@@ -1,6 +1,15 @@
 # Champollion pipeline - step-by-step tutorial
 
+This tutorial gives the steps to go from a list of T1 MRIs to their corresponding 56 Champollion embeddings.
+
 # 1. Get Started
+
+
+In Neurospin, you should first connect to a computer with some computing power, for example rosette:
+
+```
+ssh rosette
+```
 
 You should first get pixi:
 
@@ -9,11 +18,154 @@ curl -fsSL https://pixi.sh/install.sh | bash
 source ~/.bashrc
 ```
 
-You then create a pixi environment (we place here this environment in the directory env_pixi):
+## Define convenience environment variables
+
+To facilitate the description of this README, we define several environment variables (these correspond to the path to data folders,... that are not used directly by the underneath software. They are just here for the convenience of this tutorial):
+
+For convenience, you will define your_user_name, which is the one used as subfolder in /neurospin/dico, and the one used to determine where to put the pixi environmenent.
+
+You will choose a test directory TESTXX (change XX to a number that has not been used, that is such that $PATH_TO_TEST_DATA/TESTXX doesn't exist) where you will put two T1 MRIs (steps done after).
+
+Please change your_user_name, TESTXX, and YOUR_PROGRAM in the bash lines below, and execute them::
+
 ```
-mkdir env_pixi
-cd env_pixi
+export USERNAME=your_user_name # jdupond for example (first letter of first name, followed by family name)
+export PATH_TO_PIXI_ENV=/neurospin/software/$USERNAME/venv_pixi # path to your pixi environment
+export PATH_TO_TEST_DATA=/neurospin/dico/data/test # path the directory where lie some T1 MRIs
+export DATA=TESTXX # change XX with numbers, you will copy your test data here
+export PATH_TO_DATA=$PATH_TO_TEST/$DATA
+export PATH_TO_PROGRAM=/neurospin/dico/$USERNAME/Runs/YOUR_PROGRAM # where you will put your programs downloaded below
+export PATH_TO_DEEP_FOLDING_DATASETS=/neurospin/dico/data/deep_folding/current/datasets
+```
+
+## Create your environment
+
+You then create a pixi environment (we place here this environment in the directory env_pixi):
+
+```
+mkdir -p $PATH_TO_PIXI_ENV
+cd $PATH_TO_PIXI_ENV
 pixi init -c conda-forge -c https://brainvisa.info/neuro-forge
-pixi add anatomist soma-env=0.0 pip ipykernel
+pixi add anatomist morphologist soma-env=0.0 pip ipykernel
+```
+
+Enter the pixi environnment:
+
+```
+pixi shell
+```
+
+Note that, if yoy enter again on rosette, you will need to read .bashrc first (it is not done automatically with ssh):
+
+```
+. ~/.basrhc
+pixi shell
+```
+
+Then, download the different software:
+
+* deep_folding: to tile the cortex in 56 sulcal regions
+* champollion_V1: the software usedto generate the Deep learning embeddings
+
+```
+cd $PATH_TO_PROGRAM
+git clone https://github.com/neurospin/deep_folding.git
+git clone https://github.com/neurospin/champollion_V1.git
+```
+
+Install the software:
+
+```
+cd deep_folding
+SKLEARN_ALLOW_DEPRECATED_SKLEARN_PACKAGE_INSTALL=True pip3 install -e .
+python3 -m pytest # To run the deep_folding test
+cd ../champollion_V1
+pip3 install -e .
+```
+
+# 2. Generate the Morphologist graphs
+
+To generate the Morphologist graphs from the T1 MRIs, you will use morphologist-cli.
+
+First, copy the source example TEST_TEMPLATE, present in $PATH_TO_TEST:
+
+```
+cd $PATH_TO_TEST
+rsync -a TEST_TEMPLATE/* $PATH_TO_DATA
+```
+
+The folder $PATH_TO_DATA contains two T1 MRI files in the subfolder rawdata. The following bash command will generate the Morphologist graph from the two T1 MRIs and put them in the subfolder "derivatives/morphologist-5.2". You give as inputs a list of MRIs (LIST_MRI_FILES) separated by spaces:
+
+* If you want to run each subject serially (it will be the "classical morphologist output, NOT with the BIDS organization"):
+
+```
+cd $PATH_TO_DATA
+LIST_MRI_FILES="rawdata/sub-0001.nii.gz rawdata/sub-0002.nii.gz"
+OUTPUT_PATH="."
+morphologist-cli $LIST_MRI_FILES $OUTPUT_PATH -- --of morphologist-auto-nonoverlap-1.0
+```
+
+* If you want to run each subject in parallel using soma-workflow:
+
+First set the maximum number of processors (it will be set once and for all); for this:
+
+- launch soma_work_flow_gui
+
+```
+soma_workflow_gui
+```
+
+Then, under the subwindow "Computing resources", put '24' as the number of CPUs (CPUs, between 24 and All). By doing regularly refresh on the "wubmitted workflows" sub-window, you can follow the advancement of the pipeline.
+
+Then launch the command with the option --swf (for soma-workflow)
+
+```
+morphologist-cli $LIST_MRI_FILES $OUTPUT_PATH -- --of morphologist-auto-nonoverlap-1.0 --swf
+```
+
+This may last around 30 minutes.
+
+# 3. Generate the sulcal regions
+
+In $PATH_TO_DATA, you will create the folder deep_folding-2025 in the derivatives, make a symbolic link between the deep_folding datasets folder and this deep_folding-2025 folder (This is necessary as the deep_folding software is looking for a folder where all deep_folding datasets lie). You will copy there the file pipeline_loop_2mm.json:
+
+```
+mkdir -p derivatives/deep_folding-2025
+cd derivatives/deep_folding-2025
+ln -s $PATH_TO_DATA/derivatives/deep_folding-2025 $PATH_TO_DEEP_FOLDING_DATASETS/$DATA 
+cp $PATH_TO_PROGRAM/champollion_pipeline/pipeline_loop_2mm.json .
+```
+
+We will now adapt the file pipeline_loop_2mm.json to our dataset. For this, we only need to change 5 lines:
+
+* "graphs_dir" -> contains the path to morphologist folder
+* "path_to_graph": -> contains the sub-path that, for each subject, permits to get the sulcal graphs
+* "path_to_skeleton_with_hull" -> contains the sub-path where to get the skeleton with hull
+* "skel_qc_path" -> the path to the qc file if its exists (the format of the qc file is given below)
+* "output_dir" -> the output directory where the deep_folding outputs will lie
+
+For example, if your dataset is TESTXX, and you have no qc file, the corresponding parameters in the json file will look like:
+
+```
+   "graphs_dir": "/neurospin/dico/data/test/TESTXX/derivatives/morphologist-5.2",
+   "path_to_graph": "t1mri/default_acquisition/default_analysis/folds/3.1",
+   "path_to_skeleton_with_hull": "t1mri/default_acquisition/default_analysis/segmentation",
+   "skel_qc_path": "",
+   "output_dir": "/neurospin/dico/data/deep_folding/current/datasets/TESTXX",
+```
+
+If you have a qc file, it will be a tabular-separated file (for example qc.tsv). It will have as minimum two columns: "participant_id" and "qc" (with an optional third column named "comments" to explain the reason of the rejection). qc will be set to 1 if the subject should be processed, and to 0 otherwise. Here is an example of a qc file:
+
+```
+participant_id	qc  comments
+bvdb            0   Right graph does not exist
+sub-1000021     1   
+```
+
+Now, you go to the deep_folding program folder (the one in which yu made the git clone of the deep_folding library) and generate the sulcal regions:
+
+```
+cd $PATH_TO_PROGRAM/deep_folding/deep_folding/brainvisa
+python3 multi_pipelines -d $DATA
 ```
 
