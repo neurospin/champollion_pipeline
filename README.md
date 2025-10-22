@@ -334,6 +334,24 @@ Inside the file embeddings_pipeline.py ($PATH_TO_PROGRAM/champollion_V1/contrast
         verbose=False) 
 ```
 
+change 'datasets_root' and 'short_name' to your dataset names, for example, if your dataset is DATA=TEST04, you will change it too:
+
+```
+        datasets_root="julien/TEST04",
+        short_name='test04',
+```
+
+What the program embeddings_pipeline.py will do is to write the embeddings for your dataset using all regional models contained in "/neurospin/dico/data/deep_folding/current/models/Champollion_V1_after_ablation". Launch now tje pipeline:
+
+```bash
+cd $PATH_TO_PROGRAM/champollion_V1/contrastive
+python3 evaluation/embeddings_pipeline.py
+```
+
+It will take 15-30 minutes.
+
+## 4.2. Putting together the embeddings
+
 
 
 
