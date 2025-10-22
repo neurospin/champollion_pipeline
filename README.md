@@ -70,8 +70,8 @@ Then, download the different software:
 
 ```bash
 cd $PATH_TO_PROGRAM
+git clone https://github.com/neurospin/champollion_pipeline.git
 git clone https://github.com/neurospin/deep_folding.git
-git clone https://github.com/neurospin/champollion_V1.git
 ```
 
 Install the software:
@@ -80,8 +80,6 @@ Install the software:
 cd deep_folding
 SKLEARN_ALLOW_DEPRECATED_SKLEARN_PACKAGE_INSTALL=True pip3 install -e .
 python3 -m pytest # To run the deep_folding test
-cd ../champollion_V1
-pip3 install -e .
 ```
 
 Then, exit the environment:
@@ -95,7 +93,7 @@ exit
 ```bash
 mkdir -p $PATH_TO_PIXI_CHAMPOLLION
 cd $PATH_TO_PIXI_CHAMPOLLION
-pixi init -c conda-forge -c https://brainvisa.info/neuro-forge
+pixi init -c conda-forge
 pixi add pip ipykernel
 ```
 
