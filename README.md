@@ -31,18 +31,16 @@ To facilitate the description of this README, we define several environment vari
 
 For convenience, you will define your_user_name, which is the one used as subfolder in /neurospin/dico, and the one used to determine where to put the pixi environmenent You will also choose a test directory TESTXX (change XX to a number that has not been used, that is such that $PATH_TO_TEST_DATA/TESTXX doesn't exist beforehand) where you will put two T1 MRIs. In my case, YOUR_PROGRAM=YY_ZZ/Program (where YY is the number of the experiment, like 01 if it is your first one, and ZZ is the name of the experiment, like "champollion_tutorial").
 
-Please change your_user_name, TESTXX, YOUR_PROGRAM (by changing YY_ZZ) and YOUR_OUTPUT in the bash lines below, and execute them::
+Please change your_user_name, TESTXX, and YOUR_PROGRAM (YY_ZZ) in the bash lines below, and execute them::
 
 ```
 export YOUR_PROGRAM=YY_ZZ/Program
-export YOUR_OUTPUT=YY_ZZ/Output # where you will put the embeddings
 export USERNAME=your_user_name # jdupond for example (first letter of first name, followed by family name)
 export PATH_TO_PIXI_ENV=/neurospin/software/$USERNAME/pixi_env # path to your pixi environment containing morphologist, deep_foldingand chaompollion_V1
 export PATH_TO_TEST_DATA=/neurospin/dico/data/test # path the directory where lie some T1 MRIs
 export DATA=TESTXX # change XX with numbers, you will copy your test data here
 export PATH_TO_DATA=$PATH_TO_TEST_DATA/$DATA
 export PATH_TO_PROGRAM=/neurospin/dico/$USERNAME/Runs/$YOUR_PROGRAM # where you will put your programs downloaded below
-export PATH_TO_OUTPUT=/neurospin/dico/$USERNAME/Runs/$YOUR_OUPUT
 export PATH_TO_DEEP_FOLDING_DATASETS=/neurospin/dico/data/deep_folding/current/datasets
 ```
 
@@ -68,6 +66,9 @@ Enter the pixi environment:
 
 ```bash
 pixi shell
+grep -q "^\[tool.pixi.environment-variables\]" pixi.toml \
+  || echo "[tool.pixi.environment-variables]" >> pixi.toml
+echo 'SKLEARN_ALLOW_DEPRECATED_SKLEARN_PACKAGE_INSTALL = "True"' >> pixi.toml
 ```
 
 Then, download the different software:
@@ -85,8 +86,7 @@ Install the software:
 
 ```bash
 cd deep_folding
-pixi project config set tool.pixi.environment-variables.SKLEARN_ALLOW_DEPRECATED_SKLEARN_PACKAGE_INSTALL True
-pixi add --pypi . --develop
+SKLEARN_ALLOW_DEPRECATED_SKLEARN_PACKAGE_INSTALL=True pip3 install -e .
 python3 -m pytest # To run the deep_folding test
 ```
 
@@ -94,7 +94,7 @@ Install the software:
 
 ```bash
 cd champollion_V1
-pixi add --pypi . --develop
+pip3 install -e .
 ```
 
 # 2. Generate the Morphologist graphs
@@ -104,8 +104,6 @@ To generate the Morphologist graphs from the T1 MRIs, you will use morphologist-
 First, copy the source example TEST_TEMPLATE, present in $PATH_TO_TEST:
 
 ```bash
-cd $PATH_TO_PIXI_AIMS
-pixi shell
 cd $PATH_TO_TEST_DATA
 rsync -a TEST_TEMPLATE/* $PATH_TO_DATA
 ```
@@ -216,14 +214,6 @@ exit
 
 ## 4.1. Generate the dataset config files
 
-Enter the pixi environment containing the Champollion program:
-
-```bash
-cd $PATH_TO_PIXI_CHAMPOLLION
-pixi shell
-```
-
-
 We first need to generate the configuration files for each region of the new dataset $DATA (It can be anywhere in the dataset configuration folder: $PATH_TO_PROGRAM/champollion_V1/contrastive/configs/dataset). For this, we will first create a folder called $DATA in the datasets folder of the champollion_V1 configuration, and copy the file 'reference.yaml' (the one in this GitHub) into this folder:
 
 ```bash
@@ -306,23 +296,6 @@ Inside the file embeddings_pipeline.py ($PATH_TO_PROGRAM/champollion_V1/contrast
         verbose=False) 
 ```
 
-change 'datasets_root' and 'short_name' to your dataset names, for example, if your dataset is DATA=TEST04, you will change it too:
-
-```
-        datasets_root="julien/TEST04",
-        short_name='test04',
-```
-
-What the program embeddings_pipeline.py will do is to write the embeddings for your dataset using all regional models contained in "/neurospin/dico/data/deep_folding/current/models/Champollion_V1_after_ablation". Launch now tje pipeline:
-
-```bash
-cd $PATH_TO_PROGRAM/champollion_V1/contrastive
-python3 evaluation/embeddings_pipeline.py
-```
-
-It will take 15-30 minutes.
-
-If everything went fine,
 
 ## 4.2. Putting together the embeddings
 
@@ -339,4 +312,9 @@ by substituting textxx with the short_name defined in generate_embeddings (for e
 Check that you have 56 csv files in the output directory.
 
 That's it! You have now the champollion_V1 embedddings....
+
+
+
+
+
 
