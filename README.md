@@ -30,7 +30,7 @@ pixi shell
 
 To facilitate the description of this README, we define several environment variables (these correspond to the path to data and your program folders,... that are not used directly by the underneath software. They are just here for the convenience of this tutorial):
 
-For convenience, you will define your_user_name, which is the one used as subfolder in /neurospin/dico, and the one used to determine where to put the pixi environmenent You will also choose a test directory TESTXX (change XX to a number that has not been used, that is such that $PATH_TO_TEST_DATA/TESTXX doesn't exist beforehand) where you will put two T1 MRIs. In my case, YOUR_PROGRAM=Runs/YY_ZZ/Program (where YY is the number of the experiment, like 01 if it is your first one, and ZZ is the name of the experiment, like "champollion_tutorial").
+For convenience, you will define your_user_name, which is the one used as subfolder in /neurospin/dico, and the one used to determine where to put the pixi environmenent You will also choose a test directory TESTXX (change XX to a number that has not been used, that is such that $PATH_TO_TEST_DATA/TESTXX doesn't exist beforehand) where you will put two T1 MRIs. In my case, YOUR_PROGRAM=YY_ZZ/Program (where YY is the number of the experiment, like 01 if it is your first one, and ZZ is the name of the experiment, like "champollion_tutorial").
 
 Please change your_user_name, TESTXX, and YOUR_PROGRAM in the bash lines below, and execute them::
 
@@ -41,7 +41,7 @@ export PATH_TO_PIXI_CHAMPOLLION=/neurospin/software/$USERNAME/pixi_chamopollion 
 export PATH_TO_TEST_DATA=/neurospin/dico/data/test # path the directory where lie some T1 MRIs
 export DATA=TESTXX # change XX with numbers, you will copy your test data here
 export PATH_TO_DATA=$PATH_TO_TEST/$DATA
-export PATH_TO_PROGRAM=/neurospin/dico/$USERNAME/Runs/YOUR_PROGRAM # where you will put your programs downloaded below
+export PATH_TO_PROGRAM=/neurospin/dico/$USERNAME/Runs/$YOUR_PROGRAM # where you will put your programs downloaded below
 export PATH_TO_DEEP_FOLDING_DATASETS=/neurospin/dico/data/deep_folding/current/datasets
 ```
 
