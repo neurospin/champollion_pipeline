@@ -10,7 +10,6 @@ In Neurospin, you should first connect to a computer with some computing power, 
 ```
 ssh rosette
 ```
-Note that you need to be in ssh on rosette (not through the TurboVNC graphical interface)
 
 You should first get pixi:
 
@@ -23,13 +22,14 @@ Note that, if you enter again on rosette, you will need to read .bashrc first (i
 
 ```bash
 . ~/.basrhc
+pixi shell
 ```
 
 ## 1.1 Define convenience environment variables
 
 To facilitate the description of this README, we define several environment variables (these correspond to the path to data and your program folders,... that are not used directly by the underneath software. They are just here for the convenience of this tutorial):
 
-For convenience, you will define your_user_name, which is the one used as subfolder in /neurospin/dico, and the one used to determine where to put the pixi environmenent You will also choose a test directory TESTXX (change XX to a number that has not been used, that is such that $PATH_TO_TEST_DATA/TESTXX doesn't exist beforehand) where you will put two T1 MRIs. In my case, YOUR_PROGRAM=YY_ZZ/Program (where YY is the number of the experiment, like 01 if it is your first one, and ZZ is the name of the experiment, like "champollion_tutorial").
+For convenience, you will define your_user_name, which is the one used as subfolder in /neurospin/dico, and the one used to determine where to put the pixi environmenent You will also choose a test directory TESTXX (change XX to a number that has not been used, that is such that $PATH_TO_TEST_DATA/TESTXX doesn't exist beforehand) where you will put two T1 MRIs. In my case, YOUR_PROGRAM=Runs/YY_ZZ/Program (where YY is the number of the experiment, like 01 if it is your first one, and ZZ is the name of the experiment, like "champollion_tutorial").
 
 Please change your_user_name, TESTXX, and YOUR_PROGRAM in the bash lines below, and execute them::
 
