@@ -31,10 +31,11 @@ To facilitate the description of this README, we define several environment vari
 
 For convenience, you will define your_user_name, which is the one used as subfolder in /neurospin/dico, and the one used to determine where to put the pixi environmenent You will also choose a test directory TESTXX (change XX to a number that has not been used, that is such that $PATH_TO_TEST_DATA/TESTXX doesn't exist beforehand) where you will put two T1 MRIs. In my case, YOUR_PROGRAM=YY_ZZ/Program (where YY is the number of the experiment, like 01 if it is your first one, and ZZ is the name of the experiment, like "champollion_tutorial").
 
-Please change your_user_name, TESTXX, and YOUR_PROGRAM (YY_ZZ) in the bash lines below, and execute them::
+Please change your_user_name, TESTXX, YOUR_PROGRAM (by changing YY_ZZ) and YOUR_OUTPUT in the bash lines below, and execute them::
 
 ```
 export YOUR_PROGRAM=YY_ZZ/Program
+export YOUR_OUTPUT=YY_ZZ/Output # where you will put the embeddings
 export USERNAME=your_user_name # jdupond for example (first letter of first name, followed by family name)
 export PATH_TO_PIXI_AIMS=/neurospin/software/$USERNAME/pixi_aims # path to your pixi environment containing morphologist and deep_folding
 export PATH_TO_PIXI_CHAMPOLLION=/neurospin/software/$USERNAME/pixi_chamopollion # path to your pixi environment containing champollion
@@ -42,6 +43,7 @@ export PATH_TO_TEST_DATA=/neurospin/dico/data/test # path the directory where li
 export DATA=TESTXX # change XX with numbers, you will copy your test data here
 export PATH_TO_DATA=$PATH_TO_TEST_DATA/$DATA
 export PATH_TO_PROGRAM=/neurospin/dico/$USERNAME/Runs/$YOUR_PROGRAM # where you will put your programs downloaded below
+export PATH_TO_OUTPUT=/neurospin/dico/$USERNAME/Runs/$YOUR_OUPUT
 export PATH_TO_DEEP_FOLDING_DATASETS=/neurospin/dico/data/deep_folding/current/datasets
 ```
 
@@ -350,8 +352,18 @@ python3 evaluation/embeddings_pipeline.py
 
 It will take 15-30 minutes.
 
+If everything went fine,
+
 ## 4.2. Putting together the embeddings
 
+By using the code put_together_embeddings_files, which lies in $PATH_TO_PROGRAM/champollion_V1/contrastive/utils, you will put together the embeddings.
 
+At the top of the file, you will change:
+
+```
+embeddings_subpath = "testxx_random_embeddings/full_embeddings.csv"
+output_path = "/neurospin/dico/data/deep_folding/current/models/Champollion_V1_after_ablation/embeddings/TESTXX_embeddings"
+```
+by substituting textxx with the short_name defined in generate_embeddings (for example testxx), and by giving to output_path the content of $PATH_TO_OUTPUT/TEST04_embeddings (you can also just substitute TESTXX with your data folder, for example TEST04; in this case, it will copy the output to "/neurospin/dico/data/deep_folding/current/models/Champollion_V1_after_ablation/embeddings/TEST04_embeddings")
 
 
