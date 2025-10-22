@@ -23,7 +23,6 @@ Note that, if you enter again on rosette, you will need to read .bashrc first (i
 
 ```bash
 . ~/.basrhc
-pixi shell
 ```
 
 ## 1.1 Define convenience environment variables
@@ -32,22 +31,23 @@ To facilitate the description of this README, we define several environment vari
 
 For convenience, you will define your_user_name, which is the one used as subfolder in /neurospin/dico, and the one used to determine where to put the pixi environmenent You will also choose a test directory TESTXX (change XX to a number that has not been used, that is such that $PATH_TO_TEST_DATA/TESTXX doesn't exist beforehand) where you will put two T1 MRIs. In my case, YOUR_PROGRAM=YY_ZZ/Program (where YY is the number of the experiment, like 01 if it is your first one, and ZZ is the name of the experiment, like "champollion_tutorial").
 
-Please change your_user_name, TESTXX, and YOUR_PROGRAM in the bash lines below, and execute them::
+Please change your_user_name, TESTXX, and YOUR_PROGRAM (YY_ZZ) in the bash lines below, and execute them::
 
 ```
+export YOUR_PROGRAM=YY_ZZ/Program
 export USERNAME=your_user_name # jdupond for example (first letter of first name, followed by family name)
 export PATH_TO_PIXI_AIMS=/neurospin/software/$USERNAME/pixi_aims # path to your pixi environment containing morphologist and deep_folding
 export PATH_TO_PIXI_CHAMPOLLION=/neurospin/software/$USERNAME/pixi_chamopollion # path to your pixi environment containing champollion
 export PATH_TO_TEST_DATA=/neurospin/dico/data/test # path the directory where lie some T1 MRIs
 export DATA=TESTXX # change XX with numbers, you will copy your test data here
-export PATH_TO_DATA=$PATH_TO_TEST/$DATA
+export PATH_TO_DATA=$PATH_TO_TEST_DATA/$DATA
 export PATH_TO_PROGRAM=/neurospin/dico/$USERNAME/Runs/$YOUR_PROGRAM # where you will put your programs downloaded below
 export PATH_TO_DEEP_FOLDING_DATASETS=/neurospin/dico/data/deep_folding/current/datasets
 ```
 
 ## 1.2 Create your environments
 
-You then create two environmenets, one for morphologist and deep_folding, and another one for champollion. Indeed, there is a mismatch between the PyTorch version of the two environments?
+You then create two environments, one for morphologist and deep_folding, and another one for Champollion. Indeed, there is a mismatch between the PyTorch version of the two environments.
 
 ### Create the pyaims environment
 
@@ -58,7 +58,7 @@ pixi init -c conda-forge -c https://brainvisa.info/neuro-forge
 pixi add anatomist morphologist soma-env=0.0 pip ipykernel
 ```
 
-Enter the pixi environnment:
+Enter the pixi environment:
 
 ```bash
 pixi shell
@@ -88,7 +88,7 @@ Then, exit the environment:
 exit
 ```
 
-### Create the champollion environment
+### Create the Champollion environment
 
 ```bash
 mkdir -p $PATH_TO_PIXI_CHAMPOLLION
@@ -97,7 +97,7 @@ pixi init -c conda-forge
 pixi add pip ipykernel
 ```
 
-Enter the pixi environnment:
+Enter the pixi environment:
 
 ```bash
 pixi shell
@@ -138,9 +138,9 @@ cd $PATH_TO_TEST_DATA
 rsync -a TEST_TEMPLATE/* $PATH_TO_DATA
 ```
 
-The folder now $PATH_TO_DATA contains two T1 MRI files in the subfolder rawdata. The following bash command will generate the Morphologist graph from the two T1 MRIs and put them in the subfolder "derivatives/morphologist-5.2". You give as inputs a list of MRIs (LIST_MRI_FILES) separated by spaces. We will now generate the Morphologist otuputs. Note that the steps described here generate the "classical" Morphologist output, NOT with the BIDS organization. You can generate them serially or in parallel (choose only of the the two options):
+The folder now $PATH_TO_DATA contains two T1 MRI files in the subfolder rawdata. The following bash command will generate the Morphologist graph from the two T1 MRIs and put them in the subfolder "derivatives/morphologist-5.2". You provide a list of MRIs (LIST_MRI_FILES) separated by spaces. We will now generate the Morphologist outputs. Note that the steps described here generate the "classical" Morphologist output, NOT with the BIDS organization. You can generate them serially or in parallel (choose only one of the two options):
 
-## If you want to run each subject serially:
+## If you want to run each subject serially:
 
 ```bash
 cd $PATH_TO_DATA
@@ -151,7 +151,7 @@ morphologist-cli $LIST_MRI_FILES $OUTPUT_PATH -- --of morphologist-auto-nonoverl
 
 ## If you want to run each subject in parallel using soma-workflow:
 
-First set the maximum number of processors (it will be set once and for all); for this:
+First, set the maximum number of processors (it will be set once and for all); for this:
 
 - launch soma_work_flow_gui
 
@@ -182,13 +182,13 @@ cp $PATH_TO_PROGRAM/champollion_pipeline/pipeline_loop_2mm.json .
 
 We will now adapt the file pipeline_loop_2mm.json to our dataset. For this, we only need to change 5 lines of this file:
 
-* "graphs_dir" -> contains the path to morphologist folder
-* "path_to_graph": -> contains the sub-path that, for each subject, permits to get the sulcal graphs
+* "graphs_dir" -> contains the path to the morphologist folder
+* "path_to_graph": -> contains the sub-path that, for each subject, permits getting the sulcal graphs
 * "path_to_skeleton_with_hull" -> contains the sub-path where to get the skeleton with hull
-* "skel_qc_path" -> the path to the qc file if its exists (the format of the qc file is given below)
+* "skel_qc_path" -> the path to the QC file if it exists (the format of the QC file is given below)
 * "output_dir" -> the output directory where the deep_folding outputs will lie
 
-For example, if your dataset is TESTXX, and you have no qc file, the corresponding parameters in the json file will look like:
+For example, if your dataset is TESTXX, and you have no QC file, the corresponding parameters in the JSON file will look like:
 
 ```bash
    "graphs_dir": "/neurospin/dico/data/test/TESTXX/derivatives/morphologist-5.2",
@@ -198,7 +198,7 @@ For example, if your dataset is TESTXX, and you have no qc file, the correspondi
    "output_dir": "/neurospin/dico/data/deep_folding/current/datasets/TESTXX",
 ```
 
-If you have a qc file, it will be a tabular-separated file (for example qc.tsv). It will have as minimum two columns: "participant_id" and "qc" (with an optional third column named "comments" to explain the reason of the rejection). qc will be set to 1 if the subject should be processed, and to 0 otherwise. Here is an example of a qc file:
+If you have a QC file, it will be a tabular-separated file (for example,  qc.tsv). It will have a minimum of two columns: "participant_id" and "qc" (with an optional third column named "comments" to explain the reason for the rejection). qc will be set to 1 if the subject should be processed, and to 0 otherwise. Here is an example of a QC file:
 
 ```bash
 participant_id	qc  comments
@@ -213,7 +213,7 @@ cd $PATH_TO_PROGRAM/deep_folding/deep_folding/brainvisa
 python3 multi_pipelines -d $DATA
 ```
 
-It will last 15-30 mibutes. To check that everything went smoothly, you can print the subfolders of the crop folder:
+It will last 15-30 minutes. To check that everything went smoothly, you can print the subfolders of the crop folder:
 
 ```bash
 ls $PATH_TO_DEEP_FOLDING_DATASETS/$DATA/crops/2mm
@@ -242,7 +242,9 @@ exit
 
 # 4. Generate the embeddings
 
-Enter the pixi environment containing the champollion program:
+## 4.1. Generate the dataset config files
+
+Enter the pixi environment containing the Champollion program:
 
 ```bash
 cd $PATH_TO_PIXI_CHAMPOLLION
@@ -250,17 +252,18 @@ pixi shell
 ```
 
 
-We first need to generate the configuration files for each region of the new dataset $DATA (It can be anywhere in the dataset configuration folder: $PATH_TO_PROGRAM/champollion_V1/contrastive/configs/dataset). For this, we will first create a folder called $DATA in the datasets folder of the champollion_V1 configuration, and copy the file 'reference.yaml' (the one in this GitHub) in this folder:
+We first need to generate the configuration files for each region of the new dataset $DATA (It can be anywhere in the dataset configuration folder: $PATH_TO_PROGRAM/champollion_V1/contrastive/configs/dataset). For this, we will first create a folder called $DATA in the datasets folder of the champollion_V1 configuration, and copy the file 'reference.yaml' (the one in this GitHub) into this folder:
 
-```
+```bash
 mkdir -p $PATH_TO_PROGRAM/champollion_V1/contrastive/configs/dataset/julien/$DATA
 cp reference.yaml $PATH_TO_PROGRAM/champollion_V1/contrastive/configs/dataset/julien/$DATA/
 ```
 
-You will now replace in the newly created file reference.yaml all occurences of TESTXX with $DATA. For example, if DATA was for you equal to "TEST04", then the reference.yaml file will look like:
+You will now replace in the newly created file reference.yaml all occurrences of TESTXX with $DATA. For example, if DATA was for you equal to "TEST04", then the reference.yaml file will look like:
 
 Example reference.yaml file after substitution of TESTXX by TEST04:
-```
+
+```bash
 # @package dataset.REPLACE_DATASET
 dataset_name: REPLACE_DATASET
 pickle_normal: ${dataset_folder}/TEST04/crops/2mm/REPLACE_CROP_NAME/mask/REPLACE_SIDEskeleton.pkl
@@ -287,5 +290,50 @@ flip_dataset: False
 input_size: (1, REPLACE_SIZEX, REPLACE_SIZEY, REPLACE_SIZEZ)
 ```
 
-You will now enter
+Once you have changed the reference.yaml file, you will generate the dataset config files for all sulcal regions by using create_dataset_config_files.py, which lies in $PATH_TO_PROGRAM/champollion_V1/contrastive/utils. You first need to change inside the file TEXTXX by $DATA (for example TEST04) at the top of the file:
+
+Change TESTXX to $DATA at the top of create_dataset_config_files.py:
+
+```
+path = f"{os.getcwd()}/../configs/dataset/julien/TESTXX"
+ref_file = f"{path}/reference.yaml"
+crop_path = "/neurospin/dico/data/deep_folding/current/datasets/TESTXX/crops/2mm"
+```
+
+Then generate the config files:
+
+```bash
+cd $PATH_TO_PROGRAM/champollion_V1/contrastive/utils
+python3 create_dataset_config_files.py
+```
+
+To check that it works, you verify that you get 56 yaml files (like FCLp-subsc-FCLa-INSULA_left.yaml) corresponding to the 56 sulcal regions + the file reference.yaml inside $PATH_TO_PROGRAM/champollion_V1/contrastive/configs/dataset/julien/$DATA
+
+```bash
+ls $PATH_TO_PROGRAM/champollion_V1/contrastive/configs/dataset | wc -l
+```
+It should output 57
+
+## 4.2. Generate the embeddings
+
+Inside the file embeddings_pipeline.py ($PATH_TO_PROGRAM/champollion_V1/contrastive/evaluation/embeddings_pipeline.py):
+
+```
+    embeddings_pipeline("/neurospin/dico/data/deep_folding/current/models/Champollion_V1_after_ablation",
+        dataset_localization="neurospin",
+        datasets_root="julien/TESTXX",
+        short_name='testxx',
+        overwrite=True,
+        datasets=["toto"],
+        idx_region_evaluation=None,
+        labels=["Sex"],
+        classifier_name='logistic',
+        embeddings=True, embeddings_only=True, use_best_model=False,
+        subsets=['full'], epochs=[None], split='random', cv=1,
+        splits_basedir='',
+        verbose=False) 
+```
+
+
+
 
