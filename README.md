@@ -36,8 +36,7 @@ Please change your_user_name, TESTXX, and YOUR_PROGRAM (YY_ZZ) in the bash lines
 ```
 export YOUR_PROGRAM=YY_ZZ/Program
 export USERNAME=your_user_name # jdupond for example (first letter of first name, followed by family name)
-export PATH_TO_PIXI_AIMS=/neurospin/software/$USERNAME/pixi_aims # path to your pixi environment containing morphologist and deep_folding
-export PATH_TO_PIXI_CHAMPOLLION=/neurospin/software/$USERNAME/pixi_chamopollion # path to your pixi environment containing champollion
+export PATH_TO_PIXI_ENV=/neurospin/software/$USERNAME/pixi_env # path to your pixi environment containing morphologist, deep_foldingand chaompollion_V1
 export PATH_TO_TEST_DATA=/neurospin/dico/data/test # path the directory where lie some T1 MRIs
 export DATA=TESTXX # change XX with numbers, you will copy your test data here
 export PATH_TO_DATA=$PATH_TO_TEST_DATA/$DATA
@@ -49,13 +48,18 @@ export PATH_TO_DEEP_FOLDING_DATASETS=/neurospin/dico/data/deep_folding/current/d
 
 You then create two environments, one for morphologist and deep_folding, and another one for Champollion. Indeed, there is a mismatch between the PyTorch version of the two environments.
 
-### Create the pyaims environment
+### Create the pixi environment
 
 ```bash
-mkdir -p $PATH_TO_PIXI_AIMS
-cd $PATH_TO_PIXI_AIMS
-pixi init -c conda-forge -c https://brainvisa.info/neuro-forge
-pixi add anatomist morphologist soma-env=0.0 pip ipykernel
+mkdir -p $PATH_TO_PIXI_ENV
+cd $PATH_TO_PIXI_ENV
+pixi init -c https://brainvisa.info/neuro-forge -c pytorch -c nvidia -c conda-forge
+echo 'soma-env = ">=0.0"' >> pixi.toml
+echo 'libjpeg-turbo = {channel= "conda-forge", version= ">=3.0"}' >> pixi.toml
+echo "" >> pixi.toml
+echo "[pypi-dependencies]" >> pixi.toml
+echo 'dracopy = ">=1.4.2"' >> pixi.toml
+pixi add anatomist morphologist soma-env=0.0 pip
 ```
 
 Enter the pixi environment:
@@ -67,62 +71,28 @@ pixi shell
 Then, download the different software:
 
 * deep_folding: to tile the cortex in 56 sulcal regions
-
+* champollion_V1: the software used to generate the Deep learning embeddings
 ```bash
 cd $PATH_TO_PROGRAM
 git clone https://github.com/neurospin/champollion_pipeline.git
 git clone https://github.com/neurospin/deep_folding.git
-```
-
-Install the software:
-
-```bash
-cd deep_folding
-SKLEARN_ALLOW_DEPRECATED_SKLEARN_PACKAGE_INSTALL=True pip3 install -e .
-python3 -m pytest # To run the deep_folding test
-```
-
-Then, exit the environment:
-
-```bash
-exit
-```
-
-### Create the Champollion environment
-
-```bash
-mkdir -p $PATH_TO_PIXI_CHAMPOLLION
-cd $PATH_TO_PIXI_CHAMPOLLION
-pixi init -c conda-forge
-pixi add pip ipykernel
-```
-
-Enter the pixi environment:
-
-```bash
-pixi shell
-```
-
-Then, download the different software:
-
-* champollion_V1: the software used to generate the Deep learning embeddings
-
-```bash
-cd $PATH_TO_PROGRAM
 git clone https://github.com/neurospin/champollion_V1.git
 ```
 
 Install the software:
 
 ```bash
-cd champollion_V1
-pip3 install -e .
+cd deep_folding
+pixi project config set tool.pixi.environment-variables.SKLEARN_ALLOW_DEPRECATED_SKLEARN_PACKAGE_INSTALL True
+pixi add --pypi . --develop
+python3 -m pytest # To run the deep_folding test
 ```
 
-Then, exit the environment:
+Install the software:
 
 ```bash
-exit
+cd champollion_V1
+pixi add --pypi . --develop
 ```
 
 # 2. Generate the Morphologist graphs
