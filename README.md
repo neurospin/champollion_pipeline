@@ -366,4 +366,7 @@ output_path = "/neurospin/dico/data/deep_folding/current/models/Champollion_V1_a
 ```
 by substituting textxx with the short_name defined in generate_embeddings (for example testxx), and by giving to output_path the content of $PATH_TO_OUTPUT/TEST04_embeddings (you can also just substitute TESTXX with your data folder, for example TEST04; in this case, it will copy the output to "/neurospin/dico/data/deep_folding/current/models/Champollion_V1_after_ablation/embeddings/TEST04_embeddings")
 
+Check that you have 56 csv files in the output directory.
+
+That's it! You have now the champollion_V1 embedddings....
 
