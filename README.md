@@ -106,7 +106,7 @@ pixi shell
 
 Then, download the different software:
 
-* champollion_V1: the software usedto generate the Deep learning embeddings
+* champollion_V1: the software used to generate the Deep learning embeddings
 
 ```bash
 cd $PATH_TO_PROGRAM
@@ -132,54 +132,56 @@ To generate the Morphologist graphs from the T1 MRIs, you will use morphologist-
 
 First, copy the source example TEST_TEMPLATE, present in $PATH_TO_TEST:
 
-```
-cd $PATH_TO_TEST
+```bash
+cd $PATH_TO_PIXI_AIMS
+pixi shell
+cd $PATH_TO_TEST_DATA
 rsync -a TEST_TEMPLATE/* $PATH_TO_DATA
 ```
 
-The folder $PATH_TO_DATA contains two T1 MRI files in the subfolder rawdata. The following bash command will generate the Morphologist graph from the two T1 MRIs and put them in the subfolder "derivatives/morphologist-5.2". You give as inputs a list of MRIs (LIST_MRI_FILES) separated by spaces:
+The folder now $PATH_TO_DATA contains two T1 MRI files in the subfolder rawdata. The following bash command will generate the Morphologist graph from the two T1 MRIs and put them in the subfolder "derivatives/morphologist-5.2". You give as inputs a list of MRIs (LIST_MRI_FILES) separated by spaces. We will now generate the Morphologist otuputs. Note that the steps described here generate the "classical" Morphologist output, NOT with the BIDS organization. You can generate them serially or in parallel (choose only of the the two options):
 
-* If you want to run each subject serially (it will be the "classical morphologist output, NOT with the BIDS organization"):
+## If you want to run each subject serially:
 
-```
+```bash
 cd $PATH_TO_DATA
 LIST_MRI_FILES="rawdata/sub-0001.nii.gz rawdata/sub-0002.nii.gz"
-OUTPUT_PATH="."
+OUTPUT_PATH="." # The program will put the output in $OUTPUT_PATH/derivatives/morphologist-5.2
 morphologist-cli $LIST_MRI_FILES $OUTPUT_PATH -- --of morphologist-auto-nonoverlap-1.0
 ```
 
-* If you want to run each subject in parallel using soma-workflow:
+## If you want to run each subject in parallel using soma-workflow:
 
 First set the maximum number of processors (it will be set once and for all); for this:
 
 - launch soma_work_flow_gui
 
-```
+```bash
 soma_workflow_gui
 ```
 
-Then, under the subwindow "Computing resources", put '24' as the number of CPUs (CPUs, between 24 and All). By doing regularly refresh on the "wubmitted workflows" sub-window, you can follow the advancement of the pipeline.
+Then, under the subwindow "Computing resources", put '24' as the number of CPUs (every user is limited to 24 CPUs on rosette; just do it once). By doing regularly refresh on the "submitted workflows" sub-window, you can follow the advancement of the pipeline.
 
-Then launch the command with the option --swf (for soma-workflow)
+Then launch the Morphologist command with the option --swf (for soma-workflow)
 
-```
+```bash
 morphologist-cli $LIST_MRI_FILES $OUTPUT_PATH -- --of morphologist-auto-nonoverlap-1.0 --swf
 ```
 
-This may last around 30 minutes.
+This may last around 15-30 minutes.
 
 # 3. Generate the sulcal regions
 
-In $PATH_TO_DATA, you will create the folder deep_folding-2025 in the derivatives, make a symbolic link between the deep_folding datasets folder and this deep_folding-2025 folder (This is necessary as the deep_folding software is looking for a folder where all deep_folding datasets lie). You will copy there the file pipeline_loop_2mm.json:
+In $PATH_TO_DATA, you will create the folder deep_folding-2025 in the derivatives, make a symbolic link between the deep_folding datasets folder and this deep_folding-2025 folder (This is necessary as the deep_folding software is looking for a folder, $PATH_TO_DEEP_FOLDING_DATASETS, where all deep_folding datasets lie). You will copy there the file pipeline_loop_2mm.json (the one in this GitHub):
 
-```
+```bash
 mkdir -p derivatives/deep_folding-2025
 cd derivatives/deep_folding-2025
 ln -s $PATH_TO_DATA/derivatives/deep_folding-2025 $PATH_TO_DEEP_FOLDING_DATASETS/$DATA 
 cp $PATH_TO_PROGRAM/champollion_pipeline/pipeline_loop_2mm.json .
 ```
 
-We will now adapt the file pipeline_loop_2mm.json to our dataset. For this, we only need to change 5 lines:
+We will now adapt the file pipeline_loop_2mm.json to our dataset. For this, we only need to change 5 lines of this file:
 
 * "graphs_dir" -> contains the path to morphologist folder
 * "path_to_graph": -> contains the sub-path that, for each subject, permits to get the sulcal graphs
@@ -189,7 +191,7 @@ We will now adapt the file pipeline_loop_2mm.json to our dataset. For this, we o
 
 For example, if your dataset is TESTXX, and you have no qc file, the corresponding parameters in the json file will look like:
 
-```
+```bash
    "graphs_dir": "/neurospin/dico/data/test/TESTXX/derivatives/morphologist-5.2",
    "path_to_graph": "t1mri/default_acquisition/default_analysis/folds/3.1",
    "path_to_skeleton_with_hull": "t1mri/default_acquisition/default_analysis/segmentation",
@@ -199,7 +201,7 @@ For example, if your dataset is TESTXX, and you have no qc file, the correspondi
 
 If you have a qc file, it will be a tabular-separated file (for example qc.tsv). It will have as minimum two columns: "participant_id" and "qc" (with an optional third column named "comments" to explain the reason of the rejection). qc will be set to 1 if the subject should be processed, and to 0 otherwise. Here is an example of a qc file:
 
-```
+```bash
 participant_id	qc  comments
 bvdb            0   Right graph does not exist
 sub-1000021     1   
@@ -207,14 +209,49 @@ sub-1000021     1
 
 Now, you go to the deep_folding program folder (the one in which yu made the git clone of the deep_folding library) and generate the sulcal regions:
 
-```
+```bash
 cd $PATH_TO_PROGRAM/deep_folding/deep_folding/brainvisa
 python3 multi_pipelines -d $DATA
 ```
 
+It will last 15-30 mibutes. To check that everything went smoothly, you can print the subfolders of the crop folder:
+
+```bash
+ls $PATH_TO_DEEP_FOLDING_DATASETS/$DATA/crops/2mm
+```
+
+You should see 28 subfolders like this:
+
+```
+F.C.L.p.-subsc.-F.C.L.a.-INSULA.  S.C.-S.Pe.C. S.Or.-S.Olf.
+F.C.M.post.-S.p.C.		          S.C.-S.Po.C. S.Pe.C.
+F.Coll.-S.Rh.			          S.C.-sylv.   S.Po.C.
+F.I.P.-F.I.P.Po.C.inf.		      S.F.inf.-BROCA-S.Pe.C.inf. S.s.P.-S.Pa.int.
+F.P.O.-S.Cu.-Sc.Cal.		      S.F.inter.-S.F.sup.        S.T.i.-S.O.T.lat.
+Lobule_parietal_sup.		      S.F.int.-F.C.M.ant.		  S.T.i.-S.T.s.-S.T.pol.
+OCCIPITAL			              S.F.int.-S.R.			     S.T.s.
+S.Call.				              S.F.marginal-S.F.inf.ant.	 S.T.s.br.
+S.Call.-S.s.P.-S.intraCing.	      S.F.median-S.F.pol.tr.-S.F.sup.
+Sc.Cal.-S.Li.			          S.Or.
+```
+
+Then exit the pixi environment:
+
+```bash
+exit
+```
+
 # 4. Generate the embeddings
 
-We first need to generate the configuration files for each region of the new dataset $DATA. For this, we will first create a folder called $DATA in the datasets folder of the champollion_V1 configuration:
+Enter the pixi environment containing the champollion program:
+
+```bash
+cd $PATH_TO_PIXI_CHAMPOLLION
+pixi shell
+```
+
+
+We first need to generate the configuration files for each region of the new dataset $DATA (It can be anywhere in the dataset configuration folder: $PATH_TO_PROGRAM/champollion_V1/contrastive/configs/dataset). For this, we will first create a folder called $DATA in the datasets folder of the champollion_V1 configuration, and copy the file 'reference.yaml' (the one in this GitHub) in this folder:
 
 ```
 mkdir -p $PATH_TO_PROGRAM/champollion_V1/contrastive/configs/dataset/julien/$DATA
@@ -251,5 +288,5 @@ flip_dataset: False
 input_size: (1, REPLACE_SIZEX, REPLACE_SIZEY, REPLACE_SIZEZ)
 ```
 
-You need now to exit 
+You will now enter
 
