@@ -66,9 +66,6 @@ Enter the pixi environment:
 
 ```bash
 pixi shell
-grep -q "^\[tool.pixi.environment-variables\]" pixi.toml \
-  || echo "[tool.pixi.environment-variables]" >> pixi.toml
-echo 'SKLEARN_ALLOW_DEPRECATED_SKLEARN_PACKAGE_INSTALL = "True"' >> pixi.toml
 ```
 
 Then, download the different software:
