@@ -10,6 +10,7 @@ In Neurospin, you should first connect to a computer with some computing power, 
 ```
 ssh rosette
 ```
+Note that, specifically for Neurospin, you need to connect to rosette in ssh, not with TurboVNC.
 
 You should first get pixi:
 
