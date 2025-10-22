@@ -13,24 +13,30 @@ ssh rosette
 
 You should first get pixi:
 
-```
+```bash
 curl -fsSL https://pixi.sh/install.sh | bash
 source ~/.bashrc
 ```
 
-## Define convenience environment variables
+Note that, if you enter again on rosette, you will need to read .bashrc first (it is not done automatically with ssh):
 
-To facilitate the description of this README, we define several environment variables (these correspond to the path to data folders,... that are not used directly by the underneath software. They are just here for the convenience of this tutorial):
+```bash
+. ~/.basrhc
+pixi shell
+```
 
-For convenience, you will define your_user_name, which is the one used as subfolder in /neurospin/dico, and the one used to determine where to put the pixi environmenent.
+## 1.1 Define convenience environment variables
 
-You will choose a test directory TESTXX (change XX to a number that has not been used, that is such that $PATH_TO_TEST_DATA/TESTXX doesn't exist) where you will put two T1 MRIs (steps done after).
+To facilitate the description of this README, we define several environment variables (these correspond to the path to data and your program folders,... that are not used directly by the underneath software. They are just here for the convenience of this tutorial):
+
+For convenience, you will define your_user_name, which is the one used as subfolder in /neurospin/dico, and the one used to determine where to put the pixi environmenent You will also choose a test directory TESTXX (change XX to a number that has not been used, that is such that $PATH_TO_TEST_DATA/TESTXX doesn't exist beforehand) where you will put two T1 MRIs. In my case, YOUR_PROGRAM=Runs/YY_ZZ/Program (where YY is the number of the experiment, like 01 if it is your first one, and ZZ is the name of the experiment, like "champollion_tutorial").
 
 Please change your_user_name, TESTXX, and YOUR_PROGRAM in the bash lines below, and execute them::
 
 ```
 export USERNAME=your_user_name # jdupond for example (first letter of first name, followed by family name)
-export PATH_TO_PIXI_ENV=/neurospin/software/$USERNAME/venv_pixi # path to your pixi environment
+export PATH_TO_PIXI_AIMS=/neurospin/software/$USERNAME/pixi_aims # path to your pixi environment containing morphologist and deep_folding
+export PATH_TO_PIXI_CHAMPOLLION=/neurospin/software/$USERNAME/pixi_chamopollion # path to your pixi environment containing champollion
 export PATH_TO_TEST_DATA=/neurospin/dico/data/test # path the directory where lie some T1 MRIs
 export DATA=TESTXX # change XX with numbers, you will copy your test data here
 export PATH_TO_DATA=$PATH_TO_TEST/$DATA
@@ -38,36 +44,30 @@ export PATH_TO_PROGRAM=/neurospin/dico/$USERNAME/Runs/YOUR_PROGRAM # where you w
 export PATH_TO_DEEP_FOLDING_DATASETS=/neurospin/dico/data/deep_folding/current/datasets
 ```
 
-## Create your environment
+## 1.2 Create your environments
 
-You then create a pixi environment (we place here this environment in the directory env_pixi):
+You then create two environmenets, one for morphologist and deep_folding, and another one for champollion. Indeed, there is a mismatch between the PyTorch version of the two environments?
 
-```
-mkdir -p $PATH_TO_PIXI_ENV
-cd $PATH_TO_PIXI_ENV
+### Create the pyaims environment
+
+```bash
+mkdir -p $PATH_TO_PIXI_AIMS
+cd $PATH_TO_PIXI_AIMS
 pixi init -c conda-forge -c https://brainvisa.info/neuro-forge
 pixi add anatomist morphologist soma-env=0.0 pip ipykernel
 ```
 
 Enter the pixi environnment:
 
-```
-pixi shell
-```
-
-Note that, if yoy enter again on rosette, you will need to read .bashrc first (it is not done automatically with ssh):
-
-```
-. ~/.basrhc
+```bash
 pixi shell
 ```
 
 Then, download the different software:
 
 * deep_folding: to tile the cortex in 56 sulcal regions
-* champollion_V1: the software usedto generate the Deep learning embeddings
 
-```
+```bash
 cd $PATH_TO_PROGRAM
 git clone https://github.com/neurospin/deep_folding.git
 git clone https://github.com/neurospin/champollion_V1.git
@@ -75,12 +75,55 @@ git clone https://github.com/neurospin/champollion_V1.git
 
 Install the software:
 
-```
+```bash
 cd deep_folding
 SKLEARN_ALLOW_DEPRECATED_SKLEARN_PACKAGE_INSTALL=True pip3 install -e .
 python3 -m pytest # To run the deep_folding test
 cd ../champollion_V1
 pip3 install -e .
+```
+
+Then, exit the environment:
+
+```bash
+exit
+```
+
+### Create the champollion environment
+
+```bash
+mkdir -p $PATH_TO_PIXI_CHAMPOLLION
+cd $PATH_TO_PIXI_CHAMPOLLION
+pixi init -c conda-forge -c https://brainvisa.info/neuro-forge
+pixi add pip ipykernel
+```
+
+Enter the pixi environnment:
+
+```bash
+pixi shell
+```
+
+Then, download the different software:
+
+* champollion_V1: the software usedto generate the Deep learning embeddings
+
+```bash
+cd $PATH_TO_PROGRAM
+git clone https://github.com/neurospin/champollion_V1.git
+```
+
+Install the software:
+
+```bash
+cd champollion_V1
+pip3 install -e .
+```
+
+Then, exit the environment:
+
+```bash
+exit
 ```
 
 # 2. Generate the Morphologist graphs
@@ -168,4 +211,45 @@ Now, you go to the deep_folding program folder (the one in which yu made the git
 cd $PATH_TO_PROGRAM/deep_folding/deep_folding/brainvisa
 python3 multi_pipelines -d $DATA
 ```
+
+# 4. Generate the embeddings
+
+We first need to generate the configuration files for each region of the new dataset $DATA. For this, we will first create a folder called $DATA in the datasets folder of the champollion_V1 configuration:
+
+```
+mkdir -p $PATH_TO_PROGRAM/champollion_V1/contrastive/configs/dataset/julien/$DATA
+cp reference.yaml $PATH_TO_PROGRAM/champollion_V1/contrastive/configs/dataset/julien/$DATA/
+```
+
+You will now replace in the newly created file reference.yaml all occurences of TESTXX with $DATA. For example, if DATA was for you equal to "TEST04", then the reference.yaml file will look like:
+
+Example reference.yaml file after substitution of TESTXX by TEST04:
+```
+# @package dataset.REPLACE_DATASET
+dataset_name: REPLACE_DATASET
+pickle_normal: ${dataset_folder}/TEST04/crops/2mm/REPLACE_CROP_NAME/mask/REPLACE_SIDEskeleton.pkl
+numpy_all: ${dataset_folder}/TEST04/crops/2mm/REPLACE_CROP_NAME/mask/REPLACE_SIDEskeleton.npy
+subjects_all: ${dataset_folder}/TEST04/crops/2mm/REPLACE_CROP_NAME/mask/REPLACE_SIDEskeleton_subject.csv
+crop_dir: ${dataset_folder}/TEST04/crops/2mm/REPLACE_CROP_NAME/mask/REPLACE_SIDEcrops
+foldlabel_dir: ${dataset_folder}/TEST04/crops/2mm/REPLACE_CROP_NAME/mask/REPLACE_SIDElabels
+foldlabel_all: ${dataset_folder}/TEST04/crops/2mm/REPLACE_CROP_NAME/mask/REPLACE_SIDElabel.npy
+subjects_foldlabel_all: ${dataset_folder}/TEST04/crops/2mm/REPLACE_CROP_NAME/mask/REPLACE_SIDElabel_subject.csv
+distbottom_dir: ${dataset_folder}/TEST04/crops/2mm/REPLACE_CROP_NAME/mask/REPLACE_SIDEdistbottom
+distbottom_all: ${dataset_folder}/TEST04/crops/2mm/REPLACE_CROP_NAME/mask/REPLACE_SIDEdistbottom.npy
+extremity_dir: ${dataset_folder}/TEST04/crops/2mm/REPLACE_CROP_NAME/mask/REPLACE_SIDEextremities
+extremity_all: ${dataset_folder}/TEST04/crops/2mm/REPLACE_CROP_NAME/mask/REPLACE_SIDEextremities.npy
+subjects_extremity_all: ${dataset_folder}/TEST04/crops/2mm/REPLACE_CROP_NAME/mask/REPLACE_SIDEextremities_subject.csv
+subjects_distbottom_all: ${dataset_folder}/TEST04/crops/2mm/REPLACE_CROP_NAME/mask/REPLACE_SIDEdistbottom_subject.csv
+crop_file_suffix: _cropped_skeleton.nii.gz
+pickle_benchmark: 
+train_val_csv_file: ${dataset_folder}/TEST04/crops/2mm/REPLACE_CROP_NAME/mask/REPLACE_SIDEskeleton_subject.csv
+subject_labels_file: 
+subject_column_name:
+cutout_mask_path:
+cutin_mask_path: ${dataset_folder}/TEST04/crops/2mm/REPLACE_CROP_NAME/mask/REPLACE_SIDEmask.npy
+flip_dataset: False
+input_size: (1, REPLACE_SIZEX, REPLACE_SIZEY, REPLACE_SIZEZ)
+```
+
+You need now to exit 
 
