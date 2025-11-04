@@ -37,7 +37,7 @@ Please change your_user_name, TESTXX, and YOUR_PROGRAM (YY_ZZ) in the bash lines
 export YOUR_PROGRAM=YY_ZZ/Program
 export USERNAME=your_user_name # jdupond for example (first letter of first name, followed by family name)
 export PATH_TO_PIXI_AIMS=/neurospin/software/$USERNAME/pixi_aims # path to your pixi environment containing morphologist and deep_folding
-export PATH_TO_PIXI_CHAMPOLLION=/neurospin/software/$USERNAME/pixi_chamopollion # path to your pixi environment containing champollion
+export PATH_TO_PIXI_CHAMPOLLION=/neurospin/software/$USERNAME/pixi_champollion # path to your pixi environment containing champollion
 export PATH_TO_TEST_DATA=/neurospin/dico/data/test # path the directory where lie some T1 MRIs
 export DATA=TESTXX # change XX with numbers, you will copy your test data here
 export PATH_TO_DATA=$PATH_TO_TEST_DATA/$DATA
