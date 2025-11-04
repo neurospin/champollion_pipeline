@@ -257,7 +257,7 @@ We first need to generate the configuration files for each region of the new dat
 
 ```bash
 mkdir -p $PATH_TO_PROGRAM/champollion_V1/contrastive/configs/dataset/julien/$DATA
-cp reference.yaml $PATH_TO_PROGRAM/champollion_V1/contrastive/configs/dataset/julien/$DATA/
+cp $PATH_TO_PROGRAM/champollion_pipeline/reference.yaml $PATH_TO_PROGRAM/champollion_V1/contrastive/configs/dataset/julien/$DATA/
 ```
 
 You will now replace in the newly created file reference.yaml all occurrences of TESTXX with $DATA. For example, if DATA was for you equal to "TEST04", then the reference.yaml file will look like:
