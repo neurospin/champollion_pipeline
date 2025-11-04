@@ -338,7 +338,7 @@ Then generate the embeddings:
 
 ```
 cd $PATH_TO_PROGRAM/champollion_V1/contrastive
-python3 evaluation/generate_embeddings.py
+python3 evaluation/embeddings_pipeline.py
 ```
 
 ## 4.2. Putting together the embeddings
