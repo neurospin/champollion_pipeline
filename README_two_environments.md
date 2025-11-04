@@ -343,7 +343,7 @@ python3 evaluation/embeddings_pipeline.py
 
 ## 4.2. Putting together the embeddings
 
-By using the code put_together_embeddings_files, which lies in $PATH_TO_PROGRAM/champollion_V1/contrastive/utils, you will put together the embeddings.
+By using the code put_together_embeddings_files.py, which lies in $PATH_TO_PROGRAM/champollion_V1/contrastive/utils, you will put together the embeddings.
 
 At the top of the file, you will change:
 
