@@ -311,7 +311,7 @@ python3 create_dataset_config_files.py
 To check that it works, you verify that you get 56 yaml files (like FCLp-subsc-FCLa-INSULA_left.yaml) corresponding to the 56 sulcal regions + the file reference.yaml inside $PATH_TO_PROGRAM/champollion_V1/contrastive/configs/dataset/julien/$DATA
 
 ```bash
-ls $PATH_TO_PROGRAM/champollion_V1/contrastive/configs/dataset | wc -l
+ls $PATH_TO_PROGRAM/champollion_V1/contrastive/configs/dataset/julien/$DATA | wc -l
 ```
 It should output 57
 
