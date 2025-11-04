@@ -337,7 +337,7 @@ Inside the file embeddings_pipeline.py ($PATH_TO_PROGRAM/champollion_V1/contrast
 Then generate the embeddings:
 
 ```
-$PATH_TO_PROGRAM/champollion_V1/contrastive
+cd $PATH_TO_PROGRAM/champollion_V1/contrastive
 python3 evaluation/generate_embeddings.py
 ```
 
