@@ -174,13 +174,14 @@ This may last around 15-30 minutes.
 In $PATH_TO_DATA, you will create the folder deep_folding-2025 in the derivatives, make a symbolic link between the deep_folding datasets folder and this deep_folding-2025 folder (This is necessary as the deep_folding software is looking for a folder, $PATH_TO_DEEP_FOLDING_DATASETS, where all deep_folding datasets lie). You will copy there the file pipeline_loop_2mm.json (the one in this GitHub):
 
 ```bash
+cd $PATH_TO_DATA/derivatives
 mkdir -p derivatives/deep_folding-2025
 cd derivatives/deep_folding-2025
 ln -s $PATH_TO_DATA/derivatives/deep_folding-2025 $PATH_TO_DEEP_FOLDING_DATASETS/$DATA 
 cp $PATH_TO_PROGRAM/champollion_pipeline/pipeline_loop_2mm.json .
 ```
 
-We will now adapt the file pipeline_loop_2mm.json to our dataset. For this, we only need to change 5 lines of this file:
+We will now adapt the file pipeline_loop_2mm.json (the one in $PATH_TO_DEEP_FOLDING_DATASETS/$DATA) to our dataset. For this, we only need to change 5 lines of this file:
 
 * "graphs_dir" -> contains the path to the morphologist folder
 * "path_to_graph": -> contains the sub-path that, for each subject, permits getting the sulcal graphs
