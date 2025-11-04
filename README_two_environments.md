@@ -210,7 +210,7 @@ Now, you go to the deep_folding program folder (the one in which yu made the git
 
 ```bash
 cd $PATH_TO_PROGRAM/deep_folding/deep_folding/brainvisa
-python3 multi_pipelines -d $DATA
+python3 multi_pipelines.py -d $DATA
 ```
 
 It will last 15-30 minutes. To check that everything went smoothly, you can print the subfolders of the crop folder:
