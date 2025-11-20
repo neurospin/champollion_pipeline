@@ -1,9 +1,9 @@
 from os import getcwd
+from os.path import exists
 from argparse import ArgumentParser
 
-def run_morpho_graphs(input_path: str) -> None:
-    
-    return None
+def run_morpho_graphs(input_path: str):
+    return input_path
 
 def main() -> None:
 
