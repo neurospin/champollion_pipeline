@@ -3,6 +3,9 @@ import errno
 from os import getcwd
 from os import strerror
 from os.path import exists
+
+from subprocess import run
+
 from argparse import ArgumentParser
 
 def run_morpho_graphs(input_path: str):
