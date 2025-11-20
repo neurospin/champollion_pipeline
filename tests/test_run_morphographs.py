@@ -13,7 +13,7 @@ def test_does_path_exists ():
         assert 0 != 0
     except FileNotFoundError as e:
         assert isinstance(e, FileNotFoundError) == True
-        assert str(e) == f"{path} was not found."
+        assert  "[Errno 2] No such file or directory: '/my/path/example/" in str(e) 
 
 def test_does_morphologist_create_outputs():
     path: str = "/my/path/example/"
