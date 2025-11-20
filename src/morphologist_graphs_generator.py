@@ -2,6 +2,7 @@ from os import getcwd
 from argparse import ArgumentParser
 
 def run_morpho_graphs(input_path: str) -> None:
+    
     return None
 
 def main() -> None:
