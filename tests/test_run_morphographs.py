@@ -1,6 +1,6 @@
-from morphologist_graphs_generator import run_morpho_graphs
+import pytest
 
-def is_morpho_path_existing() -> bool:
-    
+from src.morphologist_graphs_generator import run_morpho_graphs
 
-if __name__ == "__main__":
+def does_morphologist_cli_returns ():
+    assert run_morpho_graphs("/my/path/example/") == "/my/path/example"
