@@ -14,26 +14,29 @@ from subprocess import run
 
 from argparse import ArgumentParser
 
+from src.utils.lib import are_paths_valid_or_except
+
 def run_morpho_graphs(input_path: str, output_path: str):
     
-    if not exists(input_path):
-        raise FileNotFoundError(errno.ENOENT, strerror(errno.ENOENT), input_path)
-    if not exists(output_path):
-        raise FileNotFoundError(errno.ENOENT, strerror(errno.ENOENT), output_path)
-    else:
-        # List of allowed extensions for files as raw data for the pipeline
-        LIST_OF_EXTENSIONS: list[str] = [".nii.gz", ".nii", ".gz"]
+    try :
+        # Checking for input and output path if they exist and if not getting and raising the exception
+        are_paths_valid_or_except([input_path, output_path])
+    except FileNotFoundError as e:
+        raise e
+    
+    # List of allowed extensions for files as raw data for the pipeline
+    LIST_OF_EXTENSIONS: list[str] = [".nii.gz", ".nii", ".gz"]
 
-        input_files: list[str] = [
-            f for f in listdir(input_path) 
-                                  if isfile(join(input_path, f)) 
-                                  and splitext(basename(f))[1] in LIST_OF_EXTENSIONS
-                                  ]
+    input_files: list[str] = [
+        f for f in listdir(input_path) 
+                                if isfile(join(input_path, f)) 
+                                and splitext(basename(f))[1] in LIST_OF_EXTENSIONS
+                                ]
 
-        local_dir: str = getcwd()
-        chdir(input_path)
-        run(f"morphologist-cli {' '.join(input_files)} {output_path} -- --of morphologist-auto-nonoverlap-1.0", shell=True, executable="/bin/bash")
-        chdir(local_dir)
+    local_dir: str = getcwd()
+    chdir(input_path)
+    run(f"morphologist-cli {' '.join(input_files)} {output_path} -- --of morphologist-auto-nonoverlap-1.0", shell=True, executable="/bin/bash")
+    chdir(local_dir)
 
 def main() -> None:
 
