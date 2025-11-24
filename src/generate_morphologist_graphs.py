@@ -14,7 +14,7 @@ from subprocess import run
 
 from argparse import ArgumentParser
 
-def run_morpho_graphs(input_path: str, output_path):
+def run_morpho_graphs(input_path: str, output_path: str):
     
     if not exists(input_path):
         raise FileNotFoundError(errno.ENOENT, strerror(errno.ENOENT), input_path)
@@ -43,8 +43,9 @@ def main() -> None:
         description="Generating graphs with morphologist from the user raw data."
         )
     
-    parser.add_argument("input", help="Path to the user's raw data.")
-    parser.add_argument("output-dir", help="Path to the generated graphs from morphologist. Default is the parent directory")
+    parser.add_argument("input", help="Absolute path to the user's raw data.")
+    parser.add_argument("output-dir", help="Absolute path to the generated graphs from morphologist.\n" \
+    "Morphologist will create a $output-dir/derivatives/motphologist-5.2/ directory for output generations.")
 
     args = parser.parse_args()
 
