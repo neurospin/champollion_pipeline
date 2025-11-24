@@ -3,7 +3,7 @@ import pytest
 from os import getcwd
 from os.path import exists
 
-from src.morphologist_graphs_generator import run_morpho_graphs
+from src.generate_morphologist_graphs import run_morpho_graphs
 
 path: str = "/my/path/example/"
 
