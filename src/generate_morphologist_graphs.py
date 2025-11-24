@@ -44,12 +44,12 @@ def main() -> None:
         )
     
     parser.add_argument("input", help="Absolute path to the user's raw data.")
-    parser.add_argument("output-dir", help="Absolute path to the generated graphs from morphologist.\n" \
-    "Morphologist will create a $output-dir/derivatives/motphologist-5.2/ directory for output generations.")
+    parser.add_argument("output", help="Absolute path to the generated graphs from morphologist.\n" \
+    "Morphologist will create a $output/derivatives/motphologist-5.2/ directory for output generations.")
 
     args = parser.parse_args()
 
-    run_morpho_graphs(args.input, args.output_dir)
+    run_morpho_graphs(args.input, args.output)
 
 
 if __name__ == "__main__":
