@@ -10,7 +10,7 @@ def are_paths_valid(paths: list[str]) -> bool | None:
       index: int = 0
       is_valid = True
       while is_valid and index < len(paths):
-         index += 1
          is_valid = exists(paths[index])
+         index += 1
       
       return is_valid
