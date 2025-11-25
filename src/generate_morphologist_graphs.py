@@ -14,15 +14,11 @@ from subprocess import run
 
 from argparse import ArgumentParser
 
-from src.utils.lib import are_paths_valid_or_except
-
+from utils.lib import are_paths_valid
 def run_morpho_graphs(input_path: str, output_path: str):
     
-    try :
-        # Checking for input and output path if they exist and if not getting and raising the exception
-        are_paths_valid_or_except([input_path, output_path])
-    except FileNotFoundError as e:
-        raise e
+    if not are_paths_valid([input_path, output_path]):
+        raise ValueError("generate_morphologist_graphs.py: Please input valid paths.")
     
     # List of allowed extensions for files as raw data for the pipeline
     LIST_OF_EXTENSIONS: list[str] = [".nii.gz", ".nii", ".gz"]
