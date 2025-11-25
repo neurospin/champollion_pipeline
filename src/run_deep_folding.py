@@ -1,4 +1,5 @@
 from argparse import ArgumentParser
+from os import getcwd
 
 from utils.lib import are_paths_valid
 
@@ -8,6 +9,9 @@ def run_deep_folding(input_path: str, output_path: str) -> None:
 
     if not are_paths_valid([input_path, output_path]):
         raise ValueError("run_deep_folding.py: Please input valid paths.")
+    
+    local_dir: str = getcwd()
+    
 
 
 def main() -> None :
