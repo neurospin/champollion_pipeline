@@ -1,10 +1,13 @@
 from argparse import ArgumentParser
 
+from utils.lib import are_paths_valid
+
 def run_deep_folding(input_path: str, output_path: str) -> None:
     print(f"run_deep_folding.py/input: {input_path}")
     print(f"run_deep_folding.py/output: {output_path}")
-    
-    return None
+
+    if not are_paths_valid([input_path, output_path]):
+        raise ValueError("run_deep_folding.py: Please input valid paths.")
 
 
 def main() -> None :
@@ -18,5 +21,7 @@ def main() -> None :
 
     args = parser.parse_args()
 
-if __name__ == "__name__":
+    run_deep_folding(args.input, args.output)
+
+if __name__ == "__main__":
     main()
