@@ -46,8 +46,8 @@ def main(installation_dir: str) -> None:
     run("pixi add anatomist morphologist soma-env=0.0 pip", shell=True, executable="/bin/bash")
 
     #Git part
-    run(f"git clone {link_to_deep_folding_repo}")
-    run(f"git clone {link_to_champollion_repo}")
+    run(f"git clone {link_to_deep_folding_repo}", shell=True, executable="/bin/bash")
+    run(f"git clone {link_to_champollion_repo}", shell=True, executable="/bin/bash")
 
     #software installation part
     chdir(join(installation_dir, 'deep_folding'))
