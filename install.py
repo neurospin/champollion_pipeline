@@ -6,6 +6,8 @@ from sys import stderr
 from os import getcwd
 from os import chdir
 from os.path import join
+from os.path import isabs
+from os.path import abspath
 
 from argparse import ArgumentParser
 
@@ -20,11 +22,21 @@ def is_pixi_installed():
         return True
     except (CalledProcessError, FileNotFoundError):
         return False
+    
+def get_absolute_path(path):
+    if isabs(path):
+        print(f"Path is already absolute: {path}")
+        return path
+    else:
+        abs_path = abspath(path)
+        print(f"Converted relative path to absolute: {abs_path}")
+        return abs_path
 
 def main(installation_dir: str) -> None:
 
     local_dir: str = getcwd()
-    chdir(installation_dir)
+    abs_install_dir = get_absolute_path(installation_dir)
+    chdir(abs_install_dir)
 
     link_to_deep_folding_repo: str = "https://github.com/neurospin/deep_folding.git"
     link_to_champollion_repo: str = "https://github.com/neurospin/champollion_V1.git"
@@ -50,9 +62,9 @@ def main(installation_dir: str) -> None:
     run(f"git clone {link_to_champollion_repo}", shell=True, executable="/bin/bash")
 
     #software installation part
-    chdir(join(installation_dir, 'deep_folding'))
+    chdir(join(abs_install_dir, 'deep_folding'))
     run("SKLEARN_ALLOW_DEPRECATED_SKLEARN_PACKAGE_INSTALL=True pip3 install -e .", shell=True, executable="/bin/bash")
-    chdir(join(installation_dir, "champollion_V1"))
+    chdir(join(abs_install_dir, "champollion_V1"))
     run("pip3 install -e .")
 
     return None
