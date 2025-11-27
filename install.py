@@ -64,6 +64,10 @@ def main(installation_dir: str) -> None:
     run("SKLEARN_ALLOW_DEPRECATED_SKLEARN_PACKAGE_INSTALL=True pip3 install -e .", shell=True, executable="/bin/bash")
     chdir(join(abs_install_dir, "champollion_V1"))
     run("pip3 install -e .", shell=True, executable="/bin/bash")
+    
+    #Creating the default data file
+    run("mkdir data")
+    chdir(local_dir)
 
     return None
 
