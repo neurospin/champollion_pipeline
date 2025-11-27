@@ -63,7 +63,7 @@ def main(installation_dir: str) -> None:
     chdir(join(abs_install_dir, 'deep_folding'))
     run("SKLEARN_ALLOW_DEPRECATED_SKLEARN_PACKAGE_INSTALL=True pip3 install -e .", shell=True, executable="/bin/bash")
     chdir(join(abs_install_dir, "champollion_V1"))
-    run("pip3 install -e .")
+    run("pip3 install -e .", shell=True, executable="/bin/bash")
 
     return None
 
