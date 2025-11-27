@@ -37,11 +37,11 @@ def main(installation_dir: str) -> None:
 
     run("pixi init -c https://brainvisa.info/neuro-forge -c pytorch -c nvidia -c conda-forge", shell=True, executable="/bin/bash")
     with open("pixi.toml", mode="a") as conf:
-        conf.write('soma-env = ">=0.0"')
-        conf.write('libjpeg-turbo = {channel= "conda-forge", version= ">=3.0"}')
-        conf.write('')
-        conf.write('[pypi-dependencies]')
-        conf.write('dracopy = ">=1.4.2"')
+        conf.write('soma-env = ">=0.0"\n')
+        conf.write('libjpeg-turbo = {channel= "conda-forge", version= ">=3.0"}\n')
+        conf.write('\n')
+        conf.write('[pypi-dependencies]\n')
+        conf.write('dracopy = ">=1.4.2"\n')
     
     run("pixi add anatomist morphologist soma-env=0.0 pip", shell=True, executable="/bin/bash")
 
