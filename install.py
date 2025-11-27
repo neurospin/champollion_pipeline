@@ -25,11 +25,9 @@ def is_pixi_installed():
     
 def get_absolute_path(path):
     if isabs(path):
-        print(f"Path is already absolute: {path}")
         return path
     else:
         abs_path = abspath(path)
-        print(f"Converted relative path to absolute: {abs_path}")
         return abs_path
 
 def main(installation_dir: str) -> None:
