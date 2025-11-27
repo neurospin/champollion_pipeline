@@ -33,6 +33,7 @@ def main(installation_dir: str) -> None:
     if not is_pixi_installed():
         print("Installing pixi: ")
         run("curl -fsSL https://pixi.sh/install.sh | bash", shell=True, executable="/bin/bash")
+        run("source ~/.bashrc")
 
     run("pixi init -c https://brainvisa.info/neuro-forge -c pytorch -c nvidia -c conda-forge", shell=True, executable="/bin/bash")
     with open("pixi.toml", mode="a") as conf:
