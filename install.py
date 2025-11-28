@@ -5,6 +5,7 @@ from sys import stderr
 
 from os import getcwd
 from os import chdir
+from os import environ
 from os.path import join
 from os.path import isabs
 from os.path import abspath
@@ -55,6 +56,9 @@ def main(installation_dir: str) -> None:
             text=True,
         )
 
+        # Update PATH for subprocesses
+        environ["PATH"] = f"{join(environ['HOME'], '.pixi', 'bin')}:{environ['PATH']}"
+
         # Source ~/.bashrc in the current shell (if needed)
         # Note: This only affects the current subprocess, not the parent shell.
         run(
@@ -63,7 +67,7 @@ def main(installation_dir: str) -> None:
             text=True,
         )
 
-    run("pixi init -c https://brainvisa.info/neuro-forge -c pytorch -c nvidia -c conda-forge", shell=True, executable="/bin/bash")
+    run("pixi init -c https://brainvisa.info/neuro-forge -c pytorch -c nvidia -c conda-forge", check=True, executable="/bin/bash")
     with open("pixi.toml", mode="a") as conf:
         conf.write('soma-env = ">=0.0"\n')
         conf.write('libjpeg-turbo = {channel= "conda-forge", version= ">=3.0"}\n')
@@ -71,11 +75,11 @@ def main(installation_dir: str) -> None:
         conf.write('[pypi-dependencies]\n')
         conf.write('dracopy = ">=1.4.2"\n')
     
-    run("pixi add anatomist morphologist soma-env=0.0 pip", shell=True, executable="/bin/bash")
+    run("pixi add anatomist morphologist soma-env=0.0 pip", check=True, executable="/bin/bash")
 
     #Git part
-    run(f"git clone {link_to_deep_folding_repo}", shell=True, executable="/bin/bash")
-    run(f"git clone {link_to_champollion_repo}", shell=True, executable="/bin/bash")
+    run(f"git clone {link_to_deep_folding_repo}", check=True, executable="/bin/bash")
+    run(f"git clone {link_to_champollion_repo}", check=True, executable="/bin/bash")
 
     #software installation part
     chdir(join(abs_install_dir, 'deep_folding'))
@@ -85,7 +89,7 @@ def main(installation_dir: str) -> None:
     
     #Creating the default data file
     chdir(abs_install_dir)
-    run("mkdir data", shell=True, executable="/bin/bash")
+    run("mkdir data", check=True, executable="/bin/bash")
     chdir(local_dir)
 
     return None
