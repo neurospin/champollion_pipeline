@@ -29,6 +29,12 @@ def get_absolute_path(path):
     else:
         abs_path = abspath(path)
         return abs_path
+    
+
+
+def run_in_pixi(command):
+    run(["pixi", "run", *command.split()], check=True)
+
 
 def main(installation_dir: str) -> None:
 
@@ -66,7 +72,6 @@ def main(installation_dir: str) -> None:
         conf.write('dracopy = ">=1.4.2"\n')
     
     run("pixi add anatomist morphologist soma-env=0.0 pip", shell=True, executable="/bin/bash")
-    run("pixi shell", shell=True, executable="/bin/bash")
 
     #Git part
     run(f"git clone {link_to_deep_folding_repo}", shell=True, executable="/bin/bash")
@@ -74,9 +79,9 @@ def main(installation_dir: str) -> None:
 
     #software installation part
     chdir(join(abs_install_dir, 'deep_folding'))
-    run("SKLEARN_ALLOW_DEPRECATED_SKLEARN_PACKAGE_INSTALL=True pip3 install -e .", shell=True, executable="/bin/bash")
+    run_in_pixi("SKLEARN_ALLOW_DEPRECATED_SKLEARN_PACKAGE_INSTALL=True pip3 install -e .")
     chdir(join(abs_install_dir, "champollion_V1"))
-    run("pip3 install -e .", shell=True, executable="/bin/bash")
+    run_in_pixi("pip3 install -e .")
     
     #Creating the default data file
     chdir(abs_install_dir)
