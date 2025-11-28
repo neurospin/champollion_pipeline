@@ -66,6 +66,7 @@ def main(installation_dir: str) -> None:
         conf.write('dracopy = ">=1.4.2"\n')
     
     run("pixi add anatomist morphologist soma-env=0.0 pip", shell=True, executable="/bin/bash")
+    run("pixi shell", shell=True, executable="/bin/bash")
 
     #Git part
     run(f"git clone {link_to_deep_folding_repo}", shell=True, executable="/bin/bash")
