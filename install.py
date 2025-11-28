@@ -119,7 +119,7 @@
 
 from subprocess import run, CalledProcessError
 from sys import stderr
-from os import getcwd, chdir, pathsep, environ
+from os import getcwd, chdir, pathsep, environ, remove
 from os.path import join, isabs, abspath, exists
 from argparse import ArgumentParser
 
@@ -162,25 +162,22 @@ def main(installation_dir: str) -> None:
         run(["bash", "-c", "curl -fsSL https://pixi.sh/install.sh | bash"], check=True)
         environ["PATH"] = f"{join(environ['HOME'], '.pixi', 'bin')}{pathsep}{environ['PATH']}"
 
-    # Write pixi.toml with correct format
-    with open("pixi.toml", "w") as conf:
-        conf.write('[project]\n')
-        conf.write('name = "champollion"\n')
-        conf.write('version = "0.1.0"\n')
-        conf.write('channels = ["https://brainvisa.info/neuro-forge", "pytorch", "nvidia", "conda-forge"]\n')
-        conf.write('platforms = ["linux-64"]\n')
-        conf.write('\n')
-        conf.write('[dependencies]\n')
-        conf.write('soma-env = ">=0.0"\n')
-        conf.write('libjpeg-turbo = {channel= "conda-forge", version= ">=3.0"}\n')
-        conf.write('\n')
-        conf.write('[pypi-dependencies]\n')
-        conf.write('dracopy = ">=1.4.2"\n')
+    if exists("pixi.toml"):
+        remove("pixi.toml")
 
     # Run pixi commands with updated environment
     env = environ.copy()
     env["PATH"] = f"{join(environ['HOME'], '.pixi', 'bin')}{pathsep}{env['PATH']}"
-    run_pixi("pixi init", env=env)
+    run_pixi("pixi init -c https://brainvisa.info/neuro-forge -c pytorch -c nvidia -c conda-forge", env=env)
+
+    # Write pixi.toml with correct format
+    with open("pixi.toml", "a") as conf:
+        conf.write('\n[dependencies]\n')
+        conf.write('soma-env = ">=0.0"\n')
+        conf.write('libjpeg-turbo = {channel= "conda-forge", version= ">=3.0"}\n')
+        conf.write('\n[pypi-dependencies]\n')
+        conf.write('dracopy = ">=1.4.2"\n')
+
     run_pixi("pixi add anatomist morphologist soma-env=0.0 pip", env=env)
 
     # Git part
