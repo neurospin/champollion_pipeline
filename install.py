@@ -71,6 +71,9 @@ def main(installation_dir: str) -> None:
             text=True,
         )
 
+    #TO_REMOVE
+    print("install.py/main/pixi init")
+
     run("pixi init -c https://brainvisa.info/neuro-forge -c pytorch -c nvidia -c conda-forge", check=True, executable="/bin/bash")
     with open("pixi.toml", mode="a") as conf:
         conf.write('soma-env = ">=0.0"\n')
@@ -79,9 +82,13 @@ def main(installation_dir: str) -> None:
         conf.write('[pypi-dependencies]\n')
         conf.write('dracopy = ">=1.4.2"\n')
     
+    #TO_REMOVE
+    print("install.py/main/pixi add")
+
     run("pixi add anatomist morphologist soma-env=0.0 pip", check=True, executable="/bin/bash")
 
     #Git part
+    print("install.py/main/git clone")
     clone_repo(link_to_deep_folding_repo, "deep_folding")
     clone_repo(link_to_champollion_repo, "champollion_V1")
 
