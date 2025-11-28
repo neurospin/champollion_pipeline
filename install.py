@@ -66,6 +66,7 @@ def main(installation_dir: str) -> None:
     run("pip3 install -e .", shell=True, executable="/bin/bash")
     
     #Creating the default data file
+    chdir(abs_install_dir)
     run("mkdir data", shell=True, executable="/bin/bash")
     chdir(local_dir)
 
