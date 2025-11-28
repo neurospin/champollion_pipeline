@@ -138,10 +138,19 @@ def run_pixi(command: str, env=None):
     env["PATH"] = f"{join(environ['HOME'], '.pixi', 'bin')}{pathsep}{env['PATH']}"
     run(command.split(), check=True, env=env)
 
-def run_in_pixi(command: str):
+def run_in_pixi(command: str, extra_env=None):
     env = environ.copy()
     env["PATH"] = f"{join(environ['HOME'], '.pixi', 'bin')}{pathsep}{env['PATH']}"
-    run(["pixi", "run", *command.split()], check=True, env=env)
+    if extra_env:
+        env.update(extra_env)
+    # Split the command manually to handle environment variables correctly
+    parts = command.split()
+    # Remove environment variables from the command parts
+    cmd_parts = [p for p in parts if '=' not in p]
+    # Extract environment variables
+    cmd_env = {k: v for k, v in (p.split('=', 1) for p in parts if '=' in p)}
+    env.update(cmd_env)
+    run(["pixi", "run", *cmd_parts], check=True, env=env)
 
 def clone_repo(url: str, dirname: str):
     if not exists(dirname):
