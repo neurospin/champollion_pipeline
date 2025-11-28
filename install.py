@@ -74,7 +74,7 @@ def main(installation_dir: str) -> None:
     #TO_REMOVE
     print("install.py/main/pixi init")
 
-    run("pixi init -c https://brainvisa.info/neuro-forge -c pytorch -c nvidia -c conda-forge", check=True, executable="/bin/bash")
+    run("pixi init -c https://brainvisa.info/neuro-forge -c pytorch -c nvidia -c conda-forge", check=True)
     with open("pixi.toml", mode="a") as conf:
         conf.write('soma-env = ">=0.0"\n')
         conf.write('libjpeg-turbo = {channel= "conda-forge", version= ">=3.0"}\n')
@@ -85,7 +85,7 @@ def main(installation_dir: str) -> None:
     #TO_REMOVE
     print("install.py/main/pixi add")
 
-    run("pixi add anatomist morphologist soma-env=0.0 pip", check=True, executable="/bin/bash")
+    run("pixi add anatomist morphologist soma-env=0.0 pip", check=True)
 
     #Git part
     print("install.py/main/git clone")
