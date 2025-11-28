@@ -58,6 +58,7 @@ def main(installation_dir: str) -> None:
 
         # Update PATH for subprocesses
         environ["PATH"] = f"{join(environ['HOME'], '.pixi', 'bin')}:{environ['PATH']}"
+        print(environ["PATH"])
 
         # Source ~/.bashrc in the current shell (if needed)
         # Note: This only affects the current subprocess, not the parent shell.
