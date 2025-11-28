@@ -5,10 +5,12 @@ from sys import stderr
 
 from os import getcwd
 from os import chdir
+from os import pathsep
 from os import environ
 from os.path import join
 from os.path import isabs
 from os.path import abspath
+from os.path import exists
 
 from argparse import ArgumentParser
 
@@ -24,17 +26,25 @@ def is_pixi_installed():
     except (CalledProcessError, FileNotFoundError):
         return False
     
-def get_absolute_path(path):
-    if isabs(path):
-        return path
-    else:
-        abs_path = abspath(path)
-        return abs_path
+def get_absolute_path(path: str):
+    return abspath(path) if not isabs(path) else path
     
-
+def run_pixi(command: str, env=None):
+    env = (env or environ).copy()
+    env["PATH"] = f"{join(environ['HOME'], '.pixi', 'bin')}{pathsep}{env['PATH']}"
+    run(command.split(), check=True, env=env)
 
 def run_in_pixi(command):
-    run(["pixi", "run", *command.split()], check=True)
+    env = environ.copy()
+    env["PATH"] = f"{join(environ['HOME'], '.pixi', 'bin')}{pathsep}{env['PATH']}"
+    run(["pixi", "run", *command.split()], check=True, env=env)
+
+
+def clone_repo(url: str, dirname):
+    if not exists(dirname):
+        run(["git", "clone", url, dirname], check=True)
+    else:
+        print(f"Directory {dirname} already exists, skipping clone.")
 
 
 def main(installation_dir: str) -> None:
@@ -50,15 +60,8 @@ def main(installation_dir: str) -> None:
     if not is_pixi_installed():
         print("Installing pixi: ")
         # Download and run the install script
-        run(
-            ["bash", "-c", "curl -fsSL https://pixi.sh/install.sh | bash"],
-            check=True,
-            text=True,
-        )
-
-        # Update PATH for subprocesses
-        environ["PATH"] = f"{join(environ['HOME'], '.pixi', 'bin')}:{environ['PATH']}"
-        print(environ["PATH"])
+        run(["bash", "-c", "curl -fsSL https://pixi.sh/install.sh | bash"], check=True)
+        environ["PATH"] = f"{join(environ['HOME'], '.pixi', 'bin')}{pathsep}{environ['PATH']}"
 
         # Source ~/.bashrc in the current shell (if needed)
         # Note: This only affects the current subprocess, not the parent shell.
@@ -79,8 +82,8 @@ def main(installation_dir: str) -> None:
     run("pixi add anatomist morphologist soma-env=0.0 pip", check=True, executable="/bin/bash")
 
     #Git part
-    run(f"git clone {link_to_deep_folding_repo}", check=True, executable="/bin/bash")
-    run(f"git clone {link_to_champollion_repo}", check=True, executable="/bin/bash")
+    clone_repo(link_to_deep_folding_repo, "deep_folding")
+    clone_repo(link_to_champollion_repo, "champollion_V1")
 
     #software installation part
     chdir(join(abs_install_dir, 'deep_folding'))
@@ -90,7 +93,7 @@ def main(installation_dir: str) -> None:
     
     #Creating the default data file
     chdir(abs_install_dir)
-    run("mkdir data", check=True, executable="/bin/bash")
+    run(["mkdir", "-p", "data"], check=True)
     chdir(local_dir)
 
     return None
