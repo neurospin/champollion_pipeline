@@ -85,7 +85,7 @@ def main(installation_dir: str) -> None:
     #TO_REMOVE
     print("install.py/main/pixi add")
 
-    run("pixi add anatomist morphologist soma-env=0.0 pip", check=True)
+    run(["bash", "-c",] + ' '.split("pixi add anatomist morphologist soma-env=0.0 pip"), check=True)
 
     #Git part
     print("install.py/main/git clone")
