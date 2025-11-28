@@ -42,8 +42,20 @@ def main(installation_dir: str) -> None:
     # Pixi part
     if not is_pixi_installed():
         print("Installing pixi: ")
-        run("curl -fsSL https://pixi.sh/install.sh | bash", shell=True, executable="/bin/bash")
-        run("source ~/.bashrc", shell=True, executable="/bin/bash")
+        # Download and run the install script
+        run(
+            ["bash", "-c", "curl -fsSL https://pixi.sh/install.sh | bash"],
+            check=True,
+            text=True,
+        )
+
+        # Source ~/.bashrc in the current shell (if needed)
+        # Note: This only affects the current subprocess, not the parent shell.
+        run(
+            ["bash", "-c", "source ~/.bashrc && env"],
+            check=True,
+            text=True,
+        )
 
     run("pixi init -c https://brainvisa.info/neuro-forge -c pytorch -c nvidia -c conda-forge", shell=True, executable="/bin/bash")
     with open("pixi.toml", mode="a") as conf:
