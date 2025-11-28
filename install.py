@@ -162,22 +162,27 @@ def main(installation_dir: str) -> None:
         run(["bash", "-c", "curl -fsSL https://pixi.sh/install.sh | bash"], check=True)
         environ["PATH"] = f"{join(environ['HOME'], '.pixi', 'bin')}{pathsep}{environ['PATH']}"
 
+    # Remove existing pixi.toml if it exists
     if exists("pixi.toml"):
         remove("pixi.toml")
 
-    # Run pixi commands with updated environment
+    # Run pixi init with channels
     env = environ.copy()
     env["PATH"] = f"{join(environ['HOME'], '.pixi', 'bin')}{pathsep}{env['PATH']}"
-    run_pixi("pixi init -c https://brainvisa.info/neuro-forge -c pytorch -c nvidia -c conda-forge", env=env)
+    run_pixi(
+        "pixi init -c https://brainvisa.info/neuro-forge -c pytorch -c nvidia -c conda-forge",
+        env=env
+    )
 
-    # Write pixi.toml with correct format
+    # Append dependencies to pixi.toml
     with open("pixi.toml", "a") as conf:
-        conf.write('\n[dependencies]\n')
         conf.write('soma-env = ">=0.0"\n')
         conf.write('libjpeg-turbo = {channel= "conda-forge", version= ">=3.0"}\n')
-        conf.write('\n[pypi-dependencies]\n')
+        conf.write('\n')
+        conf.write('[pypi-dependencies]\n')
         conf.write('dracopy = ">=1.4.2"\n')
 
+    # Add remaining dependencies
     run_pixi("pixi add anatomist morphologist soma-env=0.0 pip", env=env)
 
     # Git part
