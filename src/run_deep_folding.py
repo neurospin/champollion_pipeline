@@ -60,13 +60,16 @@ def main() -> None :
     parser.add_argument("output", help="Absolute path to the generated sulcal regions from deep_folding.")
     parser.add_argument("--region-file", help="Absolute path to the user's sulcal region's configuration file.")
     parser.add_argument(
-        "--path_to_graph", type=str, required=True
+        "--path_to_graph", type=str, required=True, help="Contains the sub-path that, for each subject, permits getting the sulcal graphs."
     )
     parser.add_argument(
-        "--path_sk_with_hull", type=str, required=True
+        "--path_sk_with_hull", type=str, required=True, help="Contains the sub-path where to get the skeleton with hull."
     )
     parser.add_argument(
-        "--sk_qc_path", type=str, default=""
+        "--sk_qc_path", type=str, default="", help="the path to the QC file if it exists (the format of the QC file is given below)"
+    )
+    parser.add_argument(
+        "--njobs", help="Number of CPU cores allowed to use.", type=int, default=2
     )
 
     args = parser.parse_args()
