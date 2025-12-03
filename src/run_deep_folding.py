@@ -8,13 +8,13 @@ from os import getcwd
 from os.path import dirname
 from os.path import join
 
-from json import load
+from joblib import cpu_count
 
 from subprocess import run
 
 from utils.lib import are_paths_valid
 
-def run_deep_folding(input_path: str, output_path: str, path_to_graph, path_sk_with_hull, sk_qc_path) -> None:
+def run_deep_folding(input_path: str, output_path: str, path_to_graph, path_sk_with_hull, sk_qc_path, njobs) -> None:
     print(f"run_deep_folding.py/input: {input_path}")
     print(f"run_deep_folding.py/output: {output_path}")
 
@@ -39,9 +39,13 @@ def run_deep_folding(input_path: str, output_path: str, path_to_graph, path_sk_w
         )
     sk_qc_path_arg = f"--sk_qc_path {sk_qc_path}" if sk_qc_path else ""
 
+    if njobs >= cpu_count():
+        print(f"run_deep_folding.py/run_deep_folding/njobs: Warning you are trying to run more jobs than you have cores, the script will run with {cpu_count() - 2} jobs.")
+
     run(f"python3 generate_sulcal_regions.py -d {input_path}"
-        f"{path_to_graph_arg}" 
-        f"{path_sk_with_hull_arg}", 
+        f" {path_to_graph_arg}" 
+        f" {path_sk_with_hull_arg}"
+        f" {njobs}", 
         shell=True, 
         executable="/bin/bash")
     
@@ -69,12 +73,14 @@ def main() -> None :
         "--sk_qc_path", type=str, default="", help="the path to the QC file if it exists (the format of the QC file is given below)"
     )
     parser.add_argument(
-        "--njobs", help="Number of CPU cores allowed to use.", type=int, default=2
+        "--njobs", help="Number of CPU cores allowed to use. Default is your maximum number of cores - 2 or up to 22 if you have enough cores.",
+        type=int,
+        default=min(22, cpu_count() - 2)
     )
 
     args = parser.parse_args()
 
-    run_deep_folding(args.input, args.output, args.path_to_graph, args.path_sk_with_hull, args.sk_qc_path)
+    run_deep_folding(args.input, args.output, args.path_to_graph, args.path_sk_with_hull, args.sk_qc_path, args.njobs)
 
 if __name__ == "__main__":
     main()
