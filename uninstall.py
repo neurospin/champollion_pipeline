@@ -29,7 +29,7 @@ def remove_pixi_global():
 
 def remove_pixi_env(install_dir):
     """Remove project-specific pixi environment and pixi.toml."""
-    pixi_dir = join(install_dir, "pixi_env")
+    pixi_dir = join(install_dir, ".pixi")
     pixi_toml = join(install_dir, "pixi.toml")
     if exists(pixi_dir):
         print(f"Removing project pixi environment at {pixi_dir}...")
