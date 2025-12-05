@@ -162,7 +162,7 @@ def main(installation_dir: str) -> None:
     local_dir: str = getcwd()
     abs_install_dir = get_absolute_path(installation_dir)
     chdir(abs_install_dir)
-    run(["git", "checkout", "pipeline_automation"], check=True)
+    
     link_to_deep_folding_repo: str = "https://github.com/neurospin/deep_folding.git"
     link_to_champollion_repo: str = "https://github.com/neurospin/champollion_V1.git"
 
