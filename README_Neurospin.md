@@ -64,11 +64,15 @@ The data/TEST_your_last_name folder now contains two T1 MRI files in the rawdata
 
 ## If you want to run each subject serially:
 
+First go in your data folder:
+```bash
+cd TEST_your_last_name
+```
+
 If you want to run Morphologist serially:
 
 ```bash
-# if you copied your data in data/ you can use it as (change /my/path/to/data with TEST_your_last_name):
-LIST_MRI_FILES="/my/path/to/data/rawdata/sub-0001.nii.gz /my/path/to/data/rawdata/rawdata/sub-0002.nii.gz"
+LIST_MRI_FILES="./rawdata/sub-0001.nii.gz ./rawdata/rawdata/sub-0002.nii.gz"
 OUTPUT_PATH="." # The program will put the output in $OUTPUT_PATH/derivatives/morphologist-5.2
 morphologist-cli $LIST_MRI_FILES $OUTPUT_PATH -- --of morphologist-auto-nonoverlap-1.0
 ```
