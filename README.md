@@ -29,6 +29,7 @@ In order to run the pipeline, enter the pixi environment:
 
 ```bash
 source ~/.barshrc # sourcing your newly installed environment
+cd ../pixi_env/
 pixi shell
 ```
 
