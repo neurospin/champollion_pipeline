@@ -28,6 +28,7 @@ The data/ folder is used to store the raw data and the derivatives outputs. You 
 In order to run the pipeline, enter the pixi environment:
 
 ```bash
+source ~/.barshrc # sourcing your newly installed environment
 pixi shell
 ```
 
@@ -40,9 +41,12 @@ To generate the Morphologist graphs from the T1 MRIs, you will use morphologist-
 ```bash
 cd ../data/ 
 
+mkdir TEST_your_last_name # creating your dataset folder, you could just also let everything in data/
+mv pipeline_loop_2mm.json TEST_your_last_name/ # reporting the config file in the new folder
+
 # if you copied your data in data/ you can use it like so
-LIST_MRI_FILES="/my/path/to/data/rawdata/sub-0001.nii.gz /my/path/to/data/rawdata/rawdata/sub-0002.nii.gz"
-OUTPUT_PATH="." # The program will put the output in $OUTPUT_PATH/derivatives/morphologist-5.2
+LIST_MRI_FILES="/my/path/to/data/TEST08/rawdata/sub-0001.nii.gz /my/path/to/data/TEST08/rawdata/sub-0002.nii.gz"
+OUTPUT_PATH="/my/path/to/data/TEST08/" # The program will put the output in $OUTPUT_PATH/derivatives/morphologist-5.2
 morphologist-cli $LIST_MRI_FILES $OUTPUT_PATH -- --of morphologist-auto-nonoverlap-1.0
 ```
 
@@ -123,6 +127,10 @@ exit
 ## 4.1. Generate the dataset config files
 
 We first need to generate the configuration files for each region of the new dataset $DATA (It can be anywhere in the dataset configuration folder: $PATH_TO_PROGRAM/champollion_V1/contrastive/configs/dataset). For this, we will first create a folder called $DATA in the datasets folder of the champollion_V1 configuration, and copy the file 'reference.yaml' (the one in this GitHub) into this folder:
+
+```bash
+python3 generate_champollion_config.py my/path/to/data/TESTXX/derivatives/deep_folding/crops/2mm --config_loc my/path/to/data/TESTXX
+```
 
 ```bash
 mkdir -p $PATH_TO_PROGRAM/champollion_V1/contrastive/configs/dataset/julien/$DATA
