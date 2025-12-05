@@ -15,13 +15,14 @@ def handle_yaml_conf(conf_loc: str, dataset_loc: str):
     lines: list[str] = list()
     
     with open(conf_loc, "r") as f:
-        for line in f.read():
-            lines.append(line)
-
-    for line in lines:
-        if "dataset_folder" in line:
-            line = f"dataset_folder: {dataset_loc}"
-
+        for line in f.readlines():
+            #TO_REMOVE
+            print(line)
+            if "dataset_folder" in line:
+                lines.append(f"dataset_folder: {dataset_loc}")
+            else:
+                lines.append(line)
+                
     with open(conf_loc, "w") as f:
         f.writelines(lines)
 
@@ -47,7 +48,7 @@ def main(loc: str, champollion_dir: str, crops_dir: str) -> None:
     chdir(champollion_dir)
     run(["python3", "./contrastive/utils/create_dataset_config_files.py", "--path", real_conf_loc, "--crop_path", crops_dir], check=True)
 
-    handle_yaml_conf(real_conf_loc, loc)
+    handle_yaml_conf("./contrastive/configs/dataset_localization/local.yaml", loc)
 
     chdir(local_dir)
 
