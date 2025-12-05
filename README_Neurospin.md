@@ -13,28 +13,36 @@ This tutorial gives the steps to go from a list of T1 MRIs to their correspondin
 
 # 1. Get Started
 
-The first step is to have a dedicated work environment. We advise you to create a new folder before cloning this repository and clone it inside the newly created folder:
+The first step is to have a dedicated work environment. We advise you to create a new folder before cloning this repository and clone it inside the newly created folder. As a first step, we advise creating it in /home_local/$USER (USER is your personal folder, for example your ID abXXXXXX):
 
 ```bash
-mkdir Champollion
+cd /home_local/$USER
+```
+
+You then create your new folder 'Champollion':
+
+```bash
+mkdir -p Champollion
 cd Champollion
 git clone https://github.com/neurospin/champollion_pipeline.git
 ```
 
-if you already have a work environment setup you can directly install and initialize the pipeline. To do so, please tun the install script like so:
+If you have not installed anything, please run the install script as follows (it will install all needed libraries in a pixi environment):
 ```bash
-python3 install.py --install_dir ..
+cd champollion_pipeline
+python3 install.py --installation_dir ..
 ```
 
-This will install everything it the previously created project folder. You can, of course, use an absolute path.
+This will install everything in the previously created project folder. You can, of course, use an absolute path for the installation_dir.
+
 It will create an architecture like so:
 ```
-champollion_pipeline/ champollion_V1/ deep_folding/ data/
+pixi_env/ champollion_pipeline/ champollion_V1/ deep_folding/ data/
 ```
 
 The data/ folder is used to store the raw data and the derivatives outputs. You can, of course, use any other folder if your environment is already setup.
 
-In order to run the pipeline, enter the pixi environment:
+To run the pipeline, enter the pixi environment:
 
 ```bash
 source ~/.barshrc # sourcing your newly installed environment
