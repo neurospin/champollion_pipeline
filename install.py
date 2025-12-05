@@ -162,6 +162,7 @@ def main(installation_dir: str) -> None:
     local_dir: str = getcwd()
     abs_install_dir = get_absolute_path(installation_dir)
     chdir(abs_install_dir)
+    run(["git", "checkout", "pipeline_automation"], check=True)
     link_to_deep_folding_repo: str = "https://github.com/neurospin/deep_folding.git"
     link_to_champollion_repo: str = "https://github.com/neurospin/champollion_V1.git"
 
@@ -200,6 +201,7 @@ def main(installation_dir: str) -> None:
 
     # Software installation part
     chdir(join(abs_install_dir, 'deep_folding'))
+    run(["git", "checkout", "2025_bdrabczuk_running_local_tests"], check=True)
     run_in_pixi("SKLEARN_ALLOW_DEPRECATED_SKLEARN_PACKAGE_INSTALL=True pip3 install -e .")
     chdir(join(abs_install_dir, "champollion_V1"))
     run_in_pixi("pip3 install -e .")
