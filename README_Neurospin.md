@@ -3,7 +3,7 @@
 In Neurospin, you should first connect to a computer with some computing power, for example rosette:
 
 ```
-ssh rosette
+ssh -X rosette
 ```
 Note that, specifically for Neurospin, you need to connect to rosette in ssh, not with TurboVNC.
 
@@ -37,7 +37,7 @@ This will install everything in the previously created project folder. You can, 
 
 It will create an architecture like so:
 ```
-pixi_env/ champollion_pipeline/ champollion_V1/ deep_folding/ data/
+champollion_pipeline/ champollion_V1/ deep_folding/ data/
 ```
 
 The data/ folder is used to store the raw data and the derivatives outputs. You can, of course, use any other folder if your environment is already setup.
@@ -46,7 +46,6 @@ To run the pipeline, enter the pixi environment:
 
 ```bash
 source ~/.bashrc # sourcing your newly installed environment
-cd ../pixi_env/
 pixi shell
 ```
 
@@ -58,7 +57,7 @@ First, copy the source example TEST_TEMPLATE, present in $PATH_TO_TEST:
 
 ```bash
 cd ../data/
-rsync -a /neurospin/dico/data/test/TEST_TEMPLATE TEST_your_last_name
+rsync -a /neurospin/dico/data/test/TEST_TEMPLATE/ TEST_your_last_name
 ```
 
 The data/TEST_your_last_name folder now contains two T1 MRI files in the rawdata subfolder. The following bash command will generate the Morphologist graph from the two T1 MRIs and put them in the subfolder "derivatives/morphologist-5.2". You provide a list of MRIs (LIST_MRI_FILES) separated by spaces. We will now generate the Morphologist outputs. Note that the steps described here generate the "classical" Morphologist output, NOT with the BIDS organization. You can generate them serially or in parallel (choose only one of the two options):
