@@ -176,6 +176,9 @@ def main(installation_dir: str) -> None:
     if exists("pixi.toml"):
         remove("pixi.toml")
 
+    run(["mkdir", "-p", "pixi_env"])
+    chdir(join(abs_install_dir, "pixi_env"))
+
     # Run pixi init with channels
     env = environ.copy()
     env["PATH"] = f"{join(environ['HOME'], '.pixi', 'bin')}{pathsep}{env['PATH']}"

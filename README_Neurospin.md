@@ -7,7 +7,13 @@ ssh rosette
 ```
 Note that, specifically for Neurospin, you need to connect to rosette in ssh, not with TurboVNC.
 
-Then the first step is to have a dedicated work environment. We advise you to create a new folder before cloning this repository and clone it inside the newly created folder:
+# Champollion pipeline - step-by-step tutorial
+
+This tutorial gives the steps to go from a list of T1 MRIs to their corresponding 56 Champollion embeddings.
+
+# 1. Get Started
+
+The first step is to have a dedicated work environment. We advise you to create a new folder before cloning this repository and clone it inside the newly created folder:
 
 ```bash
 mkdir Champollion
@@ -31,6 +37,8 @@ The data/ folder is used to store the raw data and the derivatives outputs. You 
 In order to run the pipeline, enter the pixi environment:
 
 ```bash
+source ~/.barshrc # sourcing your newly installed environment
+cd ../pixi_env/
 pixi shell
 ```
 
