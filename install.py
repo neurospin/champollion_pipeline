@@ -209,7 +209,7 @@ def main(installation_dir: str) -> None:
     # Creating the default data file
     chdir(abs_install_dir)
     run(["mkdir", "-p", "data"], check=True)
-    run(["cp", "./pipeline_loop_2mm.json", "data/"])
+    run(["cp", "./champollion_pipeline/pipeline_loop_2mm.json", "data/"])
     chdir(local_dir)
     return None
 
