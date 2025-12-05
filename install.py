@@ -198,6 +198,8 @@ def main(installation_dir: str) -> None:
     # Add remaining dependencies
     run_pixi("pixi add anatomist morphologist soma-env=0.0 pip", env=env)
 
+    chdir(abs_install_dir)
+
     # Git part
     clone_repo(link_to_deep_folding_repo, "deep_folding")
     clone_repo(link_to_champollion_repo, "champollion_V1")
