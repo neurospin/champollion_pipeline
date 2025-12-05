@@ -14,21 +14,22 @@ git clone https://github.com/neurospin/champollion_pipeline.git
 
 if you already have a work environment setup you can directly install and initialize the pipeline. To do so, please tun the install script like so:
 ```bash
-python3 install.py --install_dir ..
+cd champollion_pipeline
+python3 install.py --installation_dir ..
 ```
 
-This will install everything it the previously created project folder. You can, of course, use an absolute path.
+This will install everything in the previously created project folder. You can, of course, use an absolute path for installation_dir.
 It will create an architecture like so:
 ```
-champollion_pipeline/ champollion_V1/ deep_folding/ data/
+pixi_env/ champollion_pipeline/ champollion_V1/ deep_folding/ data/
 ```
 
 The data/ folder is used to store the raw data and the derivatives outputs. You can, of course, use any other folder if your environment is already setup.
 
-In order to run the pipeline, enter the pixi environment:
+To run the pipeline, enter the pixi environment:
 
 ```bash
-source ~/.barshrc # sourcing your newly installed environment
+source ~/.bashrc # sourcing your newly installed environment
 cd ../pixi_env/
 pixi shell
 ```
@@ -42,10 +43,10 @@ To generate the Morphologist graphs from the T1 MRIs, you will use morphologist-
 ```bash
 cd ../data/ 
 
-mkdir TEST_your_last_name # creating your dataset folder, you could just also let everything in data/
+mkdir TEST_your_last_name # creating your dataset folder, you could also just let everything in data/
 mv pipeline_loop_2mm.json TEST_your_last_name/ # reporting the config file in the new folder
 
-# if you copied your data in data/ you can use it like so
+# if you copied your data in data/ you can use it like as (change /my/path/to/data with TEST_your_last_name):
 LIST_MRI_FILES="/my/path/to/data/TEST08/rawdata/sub-0001.nii.gz /my/path/to/data/TEST08/rawdata/sub-0002.nii.gz"
 OUTPUT_PATH="/my/path/to/data/TEST08/" # The program will put the output in $OUTPUT_PATH/derivatives/morphologist-5.2
 morphologist-cli $LIST_MRI_FILES $OUTPUT_PATH -- --of morphologist-auto-nonoverlap-1.0
@@ -73,7 +74,7 @@ This may last around 15-30 minutes.
 
 # 3. Generate the sulcal regions
 
-In $PATH_TO_DATA, you will create the folder deep_folding-2025 in the derivatives, make a symbolic link between the deep_folding datasets folder and this deep_folding-2025 folder (This is necessary as the deep_folding software is looking for a folder, $PATH_TO_DEEP_FOLDING_DATASETS, where all deep_folding datasets lie). :
+In TEST_your_last_name, you will create the folder deep_folding-2025 in the derivatives, make a symbolic link between the deep_folding datasets folder and this deep_folding-2025 folder (This is necessary as the deep_folding software is looking for a folder, $PATH_TO_DEEP_FOLDING_DATASETS, where all deep_folding datasets lie). :
 
 
 * "graphs_dir" -> contains the path to the morphologist folder
