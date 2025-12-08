@@ -21,7 +21,7 @@ python3 install.py --installation_dir ..
 This will install everything in the previously created project folder. You can, of course, use an absolute path for installation_dir.
 It will create an architecture like so:
 ```
-pixi_env/ champollion_pipeline/ champollion_V1/ deep_folding/ data/
+champollion_pipeline/ champollion_V1/ deep_folding/ data/
 ```
 
 The data/ folder is used to store the raw data and the derivatives outputs. You can, of course, use any other folder if your environment is already setup.
@@ -30,7 +30,6 @@ To run the pipeline, enter the pixi environment:
 
 ```bash
 source ~/.bashrc # sourcing your newly installed environment
-cd ../pixi_env/
 pixi shell
 ```
 
