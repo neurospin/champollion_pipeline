@@ -5,54 +5,46 @@ Wrapper script to generate embeddings and train classifiers.
 This script manages user inputs and calls embeddings_pipeline.py.
 """
 
+import os
+import sys
 import pprint
-from argparse import ArgumentParser
-from os import chdir
-from os import getcwd
-from os.path import dirname
-from os.path import join
-from subprocess import run
-from typing import List, Optional
+import argparse
+from os.path import dirname, join
+from subprocess import run, check_call
 
 def run_embeddings_pipeline(
-    config_path: str,
     dir_path: str,
     datasets_root: str,
     dataset_localization: str = "neurospin",
-    datasets: List[str] = ["toto"],
-    labels: List[str] = ["Sex"],
-    short_name: Optional[str] = None,
+    datasets: list = ["toto"],
+    labels: list = ["Sex"],
+    short_name: str = None,
     classifier_name: str = "svm",
     overwrite: bool = False,
     embeddings_only: bool = False,
     use_best_model: bool = False,
-    subsets: List[str] = ["full"],
-    epochs: List[Optional[int]] = [None],
+    subsets: list = ["full"],
+    epochs: list = [None],
     split: str = "random",
     cv: int = 5,
     splits_basedir: str = "",
-    idx_region_evaluation: Optional[int] = None,
-    verbose: bool = False,
-    njobs: Optional[int] = None
-) -> None:
+    idx_region_evaluation: int = None,
+    verbose: bool = False
+) -> int:
     """Run the embeddings pipeline with the given arguments."""
-    print(f"generate_embedding.py/config_path: {config_path}")
     print(f"generate_embedding.py/dir_path: {dir_path}")
     print(f"generate_embedding.py/datasets_root: {datasets_root}")
 
-    local_dir: str = getcwd()
-
     # Build the command to call embeddings_pipeline.py
     cmd = [
-        "python3",
+        sys.executable,
         join(dirname(__file__), "embeddings_pipeline.py"),
-        f"--config_path={config_path}",
         f"--dir_path={dir_path}",
         f"--datasets_root={datasets_root}",
         f"--dataset_localization={dataset_localization}"
     ]
 
-    # Add optional arguments
+    # Add optional arguments if they differ from defaults
     if datasets != ["toto"]:
         for dataset in datasets:
             cmd.append(f"--datasets={dataset}")
@@ -107,36 +99,28 @@ def run_embeddings_pipeline(
     print(" ".join(cmd))
 
     # Execute the command
-    run(" ".join(cmd), shell=True, executable="/bin/bash")
+    try:
+        return check_call(cmd)
+    except Exception as e:
+        print(f"Error running command: {e}")
+        return 1
 
-    # Return to the original directory
-    chdir(local_dir)
-
-def main() -> None:
+def main() -> int:
     """Main function to handle user inputs and call the pipeline script."""
-    parser = ArgumentParser(
-        prog="generate_embedding",
+    parser = argparse.ArgumentParser(
         description="Generate embeddings and train classifiers for deep learning models."
     )
 
     # Required arguments
     parser.add_argument(
-        "--config_path",
+        "dir_path",
         type=str,
-        required=True,
-        help="Path to the directory containing classifier configs (e.g., svm.yaml, logistic.yaml)."
-    )
-    parser.add_argument(
-        "--dir_path",
-        type=str,
-        required=True,
         help="Path to the directory containing model folders."
     )
     parser.add_argument(
-        "--datasets_root",
+        "datasets_root",
         type=str,
-        required=True,
-        help="Root path to the dataset YAML configs (e.g., '/path/to/champollion_config_data')."
+        help="Root path to the dataset YAML configs."
     )
 
     # Optional arguments with defaults
@@ -242,8 +226,7 @@ def main() -> None:
             epochs.append(int(epoch))
 
     # Call the pipeline function
-    run_embeddings_pipeline(
-        config_path=args.config_path,
+    return run_embeddings_pipeline(
         dir_path=args.dir_path,
         datasets_root=args.datasets_root,
         dataset_localization=args.dataset_localization,
@@ -264,4 +247,4 @@ def main() -> None:
     )
 
 if __name__ == "__main__":
-    main()
+    sys.exit(main())
