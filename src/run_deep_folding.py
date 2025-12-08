@@ -23,7 +23,7 @@ def run_deep_folding(input_path: str, output_path: str, path_to_graph, path_sk_w
     
     local_dir: str = getcwd()
         
-        # Moving to deep_folding's script location
+    # Moving to deep_folding's script location
     chdir(join(dirname(dirname(local_dir)), 'deep_folding/deep_folding/brainvisa/'))
 
     path_to_graph_arg = (
