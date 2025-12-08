@@ -72,7 +72,7 @@ cd TEST_your_last_name
 If you want to run Morphologist serially:
 
 ```bash
-LIST_MRI_FILES="./rawdata/sub-0001.nii.gz ./rawdata/rawdata/sub-0002.nii.gz"
+LIST_MRI_FILES="./rawdata/sub-0001.nii.gz ./rawdata/sub-0002.nii.gz"
 OUTPUT_PATH="." # The program will put the output in $OUTPUT_PATH/derivatives/morphologist-5.2
 morphologist-cli $LIST_MRI_FILES $OUTPUT_PATH -- --of morphologist-auto-nonoverlap-1.0
 ```
