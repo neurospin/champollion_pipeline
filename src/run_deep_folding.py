@@ -37,7 +37,12 @@ def run_deep_folding(input_path: str, output_path: str, path_to_graph, path_sk_w
         if path_sk_with_hull 
         else "--path_sk_with_hull t1mri/default_acquisition/default_analysis/segmentation"
         )
+    
     sk_qc_path_arg = f"--sk_qc_path {sk_qc_path}" if sk_qc_path else ""
+
+    njobs_arg = (
+        f" --njobs {njobs}"
+    )
 
     if njobs >= cpu_count():
         print(f"run_deep_folding.py/run_deep_folding/njobs: Warning you are trying to run more jobs than you have cores, the script will run with {cpu_count() - 2} jobs.")
@@ -45,7 +50,8 @@ def run_deep_folding(input_path: str, output_path: str, path_to_graph, path_sk_w
     run(f"python3 generate_sulcal_regions.py -d {input_path}"
         f" {path_to_graph_arg}" 
         f" {path_sk_with_hull_arg}"
-        f" {njobs}", 
+        f" {sk_qc_path_arg}"
+        f" {njobs_arg}", 
         shell=True, 
         executable="/bin/bash")
     
@@ -75,10 +81,17 @@ def main() -> None :
     parser.add_argument(
         "--njobs", help="Number of CPU cores allowed to use. Default is your maximum number of cores - 2 or up to 22 if you have enough cores.",
         type=int,
-        default=min(22, cpu_count() - 2)
+        default=None
     )
 
     args = parser.parse_args()
+
+    if args.njobs is None:
+        args.njobs = min(22, cpu_count() - 2)
+
+    # Convert default lambda to actual value
+    if callable(args.njobs):
+        args.njobs = args.njobs()
 
     run_deep_folding(args.input, args.output, args.path_to_graph, args.path_sk_with_hull, args.sk_qc_path, args.njobs)
 

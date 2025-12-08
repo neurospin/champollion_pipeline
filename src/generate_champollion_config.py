@@ -22,14 +22,14 @@ def handle_yaml_conf(conf_loc: str, dataset_loc: str):
                 lines.append(f"dataset_folder: {dataset_loc}")
             else:
                 lines.append(line)
-                
+
     with open(conf_loc, "w") as f:
         f.writelines(lines)
 
 
 def main(loc: str, champollion_dir: str, crops_dir: str) -> None:
     local_dir: str = getcwd()
-    real_conf_loc: str = join(loc, 'champollion_config_data/')
+    real_conf_loc: str = join(loc, f'derivatives/champollion_V1/champollion_config_data/{basename(loc)}/')
     if not exists(real_conf_loc):
         run(["mkdir", "-p", real_conf_loc], check=True)
     if not exists(join(real_conf_loc, "reference.yaml")):
