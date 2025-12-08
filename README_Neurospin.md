@@ -108,10 +108,10 @@ In TEST_your_last_name, you will create the folder deep_folding-2025 in the deri
 * "skel_qc_path" -> the path to the QC file if it exists (the format of the QC file is given below)
 * "output_dir" -> the output directory where the deep_folding outputs will lie
 
-For example, if your dataset is TESTXX, and you have no QC file, the corresponding parameters in the run_deep_folding script file will look like:
+For example, if your dataset is TESTXX, and you have no QC file, the corresponding parameters in the run_deep_folding script file will look like (you are supposed to be here in the champollion_pipeline folder):
 
 ```bash
-python3 ./src/run_deep_folding.py /my/path/to/data/TESTXX/ /my/path/to/data/TESTXX/derivatives/ --path_to_graph "t1mri/default_acquisition/default_analysis/folds/3.1" --path_to_sk_with_hull "t1mri/default_acquisition/default_analysis/segmentation" --sk_qc_path ""
+python3 ./src/run_deep_folding.py /my/path/to/data/TESTXX/ /my/path/to/data/TESTXX/derivatives/ --path_to_graph "t1mri/default_acquisition/default_analysis/folds/3.1" --path_sk_with_hull "t1mri/default_acquisition/default_analysis/segmentation" --sk_qc_path ""
 ```
 
 If you have a QC file, it will be a tabular-separated file (for example,  qc.tsv). It will have a minimum of two columns: "participant_id" and "qc" (with an optional third column named "comments" to explain the reason for the rejection). qc will be set to 1 if the subject should be processed, and to 0 otherwise. Here is an example of a QC file:
