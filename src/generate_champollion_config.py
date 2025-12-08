@@ -16,8 +16,6 @@ def handle_yaml_conf(conf_loc: str, dataset_loc: str):
     
     with open(conf_loc, "r") as f:
         for line in f.readlines():
-            #TO_REMOVE
-            print(line)
             if "dataset_folder" in line:
                 lines.append(f"dataset_folder: {dataset_loc}")
             else:
