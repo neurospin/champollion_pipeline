@@ -119,7 +119,7 @@ In the script, as it is done now, there are two parameters:
 For example, if your dataset is TEST_your_last_name, and you have no QC file, the corresponding parameters in the run_deep_folding script file will look like (you are supposed to be here in the champollion_pipeline folder):
 
 ```bash
-cd src
+cd ../../champollion_pipeline/src
 python3 ./run_deep_folding.py /my/path/to/data/TEST_your_last_name/ /my/path/to/data/TEST_your_last_name/derivatives/ --path_to_graph "t1mri/default_acquisition/0/folds/3.1" --path_sk_with_hull "t1mri/default_acquisition/0/segmentation" --sk_qc_path ""
 ```
 
