@@ -8,8 +8,10 @@ from os.path import dirname
 from os.path import exists
 from os.path import join
 
+from utils.lib import get_nth_parent_dir
 
-def handle_yaml_conf(conf_loc: str, dataset_loc: str):
+
+def handle_yaml_conf(conf_loc: str, crops_loc: str):
     """Loads the yaml configuration file and returns it."""
 
     lines: list[str] = list()
@@ -17,7 +19,7 @@ def handle_yaml_conf(conf_loc: str, dataset_loc: str):
     with open(conf_loc, "r") as f:
         for line in f.readlines():
             if "dataset_folder" in line:
-                lines.append(f"dataset_folder: {dirname(dataset_loc)}")
+                lines.append(f"dataset_folder: {get_nth_parent_dir(crops_loc, 6)}")
             else:
                 lines.append(line)
 
@@ -52,7 +54,7 @@ def main(dataset: str, champollion_dir: str, crops_dir: str) -> None:
     print(f"generate_champollion_config.py/main/chdir: {getcwd()}")
     run(["python3", "./contrastive/utils/create_dataset_config_files.py", "--path", dataset_loc, "--crop_path", crops_dir], check=True)
 
-    handle_yaml_conf("./contrastive/configs/dataset_localization/local.yaml", dataset_loc)
+    handle_yaml_conf("./contrastive/configs/dataset_localization/local.yaml", crops_dir)
 
     chdir(local_dir)
 
