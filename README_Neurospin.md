@@ -114,7 +114,8 @@ In the scriàpt, as it is done now, there are two parameters:
 For example, if your dataset is TEST_your_last_name, and you have no QC file, the corresponding parameters in the run_deep_folding script file will look like (you are supposed to be here in the champollion_pipeline folder):
 
 ```bash
-python3 ./src/run_deep_folding.py /my/path/to/data/TEST_your_last_name/ /my/path/to/data/TEST_your_last_name/derivatives/ --path_to_graph "t1mri/default_acquisition/default_analysis/folds/3.1" --path_sk_with_hull "t1mri/default_acquisition/default_analysis/segmentation" --sk_qc_path ""
+cd src
+python3 ./run_deep_folding.py /my/path/to/data/TEST_your_last_name/ /my/path/to/data/TEST_your_last_name/derivatives/ --path_to_graph "t1mri/default_acquisition/default_analysis/folds/3.1" --path_sk_with_hull "t1mri/default_acquisition/default_analysis/segmentation" --sk_qc_path ""
 ```
 
 If you have a QC file, it will be a tabular-separated file (for example,  qc.tsv). It will have a minimum of two columns: "participant_id" and "qc" (with an optional third column named "comments" to explain the reason for the rejection). qc will be set to 1 if the subject should be processed, and to 0 otherwise. Here is an example of a QC file:
@@ -128,7 +129,7 @@ sub-1000021     1
 It will last 15-30 minutes. To check that everything went smoothly, you can print the subfolders of the crop folder:
 
 ```bash
-ls /my/path/to/data/TESTXX/derivatives/deep_folding/crops/2mm
+ls /my/path/to/data/TEST_tour_last_name/derivatives/deep_folding/crops/2mm
 ```
 
 You should see 28 subfolders like this:
@@ -148,25 +149,18 @@ Sc.Cal.-S.Li.			          S.Or.
 
 # 4. Generate the embeddings
 
+## 4.2. Generate the dataset config files
+
+```bash
+python3 generate_champollion_config.py my/path/to/data/TEST_your_last_name/derivatives/deep_folding/crops/2mm --data TEST_your_last_name
+```
+
 ## 4.2. Generate the embeddings
 
-Inside the file embeddings_pipeline.py ($PATH_TO_PROGRAM/champollion_V1/contrastive/evaluation/embeddings_pipeline.py):
+```bash
+python3 generate_embeddings.py /neurospin/dico/data/deep_folding/current/models/Champollion_V1_after_ablation local TEST_your_last_name test_your_last_name
+```
 
-```
-    embeddings_pipeline("/neurospin/dico/data/deep_folding/current/models/Champollion_V1_after_ablation",
-        dataset_localization="neurospin",
-        datasets_root="julien/TESTXX",
-        short_name='testxx',
-        overwrite=True,
-        datasets=["toto"],
-        idx_region_evaluation=None,
-        labels=["Sex"],
-        classifier_name='logistic',
-        embeddings=True, embeddings_only=True, use_best_model=False,
-        subsets=['full'], epochs=[None], split='random', cv=1,
-        splits_basedir='',
-        verbose=False) 
-```
 
 ## 4.2. Putting together the embeddings
 
