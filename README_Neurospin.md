@@ -146,7 +146,47 @@ S.Call.-S.s.P.-S.intraCing.	      S.F.median-S.F.pol.tr.-S.F.sup.
 Sc.Cal.-S.Li.			          S.Or.
 ```
 
-Then exit the pixi environment:
+# 4. Generate the embeddings
+
+## 4.2. Generate the embeddings
+
+Inside the file embeddings_pipeline.py ($PATH_TO_PROGRAM/champollion_V1/contrastive/evaluation/embeddings_pipeline.py):
+
+```
+    embeddings_pipeline("/neurospin/dico/data/deep_folding/current/models/Champollion_V1_after_ablation",
+        dataset_localization="neurospin",
+        datasets_root="julien/TESTXX",
+        short_name='testxx',
+        overwrite=True,
+        datasets=["toto"],
+        idx_region_evaluation=None,
+        labels=["Sex"],
+        classifier_name='logistic',
+        embeddings=True, embeddings_only=True, use_best_model=False,
+        subsets=['full'], epochs=[None], split='random', cv=1,
+        splits_basedir='',
+        verbose=False) 
+```
+
+## 4.2. Putting together the embeddings
+
+By using the code put_together_embeddings_files, which lies in $PATH_TO_PROGRAM/champollion_V1/contrastive/utils, you will put together the embeddings.
+
+At the top of the file, you will change:
+
+```
+embeddings_subpath = "testxx_random_embeddings/full_embeddings.csv"
+output_path = "/neurospin/dico/data/deep_folding/current/models/Champollion_V1_after_ablation/embeddings/TESTXX_embeddings"
+```
+by substituting textxx with the short_name defined in generate_embeddings (for example testxx), and by giving to output_path the content of $PATH_TO_OUTPUT/TEST04_embeddings (you can also just substitute TESTXX with your data folder, for example TEST04; in this case, it will copy the output to "/neurospin/dico/data/deep_folding/current/models/Champollion_V1_after_ablation/embeddings/TEST04_embeddings")
+
+Check that you have 56 csv files in the output directory.
+
+That's it! You have now the champollion_V1 embedddings....
+
+# Finalize
+
+Exit the pixi environment:
 
 ```bash
 exit
