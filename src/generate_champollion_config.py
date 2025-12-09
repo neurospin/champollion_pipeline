@@ -19,7 +19,7 @@ def handle_yaml_conf(conf_loc: str, crops_loc: str):
     with open(conf_loc, "r") as f:
         for line in f.readlines():
             if "dataset_folder" in line:
-                lines.append(f"dataset_folder: {get_nth_parent_dir(crops_loc, 6)}")
+                lines.append(f"dataset_folder: {get_nth_parent_dir(crops_loc, 5)}")
             else:
                 lines.append(line)
 
