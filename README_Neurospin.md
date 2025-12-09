@@ -172,10 +172,10 @@ python3 generate_embeddings.py /neurospin/dico/data/deep_folding/current/models/
 Now, put all embeddings together in derivatives/champollion_V1 of your dataset:
 
 ```bash
-python3 put_together_embeddings.py --embeddings_subpath test_your_last_name_random_embeddings/full_embeddings.csv --output_path my/path/to/data/TEST_your_last_name/TEST_chavas/derivatives/champollion_V1
+python3 put_together_embeddings.py --embeddings_subpath test_your_last_name_random_embeddings/full_embeddings.csv --output_path my/path/to/data/TEST_your_last_name/derivatives/champollion_V1
 ```
 
-Check that you have 56 csv files in the output directory my/path/to/data/TEST_your_last_name/TEST_chavas/derivatives/champollion_V1.
+Check that you have 56 csv files in the output directory my/path/to/data/TEST_your_last_name/derivatives/champollion_V1.
 
 That's it! You have now the champollion_V1 embedddings....
 
