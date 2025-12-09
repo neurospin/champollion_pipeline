@@ -157,7 +157,7 @@ Sc.Cal.-S.Li.			          S.Or.
 ## 4.2. Generate the dataset config files
 
 ```bash
-python3 generate_champollion_config.py my/path/to/data/TEST_your_last_name/derivatives/deep_folding/crops/2mm --data TEST_your_last_name
+python3 generate_champollion_config.py my/path/to/data/TEST_your_last_name/derivatives/deep_folding/crops/2mm --dataset TEST_your_last_name
 ```
 
 ## 4.2. Generate the embeddings
