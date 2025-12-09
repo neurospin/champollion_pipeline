@@ -42,7 +42,7 @@ def main(dataset: str, champollion_dir: str, crops_dir: str) -> None:
     my_lines: list[str] = list()
     with open("reference.yaml", 'r') as f:
         for line in f.readlines():
-            computed_path: str = f"{dataset}/dertivatives/deep_folding-2025"
+            computed_path: str = f"{dataset}/derivatives/deep_folding-2025"
             my_lines.append(line.replace("TESTXX", computed_path))
     
     with open("reference.yaml", "w") as f:
