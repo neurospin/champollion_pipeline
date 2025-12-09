@@ -99,19 +99,17 @@ This may last around 15-30 minutes.
 
 # 3. Generate the sulcal regions
 
-In TEST_your_last_name, you will create the folder deep_folding-2025 in the derivatives, make a symbolic link between the deep_folding datasets folder and this deep_folding-2025 folder (This is necessary as the deep_folding software is looking for a folder, $PATH_TO_DEEP_FOLDING_DATASETS, where all deep_folding datasets lie). :
+You will now create the culca regions. In TEST_your_last_name, the following script run_deep_folding.py will create the folder deep_folding-2025 in the derivatives, and create all the sulcal regions:
 
 
-* "graphs_dir" -> contains the path to the morphologist folder
 * "path_to_graph": -> contains the sub-path that, for each subject, permits getting the sulcal graphs
-* "path_to_skeleton_with_hull" -> contains the sub-path where to get the skeleton with hull
+* "path_sk_with_hull" -> contains the sub-path where to get the skeleton with hull
 * "skel_qc_path" -> the path to the QC file if it exists (the format of the QC file is given below)
-* "output_dir" -> the output directory where the deep_folding outputs will lie
 
-For example, if your dataset is TESTXX, and you have no QC file, the corresponding parameters in the run_deep_folding script file will look like (you are supposed to be here in the champollion_pipeline folder):
+For example, if your dataset is TEST_your_last_name, and you have no QC file, the corresponding parameters in the run_deep_folding script file will look like (you are supposed to be here in the champollion_pipeline folder):
 
 ```bash
-python3 ./src/run_deep_folding.py /my/path/to/data/TESTXX/ /my/path/to/data/TESTXX/derivatives/ --path_to_graph "t1mri/default_acquisition/default_analysis/folds/3.1" --path_sk_with_hull "t1mri/default_acquisition/default_analysis/segmentation" --sk_qc_path ""
+python3 ./src/run_deep_folding.py /my/path/to/data/TEST_your_last_name/ /my/path/to/data/TEST_your_last_name/derivatives/ --path_to_graph "t1mri/default_acquisition/default_analysis/folds/3.1" --path_sk_with_hull "t1mri/default_acquisition/default_analysis/segmentation" --sk_qc_path ""
 ```
 
 If you have a QC file, it will be a tabular-separated file (for example,  qc.tsv). It will have a minimum of two columns: "participant_id" and "qc" (with an optional third column named "comments" to explain the reason for the rejection). qc will be set to 1 if the subject should be processed, and to 0 otherwise. Here is an example of a QC file:
