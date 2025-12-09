@@ -261,7 +261,7 @@ import sys
 import argparse
 
 # Add the directory containing embeddings_pipeline.py to the Python path
-sys.path.append(os.path.dirname(os.path.abspath("../../champollion_V1/contrastive/utils/")))
+sys.path.append(os.path.abspath("../../champollion_V1/contrastive/utils/"))
 
 # Import the embeddings_pipeline function
 from embeddings_pipeline import embeddings_pipeline
