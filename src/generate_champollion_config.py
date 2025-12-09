@@ -25,28 +25,34 @@ def handle_yaml_conf(conf_loc: str, dataset_loc: str):
         f.writelines(lines)
 
 
-def main(loc: str, champollion_dir: str, crops_dir: str) -> None:
+def main(dataset: str, champollion_dir: str, crops_dir: str) -> None:
+
+    if not exists(crops_dir):
+        raise ValueError(f"generate_chamollion_config: Please input correct values. {crops_dir} does not exists.")
+
     local_dir: str = getcwd()
-    real_conf_loc: str = join(loc, f'derivatives/champollion_V1/champollion_config_data/{basename(loc)}/')
-    if not exists(real_conf_loc):
-        run(["mkdir", "-p", real_conf_loc], check=True)
-    if not exists(join(real_conf_loc, "reference.yaml")):
-        run(["cp", "../reference.yaml", real_conf_loc], check=True)
+    dataset_loc: str = join(local_dir, f"{champollion_dir}contrastive/configs/dataset/{dataset}")
+    if not exists(dataset_loc):
+        run(["mkdir", "-p", dataset_loc], check=True)
+    if not exists(join(dataset_loc, "reference.yaml")):
+        run(["cp", "../reference.yaml", dataset_loc], check=True)
     
-    chdir(real_conf_loc)
+    chdir(dataset_loc)
     
     my_lines: list[str] = list()
     with open("reference.yaml", 'r') as f:
         for line in f.readlines():
-            my_lines.append(line.replace("TESTXX", basename(loc)))
+            computed_path: str = f"{dataset}/dertivatives/deep_folding-2025"
+            my_lines.append(line.replace("TESTXX", computed_path))
     
     with open("reference.yaml", "w") as f:
         f.writelines(my_lines)
     
     chdir(champollion_dir)
-    run(["python3", "./contrastive/utils/create_dataset_config_files.py", "--path", real_conf_loc, "--crop_path", crops_dir], check=True)
+    print(f"generate_champollion_config.py/main/chdir: {getcwd()}")
+    run(["python3", "./contrastive/utils/create_dataset_config_files.py", "--path", dataset_loc, "--crop_path", crops_dir], check=True)
 
-    handle_yaml_conf("./contrastive/configs/dataset_localization/local.yaml", loc)
+    handle_yaml_conf("./contrastive/configs/dataset_localization/local.yaml", dataset_loc)
 
     chdir(local_dir)
 
@@ -64,10 +70,10 @@ if __name__ == "__main__":
         type=str
     )
     parser.add_argument(
-        "--config_loc",
-        help="Absolute path to the wished configuration's location",
+        "--dataset",
+        help="Name of the dataset.",
         type=str,
-        default="../../data/")
+        required=True)
     parser.add_argument(
         "--champollion_loc",
         help="Absolute path to Champollion binanries.",
@@ -76,4 +82,4 @@ if __name__ == "__main__":
     )
     args = parser.parse_args()
     
-    main(args.config_loc, args.champollion_loc, args.crop_path)
+    main(args.dataset, args.champollion_loc, args.crop_path)
