@@ -164,17 +164,13 @@ python3 generate_embeddings.py /neurospin/dico/data/deep_folding/current/models/
 
 ## 4.2. Putting together the embeddings
 
-By using the code put_together_embeddings_files, which lies in $PATH_TO_PROGRAM/champollion_V1/contrastive/utils, you will put together the embeddings.
+Now, put all embeddings together in derivatives/champollion_V1 of your dataset:
 
-At the top of the file, you will change:
-
+```bash
+python3 put_together_embeddings.py --embeddings_subpath test_your_last_name_random_embeddings/full_embeddings.csv --output_path my/path/to/data/TEST_your_last_name/TEST_chavas/derivatives/champollion_V1
 ```
-embeddings_subpath = "testxx_random_embeddings/full_embeddings.csv"
-output_path = "/neurospin/dico/data/deep_folding/current/models/Champollion_V1_after_ablation/embeddings/TESTXX_embeddings"
-```
-by substituting textxx with the short_name defined in generate_embeddings (for example testxx), and by giving to output_path the content of $PATH_TO_OUTPUT/TEST04_embeddings (you can also just substitute TESTXX with your data folder, for example TEST04; in this case, it will copy the output to "/neurospin/dico/data/deep_folding/current/models/Champollion_V1_after_ablation/embeddings/TEST04_embeddings")
 
-Check that you have 56 csv files in the output directory.
+Check that you have 56 csv files in the output directory my/path/to/data/TEST_your_last_name/TEST_chavas/derivatives/champollion_V1.
 
 That's it! You have now the champollion_V1 embedddings....
 
