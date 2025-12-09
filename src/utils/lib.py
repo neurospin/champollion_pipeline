@@ -1,7 +1,7 @@
 import errno
 
 from os import strerror
-from os.path import exists
+from os.path import exists, dirname
 
 def are_paths_valid(paths: list[str]) -> bool | None:
    if len(paths) <= 0:
@@ -34,6 +34,6 @@ def get_nth_parent_dir(folder: str, n: int) -> str:
     else :
         parent_folder: str = folder
         for i in range(n) :
-            parent_folder = os.path.dirname(parent_folder)
+            parent_folder = dirname(parent_folder)
 
     return parent_folder
