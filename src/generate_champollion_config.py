@@ -4,7 +4,7 @@ from argparse import ArgumentParser
 from os import getcwd
 from os import chdir
 
-from os.path import basename
+from os.path import dirname
 from os.path import exists
 from os.path import join
 
@@ -17,7 +17,7 @@ def handle_yaml_conf(conf_loc: str, dataset_loc: str):
     with open(conf_loc, "r") as f:
         for line in f.readlines():
             if "dataset_folder" in line:
-                lines.append(f"dataset_folder: {dataset_loc}")
+                lines.append(f"dataset_folder: {dirname(dataset_loc)}")
             else:
                 lines.append(line)
 
