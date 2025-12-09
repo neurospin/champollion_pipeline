@@ -62,13 +62,13 @@ def main() -> None:
     )
     parser.add_argument(
         "--overwrite",
-        action="store_true",
-        help="Overwrite existing embeddings (default: False)."
+        action="store_false",
+        help="Overwrite existing embeddings (default: True)."
     )
     parser.add_argument(
         "--embeddings_only",
-        action="store_true",
-        help="Only compute embeddings (skip classifiers, default: False)."
+        action="store_false",
+        help="Only compute embeddings (skip classifiers, default: True)."
     )
     parser.add_argument(
         "--use_best_model",
@@ -120,6 +120,8 @@ def main() -> None:
     )
 
     args = parser.parse_args()
+
+    print(args)
 
     local_dir: str = os.getcwd()
 
