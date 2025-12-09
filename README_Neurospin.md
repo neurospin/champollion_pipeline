@@ -99,6 +99,11 @@ This may last around 15-30 minutes.
 
 # 3. Generate the sulcal regions
 
+
+```bash
+mv pipeline_loop_2mm.json TEST_your_last_name/
+```
+
 You will now create the culca regions. In TEST_your_last_name, the following script run_deep_folding.py will create the folder deep_folding-2025 in the derivatives, and create all the sulcal regions:
 
 You will need to define in the command line the following parameters:
@@ -110,10 +115,6 @@ You will need to define in the command line the following parameters:
 In the script, as it is done now, there are two parameters:
 * first argument (/my/path/to/data/TEST_your_last_name/): folder in which the dataset lies. The script will take the morphologist subfolders from this path + /derivatives/morphologist-5.2 created before
 * second argument  (/my/path/to/data/TEST_your_last_name/derivatives/): folder where we put the sulcal regions. The script will put the sulcal regions in this path + deep_folding-2025
-
-```bash
-mv pipeline_loop_2mm.json TEST_your_last_name/
-```
 
 For example, if your dataset is TEST_your_last_name, and you have no QC file, the corresponding parameters in the run_deep_folding script file will look like (you are supposed to be here in the champollion_pipeline folder):
 
