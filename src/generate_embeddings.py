@@ -123,7 +123,7 @@ def main() -> None:
 
     local_dir: str = os.getcwd()
 
-    champollion_dir: str = "../../champollion_V1/constrastive/"
+    champollion_dir: str = "../../champollion_V1/contrastive/"
 
     os.chdir(champollion_dir)
 
