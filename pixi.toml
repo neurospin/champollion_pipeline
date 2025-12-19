@@ -1,0 +1,37 @@
+[workspace]
+name = "champollion-pipeline"
+version = "0.1.0"
+description = "Installation de la pipeline Champollion V1 avec Pixi"
+authors = ["Ton Nom <ton.email@example.com>"]
+channels = [
+    "https://brainvisa.info/neuro-forge",
+    "pytorch",
+    "nvidia",
+    "conda-forge"
+]
+platforms = ["linux-64"]
+
+[dependencies]
+python = ">=3.8"
+soma-env = ">=0.0"
+libjpeg-turbo = ">=3.0"
+pip = "*"
+
+[pypi-dependencies]
+dracopy = ">=1.4.2"
+
+[tasks]
+# Clone les dépôts Git
+clone-repos = "git clone https://github.com/neurospin/deep_folding.git deep_folding 2>/dev/null || echo 'deep_folding already exists' && git clone https://github.com/neurospin/champollion_V1.git champollion_V1 2>/dev/null || echo 'champollion_V1 already exists'"
+
+# Installe deep_folding en mode éditable
+install-deep-folding = "cd deep_folding && git checkout 2025_bdrabczuk_running_local_tests && SKLEARN_ALLOW_DEPRECATED_SKLEARN_PACKAGE_INSTALL=True pip install -e ."
+
+# Installe champollion_V1 en mode éditable
+install-champollion = "cd champollion_V1 && pip install -e ."
+
+# Crée le dossier data et copie le fichier de config
+setup-data = "mkdir -p data"
+
+# Tâche globale pour tout installer
+install-all = { depends-on = ["clone-repos", "install-deep-folding", "install-champollion", "setup-data"] }
