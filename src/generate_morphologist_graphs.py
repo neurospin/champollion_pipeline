@@ -1,55 +1,79 @@
-import errno
+#!/usr/bin/env python3
+# -*- coding: utf-8 -*-
+"""
+Script to generate graphs with morphologist from the user's raw data.
+"""
 
-from os import getcwd
-from os import strerror
-from os import listdir
-from os import chdir
-from os.path import exists
-from os.path import isfile
-from os.path import join
-from os.path import splitext
-from os.path import basename
+from os import getcwd, chdir, listdir
+from os.path import isfile, join, splitext, basename
 
-from subprocess import run
+from script_builder import ScriptBuilder
 
-from argparse import ArgumentParser
 
-from utils.lib import are_paths_valid
-def run_morpho_graphs(input_path: str, output_path: str):
-    
-    if not are_paths_valid([input_path, output_path]):
-        raise ValueError("generate_morphologist_graphs.py: Please input valid paths.")
-    
-    # List of allowed extensions for files as raw data for the pipeline
-    LIST_OF_EXTENSIONS: list[str] = [".nii.gz", ".nii", ".gz"]
+class GenerateMorphologistGraphs(ScriptBuilder):
+    """Script for generating graphs with morphologist."""
 
-    input_files: list[str] = [
-        f for f in listdir(input_path) 
-                                if isfile(join(input_path, f)) 
-                                and splitext(basename(f))[1] in LIST_OF_EXTENSIONS
-                                ]
-
-    local_dir: str = getcwd()
-    chdir(input_path)
-    run(f"morphologist-cli {' '.join(input_files)} {output_path} -- --of morphologist-auto-nonoverlap-1.0", shell=True, executable="/bin/bash")
-    chdir(local_dir)
-
-def main() -> None:
-
-    print(f"Current working directory: {getcwd()}")
-    parser: ArgumentParser = ArgumentParser(
-        prog="morphologist_graphs_generator",
-        description="Generating graphs with morphologist from the user raw data."
+    def __init__(self):
+        super().__init__(
+            script_name="morphologist_graphs_generator",
+            description="Generating graphs with morphologist from the user raw data."
         )
-    
-    parser.add_argument("input", help="Absolute path to the user's raw data.")
-    parser.add_argument("output", help="Absolute path to the generated graphs from morphologist.\n" \
-    "Morphologist will create a $output/derivatives/motphologist-5.2/ directory for output generations.")
+        # Configure arguments using method chaining
+        (self.add_argument("input", help="Absolute path to the user's raw data.")
+         .add_argument("output", help="Absolute path to the generated graphs from morphologist. "
+                                      "Morphologist will create a $output/derivatives/morphologist-5.2/ "
+                                      "directory for output generations."))
 
-    args = parser.parse_args()
+    def _get_input_files(self):
+        """Get list of valid input files."""
+        # List of allowed extensions for files as raw data for the pipeline
+        LIST_OF_EXTENSIONS = [".nii.gz", ".nii", ".gz"]
 
-    run_morpho_graphs(args.input, args.output)
+        input_files = [
+            f for f in listdir(self.args.input)
+            if isfile(join(self.args.input, f))
+            and splitext(basename(f))[1] in LIST_OF_EXTENSIONS
+        ]
+
+        return input_files
+
+    def run(self):
+        """Execute the morphologist script."""
+        print(f"Current working directory: {getcwd()}")
+
+        # Validate paths
+        if not self.validate_paths([self.args.input, self.args.output]):
+            raise ValueError(
+                "generate_morphologist_graphs.py: Please input valid paths."
+            )
+
+        input_files = self._get_input_files()
+
+        local_dir = getcwd()
+        chdir(self.args.input)
+
+        # Build command
+        cmd = [
+            "morphologist-cli",
+            *input_files,
+            self.args.output,
+            "--",
+            "--of",
+            "morphologist-auto-nonoverlap-1.0"
+        ]
+
+        result = self.execute_command(cmd, shell=True)
+
+        chdir(local_dir)
+
+        return result
+
+
+def main():
+    """Main entry point."""
+    script = GenerateMorphologistGraphs()
+    return script.build().print_args().run()
 
 
 if __name__ == "__main__":
-    main()
+    exit(main())

@@ -1,24 +1,30 @@
 #!/usr/bin/env python3
 # -*- coding: utf-8 -*-
 """
-ScriptFactory: A base class for creating flexible command-line scripts.
+ScriptBuilder: A base class for building flexible command-line scripts.
+Implements the Builder pattern for script configuration.
 """
 
-import os
+import os  # noqa: F401
 import sys
 import pprint
 import argparse
 from abc import ABC, abstractmethod
-from typing import List, Dict, Any, Optional, Union, Callable
-from os.path import dirname, join, exists
+from typing import List, Dict, Any, Optional
+from os.path import dirname, join, exists  # noqa: F401
 from subprocess import run, check_call
 
-class ScriptFactory(ABC):
-    """Base class for creating flexible command-line scripts."""
+
+class ScriptBuilder(ABC):
+    """
+    Base class for building flexible command-line scripts.
+
+    Uses the Builder pattern.
+    """
 
     def __init__(self, script_name: str, description: str):
         """
-        Initialize the script factory.
+        Initialize the script builder.
 
         Args:
             script_name: Name of the script (used in help messages).
@@ -37,13 +43,25 @@ class ScriptFactory(ABC):
             formatter_class=argparse.ArgumentDefaultsHelpFormatter
         )
 
-    def add_argument(self, *args, **kwargs) -> None:
-        """Add an argument to the parser."""
+    def add_argument(self, *args, **kwargs):
+        """Add an argument to the parser. Returns self for chaining."""
         self.parser.add_argument(*args, **kwargs)
+        return self
 
-    def add_required_argument(self, name: str, help_text: str, type_: type = str) -> None:
-        """Add a required argument."""
-        self.add_argument(name, type=type_, required=True, help=help_text)
+    def add_required_argument(
+        self,
+        name: str,
+        help_text: str,
+        type_: type = str
+    ):
+        """Add a required argument. Returns self for chaining."""
+        self.parser.add_argument(
+            name,
+            type=type_,
+            required=True,
+            help=help_text
+        )
+        return self
 
     def add_optional_argument(
         self,
@@ -52,21 +70,43 @@ class ScriptFactory(ABC):
         default: Any = None,
         type_: type = str,
         action: Optional[str] = None
-    ) -> None:
-        """Add an optional argument."""
+    ):
+        """Add an optional argument. Returns self for chaining."""
         if action:
-            self.add_argument(name, action=action, help=help_text)
+            self.parser.add_argument(name, action=action, help=help_text)
         else:
-            self.add_argument(name, type=type_, default=default, help=help_text)
+            self.parser.add_argument(
+                name,
+                type=type_,
+                default=default,
+                help=help_text
+            )
+        return self
 
-    def add_flag(self, name: str, help_text: str) -> None:
-        """Add a boolean flag."""
-        self.add_optional_argument(name, help_text, action="store_true")
+    def add_flag(self, name: str, help_text: str):
+        """Add a boolean flag. Returns self for chaining."""
+        self.parser.add_argument(name, action="store_true", help=help_text)
+        return self
 
-    def parse_args(self, args: Optional[List[str]] = None) -> argparse.Namespace:
+    def parse_args(
+        self,
+        args: Optional[List[str]] = None
+    ) -> argparse.Namespace:
         """Parse command-line arguments."""
         self.args = self.parser.parse_args(args)
         return self.args
+
+    def build(self):
+        """
+        Build and finalize the script configuration.
+
+        This method completes the builder pattern by parsing arguments
+        and returning self for final method calls like run().
+
+        Returns self for chaining to run() or other methods.
+        """
+        self.parse_args()
+        return self
 
     def validate_paths(self, paths: List[str]) -> bool:
         """Validate that all paths exist."""
@@ -76,17 +116,18 @@ class ScriptFactory(ABC):
                 return False
         return True
 
-    def print_args(self) -> None:
-        """Print the parsed arguments."""
+    def print_args(self):
+        """Print the parsed arguments. Returns self for chaining."""
         print(f"{self.script_name} arguments:")
         pprint.pprint(vars(self.args))
+        return self
 
     def build_command(
         self,
         script_path: str,
         required_args: List[str],
-        optional_args: Dict[str, Any],
-        defaults: Dict[str, Any]
+        optional_args: Dict[str, Any] = None,
+        defaults: Dict[str, Any] = None
     ) -> List[str]:
         """
         Build a command to execute another script.
@@ -94,12 +135,17 @@ class ScriptFactory(ABC):
         Args:
             script_path: Path to the script to execute.
             required_args: List of required argument names.
-            optional_args: Dictionary of optional argument names and their values.
-            defaults: Dictionary of default values for optional arguments.
+            optional_args: Dictionary of optional argument names
+                          (not used, kept for compatibility).
+            defaults: Dictionary of default values for optional
+                     arguments.
 
         Returns:
             List of command components.
         """
+        if defaults is None:
+            defaults = {}
+
         cmd = [sys.executable, script_path]
 
         # Add required arguments
@@ -109,8 +155,8 @@ class ScriptFactory(ABC):
 
         # Add optional arguments if they differ from defaults
         for arg, default in defaults.items():
-            value = getattr(self.args, arg)
-            if value != default:
+            value = getattr(self.args, arg, None)
+            if value is not None and value != default:
                 if isinstance(value, bool) and value:
                     cmd.append(f"--{arg}")
                 elif isinstance(value, list):
@@ -136,7 +182,12 @@ class ScriptFactory(ABC):
         print(" ".join(cmd))
         try:
             if shell:
-                return run(" ".join(cmd), shell=True, executable="/bin/bash").returncode
+                result = run(
+                    " ".join(cmd),
+                    shell=True,
+                    executable="/bin/bash"
+                )
+                return result.returncode
             else:
                 return check_call(cmd)
         except Exception as e:
@@ -150,6 +201,4 @@ class ScriptFactory(ABC):
 
     def main(self) -> int:
         """Main entry point for the script."""
-        self.parse_args()
-        self.print_args()
-        return self.run()
+        return self.build().print_args().run()
