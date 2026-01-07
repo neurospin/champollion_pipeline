@@ -23,7 +23,9 @@ class GenerateChampollionConfig(ScriptBuilder):
         (self.add_argument("crop_path", help="Absolute path to crops path.", type=str)
          .add_required_argument("--dataset", "Name of the dataset.")
          .add_optional_argument("--champollion_loc", "Absolute path to Champollion binaries.",
-                                default=join(getcwd(), "../../champollion_V1/")))
+                                default=join(getcwd(), "../../champollion_V1/"))
+        .add_optional_argument("--output", 
+                               "Absolute path to desired output. Default is in Champollion_V1/config/dataset/"))
 
     def _validate_inputs(self):
         """Validate input paths."""
@@ -54,9 +56,12 @@ class GenerateChampollionConfig(ScriptBuilder):
         self._validate_inputs()
 
         local_dir = getcwd()
+
+        output_loc: str = f"{self.args.champollion_loc}contrastive/configs/dataset/{self.args.dataset}" if not self.args.output else self.args.output
+
         dataset_loc = join(
             local_dir,
-            f"{self.args.champollion_loc}contrastive/configs/dataset/{self.args.dataset}"
+            output_loc
         )
 
         # Create dataset directory if it doesn't exist
