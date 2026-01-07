@@ -5,8 +5,8 @@ Script to generate sulcal regions with deep_folding from Morphologist's graphs.
 """
 
 import sys
-from os import getcwd, chdir
-from os.path import abspath, dirname, join, exists
+from os import getcwd, chdir, getcwd
+from os.path import abspath, dirname, join
 from joblib import cpu_count
 
 from script_builder import ScriptBuilder
@@ -37,6 +37,11 @@ class RunDeepFolding(ScriptBuilder):
         # Validate paths
         if not self.validate_paths([self.args.input, self.args.output]):
             raise ValueError("run_deep_folding.py: Please input valid paths.")
+        
+        # If not exist in the current dataset copy config file
+        config_file_path: str = join(self.args.input, "pipeline_loop_2mm.json")
+        if not self.validate_paths([config_file_path]):
+            self.execute_command(["cp", "../pipeline_loop_2mm.json", config_file_path], shell=False)
 
         # Prepare njobs
         if self.args.njobs is None:
