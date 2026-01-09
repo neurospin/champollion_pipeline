@@ -7,7 +7,7 @@ Script to define and generate Champollion's configuration.
 from os import getcwd, chdir
 from os.path import exists, join
 
-from script_builder import ScriptBuilder
+from champollion_utils.src.champollion_utils.script_builder import ScriptBuilder
 from utils.lib import get_nth_parent_dir
 
 
