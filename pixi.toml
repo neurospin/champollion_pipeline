@@ -1,0 +1,67 @@
+[workspace]
+name = "champollion"
+version = "0.1.0"
+description = "Champollion pipeline with deep_folding, champollion_utils, and testing infrastructure"
+channels = ["https://brainvisa.info/neuro-forge", "pytorch", "nvidia", "conda-forge"]
+platforms = ["linux-64"]
+
+[dependencies]
+python = ">=3.8"
+soma-env = ">=0.0"
+libjpeg-turbo = { channel = "conda-forge", version = ">=3.0" }
+anatomist = ">=0.0.29"
+morphologist = ">=0.0.29"
+pip = ">=25.3,<26"
+flake8 = ">=7.3.0,<8"
+pytest = ">=7.0"
+pytest-cov = ">=4.0"
+pytest-mock = ">=3.10"
+
+[pypi-dependencies]
+dracopy = ">=1.4.2"
+
+[tasks]
+# Initialize submodules
+init-submodules = "git submodule update --init --recursive"
+
+# Install DeepFolding in editable mode
+install-deep-folding = "cd external/deep_folding && git checkout 2025_bdrabczuk_running_local_tests && SKLEARN_ALLOW_DEPRECATED_SKLEARN_PACKAGE_INSTALL=True pip install -e ."
+
+# Install Champollion v1 in editable mode
+install-champollion = "cd external/champollion_V1 && pip install -e ."
+
+install-utils = "cd .. && git clone https://github.com/neurospin/champollion_utils.git 2>/dev/null || echo 'champollion_utils already exists' && cd champollion_pipeline"
+
+# Create data directory
+setup-data = "mkdir -p data"
+
+# Global task to install everything
+install-all = { depends-on = ["init-submodules", "install-deep-folding", "install-champollion", "install-utils", "setup-data"] }
+
+# Uninstall task: removes cloned repos, installed packages, and data
+uninstall = """
+  git submodule deinit -f external/champollion_V1 && \
+  git submodule deinit -f external/deep_folding && \
+  rm -rf external/champollion_V1 external/deep_folding && \
+  rm -rf data && \
+  pip uninstall -y dracopy deep_folding champollion_V1 && \
+  rm -rf . && \
+  echo "✅ Uninstallation complete."
+"""
+
+# Uninstall everything, including Pixi-managed dependencies
+uninstall-all = """
+  rm -rf .pixi pixi.lock && \
+  rm -rf champollion_pipeline && \
+  pixi run uninstall
+"""
+
+# Testing tasks (run from champollion_pipeline directory)
+test = "cd champollion_pipeline && pytest tests/ -v"
+test-unit = "cd champollion_pipeline && pytest tests/ -v -m unit"
+test-integration = "cd champollion_pipeline && pytest tests/ -v -m integration"
+test-smoke = "cd champollion_pipeline && pytest tests/ -v -m smoke"
+test-cov = "cd champollion_pipeline && pytest tests/ -v --cov=src --cov-report=html --cov-report=term"
+test-fast = "cd champollion_pipeline && pytest tests/ -v -x --tb=short"
+test-verbose = "cd champollion_pipeline && pytest tests/ -vv"
+test-specific = "cd champollion_pipeline && pytest"  # Usage: pixi run test-specific tests/test_script_builder.py
