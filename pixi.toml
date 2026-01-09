@@ -44,6 +44,7 @@ uninstall = """
   git submodule deinit -f external/deep_folding && \
   rm -rf external/champollion_V1 external/deep_folding && \
   rm -rf data && \
+  rm -rf champollion_utils
   pip uninstall -y dracopy deep_folding champollion_V1 && \
   rm -rf . && \
   echo "✅ Uninstallation complete."
