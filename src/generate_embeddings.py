@@ -19,22 +19,41 @@ class GenerateEmbeddings(ScriptBuilder):
             description="Generate embeddings and train classifiers for deep learning models."
         )
         # Configure arguments using method chaining
-        (self.add_argument("models_path", type=str, help="Path to the directory containing model folders.")
-         .add_argument("dataset_localization", type=str, help="Key for dataset localization.")
-         .add_argument("datasets_root", type=str, help="Root path to the dataset YAML configs.")
-         .add_argument("short_name", type=str, help="Name of the directory where to store both embeddings and aucs.")
-         .add_argument("--datasets", type=str, nargs="+", default=["toto"], help="List of dataset names (default: ['toto']).")
-         .add_argument("--labels", type=str, nargs="+", default=["Sex"], help="List of labels (default: ['Sex']).")
-         .add_optional_argument("--classifier_name", "Classifier name.", default="svm")
+        (self.add_argument("models_path", type=str,
+                           help="Path to the directory containing model folders.")
+         .add_argument("dataset_localization", type=str,
+                       help="Key for dataset localization.")
+         .add_argument("datasets_root", type=str,
+                       help="Root path to the dataset YAML configs.")
+         .add_argument("short_name", type=str,
+                       help="Name of the directory where to store both embeddings and aucs.")
+         .add_argument("--datasets", type=str, nargs="+",
+                       default=["toto"], help="List of dataset names (default: ['toto']).")
+         .add_argument("--labels", type=str, nargs="+",
+                       default=["Sex"], help="List of labels (default: ['Sex']).")
+         .add_optional_argument("--classifier_name", "Classifier name.",
+                                default="svm")
          .add_flag("--overwrite", "Overwrite existing embeddings.")
-         .add_flag("--embeddings_only", "Only compute embeddings (skip classifiers).")
-         .add_flag("--use_best_model", "Use the best model saved during training.")
-         .add_argument("--subsets", type=str, nargs="+", default=["full"], help="Subsets of data to train on (default: ['full']).")
-         .add_argument("--epochs", type=str, nargs="+", default=["None"], help="List of epochs to evaluate (default: [None]).")
-         .add_optional_argument("--split", "Splitting strategy ('random' or 'custom').", default="random")
-         .add_optional_argument("--cv", "Number of cross-validation folds.", default=5, type_=int)
-         .add_optional_argument("--splits_basedir", "Directory for custom splits.", default="")
-         .add_optional_argument("--idx_region_evaluation", "Index of region to evaluate (multi-head models).", default=None, type_=int)
+         .add_flag("--embeddings_only",
+                   "Only compute embeddings (skip classifiers).")
+         .add_flag("--use_best_model",
+                   "Use the best model saved during training.")
+         .add_argument("--subsets", type=str, nargs="+",
+                       default=["full"], help="Subsets of data to train on (default: ['full']).")
+         .add_argument("--epochs", type=str, nargs="+",
+                       default=["None"], help="List of epochs to evaluate (default: [None]).")
+         .add_optional_argument("--split",
+                                "Splitting strategy ('random' or 'custom').", default="random")
+         .add_optional_argument("--cv",
+                                "Number of cross-validation folds.",
+                                default=5,
+                                type_=int)
+         .add_optional_argument("--splits_basedir",
+                                "Directory for custom splits.", default="")
+         .add_optional_argument("--idx_region_evaluation",
+                                "Index of region to evaluate (multi-head models).",
+                                default=None,
+                                type_=int)
          .add_flag("--verbose", "Enable verbose output."))
 
     def run(self):
@@ -63,7 +82,12 @@ class GenerateEmbeddings(ScriptBuilder):
 
         cmd = self.build_command(
             script_path="evaluation/embeddings_pipeline.py",
-            required_args=["models_path", "dataset_localization", "datasets_root", "short_name"],
+            required_args=[
+                "models_path",
+                "dataset_localization",
+                "datasets_root",
+                "short_name"
+                ],
             defaults=defaults
         )
 
