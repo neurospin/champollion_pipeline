@@ -9,7 +9,7 @@ from os import getcwd, chdir, getcwd
 from os.path import abspath, dirname, join
 from joblib import cpu_count
 
-from script_builder import ScriptBuilder
+from champollion_utils.src.champollion_utils.script_builder import ScriptBuilder
 
 
 class RunDeepFolding(ScriptBuilder):

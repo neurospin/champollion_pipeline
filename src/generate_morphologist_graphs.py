@@ -7,7 +7,7 @@ Script to generate graphs with morphologist from the user's raw data.
 from os import getcwd, chdir, listdir
 from os.path import isfile, join, splitext, basename
 
-from script_builder import ScriptBuilder
+from champollion_utils.src.champollion_utils.script_builder import ScriptBuilder
 
 
 class GenerateMorphologistGraphs(ScriptBuilder):
