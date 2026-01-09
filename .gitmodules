@@ -1,0 +1,6 @@
+[submodule "external/deepfolding"]
+	path = external/deepfolding
+	url = https://github.com/neurospin/deep_folding.git
+[submodule "external/champollion_V1"]
+	path = external/champollion_V1
+	url = https://github.com/neurospin/champollion_V1.git
