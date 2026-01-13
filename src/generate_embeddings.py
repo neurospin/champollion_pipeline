@@ -7,7 +7,7 @@ This script manages user inputs and calls embeddings_pipeline.py using subproces
 
 import os
 
-from champollion_utils.src.champollion_utils.script_builder import ScriptBuilder
+from champollion_utils.script_builder import ScriptBuilder
 
 
 class GenerateEmbeddings(ScriptBuilder):

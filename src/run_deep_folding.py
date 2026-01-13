@@ -9,7 +9,7 @@ from os import getcwd, chdir, getcwd
 from os.path import abspath, dirname, join
 from joblib import cpu_count
 
-from champollion_utils.src.champollion_utils.script_builder import ScriptBuilder
+from champollion_utils.script_builder import ScriptBuilder
 
 
 class RunDeepFolding(ScriptBuilder):
@@ -41,7 +41,8 @@ class RunDeepFolding(ScriptBuilder):
         # If not exist in the current dataset copy config file
         config_file_path: str = join(self.args.input, "pipeline_loop_2mm.json")
         if not self.validate_paths([config_file_path]):
-            self.execute_command(["cp", "../pipeline_loop_2mm.json", config_file_path], shell=False)
+            source_config = abspath(join(dirname(__file__), '..', 'pipeline_loop_2mm.json'))
+            self.execute_command(["cp", source_config, config_file_path], shell=False)
 
         # Prepare njobs
         if self.args.njobs is None:
@@ -54,7 +55,7 @@ class RunDeepFolding(ScriptBuilder):
         # Get absolute paths
         script_path = abspath(join(
             dirname(__file__),
-            '..', '..', 'deep_folding', 'deep_folding', 'brainvisa', 'generate_sulcal_regions.py'
+            '..', 'external', 'deep_folding', 'deep_folding', 'brainvisa', 'generate_sulcal_regions.py'
         ))
 
         # Convert input/output to absolute paths since we'll be changing directory

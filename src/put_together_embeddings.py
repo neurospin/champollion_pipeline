@@ -7,7 +7,7 @@ Script to put together embeddings of Champollion_V1 in a single folder.
 from os import chdir, getcwd, makedirs
 from os.path import dirname, join
 
-from champollion_utils.src.champollion_utils.script_builder import ScriptBuilder
+from champollion_utils.script_builder import ScriptBuilder
 
 
 class PutTogetherEmbeddings(ScriptBuilder):

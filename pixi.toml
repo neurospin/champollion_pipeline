@@ -30,7 +30,11 @@ install-deep-folding = "cd external/deep_folding && git checkout 2025_bdrabczuk_
 # Install Champollion v1 in editable mode
 install-champollion = "cd external/champollion_V1 && pip install -e ."
 
-install-utils = "cd .. && git clone https://github.com/neurospin/champollion_utils.git 2>/dev/null || echo 'champollion_utils already exists' && cd champollion_pipeline"
+# Install champollion_utils in editable mode
+install-utils = """
+  cd .. && git clone https://github.com/neurospin/champollion_utils.git 2>/dev/null || echo 'champollion_utils already exists' && \
+  cd champollion_utils && pip install -e . && cd ..
+"""
 
 # Create data directory
 setup-data = "mkdir -p data"
@@ -43,18 +47,19 @@ uninstall = """
   git submodule deinit -f external/champollion_V1 && \
   git submodule deinit -f external/deep_folding && \
   rm -rf external/champollion_V1 external/deep_folding && \
+  rm -rf ../champollion_utils && \
+  pip uninstall dracopy deep_folding champollion_V1 champollion_utils -y && \
   rm -rf data && \
-  rm -rf champollion_utils
-  pip uninstall -y dracopy deep_folding champollion_V1 && \
-  rm -rf . && \
   echo "✅ Uninstallation complete."
 """
 
 # Uninstall everything, including Pixi-managed dependencies
 uninstall-all = """
   rm -rf .pixi pixi.lock && \
-  rm -rf champollion_pipeline && \
-  pixi run uninstall
+  rm -rf external/champollion_V1 external/deep_folding && \
+  rm -rf ../champollion_utils && \
+  rm -rf data && \
+  echo "✅ Uninstallation of Pixi-managed dependencies complete."
 """
 
 # Testing tasks (run from champollion_pipeline directory)
