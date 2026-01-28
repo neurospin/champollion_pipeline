@@ -1,3 +1,6 @@
 [submodule "external/champollion_V1"]
 	path = external/champollion_V1
 	url = https://github.com/neurospin/champollion_V1.git
+[submodule "external/cortical_tiles"]
+	path = external/cortical_tiles
+	url = https://github.com/neurospin/cortical_tiles.git
