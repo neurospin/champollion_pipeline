@@ -19,6 +19,9 @@ pytest-mock = ">=3.10"
 
 [pypi-dependencies]
 dracopy = ">=1.4.2"
+huggingface-hub = ">=0.20.0"
+transformers = ">=4.36.0"
+datasets = ">=2.16.0"
 
 [tasks]
 # Initialize submodules
