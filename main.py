@@ -37,7 +37,7 @@ sys.path.insert(0, str(pipeline_src))
 # Import pipeline scripts
 try:
     from generate_morphologist_graphs import GenerateMorphologistGraphs
-    from run_deep_folding import RunDeepFolding
+    from run_cortical_tiles import RunCorticalTiles
     from generate_champollion_config import GenerateChampollionConfig
     from generate_embeddings import GenerateEmbeddings
     from put_together_embeddings import PutTogetherEmbeddings
@@ -88,6 +88,12 @@ class DatasetConfig:
     hf_repo_id: Optional[str] = None
     hf_token: Optional[str] = None
 
+    # External dataset config path (for datasets not in champollion_V1/contrastive/configs)
+    config_path: Optional[str] = None
+
+    # CPU mode (disable CUDA)
+    cpu: bool = False
+
 
 @dataclass
 class PipelineConfig:
@@ -102,7 +108,7 @@ class PipelineConfig:
     # Pipeline stages to execute
     stages: Dict[str, bool] = field(default_factory=lambda: {
         'generate_morphologist_graphs': False,
-        'run_deep_folding': False,
+        'run_cortical_tiles': False,
         'generate_champollion_config': False,
         'generate_embeddings': True,
         'put_together_embeddings': False,
@@ -111,8 +117,8 @@ class PipelineConfig:
     # Stage dependencies
     dependencies: Dict[str, List[str]] = field(default_factory=lambda: {
         'generate_morphologist_graphs': [],
-        'run_deep_folding': ['generate_morphologist_graphs'],
-        'generate_champollion_config': ['run_deep_folding'],
+        'run_cortical_tiles': ['generate_morphologist_graphs'],
+        'generate_champollion_config': ['run_cortical_tiles'],
         'generate_embeddings': ['generate_champollion_config'],
         'put_together_embeddings': ['generate_embeddings'],
     })
@@ -203,6 +209,8 @@ class ConfigLoader:
                 'hf_enabled': config.dataset.hf_enabled,
                 'hf_repo_id': config.dataset.hf_repo_id,
                 'hf_token': config.dataset.hf_token,
+                'config_path': config.dataset.config_path,
+                'cpu': config.dataset.cpu,
             }
         }
 
@@ -292,26 +300,32 @@ class GenerateMorphologistGraphsStage(PipelineStage):
         return result
 
 
-class RunDeepFoldingStage(PipelineStage):
-    """Stage for running deep_folding."""
+class RunCorticalTilesStage(PipelineStage):
+    """Stage for running cortical_tiles."""
 
     def validate(self) -> bool:
         """Validate that Morphologist graphs exist."""
         graphs_path = Path(self.config.dataset.morphologist_graphs)
         if not graphs_path.exists():
-            self.logger.error(f"Morphologist graphs path does not exist: {graphs_path}")
+            self.logger.error(
+                f"Morphologist graphs path does not exist: {graphs_path}"
+            )
             return False
         return True
 
     def execute(self) -> StageResult:
-        """Execute deep_folding."""
+        """Execute cortical_tiles."""
         self.log_start()
         try:
-            self.logger.info("Running deep_folding to generate sulcal regions...")
+            self.logger.info(
+                "Running cortical_tiles to generate sulcal regions..."
+            )
 
             # Build arguments from config
+            # Note: run_cortical_tiles expects data root path (not morphologist path)
+            # It will find morphologist graphs in input_path/derivatives/morphologist-*
             args = [
-                str(self.config.dataset.morphologist_graphs),
+                str(self.config.dataset.input_path),
                 str(self.config.dataset.deep_folding_output),
                 f"--path_to_graph={self.config.dataset.path_to_graph}",
                 f"--path_sk_with_hull={self.config.dataset.path_sk_with_hull}",
@@ -322,14 +336,14 @@ class RunDeepFoldingStage(PipelineStage):
                 args.append(f"--sk_qc_path={self.config.dataset.sk_qc_path}")
 
             # Parse and run
-            script = RunDeepFolding()
+            script = RunCorticalTiles()
             script.parse_args(args)
             return_code = script.run()
 
             result = StageResult(
                 stage_name=self.name,
                 success=(return_code == 0),
-                message="Deep folding completed" if return_code == 0 else "Deep folding failed",
+                message="Cortical tiles completed" if return_code == 0 else "Failed",
                 return_code=return_code
             )
         except Exception as e:
@@ -461,6 +475,14 @@ class GenerateEmbeddingsStage(PipelineStage):
                 if self.config.dataset.hf_token:
                     args.append(f"--hf_token={self.config.dataset.hf_token}")
 
+            # External config path for dataset configs
+            if self.config.dataset.config_path:
+                args.append(f"--config_path={self.config.dataset.config_path}")
+
+            # CPU mode
+            if self.config.dataset.cpu:
+                args.append("--cpu")
+
             self.logger.debug(f"Arguments: {args}")
 
             script = GenerateEmbeddings()
@@ -534,7 +556,7 @@ class PipelineOrchestrator:
     # Stage registry mapping names to classes
     STAGE_REGISTRY = {
         'generate_morphologist_graphs': GenerateMorphologistGraphsStage,
-        'run_deep_folding': RunDeepFoldingStage,
+        'run_cortical_tiles': RunCorticalTilesStage,
         'generate_champollion_config': GenerateChampollionConfigStage,
         'generate_embeddings': GenerateEmbeddingsStage,
         'put_together_embeddings': PutTogetherEmbeddingsStage,

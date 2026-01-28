@@ -1,7 +1,7 @@
 #!/usr/bin/env python3
 # -*- coding: utf-8 -*-
 """
-Script to generate sulcal regions with deep_folding from Morphologist's graphs.
+Script to generate sulcal regions with cortical_tiles from Morphologist's graphs.
 """
 
 import sys
@@ -15,13 +15,13 @@ from joblib import cpu_count
 from champollion_utils.script_builder import ScriptBuilder
 
 
-class RunDeepFolding(ScriptBuilder):
-    """Script for running deep_folding to generate sulcal regions."""
+class RunCorticalTiles(ScriptBuilder):
+    """Script for running cortical_tiles to generate sulcal regions."""
 
     def __init__(self):
         super().__init__(
-            script_name="run_deep_folding",
-            description="Generating sulcal regions with deep_folding from Morphologist's graphs."
+            script_name="run_cortical_tiles",
+            description="Generating sulcal regions with cortical_tiles from Morphologist's graphs."
         )
         # Configure arguments using method chaining
         (self.add_argument("input", help="Absolute path to Morphologist's graphs.")
@@ -33,13 +33,13 @@ class RunDeepFolding(ScriptBuilder):
          .add_optional_argument("--njobs", "Number of CPU cores allowed to use.", default=None, type_=int))
 
     def run(self):
-        """Execute the deep_folding script."""
-        print(f"run_deep_folding.py/input: {self.args.input}")
-        print(f"run_deep_folding.py/output: {self.args.output}")
+        """Execute the cortical_tiles script."""
+        print(f"run_cortical_tiles.py/input: {self.args.input}")
+        print(f"run_cortical_tiles.py/output: {self.args.output}")
 
         # Validate paths
         if not self.validate_paths([self.args.input, self.args.output]):
-            raise ValueError("run_deep_folding.py: Please input valid paths.")
+            raise ValueError("run_cortical_tiles.py: Please input valid paths.")
 
         # Convert input to absolute path
         input_abs = abspath(self.args.input)
@@ -78,10 +78,10 @@ class RunDeepFolding(ScriptBuilder):
                     with open(config_file_path, 'w') as f:
                         json.dump(config, f, indent=3)
 
-                    print(f"run_deep_folding.py: Corrected graphs_dir "
+                    print(f"run_cortical_tiles.py: Corrected graphs_dir "
                           f"from {graphs_dir} to {morphologist_path}")
                 else:
-                    print(f"run_deep_folding.py: Warning - "
+                    print(f"run_cortical_tiles.py: Warning - "
                           f"no morphologist directory found in "
                           f"{input_abs}/derivatives/")
 
@@ -90,13 +90,13 @@ class RunDeepFolding(ScriptBuilder):
             self.args.njobs = min(22, cpu_count() - 2)
 
         if self.args.njobs >= cpu_count():
-            print(f"run_deep_folding.py: Warning - {self.args.njobs} jobs requested but only {cpu_count()} cores available.")
+            print(f"run_cortical_tiles.py: Warning - {self.args.njobs} jobs requested but only {cpu_count()} cores available.")
 
         # Build command to run deep_folding script directly
         # Get absolute paths
         script_path = abspath(join(
             dirname(__file__),
-            '..', 'external', 'deep_folding', 'deep_folding', 'brainvisa', 'generate_sulcal_regions.py'
+            '..', 'external', 'cortical_tiles', 'deep_folding', 'brainvisa', 'generate_sulcal_regions.py'
         ))
 
         # Get the directory where the script lives so we can run from there
@@ -139,7 +139,7 @@ class RunDeepFolding(ScriptBuilder):
 
 def main():
     """Main entry point."""
-    script = RunDeepFolding()
+    script = RunCorticalTiles()
     return script.build().print_args().run()
 
 

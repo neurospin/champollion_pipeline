@@ -92,8 +92,8 @@ class GenerateChampollionConfig(ScriptBuilder):
         # Copy reference.yaml if it doesn't exist
         reference_yaml_dest = join(dataset_loc, "reference.yaml")
         if not exists(reference_yaml_dest):
-            # reference.yaml is in the same directory as this script's src folder
-            reference_yaml_src = join(_SCRIPT_DIR, "reference.yaml")
+            # reference.yaml is in the champollion_pipeline root directory (parent of src/)
+            reference_yaml_src = join(dirname(_SCRIPT_DIR), "reference.yaml")
             self.execute_command(["cp", reference_yaml_src, dataset_loc], shell=False)
 
         # Update reference.yaml with dataset path (using absolute path)
