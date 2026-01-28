@@ -1,231 +1,298 @@
-# Champollion pipeline - step-by-step tutorial
+# Champollion Pipeline
 
-This tutorial gives the steps to go from a list of T1 MRIs to their corresponding 56 Champollion embeddings.
+This pipeline generates Champollion embeddings from T1 MRI images. It processes MRIs through Morphologist to extract sulcal graphs, then uses deep_folding to create sulcal regions, and finally generates embeddings using pre-trained Champollion models.
 
-# 1. Get Started
+## 1. Installation
 
-The first step is to have a dedicated work environment. We advise you to create a new folder before cloning this repository and clone it inside the newly created folder:
+### Prerequisites
+
+- [Pixi](https://pixi.sh/) package manager
+- Git
+
+### Setup
+
+Clone the repository and set up the environment:
 
 ```bash
 mkdir Champollion
 cd Champollion
 git clone https://github.com/neurospin/champollion_pipeline.git
-```
-
-if you already have a work environment setup you can directly install and initialize the pipeline. To do so, please tun the install script like so:
-```bash
 cd champollion_pipeline
-python3 install.py --installation_dir ..
 ```
 
-This will install everything in the previously created project folder. You can, of course, use an absolute path for installation_dir.
-It will create an architecture like so:
-```
-champollion_pipeline/ champollion_V1/ deep_folding/ data/
-```
-
-The data/ folder is used to store the raw data and the derivatives outputs. You can, of course, use any other folder if your environment is already setup.
-
-To run the pipeline, enter the pixi environment:
+Install all dependencies using Pixi:
 
 ```bash
-source ~/.bashrc # sourcing your newly installed environment
+pixi run install-all
+```
+
+This command will:
+- Initialize git submodules (champollion_V1 and deep_folding)
+- Install deep_folding in editable mode
+- Install champollion_V1 in editable mode
+- Clone and install champollion_utils
+- Create the data directory
+
+To enter the Pixi environment:
+
+```bash
 pixi shell
 ```
 
-# 2. Generate the Morphologist graphs
+### Uninstallation
 
-To generate the Morphologist graphs from the T1 MRIs, you will use morphologist-cli.
-
-## If you want to run each subject serially:
+To remove installed packages and cloned repositories:
 
 ```bash
-cd ../data/ 
+pixi run uninstall
+```
 
-mkdir TEST_your_last_name # creating your dataset folder, you could also just let everything in data/
-mv pipeline_loop_2mm.json TEST_your_last_name/ # reporting the config file in the new folder
+To completely remove everything including Pixi-managed dependencies:
 
-# if you copied your data in data/ you can use it like as (change /my/path/to/data with TEST_your_last_name):
-LIST_MRI_FILES="/my/path/to/data/TEST08/rawdata/sub-0001.nii.gz /my/path/to/data/TEST08/rawdata/sub-0002.nii.gz"
-OUTPUT_PATH="/my/path/to/data/TEST08/" # The program will put the output in $OUTPUT_PATH/derivatives/morphologist-5.2
+```bash
+pixi run uninstall-all
+```
+
+## 2. Generate Morphologist Graphs
+
+Generate sulcal graphs from T1 MRI images using morphologist-cli.
+
+### Serial Processing
+
+```bash
+LIST_MRI_FILES="/path/to/data/sub-0001.nii.gz /path/to/data/sub-0002.nii.gz"
+OUTPUT_PATH="/path/to/data/TESTXX/"
 morphologist-cli $LIST_MRI_FILES $OUTPUT_PATH -- --of morphologist-auto-nonoverlap-1.0
 ```
 
-## If you want to run each subject in parallel using soma-workflow:
+### Parallel Processing with soma-workflow
 
-First, set the maximum number of processors (it will be set once and for all); for this:
-
-- launch soma_work_flow_gui
+First, configure soma-workflow:
 
 ```bash
 soma_workflow_gui
 ```
 
-Then, under the subwindow "Computing resources", put '24' as the number of CPUs (every user is limited to 24 CPUs on rosette; just do it once). By doing regularly refresh on the "submitted workflows" sub-window, you can follow the advancement of the pipeline.
+Set the maximum number of CPUs (e.g., 24) in the "Computing resources" subwindow.
 
-Then launch the Morphologist command with the option --swf (for soma-workflow)
+Then run with the `--swf` flag:
 
 ```bash
 morphologist-cli $LIST_MRI_FILES $OUTPUT_PATH -- --of morphologist-auto-nonoverlap-1.0 --swf
 ```
 
-This may last around 15-30 minutes.
+## 3. Generate Sulcal Regions
 
-# 3. Generate the sulcal regions
-
-In TEST_your_last_name, you will create the folder deep_folding-2025 in the derivatives, make a symbolic link between the deep_folding datasets folder and this deep_folding-2025 folder (This is necessary as the deep_folding software is looking for a folder, $PATH_TO_DEEP_FOLDING_DATASETS, where all deep_folding datasets lie). :
-
-
-* "graphs_dir" -> contains the path to the morphologist folder
-* "path_to_graph": -> contains the sub-path that, for each subject, permits getting the sulcal graphs
-* "path_to_skeleton_with_hull" -> contains the sub-path where to get the skeleton with hull
-* "skel_qc_path" -> the path to the QC file if it exists (the format of the QC file is given below)
-* "output_dir" -> the output directory where the deep_folding outputs will lie
-
-For example, if your dataset is TESTXX, and you have no QC file, the corresponding parameters in the run_deep_folding script file will look like:
+Use deep_folding to extract sulcal regions from Morphologist's graphs:
 
 ```bash
-python3 ./src/run_deep_folding.py /my/path/to/data/TESTXX/ /my/path/to/data/TESTXX/derivatives/ --path_to_graph "t1mri/default_acquisition/default_analysis/folds/3.1" --path_to_sk_with_hull "t1mri/default_acquisition/default_analysis/segmentation" --sk_qc_path ""
+pixi run python3 src/run_deep_folding.py \
+    /path/to/data/TESTXX/ \
+    /path/to/data/TESTXX/derivatives/ \
+    --path_to_graph "t1mri/default_acquisition/default_analysis/folds/3.1" \
+    --path_sk_with_hull "t1mri/default_acquisition/default_analysis/segmentation"
 ```
 
-If you have a QC file, it will be a tabular-separated file (for example,  qc.tsv). It will have a minimum of two columns: "participant_id" and "qc" (with an optional third column named "comments" to explain the reason for the rejection). qc will be set to 1 if the subject should be processed, and to 0 otherwise. Here is an example of a QC file:
+### Options
 
-```bash
-participant_id	qc  comments
+| Option | Description |
+|--------|-------------|
+| `--sk_qc_path` | Path to QC file (optional) |
+| `--njobs` | Number of CPU cores to use (default: auto) |
+| `--region-file` | Custom sulcal region configuration file |
+
+### QC File Format
+
+If you have a QC file, it should be tab-separated with columns `participant_id` and `qc`:
+
+```
+participant_id	qc	comments
 bvdb            0   Right graph does not exist
-sub-1000021     1   
+sub-1000021     1
 ```
 
-It will last 15-30 minutes. To check that everything went smoothly, you can print the subfolders of the crop folder:
+### Verification
+
+Check that 28 sulcal region folders were created:
 
 ```bash
-ls /my/path/to/data/TESTXX/derivatives/deep_folding/crops/2mm
+ls /path/to/data/TESTXX/derivatives/deep_folding/crops/2mm
 ```
 
-You should see 28 subfolders like this:
+## 4. Generate Champollion Configuration
 
-```
-F.C.L.p.-subsc.-F.C.L.a.-INSULA.  S.C.-S.Pe.C. S.Or.-S.Olf.
-F.C.M.post.-S.p.C.		          S.C.-S.Po.C. S.Pe.C.
-F.Coll.-S.Rh.			          S.C.-sylv.   S.Po.C.
-F.I.P.-F.I.P.Po.C.inf.		      S.F.inf.-BROCA-S.Pe.C.inf. S.s.P.-S.Pa.int.
-F.P.O.-S.Cu.-Sc.Cal.		      S.F.inter.-S.F.sup.        S.T.i.-S.O.T.lat.
-Lobule_parietal_sup.		      S.F.int.-F.C.M.ant.		  S.T.i.-S.T.s.-S.T.pol.
-OCCIPITAL			              S.F.int.-S.R.			     S.T.s.
-S.Call.				              S.F.marginal-S.F.inf.ant.	 S.T.s.br.
-S.Call.-S.s.P.-S.intraCing.	      S.F.median-S.F.pol.tr.-S.F.sup.
-Sc.Cal.-S.Li.			          S.Or.
-```
-
-Then exit the pixi environment:
+Create dataset configuration files for Champollion:
 
 ```bash
-exit
+pixi run python3 src/generate_champollion_config.py \
+    /path/to/data/TESTXX/derivatives/deep_folding/crops/2mm \
+    --dataset TESTXX
 ```
 
-# 4. Generate the embeddings
+### Options
 
-## 4.1. Generate the dataset config files
+| Option | Description |
+|--------|-------------|
+| `--champollion_loc` | Path to Champollion binaries (default: external/champollion_V1) |
+| `--output` | Custom output path for config files |
+| `--external-config` | External path for local.yaml (for read-only containers) |
 
-We first need to generate the configuration files for each region of the new dataset $DATA (It can be anywhere in the dataset configuration folder: $PATH_TO_PROGRAM/champollion_V1/contrastive/configs/dataset). For this, we will first create a folder called $DATA in the datasets folder of the champollion_V1 configuration, and copy the file 'reference.yaml' (the one in this GitHub) into this folder:
+### Read-only Container Support (Apptainer)
+
+When running in a read-only container environment:
 
 ```bash
-python3 generate_champollion_config.py my/path/to/data/TESTXX/derivatives/deep_folding/crops/2mm --config_loc my/path/to/data/TESTXX
+pixi run python3 src/generate_champollion_config.py \
+    /path/to/crops \
+    --dataset TESTXX \
+    --external-config /writable/path/local.yaml
 ```
+
+## 5. Generate Embeddings
+
+Generate embeddings using pre-trained Champollion models.
+
+### Basic Usage
 
 ```bash
-mkdir -p $PATH_TO_PROGRAM/champollion_V1/contrastive/configs/dataset/julien/$DATA
-cp reference.yaml $PATH_TO_PROGRAM/champollion_V1/contrastive/configs/dataset/julien/$DATA/
+pixi run python3 src/generate_embeddings.py \
+    /path/to/models \
+    dataset_localization \
+    datasets_root \
+    short_name
 ```
 
-You will now replace in the newly created file reference.yaml all occurrences of TESTXX with $DATA. For example, if DATA was for you equal to "TEST04", then the reference.yaml file will look like:
+### Model Sources
 
-Example reference.yaml file after substitution of TESTXX by TEST04:
+The script supports multiple model sources:
+
+| Source | Example |
+|--------|---------|
+| Local directory | `/path/to/models/` |
+| Local archive | `/path/to/models.tar.gz` |
+| Hugging Face repo ID | `neurospin/Champollion_V1` |
+| Hugging Face URL | `https://huggingface.co/neurospin/Champollion_V1` |
+| Remote archive URL | `https://example.com/models.tar.gz` |
+
+### Examples
+
+Using Hugging Face models:
 
 ```bash
-# @package dataset.REPLACE_DATASET
-dataset_name: REPLACE_DATASET
-pickle_normal: ${dataset_folder}/TEST04/crops/2mm/REPLACE_CROP_NAME/mask/REPLACE_SIDEskeleton.pkl
-numpy_all: ${dataset_folder}/TEST04/crops/2mm/REPLACE_CROP_NAME/mask/REPLACE_SIDEskeleton.npy
-subjects_all: ${dataset_folder}/TEST04/crops/2mm/REPLACE_CROP_NAME/mask/REPLACE_SIDEskeleton_subject.csv
-crop_dir: ${dataset_folder}/TEST04/crops/2mm/REPLACE_CROP_NAME/mask/REPLACE_SIDEcrops
-foldlabel_dir: ${dataset_folder}/TEST04/crops/2mm/REPLACE_CROP_NAME/mask/REPLACE_SIDElabels
-foldlabel_all: ${dataset_folder}/TEST04/crops/2mm/REPLACE_CROP_NAME/mask/REPLACE_SIDElabel.npy
-subjects_foldlabel_all: ${dataset_folder}/TEST04/crops/2mm/REPLACE_CROP_NAME/mask/REPLACE_SIDElabel_subject.csv
-distbottom_dir: ${dataset_folder}/TEST04/crops/2mm/REPLACE_CROP_NAME/mask/REPLACE_SIDEdistbottom
-distbottom_all: ${dataset_folder}/TEST04/crops/2mm/REPLACE_CROP_NAME/mask/REPLACE_SIDEdistbottom.npy
-extremity_dir: ${dataset_folder}/TEST04/crops/2mm/REPLACE_CROP_NAME/mask/REPLACE_SIDEextremities
-extremity_all: ${dataset_folder}/TEST04/crops/2mm/REPLACE_CROP_NAME/mask/REPLACE_SIDEextremities.npy
-subjects_extremity_all: ${dataset_folder}/TEST04/crops/2mm/REPLACE_CROP_NAME/mask/REPLACE_SIDEextremities_subject.csv
-subjects_distbottom_all: ${dataset_folder}/TEST04/crops/2mm/REPLACE_CROP_NAME/mask/REPLACE_SIDEdistbottom_subject.csv
-crop_file_suffix: _cropped_skeleton.nii.gz
-pickle_benchmark: 
-train_val_csv_file: ${dataset_folder}/TEST04/crops/2mm/REPLACE_CROP_NAME/mask/REPLACE_SIDEskeleton_subject.csv
-subject_labels_file: 
-subject_column_name:
-cutout_mask_path:
-cutin_mask_path: ${dataset_folder}/TEST04/crops/2mm/REPLACE_CROP_NAME/mask/REPLACE_SIDEmask.npy
-flip_dataset: False
-input_size: (1, REPLACE_SIZEX, REPLACE_SIZEY, REPLACE_SIZEZ)
+pixi run python3 src/generate_embeddings.py \
+    neurospin/Champollion_V1 \
+    local \
+    TESTXX \
+    my_embeddings \
+    --embeddings_only \
+    --use_best_model
 ```
 
-Once you have changed the reference.yaml file, you will generate the dataset config files for all sulcal regions by using create_dataset_config_files.py, which lies in $PATH_TO_PROGRAM/champollion_V1/contrastive/utils. You first need to change inside the file TEXTXX by $DATA (for example TEST04) at the top of the file:
-
-Change TESTXX to $DATA at the top of create_dataset_config_files.py:
-
-```
-path = f"{os.getcwd()}/../configs/dataset/julien/TESTXX"
-ref_file = f"{path}/reference.yaml"
-crop_path = "/neurospin/dico/data/deep_folding/current/datasets/TESTXX/crops/2mm"
-```
-
-Then generate the config files:
+Using a local archive with CPU-only mode:
 
 ```bash
-cd $PATH_TO_PROGRAM/champollion_V1/contrastive/utils
-python3 create_dataset_config_files.py
+pixi run python3 src/generate_embeddings.py \
+    /path/to/models.tar.gz \
+    local \
+    TESTXX \
+    my_embeddings \
+    --cpu \
+    --embeddings_only
 ```
 
-To check that it works, you verify that you get 56 yaml files (like FCLp-subsc-FCLa-INSULA_left.yaml) corresponding to the 56 sulcal regions + the file reference.yaml inside $PATH_TO_PROGRAM/champollion_V1/contrastive/configs/dataset/julien/$DATA
+### Options
+
+| Option | Description |
+|--------|-------------|
+| `--datasets` | List of dataset names (default: ['toto']) |
+| `--labels` | List of labels (default: ['Sex']) |
+| `--classifier_name` | Classifier name (default: 'svm') |
+| `--overwrite` | Overwrite existing embeddings |
+| `--embeddings_only` | Only compute embeddings (skip classifiers) |
+| `--use_best_model` | Use the best model saved during training |
+| `--subsets` | Subsets of data to train on (default: ['full']) |
+| `--epochs` | List of epochs to evaluate (default: [None]) |
+| `--split` | Splitting strategy: 'random' or 'custom' (default: 'random') |
+| `--cv` | Number of cross-validation folds (default: 5) |
+| `--cpu` | Force CPU usage (disable CUDA) |
+| `--skip-cka` | Skip CKA coherence test after embeddings |
+| `--no-cache` | Force re-extraction of archive (ignore cache) |
+| `--profiling` | Enable Python profiling (cProfile) |
+
+### Archive Caching
+
+When using archive sources (local or remote), extracted files are cached in:
+```
+data/{datasets_root}/derivatives/champollion_V1/models_cache/
+```
+
+Use `--no-cache` to force re-extraction.
+
+### Embedding Naming
+
+Embedding folders are named using the pattern: `{short_name}_{split}_embeddings`
+
+To avoid overwriting previous embeddings, use different `short_name` values for each run.
+
+## 6. Combine Embeddings
+
+Combine embeddings from all 56 sulcal regions into a single output:
 
 ```bash
-ls $PATH_TO_PROGRAM/champollion_V1/contrastive/configs/dataset | wc -l
-```
-It should output 57
-
-## 4.2. Generate the embeddings
-
-Inside the file embeddings_pipeline.py ($PATH_TO_PROGRAM/champollion_V1/contrastive/evaluation/embeddings_pipeline.py):
-
-```
-    embeddings_pipeline("/neurospin/dico/data/deep_folding/current/models/Champollion_V1_after_ablation",
-        dataset_localization="neurospin",
-        datasets_root="julien/TESTXX",
-        short_name='testxx',
-        overwrite=True,
-        datasets=["toto"],
-        idx_region_evaluation=None,
-        labels=["Sex"],
-        classifier_name='logistic',
-        embeddings=True, embeddings_only=True, use_best_model=False,
-        subsets=['full'], epochs=[None], split='random', cv=1,
-        splits_basedir='',
-        verbose=False) 
+pixi run python3 src/put_together_embeddings.py \
+    /path/to/models \
+    short_name \
+    /path/to/output
 ```
 
+Verify that 56 CSV files were created in the output directory.
 
-## 4.2. Putting together the embeddings
-
-By using the code put_together_embeddings_files, which lies in $PATH_TO_PROGRAM/champollion_V1/contrastive/utils, you will put together the embeddings.
-
-At the top of the file, you will change:
+## Project Structure
 
 ```
-embeddings_subpath = "testxx_random_embeddings/full_embeddings.csv"
-output_path = "/neurospin/dico/data/deep_folding/current/models/Champollion_V1_after_ablation/embeddings/TESTXX_embeddings"
+champollion_pipeline/
+    external/
+        champollion_V1/     # Champollion v1 submodule
+        deep_folding/       # Deep folding submodule
+    src/
+        generate_champollion_config.py
+        generate_embeddings.py
+        generate_morphologist_graphs.py
+        put_together_embeddings.py
+        run_deep_folding.py
+        train_model.py
+    data/                   # Data directory (created by install-all)
+    pixi.toml               # Pixi configuration
 ```
-by substituting textxx with the short_name defined in generate_embeddings (for example testxx), and by giving to output_path the content of $PATH_TO_OUTPUT/TEST04_embeddings (you can also just substitute TESTXX with your data folder, for example TEST04; in this case, it will copy the output to "/neurospin/dico/data/deep_folding/current/models/Champollion_V1_after_ablation/embeddings/TEST04_embeddings")
 
-Check that you have 56 csv files in the output directory.
+## Testing
 
-That's it! You have now the champollion_V1 embedddings....
+Run all tests:
+
+```bash
+pixi run test
+```
+
+Run specific test categories:
+
+```bash
+pixi run test-unit          # Unit tests only
+pixi run test-integration   # Integration tests only
+pixi run test-smoke         # Smoke tests only
+pixi run test-cov           # Tests with coverage report
+pixi run test-fast          # Fast tests (stop on first failure)
+```
+
+## Dependencies
+
+The pipeline requires:
+- Python >= 3.8
+- soma-env (BrainVISA environment)
+- morphologist
+- anatomist
+- PyTorch
+- huggingface-hub
+- transformers
+
+All dependencies are managed through the `pixi.toml` configuration.
+
