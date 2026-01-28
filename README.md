@@ -1,6 +1,6 @@
 # Champollion Pipeline
 
-This pipeline generates Champollion embeddings from T1 MRI images. It processes MRIs through Morphologist to extract sulcal graphs, then uses deep_folding to create sulcal regions, and finally generates embeddings using pre-trained Champollion models.
+This pipeline generates Champollion embeddings from T1 MRI images. It processes MRIs through Morphologist to extract sulcal graphs, then uses cortical_tiles to create sulcal regions, and finally generates embeddings using pre-trained Champollion models.
 
 ## 1. Installation
 
@@ -27,8 +27,8 @@ pixi run install-all
 ```
 
 This command will:
-- Initialize git submodules (champollion_V1 and deep_folding)
-- Install deep_folding in editable mode
+- Initialize git submodules (champollion_V1 and cortical_tiles)
+- Install cortical_tiles in editable mode
 - Install champollion_V1 in editable mode
 - Clone and install champollion_utils
 - Create the data directory
@@ -83,10 +83,10 @@ morphologist-cli $LIST_MRI_FILES $OUTPUT_PATH -- --of morphologist-auto-nonoverl
 
 ## 3. Generate Sulcal Regions
 
-Use deep_folding to extract sulcal regions from Morphologist's graphs:
+Use cortical_tiles to extract sulcal regions from Morphologist's graphs:
 
 ```bash
-pixi run python3 src/run_deep_folding.py \
+pixi run python3 src/run_cortical_tiles.py \
     /path/to/data/TESTXX/ \
     /path/to/data/TESTXX/derivatives/ \
     --path_to_graph "t1mri/default_acquisition/default_analysis/folds/3.1" \
@@ -253,13 +253,13 @@ Verify that 56 CSV files were created in the output directory.
 champollion_pipeline/
     external/
         champollion_V1/     # Champollion v1 submodule
-        deep_folding/       # Deep folding submodule
+        cortical_tiles/     # Cortical tiles submodule
     src/
         generate_champollion_config.py
         generate_embeddings.py
         generate_morphologist_graphs.py
         put_together_embeddings.py
-        run_deep_folding.py
+        run_cortical_tiles.py
         train_model.py
     data/                   # Data directory (created by install-all)
     pixi.toml               # Pixi configuration

@@ -1,0 +1,274 @@
+2026-01-28 13:52:19,875 - champollion_pipeline - INFO - 🚀 Starting Champollion Pipeline
+2026-01-28 13:52:19,875 - champollion_pipeline - INFO - Root path: /volatile/home/bd285800/Documents/CEA_projects/champollion/champollion_pipeline
+2026-01-28 13:52:19,875 - champollion_pipeline - INFO - Dataset: example_dataset
+2026-01-28 13:52:19,875 - champollion_pipeline - INFO - Enabled stages: ['generate_embeddings']
+
+2026-01-28 13:52:19,875 - champollion_pipeline - ERROR - Models path does not exist: /volatile/home/bd285800/Documents/CEA_projects/champollion/champollion_pipeline/models
+2026-01-28 13:52:19,875 - champollion_pipeline - ERROR - Stage 'generate_embeddings' validation failed
+2026-01-28 13:52:19,875 - champollion_pipeline - INFO - 
+============================================================
+2026-01-28 13:52:19,875 - champollion_pipeline - INFO - Pipeline Execution Summary
+2026-01-28 13:52:19,875 - champollion_pipeline - INFO - ============================================================
+2026-01-28 13:52:19,875 - champollion_pipeline - INFO - Completed stages: []
+2026-01-28 13:52:19,875 - champollion_pipeline - INFO - Failed stages: ['generate_embeddings']
+2026-01-28 13:52:19,875 - champollion_pipeline - ERROR - ❌ Pipeline completed with errors
+2026-01-28 13:53:15,407 - champollion_pipeline - INFO - 🚀 Starting Champollion Pipeline
+2026-01-28 13:53:15,407 - champollion_pipeline - INFO - Root path: /volatile/home/bd285800/Documents/CEA_projects/champollion/champollion_pipeline
+2026-01-28 13:53:15,407 - champollion_pipeline - INFO - Dataset: TEST01
+2026-01-28 13:53:15,407 - champollion_pipeline - INFO - Enabled stages: ['generate_embeddings']
+
+2026-01-28 13:53:15,407 - champollion_pipeline - INFO - ============================================================
+2026-01-28 13:53:15,407 - champollion_pipeline - INFO - Starting stage: generate_embeddings
+2026-01-28 13:53:15,407 - champollion_pipeline - INFO - ============================================================
+2026-01-28 13:53:15,407 - champollion_pipeline - INFO - Generating embeddings and training classifiers...
+2026-01-28 13:53:15,407 - champollion_pipeline - DEBUG - Arguments: ['/volatile/home/bd285800/Documents/CEA_projects/champollion/data/TEST01/derivatives/champollion_V1/models_cache/Champollion_V1', 'local', 'TEST01', 'test_run', '--datasets', 'toto', '--labels', 'Sex', '--classifier_name=svm', '--embeddings_only', '--use_best_model', '--subsets', 'full', '--epochs', 'None', '--split=random', '--cv=5', '--verbose']
+2026-01-28 13:53:25,078 - champollion_pipeline - INFO - ❌ FAILED: generate_embeddings - Embedding generation failed
+2026-01-28 13:53:25,078 - champollion_pipeline - INFO - ============================================================
+
+2026-01-28 13:53:25,078 - champollion_pipeline - ERROR - Stopping pipeline due to stage failure
+2026-01-28 13:53:25,078 - champollion_pipeline - INFO - 
+============================================================
+2026-01-28 13:53:25,078 - champollion_pipeline - INFO - Pipeline Execution Summary
+2026-01-28 13:53:25,078 - champollion_pipeline - INFO - ============================================================
+2026-01-28 13:53:25,079 - champollion_pipeline - INFO - Completed stages: []
+2026-01-28 13:53:25,079 - champollion_pipeline - INFO - Failed stages: ['generate_embeddings']
+2026-01-28 13:53:25,079 - champollion_pipeline - ERROR - ❌ Pipeline completed with errors
+2026-01-28 13:53:33,021 - champollion_pipeline - INFO - 🚀 Starting Champollion Pipeline
+2026-01-28 13:53:33,022 - champollion_pipeline - INFO - Root path: /volatile/home/bd285800/Documents/CEA_projects/champollion/champollion_pipeline
+2026-01-28 13:53:33,022 - champollion_pipeline - INFO - Dataset: TEST01
+2026-01-28 13:53:33,022 - champollion_pipeline - INFO - Enabled stages: ['generate_embeddings']
+
+2026-01-28 13:53:33,022 - champollion_pipeline - INFO - ============================================================
+2026-01-28 13:53:33,022 - champollion_pipeline - INFO - Starting stage: generate_embeddings
+2026-01-28 13:53:33,022 - champollion_pipeline - INFO - ============================================================
+2026-01-28 13:53:33,022 - champollion_pipeline - INFO - Generating embeddings and training classifiers...
+2026-01-28 13:53:33,022 - champollion_pipeline - DEBUG - Arguments: ['/volatile/home/bd285800/Documents/CEA_projects/champollion/data/TEST01/derivatives/champollion_V1/models_cache/Champollion_V1', 'local', 'TEST01', 'test_run', '--datasets', 'toto', '--labels', 'Sex', '--classifier_name=svm', '--embeddings_only', '--use_best_model', '--subsets', 'full', '--epochs', 'None', '--split=random', '--cv=5', '--verbose']
+2026-01-28 13:53:41,380 - champollion_pipeline - INFO - ❌ FAILED: generate_embeddings - Embedding generation failed
+2026-01-28 13:53:41,380 - champollion_pipeline - INFO - ============================================================
+
+2026-01-28 13:53:41,380 - champollion_pipeline - ERROR - Stopping pipeline due to stage failure
+2026-01-28 13:53:41,380 - champollion_pipeline - INFO - 
+============================================================
+2026-01-28 13:53:41,380 - champollion_pipeline - INFO - Pipeline Execution Summary
+2026-01-28 13:53:41,380 - champollion_pipeline - INFO - ============================================================
+2026-01-28 13:53:41,380 - champollion_pipeline - INFO - Completed stages: []
+2026-01-28 13:53:41,380 - champollion_pipeline - INFO - Failed stages: ['generate_embeddings']
+2026-01-28 13:53:41,380 - champollion_pipeline - ERROR - ❌ Pipeline completed with errors
+2026-01-28 15:35:35,269 - champollion_pipeline - INFO - 🚀 Starting Champollion Pipeline
+2026-01-28 15:35:35,278 - champollion_pipeline - INFO - Root path: /volatile/home/bd285800/Documents/CEA_projects/champollion/champollion_pipeline
+2026-01-28 15:35:35,278 - champollion_pipeline - INFO - Dataset: TEST01
+2026-01-28 15:35:35,278 - champollion_pipeline - INFO - Enabled stages: ['generate_embeddings']
+
+2026-01-28 15:35:35,278 - champollion_pipeline - INFO - ============================================================
+2026-01-28 15:35:35,278 - champollion_pipeline - INFO - Starting stage: generate_embeddings
+2026-01-28 15:35:35,278 - champollion_pipeline - INFO - ============================================================
+2026-01-28 15:35:35,278 - champollion_pipeline - INFO - Generating embeddings and training classifiers...
+2026-01-28 15:35:35,278 - champollion_pipeline - DEBUG - Arguments: ['/volatile/home/bd285800/Documents/CEA_projects/champollion/data/TEST01/derivatives/champollion_V1/models_cache/Champollion_V1', 'local', 'TEST01', 'test_run', '--datasets', 'toto', '--labels', 'Sex', '--classifier_name=svm', '--embeddings_only', '--use_best_model', '--subsets', 'full', '--epochs', 'None', '--split=random', '--cv=5', '--verbose', '--config_path=/volatile/home/bd285800/Documents/CEA_projects/champollion/data/TEST01/derivatives/champollion_V1/configs']
+2026-01-28 15:35:43,059 - champollion_pipeline - INFO - ❌ FAILED: generate_embeddings - Embedding generation failed
+2026-01-28 15:35:43,060 - champollion_pipeline - INFO - ============================================================
+
+2026-01-28 15:35:43,060 - champollion_pipeline - ERROR - Stopping pipeline due to stage failure
+2026-01-28 15:35:43,060 - champollion_pipeline - INFO - 
+============================================================
+2026-01-28 15:35:43,060 - champollion_pipeline - INFO - Pipeline Execution Summary
+2026-01-28 15:35:43,060 - champollion_pipeline - INFO - ============================================================
+2026-01-28 15:35:43,060 - champollion_pipeline - INFO - Completed stages: []
+2026-01-28 15:35:43,060 - champollion_pipeline - INFO - Failed stages: ['generate_embeddings']
+2026-01-28 15:35:43,060 - champollion_pipeline - ERROR - ❌ Pipeline completed with errors
+2026-01-28 15:35:54,256 - champollion_pipeline - INFO - 🚀 Starting Champollion Pipeline
+2026-01-28 15:35:54,256 - champollion_pipeline - INFO - Root path: /volatile/home/bd285800/Documents/CEA_projects/champollion/champollion_pipeline
+2026-01-28 15:35:54,256 - champollion_pipeline - INFO - Dataset: TEST01
+2026-01-28 15:35:54,256 - champollion_pipeline - INFO - Enabled stages: ['generate_embeddings']
+
+2026-01-28 15:35:54,256 - champollion_pipeline - INFO - ============================================================
+2026-01-28 15:35:54,256 - champollion_pipeline - INFO - Starting stage: generate_embeddings
+2026-01-28 15:35:54,256 - champollion_pipeline - INFO - ============================================================
+2026-01-28 15:35:54,257 - champollion_pipeline - INFO - Generating embeddings and training classifiers...
+2026-01-28 15:35:54,257 - champollion_pipeline - DEBUG - Arguments: ['/volatile/home/bd285800/Documents/CEA_projects/champollion/data/TEST01/derivatives/champollion_V1/models_cache/Champollion_V1', 'local', 'TEST01', 'test_run', '--datasets', 'toto', '--labels', 'Sex', '--classifier_name=svm', '--embeddings_only', '--use_best_model', '--subsets', 'full', '--epochs', 'None', '--split=random', '--cv=5', '--verbose', '--config_path=/volatile/home/bd285800/Documents/CEA_projects/champollion/data/TEST01/derivatives/champollion_V1/configs']
+2026-01-28 15:36:01,269 - champollion_pipeline - INFO - ❌ FAILED: generate_embeddings - Embedding generation failed
+2026-01-28 15:36:01,269 - champollion_pipeline - INFO - ============================================================
+
+2026-01-28 15:36:01,269 - champollion_pipeline - ERROR - Stopping pipeline due to stage failure
+2026-01-28 15:36:01,269 - champollion_pipeline - INFO - 
+============================================================
+2026-01-28 15:36:01,269 - champollion_pipeline - INFO - Pipeline Execution Summary
+2026-01-28 15:36:01,269 - champollion_pipeline - INFO - ============================================================
+2026-01-28 15:36:01,269 - champollion_pipeline - INFO - Completed stages: []
+2026-01-28 15:36:01,269 - champollion_pipeline - INFO - Failed stages: ['generate_embeddings']
+2026-01-28 15:36:01,269 - champollion_pipeline - ERROR - ❌ Pipeline completed with errors
+2026-01-28 15:40:03,349 - champollion_pipeline - INFO - 🚀 Starting Champollion Pipeline
+2026-01-28 15:40:03,349 - champollion_pipeline - INFO - Root path: /volatile/home/bd285800/Documents/CEA_projects/champollion/champollion_pipeline
+2026-01-28 15:40:03,349 - champollion_pipeline - INFO - Dataset: TEST01
+2026-01-28 15:40:03,349 - champollion_pipeline - INFO - Enabled stages: ['generate_embeddings']
+
+2026-01-28 15:40:03,349 - champollion_pipeline - INFO - ============================================================
+2026-01-28 15:40:03,349 - champollion_pipeline - INFO - Starting stage: generate_embeddings
+2026-01-28 15:40:03,349 - champollion_pipeline - INFO - ============================================================
+2026-01-28 15:40:03,349 - champollion_pipeline - INFO - Generating embeddings and training classifiers...
+2026-01-28 15:40:03,349 - champollion_pipeline - DEBUG - Arguments: ['/volatile/home/bd285800/Documents/CEA_projects/champollion/data/TEST01/derivatives/champollion_V1/models_cache/Champollion_V1', 'local', 'TEST01', 'test_run', '--datasets', 'toto', '--labels', 'Sex', '--classifier_name=svm', '--embeddings_only', '--use_best_model', '--subsets', 'full', '--epochs', 'None', '--split=random', '--cv=5', '--verbose', '--config_path=/volatile/home/bd285800/Documents/CEA_projects/champollion/data/TEST01/derivatives/champollion_V1/configs', '--cpu']
+2026-01-28 15:40:15,580 - champollion_pipeline - INFO - ❌ FAILED: generate_embeddings - Embedding generation failed
+2026-01-28 15:40:15,580 - champollion_pipeline - INFO - ============================================================
+
+2026-01-28 15:40:15,580 - champollion_pipeline - ERROR - Stopping pipeline due to stage failure
+2026-01-28 15:40:15,580 - champollion_pipeline - INFO - 
+============================================================
+2026-01-28 15:40:15,580 - champollion_pipeline - INFO - Pipeline Execution Summary
+2026-01-28 15:40:15,580 - champollion_pipeline - INFO - ============================================================
+2026-01-28 15:40:15,580 - champollion_pipeline - INFO - Completed stages: []
+2026-01-28 15:40:15,580 - champollion_pipeline - INFO - Failed stages: ['generate_embeddings']
+2026-01-28 15:40:15,580 - champollion_pipeline - ERROR - ❌ Pipeline completed with errors
+2026-01-28 15:52:14,199 - champollion_pipeline - INFO - 🚀 Starting Champollion Pipeline
+2026-01-28 15:52:14,199 - champollion_pipeline - INFO - Root path: /volatile/home/bd285800/Documents/CEA_projects/champollion/champollion_pipeline
+2026-01-28 15:52:14,199 - champollion_pipeline - INFO - Dataset: TEST01
+2026-01-28 15:52:14,199 - champollion_pipeline - INFO - Enabled stages: ['generate_embeddings']
+
+2026-01-28 15:52:14,199 - champollion_pipeline - INFO - ============================================================
+2026-01-28 15:52:14,199 - champollion_pipeline - INFO - Starting stage: generate_embeddings
+2026-01-28 15:52:14,199 - champollion_pipeline - INFO - ============================================================
+2026-01-28 15:52:14,199 - champollion_pipeline - INFO - Generating embeddings and training classifiers...
+2026-01-28 15:52:14,199 - champollion_pipeline - DEBUG - Arguments: ['/volatile/home/bd285800/Documents/CEA_projects/champollion/data/TEST01/derivatives/champollion_V1/models_cache/Champollion_V1', 'local', 'TEST01', 'test_run', '--datasets', 'toto', '--labels', 'Sex', '--classifier_name=svm', '--embeddings_only', '--use_best_model', '--subsets', 'full', '--epochs', 'None', '--split=random', '--cv=5', '--verbose', '--config_path=/volatile/home/bd285800/Documents/CEA_projects/champollion/data/TEST01/derivatives/champollion_V1/configs', '--cpu']
+2026-01-28 15:57:42,842 - champollion_pipeline - INFO - ✅ SUCCESS: generate_embeddings - Embeddings generated
+2026-01-28 15:57:42,843 - champollion_pipeline - INFO - ============================================================
+
+2026-01-28 15:57:42,843 - champollion_pipeline - INFO - 
+============================================================
+2026-01-28 15:57:42,843 - champollion_pipeline - INFO - Pipeline Execution Summary
+2026-01-28 15:57:42,843 - champollion_pipeline - INFO - ============================================================
+2026-01-28 15:57:42,843 - champollion_pipeline - INFO - Completed stages: ['generate_embeddings']
+2026-01-28 15:57:42,843 - champollion_pipeline - INFO - ✅ Pipeline completed successfully
+2026-01-28 15:59:49,336 - champollion_pipeline - INFO - 🚀 Starting Champollion Pipeline
+2026-01-28 15:59:49,336 - champollion_pipeline - INFO - Root path: /volatile/home/bd285800/Documents/CEA_projects/champollion/champollion_pipeline
+2026-01-28 15:59:49,336 - champollion_pipeline - INFO - Dataset: TEST01
+2026-01-28 15:59:49,336 - champollion_pipeline - INFO - Enabled stages: ['generate_embeddings']
+
+2026-01-28 15:59:49,336 - champollion_pipeline - INFO - ============================================================
+2026-01-28 15:59:49,336 - champollion_pipeline - INFO - Starting stage: generate_embeddings
+2026-01-28 15:59:49,336 - champollion_pipeline - INFO - ============================================================
+2026-01-28 15:59:49,336 - champollion_pipeline - INFO - Generating embeddings and training classifiers...
+2026-01-28 15:59:49,336 - champollion_pipeline - DEBUG - Arguments: ['/volatile/home/bd285800/Documents/CEA_projects/champollion/data/TEST01/derivatives/champollion_V1/models_cache/Champollion_V1', 'local', 'TEST01', 'test_run', '--datasets', 'toto', '--labels', 'Sex', '--classifier_name=svm', '--embeddings_only', '--use_best_model', '--subsets', 'full', '--epochs', 'None', '--split=random', '--cv=5', '--verbose', '--config_path=/volatile/home/bd285800/Documents/CEA_projects/champollion/data/TEST01/derivatives/champollion_V1/configs', '--cpu']
+2026-01-28 16:03:24,254 - champollion_pipeline - INFO - ✅ SUCCESS: generate_embeddings - Embeddings generated
+2026-01-28 16:03:24,254 - champollion_pipeline - INFO - ============================================================
+
+2026-01-28 16:03:24,254 - champollion_pipeline - INFO - 
+============================================================
+2026-01-28 16:03:24,254 - champollion_pipeline - INFO - Pipeline Execution Summary
+2026-01-28 16:03:24,254 - champollion_pipeline - INFO - ============================================================
+2026-01-28 16:03:24,254 - champollion_pipeline - INFO - Completed stages: ['generate_embeddings']
+2026-01-28 16:03:24,254 - champollion_pipeline - INFO - ✅ Pipeline completed successfully
+2026-01-28 16:04:05,750 - champollion_pipeline - INFO - 🚀 Starting Champollion Pipeline
+2026-01-28 16:04:05,751 - champollion_pipeline - INFO - Root path: /volatile/home/bd285800/Documents/CEA_projects/champollion/champollion_pipeline
+2026-01-28 16:04:05,751 - champollion_pipeline - INFO - Dataset: TEST01
+2026-01-28 16:04:05,751 - champollion_pipeline - INFO - Enabled stages: ['generate_morphologist_graphs', 'run_cortical_tiles', 'generate_champollion_config', 'generate_embeddings', 'put_together_embeddings']
+
+2026-01-28 16:04:05,751 - champollion_pipeline - INFO - ============================================================
+2026-01-28 16:04:05,751 - champollion_pipeline - INFO - Starting stage: generate_morphologist_graphs
+2026-01-28 16:04:05,751 - champollion_pipeline - INFO - ============================================================
+2026-01-28 16:04:05,751 - champollion_pipeline - INFO - Generating Morphologist graphs...
+2026-01-28 16:04:05,751 - champollion_pipeline - INFO - ✅ SUCCESS: generate_morphologist_graphs - Morphologist graphs generated successfully
+2026-01-28 16:04:05,751 - champollion_pipeline - INFO - ============================================================
+
+2026-01-28 16:04:05,752 - champollion_pipeline - INFO - ============================================================
+2026-01-28 16:04:05,752 - champollion_pipeline - INFO - Starting stage: run_cortical_tiles
+2026-01-28 16:04:05,752 - champollion_pipeline - INFO - ============================================================
+2026-01-28 16:04:05,752 - champollion_pipeline - INFO - Running cortical_tiles to generate sulcal regions...
+2026-01-28 16:04:06,591 - champollion_pipeline - INFO - ❌ FAILED: run_cortical_tiles - Failed
+2026-01-28 16:04:06,591 - champollion_pipeline - INFO - ============================================================
+
+2026-01-28 16:04:06,591 - champollion_pipeline - ERROR - Stopping pipeline due to stage failure
+2026-01-28 16:04:06,591 - champollion_pipeline - INFO - 
+============================================================
+2026-01-28 16:04:06,591 - champollion_pipeline - INFO - Pipeline Execution Summary
+2026-01-28 16:04:06,591 - champollion_pipeline - INFO - ============================================================
+2026-01-28 16:04:06,591 - champollion_pipeline - INFO - Completed stages: ['generate_morphologist_graphs']
+2026-01-28 16:04:06,591 - champollion_pipeline - INFO - Failed stages: ['run_cortical_tiles']
+2026-01-28 16:04:06,591 - champollion_pipeline - ERROR - ❌ Pipeline completed with errors
+2026-01-28 16:08:25,370 - champollion_pipeline - INFO - 🚀 Starting Champollion Pipeline
+2026-01-28 16:08:25,370 - champollion_pipeline - INFO - Root path: /volatile/home/bd285800/Documents/CEA_projects/champollion/champollion_pipeline
+2026-01-28 16:08:25,370 - champollion_pipeline - INFO - Dataset: TEST01
+2026-01-28 16:08:25,371 - champollion_pipeline - INFO - Enabled stages: ['generate_morphologist_graphs', 'run_cortical_tiles', 'generate_champollion_config', 'generate_embeddings', 'put_together_embeddings']
+
+2026-01-28 16:08:25,371 - champollion_pipeline - INFO - ============================================================
+2026-01-28 16:08:25,371 - champollion_pipeline - INFO - Starting stage: generate_morphologist_graphs
+2026-01-28 16:08:25,371 - champollion_pipeline - INFO - ============================================================
+2026-01-28 16:08:25,371 - champollion_pipeline - INFO - Generating Morphologist graphs...
+2026-01-28 16:08:25,371 - champollion_pipeline - INFO - ✅ SUCCESS: generate_morphologist_graphs - Morphologist graphs generated successfully
+2026-01-28 16:08:25,371 - champollion_pipeline - INFO - ============================================================
+
+2026-01-28 16:08:25,371 - champollion_pipeline - INFO - ============================================================
+2026-01-28 16:08:25,371 - champollion_pipeline - INFO - Starting stage: run_cortical_tiles
+2026-01-28 16:08:25,371 - champollion_pipeline - INFO - ============================================================
+2026-01-28 16:08:25,371 - champollion_pipeline - INFO - Running cortical_tiles to generate sulcal regions...
+2026-01-28 16:13:02,916 - champollion_pipeline - INFO - ✅ SUCCESS: run_cortical_tiles - Cortical tiles completed
+2026-01-28 16:13:02,916 - champollion_pipeline - INFO - ============================================================
+
+2026-01-28 16:13:02,916 - champollion_pipeline - INFO - ============================================================
+2026-01-28 16:13:02,916 - champollion_pipeline - INFO - Starting stage: generate_champollion_config
+2026-01-28 16:13:02,916 - champollion_pipeline - INFO - ============================================================
+2026-01-28 16:13:02,916 - champollion_pipeline - INFO - Generating Champollion configuration...
+2026-01-28 16:13:02,921 - champollion_pipeline - ERROR - Exception in generate_champollion_config
+Traceback (most recent call last):
+  File "/volatile/home/bd285800/Documents/CEA_projects/champollion/champollion_pipeline/main.py", line 385, in execute
+    return_code = script.run()
+                  ^^^^^^^^^^^^
+  File "/volatile/home/bd285800/Documents/CEA_projects/champollion/champollion_pipeline/src/generate_champollion_config.py", line 101, in run
+    with open(reference_yaml_dest, 'r') as f:
+         ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+FileNotFoundError: [Errno 2] No such file or directory: '/volatile/home/bd285800/Documents/CEA_projects/champollion/champollion_pipeline/external/champollion_V1/contrastive/configs/dataset/TEST01/reference.yaml'
+2026-01-28 16:13:02,921 - champollion_pipeline - INFO - ❌ FAILED: generate_champollion_config - Failed: [Errno 2] No such file or directory: '/volatile/home/bd285800/Documents/CEA_projects/champollion/champollion_pipeline/external/champollion_V1/contrastive/configs/dataset/TEST01/reference.yaml'
+2026-01-28 16:13:02,921 - champollion_pipeline - INFO - ============================================================
+
+2026-01-28 16:13:02,921 - champollion_pipeline - ERROR - Stopping pipeline due to stage failure
+2026-01-28 16:13:02,921 - champollion_pipeline - INFO - 
+============================================================
+2026-01-28 16:13:02,921 - champollion_pipeline - INFO - Pipeline Execution Summary
+2026-01-28 16:13:02,922 - champollion_pipeline - INFO - ============================================================
+2026-01-28 16:13:02,922 - champollion_pipeline - INFO - Completed stages: ['generate_morphologist_graphs', 'run_cortical_tiles']
+2026-01-28 16:13:02,922 - champollion_pipeline - INFO - Failed stages: ['generate_champollion_config']
+2026-01-28 16:13:02,922 - champollion_pipeline - ERROR - ❌ Pipeline completed with errors
+2026-01-28 16:20:04,973 - champollion_pipeline - INFO - 🚀 Starting Champollion Pipeline
+2026-01-28 16:20:04,973 - champollion_pipeline - INFO - Root path: /volatile/home/bd285800/Documents/CEA_projects/champollion/champollion_pipeline
+2026-01-28 16:20:04,973 - champollion_pipeline - INFO - Dataset: TEST01
+2026-01-28 16:20:04,973 - champollion_pipeline - INFO - Enabled stages: ['generate_morphologist_graphs', 'run_cortical_tiles', 'generate_champollion_config', 'generate_embeddings', 'put_together_embeddings']
+
+2026-01-28 16:20:04,973 - champollion_pipeline - INFO - ============================================================
+2026-01-28 16:20:04,973 - champollion_pipeline - INFO - Starting stage: generate_morphologist_graphs
+2026-01-28 16:20:04,973 - champollion_pipeline - INFO - ============================================================
+2026-01-28 16:20:04,973 - champollion_pipeline - INFO - Generating Morphologist graphs...
+2026-01-28 16:20:04,973 - champollion_pipeline - INFO - ✅ SUCCESS: generate_morphologist_graphs - Morphologist graphs generated successfully
+2026-01-28 16:20:04,973 - champollion_pipeline - INFO - ============================================================
+
+2026-01-28 16:20:04,973 - champollion_pipeline - INFO - ============================================================
+2026-01-28 16:20:04,973 - champollion_pipeline - INFO - Starting stage: run_cortical_tiles
+2026-01-28 16:20:04,974 - champollion_pipeline - INFO - ============================================================
+2026-01-28 16:20:04,974 - champollion_pipeline - INFO - Running cortical_tiles to generate sulcal regions...
+2026-01-28 16:25:01,386 - champollion_pipeline - INFO - ✅ SUCCESS: run_cortical_tiles - Cortical tiles completed
+2026-01-28 16:25:01,386 - champollion_pipeline - INFO - ============================================================
+
+2026-01-28 16:25:01,386 - champollion_pipeline - INFO - ============================================================
+2026-01-28 16:25:01,386 - champollion_pipeline - INFO - Starting stage: generate_champollion_config
+2026-01-28 16:25:01,386 - champollion_pipeline - INFO - ============================================================
+2026-01-28 16:25:01,386 - champollion_pipeline - INFO - Generating Champollion configuration...
+2026-01-28 16:25:01,777 - champollion_pipeline - INFO - ✅ SUCCESS: generate_champollion_config - Champollion config generated
+2026-01-28 16:25:01,777 - champollion_pipeline - INFO - ============================================================
+
+2026-01-28 16:25:01,777 - champollion_pipeline - INFO - ============================================================
+2026-01-28 16:25:01,777 - champollion_pipeline - INFO - Starting stage: generate_embeddings
+2026-01-28 16:25:01,777 - champollion_pipeline - INFO - ============================================================
+2026-01-28 16:25:01,778 - champollion_pipeline - INFO - Generating embeddings and training classifiers...
+2026-01-28 16:25:01,778 - champollion_pipeline - DEBUG - Arguments: ['/volatile/home/bd285800/Documents/CEA_projects/champollion/data/TEST01/derivatives/champollion_V1/models_cache/Champollion_V1', 'local', 'TEST01', 'test_run', '--datasets', 'toto', '--labels', 'Sex', '--classifier_name=svm', '--embeddings_only', '--use_best_model', '--subsets', 'full', '--epochs', 'None', '--split=random', '--cv=5', '--verbose', '--config_path=/volatile/home/bd285800/Documents/CEA_projects/champollion/data/TEST01/derivatives/champollion_V1/configs', '--cpu']
+2026-01-28 16:27:51,770 - champollion_pipeline - INFO - ✅ SUCCESS: generate_embeddings - Embeddings generated
+2026-01-28 16:27:51,770 - champollion_pipeline - INFO - ============================================================
+
+2026-01-28 16:27:51,770 - champollion_pipeline - INFO - ============================================================
+2026-01-28 16:27:51,770 - champollion_pipeline - INFO - Starting stage: put_together_embeddings
+2026-01-28 16:27:51,770 - champollion_pipeline - INFO - ============================================================
+2026-01-28 16:27:51,770 - champollion_pipeline - INFO - Putting together embeddings...
+2026-01-28 16:27:51,770 - champollion_pipeline - INFO - ✅ SUCCESS: put_together_embeddings - Embeddings combined successfully
+2026-01-28 16:27:51,770 - champollion_pipeline - INFO - ============================================================
+
+2026-01-28 16:27:51,770 - champollion_pipeline - INFO - 
+============================================================
+2026-01-28 16:27:51,771 - champollion_pipeline - INFO - Pipeline Execution Summary
+2026-01-28 16:27:51,771 - champollion_pipeline - INFO - ============================================================
+2026-01-28 16:27:51,771 - champollion_pipeline - INFO - Completed stages: ['generate_morphologist_graphs', 'run_cortical_tiles', 'generate_champollion_config', 'generate_embeddings', 'put_together_embeddings']
+2026-01-28 16:27:51,771 - champollion_pipeline - INFO - ✅ Pipeline completed successfully

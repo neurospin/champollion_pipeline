@@ -1,7 +1,7 @@
 [workspace]
 name = "champollion"
 version = "0.1.0"
-description = "Champollion pipeline with deep_folding, champollion_utils, and testing infrastructure"
+description = "Champollion pipeline with cortical_tiles, champollion_utils, and testing infrastructure"
 channels = ["https://brainvisa.info/neuro-forge", "pytorch", "nvidia", "conda-forge"]
 platforms = ["linux-64"]
 
@@ -27,8 +27,8 @@ datasets = ">=2.16.0"
 # Initialize submodules
 init-submodules = "git submodule update --init --recursive"
 
-# Install DeepFolding in editable mode
-install-deep-folding = "cd external/deep_folding && git checkout 2025_bdrabczuk_running_local_tests && SKLEARN_ALLOW_DEPRECATED_SKLEARN_PACKAGE_INSTALL=True pip install -e ."
+# Install cortical_tiles in editable mode
+install-cortical-tiles = "cd external/cortical_tiles && git checkout 2025_bdrabczuk_running_local_tests && SKLEARN_ALLOW_DEPRECATED_SKLEARN_PACKAGE_INSTALL=True pip install -e ."
 
 # Install Champollion v1 in editable mode
 install-champollion = "cd external/champollion_V1 && pip install -e ."
@@ -43,26 +43,26 @@ install-utils = """
 setup-data = "mkdir -p data"
 
 # Global task to install everything
-install-all = { depends-on = ["init-submodules", "install-deep-folding", "install-champollion", "install-utils", "setup-data"] }
+install-all = { depends-on = ["init-submodules", "install-cortical-tiles", "install-champollion", "install-utils", "setup-data"] }
 
 # Uninstall task: removes cloned repos, installed packages, and data
 uninstall = """
   git submodule deinit -f external/champollion_V1 && \
-  git submodule deinit -f external/deep_folding && \
-  rm -rf external/champollion_V1 external/deep_folding && \
+  git submodule deinit -f external/cortical_tiles && \
+  rm -rf external/champollion_V1 external/cortical_tiles && \
   rm -rf ../champollion_utils && \
-  pip uninstall dracopy deep_folding champollion_V1 champollion_utils -y && \
+  pip uninstall dracopy cortical_tiles champollion_V1 champollion_utils -y && \
   rm -rf data && \
-  echo "✅ Uninstallation complete."
+  echo "Uninstallation complete."
 """
 
 # Uninstall everything, including Pixi-managed dependencies
 uninstall-all = """
   rm -rf .pixi pixi.lock && \
-  rm -rf external/champollion_V1 external/deep_folding && \
+  rm -rf external/champollion_V1 external/cortical_tiles && \
   rm -rf ../champollion_utils && \
   rm -rf data && \
-  echo "✅ Uninstallation of Pixi-managed dependencies complete."
+  echo "Uninstallation of Pixi-managed dependencies complete."
 """
 
 # Testing tasks (run from champollion_pipeline directory)
