@@ -5,8 +5,11 @@ Script to generate sulcal regions with deep_folding from Morphologist's graphs.
 """
 
 import sys
-from os import getcwd, chdir, getcwd
-from os.path import abspath, dirname, join
+import json
+import re
+from glob import glob
+from os import getcwd, chdir
+from os.path import abspath, dirname, join, exists
 from joblib import cpu_count
 
 from champollion_utils.script_builder import ScriptBuilder
@@ -37,12 +40,50 @@ class RunDeepFolding(ScriptBuilder):
         # Validate paths
         if not self.validate_paths([self.args.input, self.args.output]):
             raise ValueError("run_deep_folding.py: Please input valid paths.")
-        
+
+        # Convert input to absolute path
+        input_abs = abspath(self.args.input)
+
         # If not exist in the current dataset copy config file
-        config_file_path: str = join(self.args.input, "pipeline_loop_2mm.json")
+        config_file_path: str = join(input_abs, "pipeline_loop_2mm.json")
         if not self.validate_paths([config_file_path]):
             source_config = abspath(join(dirname(__file__), '..', 'pipeline_loop_2mm.json'))
             self.execute_command(["cp", source_config, config_file_path], shell=False)
+
+        # Fix graphs_dir in pipeline_loop_2mm.json
+        # The config expects graphs_dir to point to where the morphologist subjects are located
+        # This is typically input_path/derivatives/morphologist-X.Y
+        if exists(config_file_path):
+            with open(config_file_path, 'r') as f:
+                config = json.load(f)
+
+            graphs_dir = config.get('graphs_dir', '')
+
+            # Check if graphs_dir points to morphologist directory
+            # Pattern matches /morphologist-X.Y where X.Y is version number
+            morphologist_pattern = r'/morphologist-\d+\.\d+$'
+
+            # If graphs_dir doesn't end with morphologist-X.Y, find it
+            if not re.search(morphologist_pattern, graphs_dir):
+                # Look for morphologist directory
+                morpho_path = join(input_abs, 'derivatives', 'morphologist-*')
+                morphologist_dirs = glob(morpho_path)
+
+                if morphologist_dirs:
+                    # Use the first morphologist directory found
+                    morphologist_path = morphologist_dirs[0]
+                    config['graphs_dir'] = morphologist_path
+
+                    # Write back the corrected config
+                    with open(config_file_path, 'w') as f:
+                        json.dump(config, f, indent=3)
+
+                    print(f"run_deep_folding.py: Corrected graphs_dir "
+                          f"from {graphs_dir} to {morphologist_path}")
+                else:
+                    print(f"run_deep_folding.py: Warning - "
+                          f"no morphologist directory found in "
+                          f"{input_abs}/derivatives/")
 
         # Prepare njobs
         if self.args.njobs is None:
@@ -57,9 +98,6 @@ class RunDeepFolding(ScriptBuilder):
             dirname(__file__),
             '..', 'external', 'deep_folding', 'deep_folding', 'brainvisa', 'generate_sulcal_regions.py'
         ))
-
-        # Convert input/output to absolute paths since we'll be changing directory
-        input_abs = abspath(self.args.input)
 
         # Get the directory where the script lives so we can run from there
         script_dir = dirname(script_path)

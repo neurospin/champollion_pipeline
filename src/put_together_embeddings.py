@@ -5,7 +5,7 @@ Script to put together embeddings of Champollion_V1 in a single folder.
 """
 
 from os import chdir, getcwd, makedirs
-from os.path import dirname, join
+from os.path import abspath, dirname, join
 
 from champollion_utils.script_builder import ScriptBuilder
 
@@ -43,10 +43,11 @@ class PutTogetherEmbeddings(ScriptBuilder):
         local_dir = getcwd()
 
         # Move to champollion's script location
-        champollion_path = join(
-            dirname(dirname(local_dir)),
-            'champollion_V1/contrastive/utils'
-        )
+        # Use __file__ to get the script's location, not cwd
+        script_dir = dirname(abspath(__file__))
+        champollion_path = abspath(join(
+            script_dir, '..', 'external', 'champollion_V1', 'contrastive', 'utils'
+        ))
         chdir(champollion_path)
 
         # Use build_command to construct the command
