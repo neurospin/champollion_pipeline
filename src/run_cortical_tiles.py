@@ -25,7 +25,7 @@ class RunCorticalTiles(ScriptBuilder):
         )
         # Configure arguments using method chaining
         (self.add_argument("input", help="Absolute path to Morphologist's graphs.")
-         .add_argument("output", help="Absolute path to the generated sulcal regions from deep_folding.")
+         .add_argument("output", help="Absolute path to the generated sulcal regions from cortical_tiles.")
          .add_optional_argument("--region-file", "Absolute path to the user's sulcal region's configuration file.")
          .add_required_argument("--path_to_graph", "Contains the sub-path that, for each subject, permits getting the sulcal graphs.")
          .add_required_argument("--path_sk_with_hull", "Contains the sub-path where to get the skeleton with hull.")
@@ -92,7 +92,7 @@ class RunCorticalTiles(ScriptBuilder):
         if self.args.njobs >= cpu_count():
             print(f"run_cortical_tiles.py: Warning - {self.args.njobs} jobs requested but only {cpu_count()} cores available.")
 
-        # Build command to run deep_folding script directly
+        # Build command to run cortical_tiles script directly
         # Get absolute paths
         script_path = abspath(join(
             dirname(__file__),

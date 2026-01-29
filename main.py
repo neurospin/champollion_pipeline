@@ -60,7 +60,7 @@ class DatasetConfig:
     # Paths
     input_path: str = ""
     morphologist_graphs: str = ""
-    deep_folding_output: str = ""
+    cortical_tiles_output: str = ""
     crops_path: str = ""
     embeddings_path: str = ""
 
@@ -188,7 +188,7 @@ class ConfigLoader:
                 'labels': config.dataset.labels,
                 'input_path': config.dataset.input_path,
                 'morphologist_graphs': config.dataset.morphologist_graphs,
-                'deep_folding_output': config.dataset.deep_folding_output,
+                'cortical_tiles_output': config.dataset.cortical_tiles_output,
                 'crops_path': config.dataset.crops_path,
                 'embeddings_path': config.dataset.embeddings_path,
                 'njobs': config.dataset.njobs,
@@ -326,7 +326,7 @@ class RunCorticalTilesStage(PipelineStage):
             # It will find morphologist graphs in input_path/derivatives/morphologist-*
             args = [
                 str(self.config.dataset.input_path),
-                str(self.config.dataset.deep_folding_output),
+                str(self.config.dataset.cortical_tiles_output),
                 f"--path_to_graph={self.config.dataset.path_to_graph}",
                 f"--path_sk_with_hull={self.config.dataset.path_sk_with_hull}",
                 f"--njobs={self.config.dataset.njobs}"
