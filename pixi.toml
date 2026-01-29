@@ -45,6 +45,28 @@ setup-data = "mkdir -p data"
 # Global task to install everything
 install-all = { depends-on = ["init-submodules", "install-cortical-tiles", "install-champollion", "install-utils", "setup-data"] }
 
+# Update git submodules to latest commits on their tracked branches
+update-submodules = """
+  git submodule update --remote --merge external/champollion_V1 && \
+  git submodule update --remote --merge external/cortical_tiles && \
+  cd external/cortical_tiles && git checkout 2025_bdrabczuk_running_local_tests && cd ../..
+"""
+
+# Update champollion_utils (pull latest from main)
+update-utils = """
+  cd ../champollion_utils && git pull origin main 2>/dev/null || echo 'champollion_utils not found or pull failed'
+"""
+
+# Reinstall Python packages to pick up dependency changes
+reinstall-packages = """
+  cd external/cortical_tiles && SKLEARN_ALLOW_DEPRECATED_SKLEARN_PACKAGE_INSTALL=True pip install -e . && \
+  cd ../champollion_V1 && pip install -e . && \
+  cd ../../.. && cd champollion_utils && pip install -e . && cd ..
+"""
+
+# Full update: pull repos and reinstall packages
+update = { depends-on = ["update-submodules", "update-utils", "reinstall-packages"] }
+
 # Uninstall task: removes cloned repos, installed packages, and data
 uninstall = """
   git submodule deinit -f external/champollion_V1 && \

@@ -8,7 +8,7 @@ import os
 from os.path import exists, join, abspath, dirname
 
 from champollion_utils.script_builder import ScriptBuilder
-from utils.lib import get_nth_parent_dir
+from utils.lib import find_dataset_folder, DERIVATIVES_FOLDER
 
 # Get the script's directory for reliable path resolution
 _SCRIPT_DIR = dirname(abspath(__file__))
@@ -42,22 +42,26 @@ class GenerateChampollionConfig(ScriptBuilder):
                 f"{self.args.crop_path} does not exist."
             )
 
-    def _handle_yaml_conf(self, conf_loc: str, crops_loc: str, output_loc: str | None = None):
+    def _handle_yaml_conf(self, conf_loc: str, crops_loc: str, dataset_name: str,
+                          output_loc: str | None = None):
         """Load and update the yaml configuration file.
 
         Args:
             conf_loc: Path to the source config file
             crops_loc: Path to crops location
+            dataset_name: Name of the dataset (e.g., 'TEST01') used to find
+                          the dataset_folder by searching upward in the path
             output_loc: Optional external output path. If None, writes to conf_loc.
                         Use this for read-only Apptainer containers.
         """
         lines = []
+        dataset_folder = find_dataset_folder(crops_loc, dataset_name)
 
         with open(conf_loc, "r") as f:
             for line in f.readlines():
                 if "dataset_folder" in line:
                     lines.append(
-                        f"dataset_folder: {get_nth_parent_dir(crops_loc, 5)}\n"
+                        f"dataset_folder: {dataset_folder}\n"
                     )
                 else:
                     lines.append(line)
@@ -100,7 +104,7 @@ class GenerateChampollionConfig(ScriptBuilder):
         my_lines = []
         with open(reference_yaml_dest, 'r') as f:
             for line in f.readlines():
-                computed_path = f"{self.args.dataset}/derivatives/deep_folding-2025"
+                computed_path = f"{self.args.dataset}/derivatives/{DERIVATIVES_FOLDER}"
                 my_lines.append(line.replace("TESTXX", computed_path))
 
         with open(reference_yaml_dest, "w") as f:
@@ -125,9 +129,13 @@ class GenerateChampollionConfig(ScriptBuilder):
         # Support external config for read-only containers (e.g., Apptainer)
         if self.args.external_config:
             external_yaml = abspath(self.args.external_config)
-            self._handle_yaml_conf(local_yaml_path, self.args.crop_path, external_yaml)
+            self._handle_yaml_conf(
+                local_yaml_path, self.args.crop_path,
+                self.args.dataset, external_yaml)
         else:
-            self._handle_yaml_conf(local_yaml_path, self.args.crop_path)
+            self._handle_yaml_conf(
+                local_yaml_path, self.args.crop_path,
+                self.args.dataset)
 
         return result
 
