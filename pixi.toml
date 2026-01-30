@@ -40,7 +40,7 @@ install-utils = """
 """
 
 # Create data directory
-setup-data = "mkdir -p data"
+setup-data = "mkdir -p ../data"
 
 # Global task to install everything
 install-all = { depends-on = ["init-submodules", "install-cortical-tiles", "install-champollion", "install-utils", "setup-data"] }
