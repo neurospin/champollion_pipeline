@@ -116,7 +116,7 @@ sub-1000021     1
 Check that 28 sulcal region folders were created:
 
 ```bash
-ls /path/to/data/TESTXX/derivatives/deep_folding/crops/2mm
+ls /path/to/data/TESTXX/derivatives/cortical_tiles-2026/crops/2mm
 ```
 
 ## 4. Generate Champollion Configuration
@@ -125,7 +125,7 @@ Create dataset configuration files for Champollion:
 
 ```bash
 pixi run python3 src/generate_champollion_config.py \
-    /path/to/data/TESTXX/derivatives/deep_folding/crops/2mm \
+    /path/to/data/TESTXX/derivatives/cortical_tiles-2026/crops/2mm \
     --dataset TESTXX
 ```
 
@@ -150,17 +150,26 @@ pixi run python3 src/generate_champollion_config.py \
 
 ## 5. Generate Embeddings
 
-Generate embeddings using pre-trained Champollion models.
+Generate embeddings using pre-trained Champollion models. Each of the 56 model folds (28 regions x 2 hemispheres) produces a `full_embeddings.csv` file containing one embedding vector per subject.
 
 ### Basic Usage
 
 ```bash
 pixi run python3 src/generate_embeddings.py \
-    /path/to/models \
-    dataset_localization \
-    datasets_root \
-    short_name
+    <models_path> \
+    <dataset_localization> \
+    <datasets_root> \
+    <short_name> \
+    --embeddings_only \
+    --config_path /path/to/data/TESTXX/derivatives/champollion_V1/configs/
 ```
+
+| Positional Argument | Description |
+|---------------------|-------------|
+| `models_path` | Path to models: local directory, local archive, HuggingFace repo ID, or URL |
+| `dataset_localization` | Key for dataset localization (use `local` for local datasets) |
+| `datasets_root` | Name of the dataset directory under `data/` (e.g., `TESTXX`) |
+| `short_name` | Name for the output embeddings directory (e.g., `my_run`) |
 
 ### Model Sources
 
@@ -176,76 +185,117 @@ The script supports multiple model sources:
 
 ### Examples
 
-Using Hugging Face models:
+Download models from Hugging Face and generate embeddings only:
+
+```bash
+pixi run python3 src/generate_embeddings.py \
+    https://huggingface.co/neurospin/Champollion_V1 \
+    local \
+    TESTXX \
+    my_run \
+    --embeddings_only \
+    --skip-cka \
+    --config_path /path/to/data/TESTXX/derivatives/champollion_V1/configs/
+```
+
+Reuse previously cached models with CPU-only mode:
+
+```bash
+pixi run python3 src/generate_embeddings.py \
+    /path/to/data/TESTXX/derivatives/champollion_V1/models_cache/Champollion_V1 \
+    local \
+    TESTXX \
+    my_run \
+    --embeddings_only \
+    --cpu \
+    --config_path /path/to/data/TESTXX/derivatives/champollion_V1/configs/
+```
+
+Generate embeddings and train classifiers (requires a `subject_labels_file` in the dataset configs):
 
 ```bash
 pixi run python3 src/generate_embeddings.py \
     neurospin/Champollion_V1 \
     local \
     TESTXX \
-    my_embeddings \
-    --embeddings_only \
-    --use_best_model
-```
-
-Using a local archive with CPU-only mode:
-
-```bash
-pixi run python3 src/generate_embeddings.py \
-    /path/to/models.tar.gz \
-    local \
-    TESTXX \
-    my_embeddings \
-    --cpu \
-    --embeddings_only
+    my_run \
+    --config_path /path/to/data/TESTXX/derivatives/champollion_V1/configs/
 ```
 
 ### Options
 
 | Option | Description |
 |--------|-------------|
-| `--datasets` | List of dataset names (default: ['toto']) |
-| `--labels` | List of labels (default: ['Sex']) |
-| `--classifier_name` | Classifier name (default: 'svm') |
-| `--overwrite` | Overwrite existing embeddings |
-| `--embeddings_only` | Only compute embeddings (skip classifiers) |
-| `--use_best_model` | Use the best model saved during training |
-| `--subsets` | Subsets of data to train on (default: ['full']) |
-| `--epochs` | List of epochs to evaluate (default: [None]) |
-| `--split` | Splitting strategy: 'random' or 'custom' (default: 'random') |
-| `--cv` | Number of cross-validation folds (default: 5) |
+| `--config_path` | Path to dataset config directory (generated in step 4) |
+| `--embeddings_only` | Only compute embeddings (skip classifier training) |
 | `--cpu` | Force CPU usage (disable CUDA) |
+| `--overwrite` | Overwrite existing embeddings |
 | `--skip-cka` | Skip CKA coherence test after embeddings |
 | `--no-cache` | Force re-extraction of archive (ignore cache) |
+| `--split` | Splitting strategy: `random` or `custom` (default: `random`) |
+| `--use_best_model` | Use the best model saved during training |
 | `--profiling` | Enable Python profiling (cProfile) |
+| `--labels` | List of labels for classifiers (default: `['Sex']`) |
+| `--classifier_name` | Classifier name (default: `svm`) |
 
 ### Archive Caching
 
-When using archive sources (local or remote), extracted files are cached in:
+When using HuggingFace or archive sources, models are cached in:
 ```
 data/{datasets_root}/derivatives/champollion_V1/models_cache/
 ```
 
-Use `--no-cache` to force re-extraction.
+On subsequent runs with the same HuggingFace repo, the script will still contact HuggingFace to check for updates (but won't re-download unchanged files). To skip this entirely, pass the cached local path directly as `models_path`.
 
-### Embedding Naming
+Use `--no-cache` to force a full re-download.
 
-Embedding folders are named using the pattern: `{short_name}_{split}_embeddings`
+### Output Structure
+
+Embeddings are saved inside each model folder with the naming pattern `{short_name}_{split}_embeddings`:
+
+```
+models_cache/Champollion_V1/
+    SC-sylv_left/name07-58-00_111/
+        my_run_random_embeddings/
+            full_embeddings.csv       # One row per subject, columns are embedding dimensions
+            train_embeddings.csv
+            val_embeddings.csv
+            test_embeddings.csv
+    SC-sylv_right/name06-17-02_84/
+        my_run_random_embeddings/
+            full_embeddings.csv
+            ...
+    ...  (56 model folds total)
+```
 
 To avoid overwriting previous embeddings, use different `short_name` values for each run.
 
 ## 6. Combine Embeddings
 
-Combine embeddings from all 56 sulcal regions into a single output:
+Combine the per-region embeddings from all 56 model folds into a single output directory:
 
 ```bash
 pixi run python3 src/put_together_embeddings.py \
-    /path/to/models \
-    short_name \
-    /path/to/output
+    --path_models /path/to/data/TESTXX/derivatives/champollion_V1/models_cache/Champollion_V1/ \
+    --embeddings_subpath my_run_random_embeddings/full_embeddings.csv \
+    --output_path /path/to/data/TESTXX/derivatives/champollion_V1/embeddings/
 ```
 
-Verify that 56 CSV files were created in the output directory.
+| Argument | Description |
+|----------|-------------|
+| `--path_models` | Path to the directory containing model fold directories |
+| `--embeddings_subpath` | Relative path to the embeddings CSV **including the filename** (e.g., `my_run_random_embeddings/full_embeddings.csv`) |
+| `--output_path` | Directory where all 56 CSV files will be copied |
+
+The subpath is constructed from `{short_name}_{split}_embeddings/full_embeddings.csv`, matching the `short_name` and `split` used in step 5.
+
+### Verification
+
+Check that 56 CSV files were created:
+
+```bash
+ls /path/to/data/TESTXX/derivatives/champollion_V1/embeddings/*.csv | wc -l
+```
 
 ## Project Structure
 
