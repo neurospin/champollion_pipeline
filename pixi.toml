@@ -49,7 +49,7 @@ install-all = { depends-on = ["init-submodules", "install-cortical-tiles", "inst
 update-submodules = """
   git submodule update --remote --merge external/champollion_V1 && \
   git submodule update --remote --merge external/cortical_tiles && \
-  cd external/cortical_tiles && git checkout 2025_bdrabczuk_running_local_tests && cd ../..
+  cd external/cortical_tiles && cd ../..
 """
 
 # Update champollion_utils (pull latest from main)
