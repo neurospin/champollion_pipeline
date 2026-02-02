@@ -46,43 +46,17 @@ class GenerateChampollionConfig(ScriptBuilder):
                 f"{self.args.crop_path} does not exist."
             )
 
-    @staticmethod
-    def _find_crops_parent(crops_loc: str) -> str:
-        """Find dataset_folder by locating 'crops' in the path.
-
-        Returns the path up to (but not including) the 'crops' component.
-        For example: '/data/project/crops/2mm' -> '/data/project'
-        """
-        from pathlib import Path
-        parts = Path(crops_loc).parts
-        for i, part in enumerate(parts):
-            if part == "crops":
-                return str(Path(*parts[:i])) if i > 0 else "/"
-        raise ValueError(
-            f"Could not find 'crops' component in path: {crops_loc}"
-        )
-
-    def _handle_yaml_conf(self, conf_loc: str, crops_loc: str, dataset_name: str,
-                          output_loc: str | None = None,
-                          external_crops: bool = False):
+    def _handle_yaml_conf(self, conf_loc: str, dataset_folder: str,
+                          output_loc: str | None = None):
         """Load and update the yaml configuration file.
 
         Args:
             conf_loc: Path to the source config file
-            crops_loc: Path to crops location
-            dataset_name: Name of the dataset (e.g., 'TEST01') used to find
-                          the dataset_folder by searching upward in the path
+            dataset_folder: Absolute path to the dataset folder root
             output_loc: Optional external output path. If None, writes to conf_loc.
                         Use this for read-only Apptainer containers.
-            external_crops: If True, derive dataset_folder from the crop path
-                           directly (parent of 'crops/') instead of searching
-                           for dataset_name in the path.
         """
         lines = []
-        if external_crops:
-            dataset_folder = self._find_crops_parent(crops_loc)
-        else:
-            dataset_folder = find_dataset_folder(crops_loc, dataset_name)
 
         with open(conf_loc, "r") as f:
             for line in f.readlines():
@@ -120,23 +94,25 @@ class GenerateChampollionConfig(ScriptBuilder):
         if not exists(dataset_loc):
             self.execute_command(["mkdir", "-p", dataset_loc], shell=False)
 
-        # Copy reference.yaml if it doesn't exist
+        # Always copy reference.yaml from template so re-runs regenerate cleanly
         reference_yaml_dest = join(dataset_loc, "reference.yaml")
-        if not exists(reference_yaml_dest):
-            # reference.yaml is in the champollion_pipeline root directory (parent of src/)
-            reference_yaml_src = join(dirname(_SCRIPT_DIR), "reference.yaml")
-            self.execute_command(["cp", reference_yaml_src, dataset_loc], shell=False)
+        reference_yaml_src = join(dirname(_SCRIPT_DIR), "reference.yaml")
+        self.execute_command(["cp", reference_yaml_src, dataset_loc], shell=False)
 
-        # Update reference.yaml with dataset path (using absolute path)
+        dataset_folder = find_dataset_folder(self.args.crop_path, self.args.dataset)
+
         my_lines = []
         with open(reference_yaml_dest, 'r') as f:
             for line in f.readlines():
                 if self.args.external_crops:
-                    # External crops: remove the TESTXX/ prefix so paths become
-                    # ${dataset_folder}/crops/2mm/... where dataset_folder points
-                    # to the parent of crops/ in crop_path
-                    my_lines.append(line.replace("TESTXX/", ""))
+                    # External crops: derive the full relative path from crop_path
+                    # e.g. crop_path = /external/shared_project/TEST01/path/to/crops/crops/2mm
+                    #      dataset_folder = /external/shared_project
+                    #      => relative = TEST01/path/to/crops/crops/2mm
+                    relative_path = os.path.relpath(self.args.crop_path, dataset_folder)
+                    my_lines.append(line.replace("TESTXX/crops/2mm", relative_path))
                 else:
+                    # Standard: use the known derivatives folder structure
                     computed_path = f"{self.args.dataset}/derivatives/{DERIVATIVES_FOLDER}"
                     my_lines.append(line.replace("TESTXX", computed_path))
 
@@ -162,15 +138,9 @@ class GenerateChampollionConfig(ScriptBuilder):
         # Support external config for read-only containers (e.g., Apptainer)
         if self.args.external_config:
             external_yaml = abspath(self.args.external_config)
-            self._handle_yaml_conf(
-                local_yaml_path, self.args.crop_path,
-                self.args.dataset, external_yaml,
-                external_crops=self.args.external_crops)
+            self._handle_yaml_conf(local_yaml_path, dataset_folder, external_yaml)
         else:
-            self._handle_yaml_conf(
-                local_yaml_path, self.args.crop_path,
-                self.args.dataset,
-                external_crops=self.args.external_crops)
+            self._handle_yaml_conf(local_yaml_path, dataset_folder)
 
         return result
 
