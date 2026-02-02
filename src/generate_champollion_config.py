@@ -32,7 +32,11 @@ class GenerateChampollionConfig(ScriptBuilder):
                                 "Absolute path to desired output. Default is in Champollion_V1/config/dataset/")
          .add_optional_argument("--external-config",
                                 "External path to write local.yaml (for read-only containers).",
-                                default=None))
+                                default=None)
+         .add_flag("--external_crops",
+                   "Use crop_path as-is instead of deriving it from --dataset. "
+                   "Replaces the dataset/derivatives/... segment with the actual crop_path location. "
+                   "Requires --dataset to be set (used for config file naming)."))
 
     def _validate_inputs(self):
         """Validate input paths."""
@@ -42,8 +46,25 @@ class GenerateChampollionConfig(ScriptBuilder):
                 f"{self.args.crop_path} does not exist."
             )
 
+    @staticmethod
+    def _find_crops_parent(crops_loc: str) -> str:
+        """Find dataset_folder by locating 'crops' in the path.
+
+        Returns the path up to (but not including) the 'crops' component.
+        For example: '/data/project/crops/2mm' -> '/data/project'
+        """
+        from pathlib import Path
+        parts = Path(crops_loc).parts
+        for i, part in enumerate(parts):
+            if part == "crops":
+                return str(Path(*parts[:i])) if i > 0 else "/"
+        raise ValueError(
+            f"Could not find 'crops' component in path: {crops_loc}"
+        )
+
     def _handle_yaml_conf(self, conf_loc: str, crops_loc: str, dataset_name: str,
-                          output_loc: str | None = None):
+                          output_loc: str | None = None,
+                          external_crops: bool = False):
         """Load and update the yaml configuration file.
 
         Args:
@@ -53,9 +74,15 @@ class GenerateChampollionConfig(ScriptBuilder):
                           the dataset_folder by searching upward in the path
             output_loc: Optional external output path. If None, writes to conf_loc.
                         Use this for read-only Apptainer containers.
+            external_crops: If True, derive dataset_folder from the crop path
+                           directly (parent of 'crops/') instead of searching
+                           for dataset_name in the path.
         """
         lines = []
-        dataset_folder = find_dataset_folder(crops_loc, dataset_name)
+        if external_crops:
+            dataset_folder = self._find_crops_parent(crops_loc)
+        else:
+            dataset_folder = find_dataset_folder(crops_loc, dataset_name)
 
         with open(conf_loc, "r") as f:
             for line in f.readlines():
@@ -104,8 +131,14 @@ class GenerateChampollionConfig(ScriptBuilder):
         my_lines = []
         with open(reference_yaml_dest, 'r') as f:
             for line in f.readlines():
-                computed_path = f"{self.args.dataset}/derivatives/{DERIVATIVES_FOLDER}"
-                my_lines.append(line.replace("TESTXX", computed_path))
+                if self.args.external_crops:
+                    # External crops: remove the TESTXX/ prefix so paths become
+                    # ${dataset_folder}/crops/2mm/... where dataset_folder points
+                    # to the parent of crops/ in crop_path
+                    my_lines.append(line.replace("TESTXX/", ""))
+                else:
+                    computed_path = f"{self.args.dataset}/derivatives/{DERIVATIVES_FOLDER}"
+                    my_lines.append(line.replace("TESTXX", computed_path))
 
         with open(reference_yaml_dest, "w") as f:
             f.writelines(my_lines)
@@ -131,11 +164,13 @@ class GenerateChampollionConfig(ScriptBuilder):
             external_yaml = abspath(self.args.external_config)
             self._handle_yaml_conf(
                 local_yaml_path, self.args.crop_path,
-                self.args.dataset, external_yaml)
+                self.args.dataset, external_yaml,
+                external_crops=self.args.external_crops)
         else:
             self._handle_yaml_conf(
                 local_yaml_path, self.args.crop_path,
-                self.args.dataset)
+                self.args.dataset,
+                external_crops=self.args.external_crops)
 
         return result
 
