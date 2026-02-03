@@ -28,7 +28,13 @@ llvmlite = "*"
 python-blosc2 = "*"
 timm = "*"
 wandb = "*"
-
+pytorch-lightning = "*"
+scikit-learn = "*"
+etelemetry = "*"
+dill = "*"
+pathos = "*"
+multiprocess = "*"
+bounded-pool-executor = "*"
 
 [tasks]
 # Initialize submodules
