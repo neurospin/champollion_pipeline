@@ -20,6 +20,15 @@ dracopy = ">=1.4.2"
 transformers = ">=4.36.0"
 datasets = ">=2.16.0"
 huggingface_hub = ">=0.20.0"
+# dependencies of champollion-v1 or cortical_tiles
+plotly = "*"
+scikit-image = "*"
+numba = "*"
+llvmlite = "*"
+python-blosc2 = "*"
+timm = "*"
+wandb = "*"
+
 
 [tasks]
 # Initialize submodules
