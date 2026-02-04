@@ -8,7 +8,7 @@
    "nb_subjects": -1,
    "input_type": "extremities",
    "labeled_subjects_dir": "/neurospin/dico/data/bv_databases/human/manually_labeled/pclean/all",
-   "path_to_graph_supervised": "t1mri/default_acquisition/0/folds/3.1",
+   "path_to_graph_supervised": "t1mri/t1/default_analysis/folds/3.3/base2018_manual",
    "supervised_output_dir": "$local",
    "nb_subjects_mask": -1,
    "graphs_dir": "$local",
