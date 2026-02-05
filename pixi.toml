@@ -45,6 +45,9 @@ setup-data = "mkdir -p ../data"
 # Global task to install everything
 install-all = { depends-on = ["init-submodules", "install-cortical-tiles", "install-champollion", "install-utils", "setup-data"] }
 
+# Pull latest changes for the main champollion_pipeline repo
+update-pipeline = "git pull"
+
 # Update git submodules to latest commits on their tracked branches
 update-submodules = """
   git submodule update --remote --merge external/champollion_V1 && \
@@ -65,7 +68,7 @@ reinstall-packages = """
 """
 
 # Full update: pull repos and reinstall packages
-update = { depends-on = ["update-submodules", "update-utils", "reinstall-packages"] }
+update = { depends-on = ["update-pipeline", "update-submodules", "update-utils", "reinstall-packages"] }
 
 # Uninstall task: removes cloned repos, installed packages, and data
 uninstall = """

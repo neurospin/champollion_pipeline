@@ -268,9 +268,20 @@ class InteractiveFallbackStrategy(ModelFetchStrategy):
         return True
 
     def fetch(self, models_path: str, extract_to: str, no_cache: bool = False) -> str:
-        """Ask user for local archive path."""
+        """Ask user for local archive path (only works in interactive mode)."""
         print(f"\nCannot automatically retrieve models from: "
               f"{models_path}")
+
+        # Check if we're in an interactive terminal
+        if not sys.stdin.isatty():
+            raise RuntimeError(
+                f"Cannot find models at: {models_path}\n"
+                f"When running non-interactively, please provide:\n"
+                f"  - A valid local path to the models directory\n"
+                f"  - A local archive file (.tar.xz, .tar.gz)\n"
+                f"  - A HuggingFace repo ID (e.g., 'neurospin/Champollion_V1')"
+            )
+
         print("\nPlease provide a local path to the models or archive.")
         response = input("Do you have a local copy? (yes/no): ").strip()
 
@@ -442,37 +453,47 @@ class GenerateEmbeddings(ScriptBuilder):
         extract_to = abspath(data_dir)
         os.makedirs(extract_to, exist_ok=True)
 
-        # Resolve relative paths to absolute before checking strategies
+        # Get no_cache flag (force re-extraction)
+        no_cache = getattr(self.args, 'no_cache', False)
+
+        # Check HuggingFace and URL strategies first with the ORIGINAL path
+        # These strategies look for semantic patterns (e.g., "user/repo", URLs)
+        # that would be destroyed by path resolution
+        hf_strategy = HuggingFaceStrategy()
+        if hf_strategy.can_handle(models_path):
+            try:
+                return hf_strategy.fetch(models_path, extract_to, no_cache)
+            except Exception as e:
+                print(f"HuggingFace strategy failed: {e}")
+                # Continue to other strategies
+
+        remote_strategy = RemoteArchiveStrategy()
+        if remote_strategy.can_handle(models_path):
+            try:
+                return remote_strategy.fetch(models_path, extract_to, no_cache)
+            except Exception as e:
+                print(f"Remote archive strategy failed: {e}")
+                # Continue to other strategies
+
+        # Resolve relative paths to absolute for local file strategies
         # This ensures relative paths like ../../models.tar.xz work
         resolved_path = models_path
         if not urlparse(models_path).scheme:  # Not a URL
             if not models_path.startswith('/'):  # Relative path
                 resolved_path = abspath(models_path)
 
-        # Get no_cache flag (force re-extraction)
-        no_cache = getattr(self.args, 'no_cache', False)
+        # Try local path strategy with resolved path
+        local_strategy = LocalPathStrategy()
+        if local_strategy.can_handle(resolved_path):
+            try:
+                return local_strategy.fetch(resolved_path, extract_to, no_cache)
+            except Exception as e:
+                print(f"Local path strategy failed: {e}")
+                # Continue to fallback
 
-        # Define strategies in order of preference
-        strategies = [
-            LocalPathStrategy(),
-            HuggingFaceStrategy(),
-            RemoteArchiveStrategy(),
-            InteractiveFallbackStrategy()  # Always handles as fallback
-        ]
-
-        # Try each strategy
-        for strategy in strategies:
-            if strategy.can_handle(resolved_path):
-                try:
-                    return strategy.fetch(resolved_path, extract_to, no_cache)
-                except Exception as e:
-                    print(f"Strategy {strategy.__class__.__name__} "
-                          f"failed: {e}")
-                    # Continue to next strategy
-                    continue
-
-        # Should never reach here due to InteractiveFallbackStrategy
-        raise RuntimeError("All model fetching strategies failed")
+        # Fallback: ask user interactively
+        fallback_strategy = InteractiveFallbackStrategy()
+        return fallback_strategy.fetch(resolved_path, extract_to, no_cache)
 
     def run(self):
         """Execute the embeddings pipeline script."""
