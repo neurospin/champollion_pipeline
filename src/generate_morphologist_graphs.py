@@ -21,8 +21,9 @@ class GenerateMorphologistGraphs(ScriptBuilder):
         # Configure arguments using method chaining
         (self.add_argument("input", help="Absolute path to the user's raw data.")
          .add_argument("output", help="Absolute path to the generated graphs from morphologist. "
-                                      "Morphologist will create a $output/derivatives/morphologist-5.2/ "
-                                      "directory for output generations."))
+                                      "Morphologist will create a $output/derivatives/morphologist-6.0/ "
+                                      "directory for output generations.")
+         .add_flag("--parallel", "Enable parallel processing using Soma-Workflow (--swf)."))
 
     def _get_input_files(self):
         """Get list of valid input files."""
@@ -61,6 +62,10 @@ class GenerateMorphologistGraphs(ScriptBuilder):
             "--of",
             "morphologist-auto-nonoverlap-1.0"
         ]
+
+        # Add parallel processing flag if requested (must be at the end)
+        if self.args.parallel:
+            cmd.append("--swf")
 
         result = self.execute_command(cmd, shell=True)
 
