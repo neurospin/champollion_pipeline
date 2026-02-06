@@ -70,9 +70,9 @@ class GenerateMorphologistGraphs(ScriptBuilder):
             cmd.append("--swf")
 
         # Skip sulcal recognition by default (process parameters come last)
-        # sulci_labelling- disables recognition step (10-20 min) and morphometry
+        # Use explicit =False syntax for reliable disabling with soma-workflow
         if not self.args.enable_sulcal_recognition:
-            cmd.append('pipeline_steps="sulci_labelling-"')
+            cmd.append('pipeline_steps="sulci_labelling=False"')
 
         result = self.execute_command(cmd, shell=True)
 
