@@ -60,18 +60,19 @@ class GenerateMorphologistGraphs(ScriptBuilder):
             "morphologist-cli",
             *input_files,
             self.args.output,
-            "--",
-            "--of",
-            "morphologist-auto-nonoverlap-1.0"
+            "--"
         ]
 
-        # Add parallel processing flag (must come before process parameters)
+        # Skip sulcal recognition by default using pipeline_steps parameter
+        if not self.args.enable_sulcal_recognition:
+            cmd.append("pipeline_steps=sulci-, sulci_labelling-")
+
+        # Add output format
+        cmd.extend(["--of", "morphologist-auto-nonoverlap-1.0"])
+
+        # Add parallel processing flag
         if self.args.parallel:
             cmd.append("--swf")
-
-        # Skip sulcal recognition by default (process parameters come last)
-        if not self.args.enable_sulcal_recognition:
-            cmd.append("SulciRecognition.selected=0")
 
         result = self.execute_command(cmd, shell=True)
 
