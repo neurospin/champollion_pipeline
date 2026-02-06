@@ -24,9 +24,8 @@ class GenerateMorphologistGraphs(ScriptBuilder):
                                       "Morphologist will create a $output/derivatives/morphologist-6.0/ "
                                       "directory for output generations.")
          .add_flag("--parallel", "Enable parallel processing using Soma-Workflow (--swf).")
-         .add_flag("--skip-sulcal-recognition",
-                   "Skip sulcal recognition to save 10-20 min/subject (recommended for embeddings pipeline).",
-                   default=True))
+         .add_flag("--enable-sulcal-recognition",
+                   "Enable sulcal recognition (adds 10-20 min/subject, disabled by default for embeddings pipeline)."))
 
     def _get_input_files(self):
         """Get list of valid input files."""
@@ -64,8 +63,8 @@ class GenerateMorphologistGraphs(ScriptBuilder):
             "--",
         ]
 
-        # Add sulcal recognition control parameter if flag is set
-        if self.args.skip_sulcal_recognition:
+        # Skip sulcal recognition by default (only run if flag is set)
+        if not self.args.enable_sulcal_recognition:
             cmd.append("SulciRecognition.selected=0")
 
         cmd.extend([
