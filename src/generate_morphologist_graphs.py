@@ -70,9 +70,10 @@ class GenerateMorphologistGraphs(ScriptBuilder):
             cmd.append("--swf")
 
         # Skip sulcal recognition by default (process parameters come last)
-        # Use explicit =False syntax for reliable disabling with soma-workflow
+        # Must disable BOTH sulci_labelling and sulcal_morphometry (which depends on it)
+        # CAPSUL pipeline_steps do not cascade dependencies automatically
         if not self.args.enable_sulcal_recognition:
-            cmd.append('pipeline_steps="sulci_labelling=False"')
+            cmd.append('pipeline_steps="sulci_labelling=False, sulcal_morphometry=False"')
 
         result = self.execute_command(cmd, shell=True)
 
