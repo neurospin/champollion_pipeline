@@ -60,19 +60,19 @@ class GenerateMorphologistGraphs(ScriptBuilder):
             "morphologist-cli",
             *input_files,
             self.args.output,
-            "--"
+            "--",
+            "--of",
+            "morphologist-auto-nonoverlap-1.0"
         ]
 
-        # Skip sulcal recognition by default using pipeline_steps parameter
-        if not self.args.enable_sulcal_recognition:
-            cmd.append("pipeline_steps=sulci-, sulci_labelling-")
-
-        # Add output format
-        cmd.extend(["--of", "morphologist-auto-nonoverlap-1.0"])
-
-        # Add parallel processing flag
+        # Add parallel processing flag (capsul options come first)
         if self.args.parallel:
             cmd.append("--swf")
+
+        # Skip sulcal recognition by default (process parameters come last)
+        # sulci_labelling- disables recognition step (10-20 min) and morphometry
+        if not self.args.enable_sulcal_recognition:
+            cmd.append('pipeline_steps="sulci_labelling-"')
 
         result = self.execute_command(cmd, shell=True)
 
