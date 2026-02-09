@@ -58,15 +58,21 @@ def find_embeddings(embeddings_dir):
     return regions
 
 
-def generate_sulcal_graph_snapshot(graph_path, output_path, size=(800, 600)):
+def generate_sulcal_graph_snapshot(graph_path, output_path, size=(800, 600),
+                                   view_quaternion=None):
     """Generate a snapshot of a sulcal graph.
 
     Args:
         graph_path: Path to .arg sulcal graph file
         output_path: Path to save the snapshot image
         size: Tuple of (width, height)
+        view_quaternion: Camera orientation as (x, y, z, w). Defaults to
+            left side view.
     """
     import anatomist.headless as ana
+
+    if view_quaternion is None:
+        view_quaternion = (0.5, 0.5, 0.5, 0.5)  # left side view
 
     a = ana.Anatomist()
 
@@ -79,28 +85,14 @@ def generate_sulcal_graph_snapshot(graph_path, output_path, size=(800, 600)):
 
     # Set up the view
     a.execute("WindowConfig", windows=[win], cursor_visibility=0)
+    win.camera(view_quaternion=view_quaternion)
+    win.focusView()
 
-    # Take snapshots from different angles
-    quaternions = [
-        (0.5, -0.5, -0.5, 0.5),  # right side view
-        (0.5, 0.5, 0.5, 0.5),    # left side view
-    ]
+    image = win.snapshotImage(size[0], size[1])
+    image.save(output_path)
+    print(f"  Saved: {output_path}")
 
-    basename = osp.splitext(output_path)[0]
-    ext = osp.splitext(output_path)[1] or ".png"
-
-    snapshots = []
-    for i, quat in enumerate(quaternions):
-        win.camera(view_quaternion=quat)
-        win.focusView()
-
-        snapshot_path = f"{basename}_{i:02d}{ext}"
-        image = win.snapshotImage(size[0], size[1])
-        image.save(snapshot_path)
-        snapshots.append(snapshot_path)
-        print(f"  Saved: {snapshot_path}")
-
-    return snapshots
+    return output_path
 
 
 def _parse_embedding_regions(embeddings_dir):
@@ -436,16 +428,30 @@ def main():
             )
             print(f"  Found {len(graphs)} sulcal graph(s)")
 
-            for i, graph_path in enumerate(graphs[:2]):
+            # Quaternions for each hemisphere
+            QUAT_LEFT = (0.5, 0.5, 0.5, 0.5)
+            QUAT_RIGHT = (0.5, -0.5, -0.5, 0.5)
+
+            for graph_path in graphs[:2]:
+                # Detect hemisphere from filename
+                fname = osp.basename(graph_path).lower()
+                if "_r" in fname or "right" in fname:
+                    hemi = "right"
+                    quat = QUAT_RIGHT
+                else:
+                    hemi = "left"
+                    quat = QUAT_LEFT
+
                 out = osp.join(
                     args.output_dir,
-                    f"sulcal_graph_{i:02d}.png"
+                    f"sulcal_graph_{hemi}.png"
                 )
                 try:
-                    snaps = generate_sulcal_graph_snapshot(
-                        graph_path, out, size
+                    snap = generate_sulcal_graph_snapshot(
+                        graph_path, out, size,
+                        view_quaternion=quat,
                     )
-                    all_snapshots.extend(snaps)
+                    all_snapshots.append(snap)
                 except Exception as e:
                     print(
                         f"  Error processing "
