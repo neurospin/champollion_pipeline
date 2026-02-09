@@ -87,7 +87,7 @@ class RunCorticalTiles(ScriptBuilder):
 
         # Prepare njobs
         if self.args.njobs is None:
-            self.args.njobs = min(22, cpu_count() - 2)
+            self.args.njobs = max(1, min(22, cpu_count() - 2))
 
         if self.args.njobs >= cpu_count():
             print(f"run_cortical_tiles.py: Warning - {self.args.njobs} jobs requested but only {cpu_count()} cores available.")

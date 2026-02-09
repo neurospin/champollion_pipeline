@@ -427,7 +427,11 @@ class GenerateEmbeddings(ScriptBuilder):
          .add_flag("--cpu", "Force CPU usage (disable CUDA).")
          .add_flag("--profiling", "Enable Python profiling (cProfile).")
          .add_flag("--skip-cka", "Skip CKA coherence test after embeddings.")
-         .add_flag("--no-cache", "Force re-extraction of archive (ignore cache)."))
+         .add_flag("--no-cache", "Force re-extraction of archive (ignore cache).")
+         .add_optional_argument(
+            "--nb_jobs",
+            "Number of CPU workers for DataLoader.",
+            default=None, type_=int))
 
     def fetch_models(self, models_path):
         """
@@ -576,7 +580,8 @@ class GenerateEmbeddings(ScriptBuilder):
             "splits_basedir": "",
             "idx_region_evaluation": None,
             "verbose": False,
-            "cpu": False
+            "cpu": False,
+            "nb_jobs": None
         }
 
         cmd = self.build_command(
