@@ -3,9 +3,10 @@
 """
 Generate visualization snapshots for the Champollion pipeline.
 
-Creates two types of visualizations:
+Creates three types of visualizations:
 1. Sulcal graph mesh from Morphologist output
 2. Region coverage map showing which regions have embeddings
+3. Cortical tiles mask overlay (one snapshot per hemisphere)
 
 Requires the BrainVISA/Anatomist environment (runs in headless mode).
 """
@@ -102,38 +103,64 @@ def generate_sulcal_graph_snapshot(graph_path, output_path, size=(800, 600)):
     return snapshots
 
 
+def _parse_embedding_regions(embeddings_dir):
+    """Parse region names from embedding CSV filenames.
+
+    Filenames follow the pattern: {region}_{model}_embeddings.csv
+    e.g. FCLp-subsc-FCLa-INSULA_left_name17--43--58--232_embeddings.csv
+    The region is everything before the last _model_ part before _embeddings.csv.
+
+    Args:
+        embeddings_dir: Path to embeddings output directory
+
+    Returns:
+        Dict mapping region names to 1.0, or empty dict if none found.
+    """
+    csv_files = glob.glob(osp.join(embeddings_dir, "*_embeddings.csv"))
+    if not csv_files:
+        # Also try recursive search
+        csv_files = glob.glob(
+            osp.join(embeddings_dir, "**", "*_embeddings.csv"),
+            recursive=True
+        )
+    if not csv_files:
+        print("  No embedding files found")
+        return {}
+
+    regions = set()
+    for f in csv_files:
+        basename = osp.basename(f)
+        # Remove _embeddings.csv suffix
+        name = basename.replace("_embeddings.csv", "")
+        # The model part is the last _-separated token (e.g. name17--43--58--232)
+        # The region is everything before it
+        parts = name.rsplit("_", 1)
+        if len(parts) == 2:
+            regions.add(parts[0])
+        else:
+            regions.add(name)
+
+    print(f"  Found {len(regions)} region(s) from {len(csv_files)} CSV file(s)")
+    return {r: 1.0 for r in regions}
+
+
 def generate_coverage_map(embeddings_dir, output_path, size=(800, 600)):
-    """Generate a glassbrain-style coverage map showing which regions have data.
+    """Generate a coverage map showing which regions have embeddings.
+
+    Tries Anatomist glassbrain first, falls back to matplotlib bar chart.
 
     Args:
         embeddings_dir: Path to embeddings output directory
         output_path: Path to save the coverage map image
         size: Tuple of (width, height)
     """
-    # Find which regions have embeddings
-    csv_files = glob.glob(osp.join(embeddings_dir, "*.csv"))
-    if not csv_files:
-        print("  No embedding files found, skipping coverage map")
-        return None
-
-    # Create a simple coverage data dict (1 for present, 0 for absent)
-    # Map region names to values
-    coverage_data = {}
-    for f in csv_files:
-        basename = osp.basename(f)
-        if "_embeddings.csv" in basename:
-            # Parse the region name from filename
-            parts = basename.replace("_embeddings.csv", "").split("_")
-            if len(parts) >= 2:
-                region = parts[0]
-                coverage_data[region] = 1.0
-
+    coverage_data = _parse_embedding_regions(embeddings_dir)
     if not coverage_data:
-        print("  Could not parse region names from files")
+        print("  No regions found, skipping coverage map")
         return None
 
+    # Try glassbrain visualization first
     try:
-        # Try to use the glassbrain visualization
         import anatomist.headless as ana
         from deep_folding.visualization.champo_glassbrain import glassbrain
 
@@ -146,39 +173,204 @@ def generate_coverage_map(embeddings_dir, output_path, size=(800, 600)):
             palette="Blue-Green-Red-Yellow",
             bounds=[0, 1],
         )
-        print(f"  Saved coverage map: {output_path}")
+        print(f"  Saved glassbrain coverage map: {output_path}")
         return output_path
 
-    except ImportError as e:
-        print(f"  Warning: Could not import glassbrain module: {e}")
-        print("  Generating simple coverage summary instead")
+    except Exception as e:
+        print(f"  Glassbrain unavailable ({e}), using matplotlib fallback")
 
-        # Fallback: create a text-based summary
-        summary_path = osp.splitext(output_path)[0] + "_summary.txt"
-        with open(summary_path, "w") as f:
-            f.write("Region Coverage Summary\n")
-            f.write("=" * 40 + "\n\n")
-            f.write(f"Total regions with embeddings: {len(coverage_data)}\n\n")
-            f.write("Regions:\n")
-            for region in sorted(coverage_data.keys()):
-                f.write(f"  - {region}\n")
-        print(f"  Saved summary: {summary_path}")
-        return summary_path
+    # Matplotlib fallback: produce a .png bar chart of covered regions
+    try:
+        import matplotlib
+        matplotlib.use("Agg")
+        import matplotlib.pyplot as plt
+
+        regions = sorted(coverage_data.keys())
+        fig, ax = plt.subplots(
+            figsize=(size[0] / 100, max(size[1] / 100, len(regions) * 0.35))
+        )
+        ax.barh(range(len(regions)), [1] * len(regions), color="#4CAF50")
+        ax.set_yticks(range(len(regions)))
+        ax.set_yticklabels(regions, fontsize=8)
+        ax.set_xlabel("Coverage")
+        ax.set_title(
+            f"Embedding Coverage: {len(regions)} region(s)",
+            fontsize=12
+        )
+        ax.set_xlim(0, 1.2)
+        plt.tight_layout()
+        plt.savefig(output_path, dpi=150)
+        plt.close(fig)
+        print(f"  Saved matplotlib coverage map: {output_path}")
+        return output_path
+
+    except Exception as e2:
+        print(f"  Matplotlib also failed ({e2}), skipping coverage map")
+        return None
+
+
+def generate_tiles_snapshot(crops_dir, output_path, size=(800, 600)):
+    """Generate snapshots of cortical tiles masks using Anatomist.
+
+    Loads all {L|R}mask_skeleton.nii.gz from each region in crops_dir,
+    overlays them in an Anatomist 3D window, and takes one snapshot per
+    hemisphere (left and right).
+
+    Falls back to nibabel + matplotlib if Anatomist is unavailable.
+
+    Args:
+        crops_dir: Path to crops/2mm/ directory containing region folders
+        output_path: Base path for snapshot images (suffixed with
+            _left.png / _right.png)
+        size: Tuple of (width, height)
+
+    Returns:
+        List of generated snapshot file paths
+    """
+    basename = osp.splitext(output_path)[0]
+    ext = osp.splitext(output_path)[1] or ".png"
+
+    hemispheres = [
+        ("left", "L", (0.5, 0.5, 0.5, 0.5)),
+        ("right", "R", (0.5, -0.5, -0.5, 0.5)),
+    ]
+
+    # Collect mask files per hemisphere
+    masks_by_hemi = {}
+    for hemi_name, prefix, _ in hemispheres:
+        pattern = osp.join(
+            crops_dir, "*", "mask",
+            f"{prefix}mask_skeleton.nii.gz"
+        )
+        masks_by_hemi[hemi_name] = glob.glob(pattern)
+
+    total = sum(len(v) for v in masks_by_hemi.values())
+    if total == 0:
+        print("  No mask files found in crops directory")
+        return []
+
+    for hemi_name, count in masks_by_hemi.items():
+        print(f"  Found {len(count)} {hemi_name} mask(s)")
+
+    # Try Anatomist first
+    try:
+        import anatomist.headless as ana
+
+        a = ana.Anatomist()
+        snapshots = []
+
+        for hemi_name, prefix, quat in hemispheres:
+            mask_files = masks_by_hemi[hemi_name]
+            if not mask_files:
+                continue
+
+            objects = [a.loadObject(f) for f in mask_files]
+
+            win = a.createWindow("3D")
+            win.addObjects(objects)
+            a.execute(
+                "WindowConfig",
+                windows=[win],
+                cursor_visibility=0
+            )
+            win.camera(view_quaternion=quat)
+            win.focusView()
+
+            snap = f"{basename}_{hemi_name}{ext}"
+            image = win.snapshotImage(size[0], size[1])
+            image.save(snap)
+            snapshots.append(snap)
+            print(f"  Saved: {snap}")
+
+        return snapshots
+
+    except Exception as e:
+        print(
+            f"  Anatomist unavailable ({e}), "
+            f"using matplotlib fallback"
+        )
+
+    # Matplotlib + nibabel fallback: middle-slice overlay
+    try:
+        import nibabel as nib
+        import matplotlib
+        matplotlib.use("Agg")
+        import matplotlib.pyplot as plt
+
+        snapshots = []
+        for hemi_name, prefix, _ in hemispheres:
+            mask_files = masks_by_hemi[hemi_name]
+            if not mask_files:
+                continue
+
+            # Load and overlay masks
+            ref = nib.load(mask_files[0])
+            overlay = np.zeros(ref.shape, dtype=np.float32)
+            for i, mf in enumerate(mask_files, 1):
+                data = nib.load(mf).get_fdata()
+                overlay[data > 0] = i
+
+            # Take middle slice along each axis
+            mid = [s // 2 for s in overlay.shape]
+            fig, axes = plt.subplots(1, 3, figsize=(
+                size[0] / 100, size[1] / 100
+            ))
+            slices = [
+                overlay[mid[0], :, :],
+                overlay[:, mid[1], :],
+                overlay[:, :, mid[2]],
+            ]
+            titles = ["Sagittal", "Coronal", "Axial"]
+            for ax, sl, title in zip(axes, slices, titles):
+                ax.imshow(
+                    sl.T, origin="lower",
+                    cmap="tab20", interpolation="nearest"
+                )
+                ax.set_title(title, fontsize=9)
+                ax.axis("off")
+            fig.suptitle(
+                f"Cortical tiles masks — {hemi_name} "
+                f"({len(mask_files)} regions)",
+                fontsize=11,
+            )
+            plt.tight_layout()
+            snap = f"{basename}_{hemi_name}{ext}"
+            plt.savefig(snap, dpi=150)
+            plt.close(fig)
+            snapshots.append(snap)
+            print(f"  Saved: {snap}")
+
+        return snapshots
+
+    except Exception as e2:
+        print(
+            f"  Matplotlib fallback also failed ({e2}), "
+            f"skipping tiles snapshot"
+        )
+        return []
 
 
 def main():
     parser = argparse.ArgumentParser(
-        description="Generate visualization snapshots for Champollion pipeline output"
+        description="Generate visualization snapshots "
+        "for Champollion pipeline output"
     )
     parser.add_argument(
         "--morphologist_dir",
         type=str,
-        help="Path to Morphologist output directory (derivatives/morphologist-6.0/)"
+        help="Path to Morphologist output directory "
+        "(derivatives/morphologist-6.0/)"
     )
     parser.add_argument(
         "--embeddings_dir",
         type=str,
         help="Path to embeddings output directory"
+    )
+    parser.add_argument(
+        "--cortical_tiles_dir",
+        type=str,
+        help="Path to cortical tiles crops directory "
+        "(e.g. crops/2mm/)"
     )
     parser.add_argument(
         "--output_dir",
@@ -201,12 +393,17 @@ def main():
     parser.add_argument(
         "--sulcal-only",
         action="store_true",
-        help="Only generate sulcal graph snapshots (skip coverage map)"
+        help="Only generate sulcal graph snapshots"
     )
     parser.add_argument(
         "--coverage-only",
         action="store_true",
-        help="Only generate coverage map (skip sulcal graphs)"
+        help="Only generate coverage map"
+    )
+    parser.add_argument(
+        "--tiles-only",
+        action="store_true",
+        help="Only generate cortical tiles snapshots"
     )
 
     args = parser.parse_args()
@@ -215,39 +412,99 @@ def main():
     # Create output directory
     os.makedirs(args.output_dir, exist_ok=True)
 
+    # Determine which snapshot types to run.
+    # --*-only flags restrict to a single type.
+    only_flags = (
+        args.sulcal_only,
+        args.coverage_only,
+        args.tiles_only,
+    )
+    run_sulcal = not any(only_flags) or args.sulcal_only
+    run_coverage = not any(only_flags) or args.coverage_only
+    run_tiles = not any(only_flags) or args.tiles_only
+
     size = (args.width, args.height)
     all_snapshots = []
 
-    # Generate sulcal graph snapshots (unless --coverage-only)
-    if not args.coverage_only:
-        if args.morphologist_dir and osp.exists(args.morphologist_dir):
+    # Generate sulcal graph snapshots
+    if run_sulcal:
+        if (args.morphologist_dir
+                and osp.exists(args.morphologist_dir)):
             print("\nGenerating sulcal graph snapshots...")
-            graphs = find_sulcal_graphs(args.morphologist_dir)
+            graphs = find_sulcal_graphs(
+                args.morphologist_dir
+            )
             print(f"  Found {len(graphs)} sulcal graph(s)")
 
-            for i, graph_path in enumerate(graphs[:2]):  # Limit to first 2 graphs
-                output_path = osp.join(args.output_dir, f"sulcal_graph_{i:02d}.png")
+            for i, graph_path in enumerate(graphs[:2]):
+                out = osp.join(
+                    args.output_dir,
+                    f"sulcal_graph_{i:02d}.png"
+                )
                 try:
-                    snapshots = generate_sulcal_graph_snapshot(graph_path, output_path, size)
-                    all_snapshots.extend(snapshots)
+                    snaps = generate_sulcal_graph_snapshot(
+                        graph_path, out, size
+                    )
+                    all_snapshots.extend(snaps)
                 except Exception as e:
-                    print(f"  Error processing {graph_path}: {e}")
+                    print(
+                        f"  Error processing "
+                        f"{graph_path}: {e}"
+                    )
         elif args.morphologist_dir:
-            print(f"Morphologist directory not found: {args.morphologist_dir}")
+            print(
+                f"Morphologist directory not found: "
+                f"{args.morphologist_dir}"
+            )
 
-    # Generate coverage map (unless --sulcal-only)
-    if not args.sulcal_only:
-        if args.embeddings_dir and osp.exists(args.embeddings_dir):
-            print("\nGenerating region coverage map...")
-            output_path = osp.join(args.output_dir, "coverage_map.png")
+    # Generate cortical tiles mask snapshots
+    if run_tiles:
+        if (args.cortical_tiles_dir
+                and osp.exists(args.cortical_tiles_dir)):
+            print("\nGenerating cortical tiles snapshots...")
+            out = osp.join(
+                args.output_dir, "tiles_masks.png"
+            )
             try:
-                result = generate_coverage_map(args.embeddings_dir, output_path, size)
+                snaps = generate_tiles_snapshot(
+                    args.cortical_tiles_dir, out, size
+                )
+                all_snapshots.extend(snaps)
+            except Exception as e:
+                print(
+                    f"  Error generating tiles snapshot: "
+                    f"{e}"
+                )
+        elif args.cortical_tiles_dir:
+            print(
+                f"Cortical tiles directory not found: "
+                f"{args.cortical_tiles_dir}"
+            )
+
+    # Generate coverage map
+    if run_coverage:
+        if (args.embeddings_dir
+                and osp.exists(args.embeddings_dir)):
+            print("\nGenerating region coverage map...")
+            out = osp.join(
+                args.output_dir, "coverage_map.png"
+            )
+            try:
+                result = generate_coverage_map(
+                    args.embeddings_dir, out, size
+                )
                 if result:
                     all_snapshots.append(result)
             except Exception as e:
-                print(f"  Error generating coverage map: {e}")
+                print(
+                    f"  Error generating coverage map: "
+                    f"{e}"
+                )
         elif args.embeddings_dir:
-            print(f"Embeddings directory not found: {args.embeddings_dir}")
+            print(
+                f"Embeddings directory not found: "
+                f"{args.embeddings_dir}"
+            )
 
     print(f"\nGenerated {len(all_snapshots)} snapshot(s)")
 
