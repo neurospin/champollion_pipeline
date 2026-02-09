@@ -58,8 +58,44 @@ def find_embeddings(embeddings_dir):
     return regions
 
 
+def find_white_mesh(graph_path):
+    """Find the white matter mesh corresponding to a sulcal graph.
+
+    Navigates from the .arg graph path up to the ``default_analysis``
+    ancestor, then into ``segmentation/mesh/`` to locate the matching
+    ``*_Lwhite.gii`` or ``*_Rwhite.gii`` file.
+
+    Args:
+        graph_path: Path to .arg sulcal graph file
+
+    Returns:
+        Path to the white mesh file, or None if not found.
+    """
+    # Walk up from the graph to find "default_analysis"
+    parts = graph_path.replace("\\", "/").split("/")
+    try:
+        idx = parts.index("default_analysis")
+    except ValueError:
+        return None
+
+    analysis_dir = "/".join(parts[: idx + 1])
+    mesh_dir = osp.join(analysis_dir, "segmentation", "mesh")
+    if not osp.isdir(mesh_dir):
+        return None
+
+    # Determine hemisphere from the graph filename
+    fname = osp.basename(graph_path).lower()
+    if fname.startswith("r") or "_r" in fname or "right" in fname:
+        pattern = osp.join(mesh_dir, "*Rwhite.gii")
+    else:
+        pattern = osp.join(mesh_dir, "*Lwhite.gii")
+
+    matches = glob.glob(pattern)
+    return matches[0] if matches else None
+
+
 def generate_sulcal_graph_snapshot(graph_path, output_path, size=(800, 600),
-                                   view_quaternion=None):
+                                   view_quaternion=None, mesh_path=None):
     """Generate a snapshot of a sulcal graph.
 
     Args:
@@ -68,6 +104,8 @@ def generate_sulcal_graph_snapshot(graph_path, output_path, size=(800, 600),
         size: Tuple of (width, height)
         view_quaternion: Camera orientation as (x, y, z, w). Defaults to
             left side view.
+        mesh_path: Optional path to a white matter mesh (.gii) to render
+            as a semi-transparent background surface.
     """
     import anatomist.headless as ana
 
@@ -82,6 +120,12 @@ def generate_sulcal_graph_snapshot(graph_path, output_path, size=(800, 600),
     # Create window and add graph
     win = a.createWindow("3D")
     win.addObjects(graph)
+
+    # Optionally overlay a semi-transparent white mesh
+    if mesh_path and osp.exists(mesh_path):
+        mesh = a.loadObject(mesh_path)
+        mesh.setMaterial(diffuse=[0.8, 0.8, 0.8, 0.37])
+        win.addObjects(mesh)
 
     # Set up the view
     a.execute("WindowConfig", windows=[win], cursor_visibility=0)
@@ -442,6 +486,10 @@ def main():
                     hemi = "left"
                     quat = QUAT_LEFT
 
+                white_mesh = find_white_mesh(graph_path)
+                if white_mesh:
+                    print(f"  White mesh: {white_mesh}")
+
                 out = osp.join(
                     args.output_dir,
                     f"sulcal_graph_{hemi}.png"
@@ -450,6 +498,7 @@ def main():
                     snap = generate_sulcal_graph_snapshot(
                         graph_path, out, size,
                         view_quaternion=quat,
+                        mesh_path=white_mesh,
                     )
                     all_snapshots.append(snap)
                 except Exception as e:
