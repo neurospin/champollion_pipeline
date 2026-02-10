@@ -12,6 +12,7 @@ libjpeg-turbo = { channel = "conda-forge", version = ">=3.0" }
 anatomist = ">=0.0.29"
 morphologist = ">=0.0.29"
 pip = ">=25.3,<26"
+setuptools = ">=65.0"
 flake8 = ">=7.3.0,<8"
 pytest = ">=7.0"
 pytest-cov = ">=4.0"
