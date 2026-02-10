@@ -13,14 +13,6 @@ jobs:
       - name: Checkout
         uses: actions/checkout@v4
 
-      - name: Debug secret lengths
-        run: |
-          echo "Username length: ${#DOCKER_USER}"
-          echo "Token length: ${#DOCKER_TOKEN}"
-        env:
-          DOCKER_USER: ${{ secrets.DOCKERHUB_USERNAME }}
-          DOCKER_TOKEN: ${{ secrets.DOCKERHUB_TOKEN }}
-
       - name: Log in to DockerHub
         uses: docker/login-action@v3
         with:
