@@ -61,8 +61,9 @@ def find_embeddings(embeddings_dir):
 def find_white_mesh(graph_path):
     """Find the white matter mesh corresponding to a sulcal graph.
 
-    Navigates from the .arg graph path up to the ``default_analysis``
-    ancestor, then into ``segmentation/mesh/`` to locate the matching
+    Navigates from the .arg graph path up to the analysis root
+    (``default_analysis`` or acquisition index ``0``), then into
+    ``segmentation/mesh/`` to locate the matching
     ``*_Lwhite.gii`` or ``*_Rwhite.gii`` file.
 
     Args:
@@ -71,11 +72,26 @@ def find_white_mesh(graph_path):
     Returns:
         Path to the white mesh file, or None if not found.
     """
-    # Walk up from the graph to find "default_analysis"
+    # Walk up from the graph to find the analysis root.
+    # Morphologist < 6 uses "default_analysis";
+    # Morphologist 6.0 uses acquisition index "0".
     parts = graph_path.replace("\\", "/").split("/")
-    try:
-        idx = parts.index("default_analysis")
-    except ValueError:
+    idx = None
+    for anchor in ("default_analysis", "0"):
+        try:
+            candidate = parts.index(anchor)
+        except ValueError:
+            continue
+        # Guard: "0" must sit under "default_acquisition"
+        if (anchor == "0"
+                and (candidate < 1
+                     or parts[candidate - 1]
+                     != "default_acquisition")):
+            continue
+        idx = candidate
+        break
+
+    if idx is None:
         return None
 
     analysis_dir = "/".join(parts[: idx + 1])
@@ -478,8 +494,9 @@ def main():
 
             for graph_path in graphs[:2]:
                 # Detect hemisphere from filename
+                # Morphologist names files L{subject}.arg / R{subject}.arg
                 fname = osp.basename(graph_path).lower()
-                if "_r" in fname or "right" in fname:
+                if fname.startswith("r") or "_r" in fname or "right" in fname:
                     hemi = "right"
                     quat = QUAT_RIGHT
                 else:
