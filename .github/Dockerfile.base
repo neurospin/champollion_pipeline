@@ -1,0 +1,41 @@
+FROM ubuntu:22.04
+
+ENV DEBIAN_FRONTEND=noninteractive
+
+# System deps (pipeline + visualization)
+RUN apt-get update && apt-get install -y --no-install-recommends \
+    python3 python3-pip python3-venv \
+    curl ca-certificates git \
+    libgl1-mesa-glx libglib2.0-0 libxrender1 libxext6 xvfb \
+    && rm -rf /var/lib/apt/lists/*
+
+# Non-root user (HF Spaces requires uid 1000)
+RUN useradd -m -u 1000 user
+ENV HOME=/home/user
+ENV PATH="/home/user/.pixi/bin:${PATH}"
+
+# Install pixi
+USER user
+RUN curl -fsSL https://pixi.sh/install.sh | bash
+
+WORKDIR ${HOME}/app
+
+# Clone pipeline & utils
+RUN git clone --depth 1 https://github.com/neurospin/champollion_pipeline.git && \
+    cd champollion_pipeline && \
+    git submodule update --init --recursive
+RUN git clone --depth 1 -b master https://github.com/neurospin/champollion_utils.git
+
+# Pipeline environment (pixi + BrainVISA)
+RUN cd champollion_pipeline && pixi install \
+    && rm -rf ${HOME}/.cache/rattler ${HOME}/.cache/pixi
+
+RUN cd champollion_pipeline \
+    && pixi run install-cortical-tiles \
+    && pixi run install-champollion \
+    && pixi run -- pip install -e ../champollion_utils \
+    && pixi run -- pip cache purge \
+    && rm -rf /tmp/pip-*
+
+# Data directory
+RUN mkdir -p data
