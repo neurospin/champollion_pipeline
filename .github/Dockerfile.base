@@ -34,6 +34,7 @@ RUN cd champollion_pipeline \
     && pixi run install-cortical-tiles \
     && pixi run install-champollion \
     && pixi run -- pip install -e ../champollion_utils \
+    && pixi run -- pip install setuptools \
     && pixi run -- pip cache purge \
     && rm -rf /tmp/pip-*
 
