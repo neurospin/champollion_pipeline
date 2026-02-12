@@ -24,5 +24,6 @@
    "combine_type": false,
    "no_mask": false,
    "threshold": 0,
-   "dilation": 5
+   "dilation": 5,
+   "skip_distbottom": false
 }
