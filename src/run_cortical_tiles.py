@@ -30,7 +30,12 @@ class RunCorticalTiles(ScriptBuilder):
          .add_required_argument("--path_to_graph", "Contains the sub-path that, for each subject, permits getting the sulcal graphs.")
          .add_required_argument("--path_sk_with_hull", "Contains the sub-path where to get the skeleton with hull.")
          .add_optional_argument("--sk_qc_path", "The path to the QC file if it exists.", default="")
-         .add_optional_argument("--njobs", "Number of CPU cores allowed to use.", default=None, type_=int))
+         .add_optional_argument("--njobs", "Number of CPU cores allowed to use.", default=None, type_=int)
+         .add_argument("--input-types", nargs="+", default=None,
+                       help="Input types to generate (e.g. skeleton foldlabel extremities). "
+                            "Default: all types.")
+         .add_flag("--skip-distbottom",
+                   "Skip distbottom generation (unused during inference)."))
 
     def run(self):
         """Execute the cortical_tiles script."""
@@ -85,6 +90,14 @@ class RunCorticalTiles(ScriptBuilder):
                           f"no morphologist directory found in "
                           f"{input_abs}/derivatives/")
 
+        # Set skip_distbottom in pipeline JSON if requested
+        if self.args.skip_distbottom and exists(config_file_path):
+            with open(config_file_path, 'r') as f:
+                config = json.load(f)
+            config['skip_distbottom'] = True
+            with open(config_file_path, 'w') as f:
+                json.dump(config, f, indent=3)
+
         # Prepare njobs
         if self.args.njobs is None:
             self.args.njobs = max(1, min(22, cpu_count() - 2))
@@ -127,6 +140,9 @@ class RunCorticalTiles(ScriptBuilder):
 
         if self.args.sk_qc_path:
             cmd.extend(["--sk_qc_path", self.args.sk_qc_path])
+
+        if self.args.input_types:
+            cmd.extend(["-y"] + self.args.input_types)
 
         # Change to script directory to run the command
         chdir(script_dir)
