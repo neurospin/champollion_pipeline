@@ -304,45 +304,8 @@ def generate_tiles_snapshot(crops_dir, output_path, size=(800, 600)):
     for hemi_name, count in masks_by_hemi.items():
         print(f"  Found {len(count)} {hemi_name} mask(s)")
 
-    # Try Anatomist first
-    try:
-        import anatomist.headless as ana
-
-        a = ana.Anatomist()
-        snapshots = []
-
-        for hemi_name, prefix, quat in hemispheres:
-            mask_files = masks_by_hemi[hemi_name]
-            if not mask_files:
-                continue
-
-            objects = [a.loadObject(f) for f in mask_files]
-
-            win = a.createWindow("3D")
-            win.addObjects(objects)
-            a.execute(
-                "WindowConfig",
-                windows=[win],
-                cursor_visibility=0
-            )
-            win.camera(view_quaternion=quat)
-            win.focusView()
-
-            snap = f"{basename}_{hemi_name}{ext}"
-            image = win.snapshotImage(size[0], size[1])
-            image.save(snap)
-            snapshots.append(snap)
-            print(f"  Saved: {snap}")
-
-        return snapshots
-
-    except Exception as e:
-        print(
-            f"  Anatomist unavailable ({e}), "
-            f"using matplotlib fallback"
-        )
-
-    # Matplotlib + nibabel fallback: middle-slice overlay
+    # Use nibabel + matplotlib to render orthogonal slice overlays.
+    # (Anatomist 3D window produces blank images for volume masks.)
     try:
         import nibabel as nib
         import matplotlib
@@ -394,9 +357,9 @@ def generate_tiles_snapshot(crops_dir, output_path, size=(800, 600)):
 
         return snapshots
 
-    except Exception as e2:
+    except Exception as e:
         print(
-            f"  Matplotlib fallback also failed ({e2}), "
+            f"  Matplotlib rendering failed ({e}), "
             f"skipping tiles snapshot"
         )
         return []
