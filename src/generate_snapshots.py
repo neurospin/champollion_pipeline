@@ -5,13 +5,12 @@ Generate visualization snapshots for the Champollion pipeline.
 
 Creates three types of visualizations:
 1. Sulcal graph mesh from Morphologist output
-2. Cortical tiles mask overlay (one snapshot per hemisphere)
+2. Cortical tiles regions on ICBM152 template (one snapshot per hemisphere)
 3. UMAP scatter plot — new subject projected onto UKB40 reference
 
 Requires the BrainVISA/Anatomist environment (runs in headless mode).
 """
 
-import argparse
 import glob
 import json
 import os
@@ -19,6 +18,17 @@ import os.path as osp
 import sys
 
 import numpy as np
+
+from champollion_utils.script_builder import ScriptBuilder
+
+
+# Fallback path for ICBM152 meshes (used when BrainVISA resource lookup fails)
+ICBM_MESH_DIR_FALLBACK = (
+    '/neurospin/dico/data/bv_databases/templates/'
+    'morphologist_templates/icbm152/'
+    'mni_icbm152_nlin_asym_09c/t1mri/default_acquisition/'
+    'default_analysis/segmentation/mesh'
+)
 
 
 def find_sulcal_graphs(morphologist_dir):
@@ -32,7 +42,6 @@ def find_sulcal_graphs(morphologist_dir):
     """
     pattern = osp.join(morphologist_dir, "**", "*.arg")
     graphs = glob.glob(pattern, recursive=True)
-    # Filter to get only the main sulcal graphs (L and R hemispheres)
     sulcal_graphs = [g for g in graphs if "sulci" in g.lower() or "folds" in g.lower()]
     return sulcal_graphs
 
@@ -51,9 +60,6 @@ def find_white_mesh(graph_path):
     Returns:
         Path to the white mesh file, or None if not found.
     """
-    # Walk up from the graph to find the analysis root.
-    # Morphologist < 6 uses "default_analysis";
-    # Morphologist 6.0 uses acquisition index "0".
     parts = graph_path.replace("\\", "/").split("/")
     idx = None
     for anchor in ("default_analysis", "0"):
@@ -61,7 +67,6 @@ def find_white_mesh(graph_path):
             candidate = parts.index(anchor)
         except ValueError:
             continue
-        # Guard: "0" must sit under "default_acquisition"
         if (anchor == "0"
                 and (candidate < 1
                      or parts[candidate - 1]
@@ -78,7 +83,6 @@ def find_white_mesh(graph_path):
     if not osp.isdir(mesh_dir):
         return None
 
-    # Determine hemisphere from the graph filename
     fname = osp.basename(graph_path).lower()
     if fname.startswith("r") or "_r" in fname or "right" in fname:
         pattern = osp.join(mesh_dir, "*Rwhite.gii")
@@ -87,6 +91,32 @@ def find_white_mesh(graph_path):
 
     matches = glob.glob(pattern)
     return matches[0] if matches else None
+
+
+def find_completed_regions(crops_dir):
+    """Scan the crops directory to find which regions were processed.
+
+    Args:
+        crops_dir: Path to crops/2mm/ directory
+
+    Returns:
+        dict with keys 'left' and 'right', each a list of region
+        directory names that contain mask_skeleton files.
+    """
+    result = {"left": [], "right": []}
+    if not osp.isdir(crops_dir):
+        return result
+    for region_name in sorted(os.listdir(crops_dir)):
+        region_dir = osp.join(crops_dir, region_name)
+        if not osp.isdir(region_dir):
+            continue
+        mask_dir = osp.join(region_dir, "mask")
+        if not osp.isdir(mask_dir):
+            continue
+        for prefix, hemi in [("L", "left"), ("R", "right")]:
+            if osp.exists(osp.join(mask_dir, f"{prefix}mask_skeleton.nii.gz")):
+                result[hemi].append(region_name)
+    return result
 
 
 def generate_sulcal_graph_snapshot(graph_path, output_path, size=(800, 600),
@@ -105,24 +135,20 @@ def generate_sulcal_graph_snapshot(graph_path, output_path, size=(800, 600),
     import anatomist.headless as ana
 
     if view_quaternion is None:
-        view_quaternion = (0.5, 0.5, 0.5, 0.5)  # left side view
+        view_quaternion = (0.5, 0.5, 0.5, 0.5)
 
     a = ana.Anatomist()
 
-    # Load the graph
     graph = a.loadObject(graph_path)
 
-    # Create window and add graph
     win = a.createWindow("3D")
     win.addObjects(graph)
 
-    # Optionally overlay a semi-transparent white mesh
     if mesh_path and osp.exists(mesh_path):
         mesh = a.loadObject(mesh_path)
         mesh.setMaterial(diffuse=[0.8, 0.8, 0.8, 0.37])
         win.addObjects(mesh)
 
-    # Set up the view
     a.execute("WindowConfig", windows=[win], cursor_visibility=0)
     win.camera(view_quaternion=view_quaternion)
     win.focusView()
@@ -134,108 +160,115 @@ def generate_sulcal_graph_snapshot(graph_path, output_path, size=(800, 600),
     return output_path
 
 
-def generate_tiles_snapshot(crops_dir, output_path, size=(800, 600)):
-    """Generate snapshots of cortical tiles masks using Anatomist.
+def generate_tiles_snapshot(crops_dir, output_path, size=(800, 600), level=1):
+    """Generate snapshots of cortical tiles regions using Anatomist.
 
-    Loads all {L|R}mask_skeleton.nii.gz from each region in crops_dir,
-    overlays them in an Anatomist 3D window, and takes one snapshot per
-    hemisphere (left and right).
+    Loads region graphs from the Champollion model data, overlays
+    them on ICBM152 hemisphere meshes, selects only regions that
+    were actually processed (found in crops_dir), and takes one
+    snapshot per hemisphere.
 
-    Falls back to nibabel + matplotlib if Anatomist is unavailable.
+    Based on display_champo_regions.py from cortical_tiles.
 
     Args:
-        crops_dir: Path to crops/2mm/ directory containing region folders
+        crops_dir: Path to crops/2mm/ directory (used to determine
+            which regions to highlight)
         output_path: Base path for snapshot images (suffixed with
             _left.png / _right.png)
         size: Tuple of (width, height)
+        level: Region threshold level (0-3, default 1)
 
     Returns:
         List of generated snapshot file paths
     """
+    import anatomist.headless as ana
+    from soma import aims
+    from deep_folding import config
+
+    a = ana.Anatomist()
+
+    completed = find_completed_regions(crops_dir)
+    total = sum(len(v) for v in completed.values())
+    if total == 0:
+        print("  No completed regions found in crops directory")
+        return []
+
+    root = config.config().get_champollion_data_root_dir()
+    regions_graph_dir = f"{root}/mask/2mm/regions/meshes"
+
+    nom = aims.read(aims.carto.Paths.findResourceFile(
+        'nomenclature/hierarchy/champollion_v1.hie'))
+    anom = a.toAObject(nom)
+
+    icbm_mesh_dir = aims.carto.Paths.findResourceFile(
+        'disco_templates_hbp_morpho/icbm152/mni_icbm152_nlin_asym_09c/'
+        't1mri/default_acquisition/default_analysis/segmentation/mesh',
+        'disco')
+    if icbm_mesh_dir is None:
+        icbm_mesh_dir = ICBM_MESH_DIR_FALLBACK
+
     basename = osp.splitext(output_path)[0]
     ext = osp.splitext(output_path)[1] or ".png"
 
     hemispheres = [
-        ("left", "L", (0.5, 0.5, 0.5, 0.5)),
-        ("right", "R", (0.5, -0.5, -0.5, 0.5)),
+        ("left", "L", (0.5, 0.5, 0.5, 0.5),
+         "mni_icbm152_nlin_asym_09c_Lhemi.gii"),
+        ("right", "R", (0.5, -0.5, -0.5, 0.5),
+         "mni_icbm152_nlin_asym_09c_Rhemi.gii"),
     ]
 
-    # Collect mask files per hemisphere
-    masks_by_hemi = {}
-    for hemi_name, prefix, _ in hemispheres:
-        pattern = osp.join(
-            crops_dir, "*", "mask",
-            f"{prefix}mask_skeleton.nii.gz"
+    snapshots = []
+    group = 0
+    for hemi_name, side, quat, mesh_file in hemispheres:
+        region_names = completed[hemi_name]
+        if not region_names:
+            continue
+
+        print(f"  {hemi_name}: {len(region_names)} region(s)")
+
+        graph_path = osp.join(
+            regions_graph_dir, f"{side}regions_model_{level}.arg"
         )
-        masks_by_hemi[hemi_name] = glob.glob(pattern)
+        if not osp.exists(graph_path):
+            print(f"  Region graph not found: {graph_path}")
+            continue
 
-    total = sum(len(v) for v in masks_by_hemi.values())
-    if total == 0:
-        print("  No mask files found in crops directory")
-        return []
+        reg_graph = a.loadObject(graph_path)
+        reg_graph.applyBuiltinReferential()
 
-    for hemi_name, count in masks_by_hemi.items():
-        print(f"  Found {len(count)} {hemi_name} mask(s)")
+        mesh_path = osp.join(icbm_mesh_dir, mesh_file)
+        if not osp.exists(mesh_path):
+            print(f"  ICBM mesh not found: {mesh_path}")
+            continue
 
-    # Use nibabel + matplotlib to render orthogonal slice overlays.
-    # (Anatomist 3D window produces blank images for volume masks.)
-    try:
-        import nibabel as nib
-        import matplotlib
-        matplotlib.use("Agg")
-        import matplotlib.pyplot as plt
+        mesh = a.loadObject(mesh_path)
+        mesh.setMaterial(diffuse=[0.8, 0.8, 0.8, 0.37])
+        mesh.applyBuiltinReferential()
 
-        snapshots = []
-        for hemi_name, prefix, _ in hemispheres:
-            mask_files = masks_by_hemi[hemi_name]
-            if not mask_files:
-                continue
+        win = a.createWindow("3D")
+        a.execute("WindowConfig", windows=[win], cursor_visibility=0)
+        win.addObjects([reg_graph, mesh], add_graph_nodes=False)
+        win.setReferential(reg_graph.referential)
 
-            # Load and overlay masks
-            ref = nib.load(mask_files[0])
-            overlay = np.zeros(ref.shape, dtype=np.float32)
-            for i, mf in enumerate(mask_files, 1):
-                data = nib.load(mf).get_fdata()
-                overlay[data > 0] = i
+        sel_names = " ".join(f"{r}_{hemi_name}" for r in region_names)
+        a.execute("LinkWindows", windows=[win], group=group)
+        a.execute("SelectByNomenclature", nomenclature=anom,
+                  names=sel_names, group=group)
+        a.execute("SelectByNomenclature", nomenclature=anom,
+                  names=sel_names, modifiers="toggle", group=group)
 
-            # Take middle slice along each axis
-            mid = [s // 2 for s in overlay.shape]
-            fig, axes = plt.subplots(1, 3, figsize=(
-                size[0] / 100, size[1] / 100
-            ))
-            slices = [
-                overlay[mid[0], :, :],
-                overlay[:, mid[1], :],
-                overlay[:, :, mid[2]],
-            ]
-            titles = ["Sagittal", "Coronal", "Axial"]
-            for ax, sl, title in zip(axes, slices, titles):
-                ax.imshow(
-                    sl.T, origin="lower",
-                    cmap="tab20", interpolation="nearest"
-                )
-                ax.set_title(title, fontsize=9)
-                ax.axis("off")
-            fig.suptitle(
-                f"Cortical tiles masks — {hemi_name} "
-                f"({len(mask_files)} regions)",
-                fontsize=11,
-            )
-            plt.tight_layout()
-            snap = f"{basename}_{hemi_name}{ext}"
-            plt.savefig(snap, dpi=150)
-            plt.close(fig)
-            snapshots.append(snap)
-            print(f"  Saved: {snap}")
+        win.camera(view_quaternion=quat)
+        win.focusView()
 
-        return snapshots
+        snap_path = f"{basename}_{hemi_name}{ext}"
+        image = win.snapshotImage(size[0], size[1])
+        image.save(snap_path)
+        snapshots.append(snap_path)
+        print(f"  Saved: {snap_path}")
 
-    except Exception as e:
-        print(
-            f"  Matplotlib rendering failed ({e}), "
-            f"skipping tiles snapshot"
-        )
-        return []
+        group += 1
+
+    return snapshots
 
 
 COLLATERAL_FILES = {
@@ -271,8 +304,7 @@ def generate_umap_snapshot(embeddings_dir, reference_data_dir, output_path,
     snapshots = []
 
     for hemi, csv_name in COLLATERAL_FILES.items():
-        # Load pre-trained model and reference coords
-        region = csv_name.split("_")[0]  # "FColl-SRh"
+        region = csv_name.split("_")[0]
         model_path = osp.join(
             reference_data_dir, f"umap_{region}_{hemi}.pkl"
         )
@@ -287,7 +319,6 @@ def generate_umap_snapshot(embeddings_dir, reference_data_dir, output_path,
         ref_coords = np.load(coords_path)
         print(f"  [{hemi}] Loaded {ref_coords.shape[0]} reference points")
 
-        # Load new subject embedding
         new_csv = osp.join(embeddings_dir, csv_name)
         if not osp.exists(new_csv):
             print(f"  [{hemi}] No embedding found at {new_csv}, skipping")
@@ -298,7 +329,6 @@ def generate_umap_snapshot(embeddings_dir, reference_data_dir, output_path,
         new_coords = model.transform(X_new)
         print(f"  [{hemi}] Projected {X_new.shape[0]} new subject(s)")
 
-        # Plot
         fig, ax = plt.subplots(
             figsize=(size[0] / 100, size[1] / 100)
         )
@@ -330,104 +360,73 @@ def generate_umap_snapshot(embeddings_dir, reference_data_dir, output_path,
     return snapshots
 
 
-def main():
-    parser = argparse.ArgumentParser(
-        description="Generate visualization snapshots "
-        "for Champollion pipeline output"
-    )
-    parser.add_argument(
-        "--morphologist_dir",
-        type=str,
-        help="Path to Morphologist output directory "
-        "(derivatives/morphologist-6.0/)"
-    )
-    parser.add_argument(
-        "--embeddings_dir",
-        type=str,
-        help="Path to embeddings output directory"
-    )
-    parser.add_argument(
-        "--cortical_tiles_dir",
-        type=str,
-        help="Path to cortical tiles crops directory "
-        "(e.g. crops/2mm/)"
-    )
-    parser.add_argument(
-        "--output_dir",
-        type=str,
-        required=True,
-        help="Directory to save snapshot images"
-    )
-    parser.add_argument(
-        "--width",
-        type=int,
-        default=800,
-        help="Snapshot width (default: 800)"
-    )
-    parser.add_argument(
-        "--height",
-        type=int,
-        default=600,
-        help="Snapshot height (default: 600)"
-    )
-    parser.add_argument(
-        "--sulcal-only",
-        action="store_true",
-        help="Only generate sulcal graph snapshots"
-    )
-    parser.add_argument(
-        "--tiles-only",
-        action="store_true",
-        help="Only generate cortical tiles snapshots"
-    )
-    parser.add_argument(
-        "--umap-only",
-        action="store_true",
-        help="Only generate UMAP scatter plots"
-    )
-    parser.add_argument(
-        "--reference_data_dir",
-        type=str,
-        help="Path to pre-trained UMAP models and reference coords"
-    )
+class GenerateSnapshots(ScriptBuilder):
+    """Script for generating visualization snapshots."""
 
-    args = parser.parse_args()
-    print(f"Arguments: {args}")
+    def __init__(self):
+        super().__init__(
+            script_name="generate_snapshots",
+            description="Generate visualization snapshots for Champollion pipeline output",
+        )
+        (self
+         .add_optional_argument("--morphologist_dir", "Path to Morphologist output directory")
+         .add_optional_argument("--embeddings_dir", "Path to embeddings output directory")
+         .add_optional_argument("--cortical_tiles_dir", "Path to cortical tiles crops directory")
+         .add_argument("--output_dir", type=str, required=True, help="Directory to save snapshot images")
+         .add_optional_argument("--width", "Snapshot width", default=800, type_=int)
+         .add_optional_argument("--height", "Snapshot height", default=600, type_=int)
+         .add_flag("--sulcal-only", "Only generate sulcal graph snapshots")
+         .add_flag("--tiles-only", "Only generate cortical tiles snapshots")
+         .add_flag("--umap-only", "Only generate UMAP scatter plots")
+         .add_optional_argument("--reference_data_dir", "Path to pre-trained UMAP models and reference coords")
+         .add_optional_argument("--tiles_level", "Region threshold level (0-3)", default=1, type_=int))
 
-    # Create output directory
-    os.makedirs(args.output_dir, exist_ok=True)
+    def run(self) -> int:
+        """Run all requested snapshot generation steps."""
+        os.makedirs(self.args.output_dir, exist_ok=True)
 
-    # Determine which snapshot types to run.
-    # --*-only flags restrict to a single type.
-    only_flags = (
-        args.sulcal_only,
-        args.tiles_only,
-        args.umap_only,
-    )
-    run_sulcal = not any(only_flags) or args.sulcal_only
-    run_tiles = not any(only_flags) or args.tiles_only
-    run_umap = not any(only_flags) or args.umap_only
+        only_flags = (
+            self.args.sulcal_only,
+            self.args.tiles_only,
+            self.args.umap_only,
+        )
+        run_sulcal = not any(only_flags) or self.args.sulcal_only
+        run_tiles = not any(only_flags) or self.args.tiles_only
+        run_umap = not any(only_flags) or self.args.umap_only
 
-    size = (args.width, args.height)
-    all_snapshots = []
+        size = (self.args.width, self.args.height)
+        all_snapshots = []
 
-    # Generate sulcal graph snapshots
-    if run_sulcal:
-        if (args.morphologist_dir
-                and osp.exists(args.morphologist_dir)):
+        if run_sulcal:
+            all_snapshots.extend(self._run_sulcal(size))
+
+        if run_tiles:
+            all_snapshots.extend(self._run_tiles(size))
+
+        if run_umap:
+            all_snapshots.extend(self._run_umap(size))
+
+        print(f"\nGenerated {len(all_snapshots)} snapshot(s)")
+
+        manifest_path = osp.join(self.args.output_dir, "snapshots_manifest.json")
+        with open(manifest_path, "w") as f:
+            json.dump({"snapshots": all_snapshots}, f, indent=2)
+        print(f"Manifest saved to: {manifest_path}")
+
+        return 0
+
+    def _run_sulcal(self, size):
+        """Generate sulcal graph snapshots."""
+        snapshots = []
+        if self.args.morphologist_dir and osp.exists(self.args.morphologist_dir):
             print("\nGenerating sulcal graph snapshots...")
-            graphs = find_sulcal_graphs(
-                args.morphologist_dir
-            )
+            graphs = find_sulcal_graphs(self.args.morphologist_dir)
             print(f"  Found {len(graphs)} sulcal graph(s)")
 
-            # Quaternions for each hemisphere
             QUAT_LEFT = (0.5, 0.5, 0.5, 0.5)
             QUAT_RIGHT = (0.5, -0.5, -0.5, 0.5)
 
             for graph_path in graphs[:2]:
-                # Detect hemisphere from filename
-                # Morphologist names files L{subject}.arg / R{subject}.arg
                 fname = osp.basename(graph_path).lower()
                 if fname.startswith("r") or "_r" in fname or "right" in fname:
                     hemi = "right"
@@ -440,91 +439,66 @@ def main():
                 if white_mesh:
                     print(f"  White mesh: {white_mesh}")
 
-                out = osp.join(
-                    args.output_dir,
-                    f"sulcal_graph_{hemi}.png"
-                )
+                out = osp.join(self.args.output_dir, f"sulcal_graph_{hemi}.png")
                 try:
                     snap = generate_sulcal_graph_snapshot(
                         graph_path, out, size,
                         view_quaternion=quat,
                         mesh_path=white_mesh,
                     )
-                    all_snapshots.append(snap)
+                    snapshots.append(snap)
                 except Exception as e:
-                    print(
-                        f"  Error processing "
-                        f"{graph_path}: {e}"
-                    )
-        elif args.morphologist_dir:
-            print(
-                f"Morphologist directory not found: "
-                f"{args.morphologist_dir}"
-            )
+                    print(f"  Error processing {graph_path}: {e}")
+        elif self.args.morphologist_dir:
+            print(f"Morphologist directory not found: {self.args.morphologist_dir}")
+        return snapshots
 
-    # Generate cortical tiles mask snapshots
-    if run_tiles:
-        if (args.cortical_tiles_dir
-                and osp.exists(args.cortical_tiles_dir)):
+    def _run_tiles(self, size):
+        """Generate cortical tiles snapshots."""
+        snapshots = []
+        if self.args.cortical_tiles_dir and osp.exists(self.args.cortical_tiles_dir):
             print("\nGenerating cortical tiles snapshots...")
-            out = osp.join(
-                args.output_dir, "tiles_masks.png"
-            )
+            out = osp.join(self.args.output_dir, "tiles_masks.png")
             try:
                 snaps = generate_tiles_snapshot(
-                    args.cortical_tiles_dir, out, size
+                    self.args.cortical_tiles_dir, out, size,
+                    level=self.args.tiles_level,
                 )
-                all_snapshots.extend(snaps)
+                snapshots.extend(snaps)
+            except ImportError as e:
+                print(f"  Anatomist not available for tiles snapshot: {e}")
             except Exception as e:
-                print(
-                    f"  Error generating tiles snapshot: "
-                    f"{e}"
-                )
-        elif args.cortical_tiles_dir:
-            print(
-                f"Cortical tiles directory not found: "
-                f"{args.cortical_tiles_dir}"
-            )
+                print(f"  Error generating tiles snapshot: {e}")
+        elif self.args.cortical_tiles_dir:
+            print(f"Cortical tiles directory not found: {self.args.cortical_tiles_dir}")
+        return snapshots
 
-    # Generate UMAP scatter plots
-    if run_umap:
-        if (args.embeddings_dir
-                and osp.exists(args.embeddings_dir)
-                and args.reference_data_dir
-                and osp.exists(args.reference_data_dir)):
+    def _run_umap(self, size):
+        """Generate UMAP scatter plots."""
+        snapshots = []
+        if (self.args.embeddings_dir
+                and osp.exists(self.args.embeddings_dir)
+                and self.args.reference_data_dir
+                and osp.exists(self.args.reference_data_dir)):
             print("\nGenerating UMAP scatter plots...")
-            out = osp.join(
-                args.output_dir, "umap_collateral.png"
-            )
+            out = osp.join(self.args.output_dir, "umap_collateral.png")
             try:
                 snaps = generate_umap_snapshot(
-                    args.embeddings_dir,
-                    args.reference_data_dir,
+                    self.args.embeddings_dir,
+                    self.args.reference_data_dir,
                     out, size,
                 )
-                all_snapshots.extend(snaps)
+                snapshots.extend(snaps)
             except Exception as e:
-                print(
-                    f"  Error generating UMAP snapshot: "
-                    f"{e}"
-                )
-        elif args.reference_data_dir and not osp.exists(
-            args.reference_data_dir
-        ):
-            print(
-                f"Reference data directory not found: "
-                f"{args.reference_data_dir}"
-            )
+                print(f"  Error generating UMAP snapshot: {e}")
+        elif self.args.reference_data_dir and not osp.exists(self.args.reference_data_dir):
+            print(f"Reference data directory not found: {self.args.reference_data_dir}")
+        return snapshots
 
-    print(f"\nGenerated {len(all_snapshots)} snapshot(s)")
 
-    # Write manifest of generated files
-    manifest_path = osp.join(args.output_dir, "snapshots_manifest.json")
-    with open(manifest_path, "w") as f:
-        json.dump({"snapshots": all_snapshots}, f, indent=2)
-    print(f"Manifest saved to: {manifest_path}")
-
-    return 0
+def main():
+    script = GenerateSnapshots()
+    return script.build().print_args().run()
 
 
 if __name__ == "__main__":
