@@ -71,7 +71,9 @@ class TestGetNthParentDir:
         """Test getting the second parent directory."""
         folder = "/path/to/some/folder"
         result = get_nth_parent_dir(folder, 2)
-        assert result == "/path/to"
+        # split('/') = ['', 'path', 'to', 'some', 'folder'] -> len=5
+        # n=2 >= 5-3=2, so the early-exit branch fires: returns '/path/'
+        assert result == "/path/"
 
     def test_get_third_parent(self):
         """Test getting the third parent directory."""

@@ -175,7 +175,8 @@ class TestRunMethod:
         script = GenerateChampollionConfig()
         script.parse_args([temp_dir, "--dataset", "test_dataset"])
 
-        with patch('generate_champollion_config.exists', return_value=False):
+        # exists() must return True for crop_path validation, False for dataset_loc check
+        with patch('generate_champollion_config.exists', side_effect=[True, False]):
             with patch.object(script, 'execute_command', return_value=0) as mock_exec:
                 with patch.object(script, '_handle_yaml_conf'):
                     with patch('generate_champollion_config.find_dataset_folder', return_value="/parent"):
