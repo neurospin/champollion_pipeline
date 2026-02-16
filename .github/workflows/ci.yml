@@ -31,6 +31,17 @@ jobs:
           auth-host: prefix.dev
           auth-token: ${{ secrets.PREFIX_DEV_TOKEN }}
 
+      - name: Cache Pixi environment
+        uses: actions/cache@v3
+        id: cache-pixi
+        with:
+          path: |
+            ~/.pixi
+            ./.pixi
+          key: ${{ runner.os }}-pixi-${{ hashFiles('pixi.toml', 'pixi.lock') }}
+          restore-keys: |
+            ${{ runner.os }}-pixi-
+
       - name: Install dependencies
         run: pixi run install-all
 
