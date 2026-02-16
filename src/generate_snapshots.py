@@ -160,7 +160,8 @@ def generate_sulcal_graph_snapshot(graph_path, output_path, size=(800, 600),
     return output_path
 
 
-def generate_tiles_snapshot(crops_dir, output_path, size=(800, 600), level=1):
+def generate_tiles_snapshot(crops_dir, output_path, size=(800, 600), level=1,
+                            champollion_data_root=None):
     """Generate snapshots of cortical tiles regions using Anatomist.
 
     Loads region graphs from the Champollion model data, overlays
@@ -177,6 +178,9 @@ def generate_tiles_snapshot(crops_dir, output_path, size=(800, 600), level=1):
             _left.png / _right.png)
         size: Tuple of (width, height)
         level: Region threshold level (0-3, default 1)
+        champollion_data_root: Override path to Champollion data
+            directory (containing mask/2mm/regions/meshes/).
+            If None, uses deep_folding config default.
 
     Returns:
         List of generated snapshot file paths
@@ -193,7 +197,10 @@ def generate_tiles_snapshot(crops_dir, output_path, size=(800, 600), level=1):
         print("  No completed regions found in crops directory")
         return []
 
-    root = config.config().get_champollion_data_root_dir()
+    if champollion_data_root:
+        root = champollion_data_root
+    else:
+        root = config.config().get_champollion_data_root_dir()
     regions_graph_dir = f"{root}/mask/2mm/regions/meshes"
 
     nom = aims.read(aims.carto.Paths.findResourceFile(
@@ -378,8 +385,16 @@ class GenerateSnapshots(ScriptBuilder):
          .add_flag("--sulcal-only", "Only generate sulcal graph snapshots")
          .add_flag("--tiles-only", "Only generate cortical tiles snapshots")
          .add_flag("--umap-only", "Only generate UMAP scatter plots")
-         .add_optional_argument("--reference_data_dir", "Path to pre-trained UMAP models and reference coords")
-         .add_optional_argument("--tiles_level", "Region threshold level (0-3)", default=1, type_=int))
+         .add_optional_argument(
+             "--reference_data_dir",
+             "Path to pre-trained UMAP models and reference coords")
+         .add_optional_argument(
+             "--tiles_level",
+             "Region threshold level (0-3)",
+             default=1, type_=int)
+         .add_optional_argument(
+             "--champollion_data_root",
+             "Override path to Champollion data directory"))
 
     def run(self) -> int:
         """Run all requested snapshot generation steps."""
@@ -463,6 +478,7 @@ class GenerateSnapshots(ScriptBuilder):
                 snaps = generate_tiles_snapshot(
                     self.args.cortical_tiles_dir, out, size,
                     level=self.args.tiles_level,
+                    champollion_data_root=self.args.champollion_data_root,
                 )
                 snapshots.extend(snaps)
             except ImportError as e:
