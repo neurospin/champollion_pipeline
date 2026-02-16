@@ -13,7 +13,9 @@ from unittest.mock import patch
 from generate_snapshots import (
     find_sulcal_graphs,
     find_white_mesh,
+    find_completed_regions,
     COLLATERAL_FILES,
+    GenerateSnapshots,
     main,
 )
 
@@ -130,6 +132,139 @@ class TestFindWhiteMesh:
         """Test that a path without default_analysis or default_acquisition/0 returns None."""
         result = find_white_mesh("/some/random/path/graph.arg")
         assert result is None
+
+
+class TestFindCompletedRegions:
+    """Test find_completed_regions function."""
+
+    def test_finds_left_and_right_regions(self, temp_dir):
+        """Test detection of both L and R mask_skeleton files."""
+        region = Path(temp_dir) / "region_A" / "mask"
+        region.mkdir(parents=True)
+        (region / "Lmask_skeleton.nii.gz").touch()
+        (region / "Rmask_skeleton.nii.gz").touch()
+
+        result = find_completed_regions(temp_dir)
+        assert "region_A" in result["left"]
+        assert "region_A" in result["right"]
+
+    def test_single_hemisphere(self, temp_dir):
+        """Test region with only one hemisphere mask."""
+        region = Path(temp_dir) / "region_B" / "mask"
+        region.mkdir(parents=True)
+        (region / "Lmask_skeleton.nii.gz").touch()
+
+        result = find_completed_regions(temp_dir)
+        assert "region_B" in result["left"]
+        assert "region_B" not in result["right"]
+
+    def test_empty_directory(self, temp_dir):
+        """Test with empty crops directory."""
+        result = find_completed_regions(temp_dir)
+        assert result == {"left": [], "right": []}
+
+    def test_nonexistent_directory(self):
+        """Test with nonexistent directory."""
+        result = find_completed_regions("/nonexistent/path")
+        assert result == {"left": [], "right": []}
+
+    def test_region_without_mask_dir(self, temp_dir):
+        """Test that regions without mask/ subdirectory are skipped."""
+        (Path(temp_dir) / "region_C").mkdir()
+        result = find_completed_regions(temp_dir)
+        assert result == {"left": [], "right": []}
+
+    def test_multiple_regions_sorted(self, temp_dir):
+        """Test that regions are returned in sorted order."""
+        for name in ["zebra", "alpha", "middle"]:
+            mask_dir = Path(temp_dir) / name / "mask"
+            mask_dir.mkdir(parents=True)
+            (mask_dir / "Lmask_skeleton.nii.gz").touch()
+
+        result = find_completed_regions(temp_dir)
+        assert result["left"] == ["alpha", "middle", "zebra"]
+
+
+class TestGenerateSnapshotsInit:
+    """Test GenerateSnapshots class initialization."""
+
+    def test_script_name(self):
+        """Test that script_name is set correctly."""
+        script = GenerateSnapshots()
+        assert script.script_name == "generate_snapshots"
+
+    def test_output_dir_required(self):
+        """Test that --output_dir is required."""
+        script = GenerateSnapshots()
+        with pytest.raises(SystemExit):
+            script.parse_args([])
+
+    def test_parse_all_args(self, temp_dir):
+        """Test parsing all arguments."""
+        script = GenerateSnapshots()
+        args = script.parse_args([
+            "--output_dir", temp_dir,
+            "--morphologist_dir", "/morpho",
+            "--embeddings_dir", "/emb",
+            "--cortical_tiles_dir", "/tiles",
+            "--width", "1024",
+            "--height", "768",
+            "--sulcal-only",
+            "--tiles_level", "2",
+            "--reference_data_dir", "/ref",
+        ])
+        assert args.output_dir == temp_dir
+        assert args.morphologist_dir == "/morpho"
+        assert args.embeddings_dir == "/emb"
+        assert args.cortical_tiles_dir == "/tiles"
+        assert args.width == 1024
+        assert args.height == 768
+        assert args.sulcal_only is True
+        assert args.tiles_level == 2
+        assert args.reference_data_dir == "/ref"
+
+    def test_default_values(self, temp_dir):
+        """Test default argument values."""
+        script = GenerateSnapshots()
+        args = script.parse_args(["--output_dir", temp_dir])
+        assert args.width == 800
+        assert args.height == 600
+        assert args.sulcal_only is False
+        assert args.tiles_only is False
+        assert args.umap_only is False
+        assert args.tiles_level == 1
+
+
+class TestGenerateSnapshotsRun:
+    """Test GenerateSnapshots.run() method."""
+
+    def test_run_creates_output_dir(self, temp_dir):
+        """Test that run() creates the output directory."""
+        output_dir = os.path.join(temp_dir, "new_output")
+        script = GenerateSnapshots()
+        script.parse_args(["--output_dir", output_dir])
+        result = script.run()
+        assert result == 0
+        assert os.path.isdir(output_dir)
+
+    def test_run_writes_manifest(self, temp_dir):
+        """Test that run() writes manifest JSON."""
+        output_dir = os.path.join(temp_dir, "out")
+        script = GenerateSnapshots()
+        script.parse_args(["--output_dir", output_dir])
+        script.run()
+        manifest = os.path.join(output_dir, "snapshots_manifest.json")
+        assert os.path.exists(manifest)
+        with open(manifest) as f:
+            data = json.load(f)
+        assert "snapshots" in data
+        assert isinstance(data["snapshots"], list)
+
+    def test_run_returns_zero(self, temp_dir):
+        """Test that run() returns 0 on success."""
+        script = GenerateSnapshots()
+        script.parse_args(["--output_dir", os.path.join(temp_dir, "out")])
+        assert script.run() == 0
 
 
 class TestOnlyFlagLogic:
@@ -254,6 +389,23 @@ class TestMainFunction:
             assert result == 0
 
 
+    def test_main_calls_build_print_run(self, temp_dir):
+        """Test that main() follows the ScriptBuilder pattern."""
+        output_dir = os.path.join(temp_dir, "out")
+        with patch('sys.argv', [
+            'generate_snapshots.py',
+            '--output_dir', output_dir,
+        ]):
+            with patch.object(GenerateSnapshots, 'build',
+                              return_value=GenerateSnapshots.__new__(GenerateSnapshots)) as mock_build:
+                mock_instance = mock_build.return_value
+                mock_instance.print_args = lambda: mock_instance
+                mock_instance.run = lambda: 0
+                result = main()
+                mock_build.assert_called_once()
+                assert result == 0
+
+
 @pytest.mark.smoke
 class TestGenerateSnapshotsSmoke:
     """Smoke tests for basic functionality."""
@@ -265,6 +417,15 @@ class TestGenerateSnapshotsSmoke:
     def test_find_white_mesh_is_callable(self):
         """Test that find_white_mesh is callable."""
         assert callable(find_white_mesh)
+
+    def test_find_completed_regions_is_callable(self):
+        """Test that find_completed_regions is callable."""
+        assert callable(find_completed_regions)
+
+    def test_generate_snapshots_class_exists(self):
+        """Test that GenerateSnapshots class can be instantiated."""
+        script = GenerateSnapshots()
+        assert script.script_name == "generate_snapshots"
 
     def test_main_is_callable(self):
         """Test that main is callable."""
