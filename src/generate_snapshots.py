@@ -3,10 +3,11 @@
 """
 Generate visualization snapshots for the Champollion pipeline.
 
-Creates three types of visualizations:
+Creates four types of visualizations:
 1. Sulcal graph mesh from Morphologist output
 2. Region coverage map showing which regions have embeddings
 3. Cortical tiles mask overlay (one snapshot per hemisphere)
+4. UMAP scatter plot — new subject projected onto UKB40 reference
 
 Requires the BrainVISA/Anatomist environment (runs in headless mode).
 """
@@ -365,6 +366,98 @@ def generate_tiles_snapshot(crops_dir, output_path, size=(800, 600)):
         return []
 
 
+COLLATERAL_FILES = {
+    "left": "FColl-SRh_left_name06-43-43--210_embeddings.csv",
+    "right": "FColl-SRh_right_name06-56-15--113_embeddings.csv",
+}
+
+
+def generate_umap_snapshot(embeddings_dir, reference_data_dir, output_path,
+                           size=(800, 600)):
+    """Generate UMAP scatter plots for the collateral sulcus region.
+
+    Projects the pipeline's new subject(s) onto a pre-trained UMAP fitted
+    on UKBioBank40 reference embeddings. Produces one plot per hemisphere.
+
+    Args:
+        embeddings_dir: Path to pipeline embeddings (stage 5 output)
+        reference_data_dir: Path to pre-trained UMAP models and coords
+        output_path: Base path for output images (suffixed with _left/_right)
+        size: Tuple of (width, height)
+
+    Returns:
+        List of generated snapshot file paths
+    """
+    import joblib
+    import matplotlib
+    matplotlib.use("Agg")
+    import matplotlib.pyplot as plt
+    import pandas as pd
+
+    basename = osp.splitext(output_path)[0]
+    ext = osp.splitext(output_path)[1] or ".png"
+    snapshots = []
+
+    for hemi, csv_name in COLLATERAL_FILES.items():
+        # Load pre-trained model and reference coords
+        region = csv_name.split("_")[0]  # "FColl-SRh"
+        model_path = osp.join(
+            reference_data_dir, f"umap_{region}_{hemi}.pkl"
+        )
+        coords_path = osp.join(
+            reference_data_dir, f"umap_{region}_{hemi}_coords.npy"
+        )
+        if not osp.exists(model_path) or not osp.exists(coords_path):
+            print(f"  UMAP artifacts not found for {hemi}, skipping")
+            continue
+
+        model = joblib.load(model_path)
+        ref_coords = np.load(coords_path)
+        print(f"  [{hemi}] Loaded {ref_coords.shape[0]} reference points")
+
+        # Load new subject embedding
+        new_csv = osp.join(embeddings_dir, csv_name)
+        if not osp.exists(new_csv):
+            print(f"  [{hemi}] No embedding found at {new_csv}, skipping")
+            continue
+
+        df = pd.read_csv(new_csv)
+        X_new = df.drop(columns=["ID"]).values.astype(np.float32)
+        new_coords = model.transform(X_new)
+        print(f"  [{hemi}] Projected {X_new.shape[0]} new subject(s)")
+
+        # Plot
+        fig, ax = plt.subplots(
+            figsize=(size[0] / 100, size[1] / 100)
+        )
+        ax.scatter(
+            ref_coords[:, 0], ref_coords[:, 1],
+            s=1, c="#4a90d9", alpha=0.08,
+            label=f"UKB40 (n={ref_coords.shape[0]:,})", rasterized=True,
+        )
+        ax.scatter(
+            new_coords[:, 0], new_coords[:, 1],
+            s=80, c="#e74c3c", edgecolors="white", linewidths=0.8,
+            zorder=5, label="Your subject",
+        )
+        ax.set_title(
+            f"Collateral sulcus \u2014 {hemi}", fontsize=12
+        )
+        ax.legend(loc="best", fontsize=9, framealpha=0.9)
+        ax.set_xlabel("UMAP 1", fontsize=9)
+        ax.set_ylabel("UMAP 2", fontsize=9)
+        ax.tick_params(labelsize=8)
+        plt.tight_layout()
+
+        snap = f"{basename}_{hemi}{ext}"
+        plt.savefig(snap, dpi=150)
+        plt.close(fig)
+        snapshots.append(snap)
+        print(f"  Saved: {snap}")
+
+    return snapshots
+
+
 def main():
     parser = argparse.ArgumentParser(
         description="Generate visualization snapshots "
@@ -420,6 +513,16 @@ def main():
         action="store_true",
         help="Only generate cortical tiles snapshots"
     )
+    parser.add_argument(
+        "--umap-only",
+        action="store_true",
+        help="Only generate UMAP scatter plots"
+    )
+    parser.add_argument(
+        "--reference_data_dir",
+        type=str,
+        help="Path to pre-trained UMAP models and reference coords"
+    )
 
     args = parser.parse_args()
     print(f"Arguments: {args}")
@@ -433,10 +536,12 @@ def main():
         args.sulcal_only,
         args.coverage_only,
         args.tiles_only,
+        args.umap_only,
     )
     run_sulcal = not any(only_flags) or args.sulcal_only
     run_coverage = not any(only_flags) or args.coverage_only
     run_tiles = not any(only_flags) or args.tiles_only
+    run_umap = not any(only_flags) or args.umap_only
 
     size = (args.width, args.height)
     all_snapshots = []
@@ -539,6 +644,36 @@ def main():
             print(
                 f"Embeddings directory not found: "
                 f"{args.embeddings_dir}"
+            )
+
+    # Generate UMAP scatter plots
+    if run_umap:
+        if (args.embeddings_dir
+                and osp.exists(args.embeddings_dir)
+                and args.reference_data_dir
+                and osp.exists(args.reference_data_dir)):
+            print("\nGenerating UMAP scatter plots...")
+            out = osp.join(
+                args.output_dir, "umap_collateral.png"
+            )
+            try:
+                snaps = generate_umap_snapshot(
+                    args.embeddings_dir,
+                    args.reference_data_dir,
+                    out, size,
+                )
+                all_snapshots.extend(snaps)
+            except Exception as e:
+                print(
+                    f"  Error generating UMAP snapshot: "
+                    f"{e}"
+                )
+        elif args.reference_data_dir and not osp.exists(
+            args.reference_data_dir
+        ):
+            print(
+                f"Reference data directory not found: "
+                f"{args.reference_data_dir}"
             )
 
     print(f"\nGenerated {len(all_snapshots)} snapshot(s)")
