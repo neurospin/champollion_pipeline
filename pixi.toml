@@ -91,12 +91,12 @@ uninstall-all = """
   echo "Uninstallation of Pixi-managed dependencies complete."
 """
 
-# Testing tasks (run from champollion_pipeline directory)
-test = "cd champollion_pipeline && pytest tests/ -v"
-test-unit = "cd champollion_pipeline && pytest tests/ -v -m unit"
-test-integration = "cd champollion_pipeline && pytest tests/ -v -m integration"
-test-smoke = "cd champollion_pipeline && pytest tests/ -v -m smoke"
-test-cov = "cd champollion_pipeline && pytest tests/ -v --cov=src --cov-report=html --cov-report=term"
-test-fast = "cd champollion_pipeline && pytest tests/ -v -x --tb=short"
-test-verbose = "cd champollion_pipeline && pytest tests/ -vv"
-test-specific = "cd champollion_pipeline && pytest"  # Usage: pixi run test-specific tests/test_script_builder.py
+# Testing tasks
+test = "pytest tests/ -v"
+test-unit = "pytest tests/ -v -m unit"
+test-integration = "pytest tests/ -v -m integration"
+test-smoke = "pytest tests/ -v -m smoke"
+test-cov = "pytest tests/ -v --cov=src --cov-report=html --cov-report=term"
+test-fast = "pytest tests/ -v -x --tb=short"
+test-verbose = "pytest tests/ -vv"
+test-specific = "pytest"  # Usage: pixi run test-specific tests/test_script_builder.py
