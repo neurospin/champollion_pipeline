@@ -8,6 +8,7 @@ on:
 jobs:
   lint-and-test:
     runs-on: ubuntu-latest
+    environment: ci
     steps:
       - name: Free disk space
         run: |
