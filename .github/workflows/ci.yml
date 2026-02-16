@@ -23,10 +23,14 @@ jobs:
           submodules: recursive
 
       - name: Install Pixi
-        uses: prefix-dev/setup-pixi@v0.8.1
+        uses: prefix-dev/setup-pixi@v0.9.4
         with:
+          pixi-version: v0.59.0
           manifest-path: pixi.toml
           cache: true
+          cache-write: ${{ github.event_name == 'push' && github.ref_name == 'main' }}
+          auth-host: prefix.dev
+          auth-token: ${{ secrets.PREFIX_DEV_TOKEN }}
 
       - name: Install dependencies
         run: pixi run install-all
