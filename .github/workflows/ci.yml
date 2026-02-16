@@ -31,13 +31,25 @@ jobs:
           auth-host: prefix.dev
           auth-token: ${{ secrets.PREFIX_DEV_TOKEN }}
 
+
+      - name: Debug Pixi environment location
+        run: |
+            echo "Listing ~/.pixi:"
+            ls -la ~/.pixi || echo "No global Pixi cache found"
+            echo "Listing ./.pixi:"
+            ls -la ./.pixi || echo "No local Pixi cache found"
+            echo "Listing ~/.pixi/envs:"
+            ls -la ~/.pixi/envs || echo "No global Pixi envs found"
+            echo "Listing ./.pixi/envs:"
+            ls -la ./.pixi/envs || echo "No local Pixi envs found"
+
       - name: Cache Pixi environment
         uses: actions/cache@v5
         id: cache-pixi
         with:
           path: |
-            ~/.pixi
-            ./.pixi
+            ~/.pixi/envs
+            ./.pixi/envs
           key: ${{ runner.os }}-pixi-${{ hashFiles('pixi.toml', 'pixi.lock') }}
           restore-keys: |
             ${{ runner.os }}-pixi-
