@@ -33,6 +33,9 @@ jobs:
           auth-host: prefix.dev
           auth-token: ${{ secrets.PREFIX_DEV_TOKEN }}
 
+      - name: Clear stale rattler package cache
+        run: rm -rf ~/.cache/rattler/cache/pkgs/cuda-version-*
+
       - name: Install dependencies
         run: pixi run install-all
 
