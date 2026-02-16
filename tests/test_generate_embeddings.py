@@ -71,6 +71,10 @@ class TestGenerateEmbeddingsArguments:
         assert args.embeddings_only is False
         assert args.use_best_model is False
         assert args.verbose is False
+        assert args.cpu is False
+        assert args.profiling is False
+        assert args.skip_cka is False
+        assert args.no_cache is False
 
     def test_flags_can_be_set(self):
         """Test that flags can be set to True."""
@@ -80,12 +84,32 @@ class TestGenerateEmbeddingsArguments:
             "--overwrite",
             "--embeddings_only",
             "--use_best_model",
-            "--verbose"
+            "--verbose",
+            "--cpu",
+            "--profiling",
+            "--skip-cka",
+            "--no-cache"
         ])
         assert args.overwrite is True
         assert args.embeddings_only is True
         assert args.use_best_model is True
         assert args.verbose is True
+        assert args.cpu is True
+        assert args.profiling is True
+        assert args.skip_cka is True
+        assert args.no_cache is True
+
+    def test_nb_jobs_default_none(self):
+        """Test that nb_jobs defaults to None."""
+        script = GenerateEmbeddings()
+        args = script.parse_args(["/m", "loc", "/d", "name"])
+        assert args.nb_jobs is None
+
+    def test_nb_jobs_can_be_set(self):
+        """Test that --nb_jobs can be set."""
+        script = GenerateEmbeddings()
+        args = script.parse_args(["/m", "loc", "/d", "name", "--nb_jobs", "8"])
+        assert args.nb_jobs == 8
 
     def test_list_arguments(self):
         """Test list arguments with multiple values."""
