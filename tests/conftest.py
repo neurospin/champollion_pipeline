@@ -113,7 +113,7 @@ def mock_validate_paths_failure():
 @pytest.fixture
 def script_builder_subclass():
     """Create a simple ScriptBuilder subclass for testing."""
-    from script_builder import ScriptBuilder
+    from champollion_utils.script_builder import ScriptBuilder
 
     class TestScript(ScriptBuilder):
         def __init__(self):

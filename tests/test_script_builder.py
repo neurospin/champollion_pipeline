@@ -10,7 +10,7 @@ import os
 from unittest.mock import MagicMock, patch, call
 from pathlib import Path
 
-from script_builder import ScriptBuilder
+from champollion_utils.script_builder import ScriptBuilder
 
 
 class ConcreteScriptBuilder(ScriptBuilder):
@@ -297,18 +297,19 @@ class TestScriptBuilderBuildCommand:
 class TestScriptBuilderExecuteCommand:
     """Test command execution."""
 
-    def test_execute_command_success_no_shell(self, mock_subprocess_success):
+    def test_execute_command_success_no_shell(self):
         """Test successful command execution without shell."""
         script = ConcreteScriptBuilder()
         cmd = ["echo", "test"]
-        result = script.execute_command(cmd, shell=False)
-        assert result == 0
+        with patch('champollion_utils.script_builder.check_call', return_value=0):
+            result = script.execute_command(cmd, shell=False)
+            assert result == 0
 
     def test_execute_command_success_with_shell(self):
         """Test successful command execution with shell."""
         script = ConcreteScriptBuilder()
         cmd = ["echo", "test"]
-        with patch('subprocess.run') as mock_run:
+        with patch('champollion_utils.script_builder.run') as mock_run:
             mock_run.return_value = MagicMock(returncode=0)
             result = script.execute_command(cmd, shell=True)
             assert result == 0
@@ -318,7 +319,7 @@ class TestScriptBuilderExecuteCommand:
         """Test command execution failure."""
         script = ConcreteScriptBuilder()
         cmd = ["nonexistent_command"]
-        with patch('subprocess.check_call', side_effect=Exception("Command failed")):
+        with patch('champollion_utils.script_builder.check_call', side_effect=Exception("Command failed")):
             result = script.execute_command(cmd, shell=False)
             assert result == 1
 
@@ -327,9 +328,8 @@ class TestScriptBuilderExecuteCommand:
         """Test that execute_command prints the command."""
         script = ConcreteScriptBuilder()
         cmd = ["echo", "test"]
-        with patch('subprocess.check_call', return_value=0):
+        with patch('champollion_utils.script_builder.check_call', return_value=0):
             script.execute_command(cmd, shell=False)
-            # Check that print was called with command info
             assert mock_print.called
 
 
