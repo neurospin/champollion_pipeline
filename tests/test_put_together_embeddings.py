@@ -74,10 +74,10 @@ class TestRunMethod:
             "--output_path", temp_dir
         ])
 
-        with patch('os.makedirs'):
+        with patch('put_together_embeddings.makedirs'):
             with patch.object(script, 'validate_paths', return_value=True):
-                with patch('os.chdir'):
-                    with patch('os.getcwd', return_value="/original"):
+                with patch('put_together_embeddings.chdir'):
+                    with patch('put_together_embeddings.getcwd', return_value="/original"):
                         with patch.object(script, 'build_command', return_value=["cmd"]):
                             with patch.object(script, 'execute_command', return_value=0):
                                 script.run()
@@ -97,10 +97,10 @@ class TestRunMethod:
             "--output_path", str(output_dir)
         ])
 
-        with patch('os.makedirs') as mock_makedirs:
+        with patch('put_together_embeddings.makedirs') as mock_makedirs:
             with patch.object(script, 'validate_paths', return_value=True):
-                with patch('os.chdir'):
-                    with patch('os.getcwd', return_value="/original"):
+                with patch('put_together_embeddings.chdir'):
+                    with patch('put_together_embeddings.getcwd', return_value="/original"):
                         with patch.object(script, 'build_command', return_value=["cmd"]):
                             with patch.object(script, 'execute_command', return_value=0):
                                 script.run()
@@ -115,7 +115,7 @@ class TestRunMethod:
             "--output_path", temp_dir
         ])
 
-        with patch('os.makedirs'):
+        with patch('put_together_embeddings.makedirs'):
             with patch.object(script, 'validate_paths', return_value=False):
                 with pytest.raises(ValueError, match="Please input valid paths"):
                     script.run()
@@ -128,10 +128,10 @@ class TestRunMethod:
             "--output_path", temp_dir
         ])
 
-        with patch('os.makedirs'):
+        with patch('put_together_embeddings.makedirs'):
             with patch.object(script, 'validate_paths', return_value=True):
-                with patch('os.chdir') as mock_chdir:
-                    with patch('os.getcwd', return_value="/original"):
+                with patch('put_together_embeddings.chdir') as mock_chdir:
+                    with patch('put_together_embeddings.getcwd', return_value="/original"):
                         with patch.object(script, 'build_command', return_value=["cmd"]):
                             with patch.object(script, 'execute_command', return_value=0):
                                 script.run()
@@ -149,10 +149,10 @@ class TestRunMethod:
             "--path_models", "/models"
         ])
 
-        with patch('os.makedirs'):
+        with patch('put_together_embeddings.makedirs'):
             with patch.object(script, 'validate_paths', return_value=True):
-                with patch('os.chdir'):
-                    with patch('os.getcwd', return_value="/original"):
+                with patch('put_together_embeddings.chdir'):
+                    with patch('put_together_embeddings.getcwd', return_value="/original"):
                         with patch.object(script, 'build_command', return_value=["python", "script.py"]) as mock_build:
                             with patch.object(script, 'execute_command', return_value=0):
                                 script.run()
@@ -173,10 +173,10 @@ class TestRunMethod:
             "--output_path", temp_dir
         ])
 
-        with patch('os.makedirs'):
+        with patch('put_together_embeddings.makedirs'):
             with patch.object(script, 'validate_paths', return_value=True):
-                with patch('os.chdir'):
-                    with patch('os.getcwd', return_value="/original"):
+                with patch('put_together_embeddings.chdir'):
+                    with patch('put_together_embeddings.getcwd', return_value="/original"):
                         with patch.object(script, 'build_command', return_value=["cmd"]):
                             with patch.object(script, 'execute_command', return_value=0) as mock_exec:
                                 script.run()
@@ -191,10 +191,10 @@ class TestRunMethod:
             "--output_path", temp_dir
         ])
 
-        with patch('os.makedirs'):
+        with patch('put_together_embeddings.makedirs'):
             with patch.object(script, 'validate_paths', return_value=True):
-                with patch('os.chdir'):
-                    with patch('os.getcwd', return_value="/original"):
+                with patch('put_together_embeddings.chdir'):
+                    with patch('put_together_embeddings.getcwd', return_value="/original"):
                         with patch.object(script, 'build_command', return_value=["cmd"]):
                             with patch.object(script, 'execute_command', return_value=123):
                                 result = script.run()
@@ -209,10 +209,10 @@ class TestRunMethod:
         ])
         original = "/original/dir"
 
-        with patch('os.makedirs'):
+        with patch('put_together_embeddings.makedirs'):
             with patch.object(script, 'validate_paths', return_value=True):
-                with patch('os.getcwd', return_value=original):
-                    with patch('os.chdir') as mock_chdir:
+                with patch('put_together_embeddings.getcwd', return_value=original):
+                    with patch('put_together_embeddings.chdir') as mock_chdir:
                         with patch.object(script, 'build_command', return_value=["cmd"]):
                             with patch.object(script, 'execute_command', return_value=0):
                                 script.run()
@@ -262,8 +262,8 @@ class TestPutTogetherEmbeddingsIntegration:
         ])
 
         with patch.object(script, 'execute_command', return_value=0) as mock_exec:
-            with patch('os.chdir'):
-                with patch('os.getcwd', return_value="/original"):
+            with patch('put_together_embeddings.chdir'):
+                with patch('put_together_embeddings.getcwd', return_value="/original"):
                     result = script.run()
 
                     assert result == 0

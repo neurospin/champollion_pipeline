@@ -51,6 +51,30 @@ class TestGenerateMorphologistGraphsArguments:
         with pytest.raises(SystemExit):
             script.parse_args(["/path/to/input"])
 
+    def test_parallel_flag_default_false(self):
+        """Test that --parallel defaults to False."""
+        script = GenerateMorphologistGraphs()
+        args = script.parse_args(["/input", "/output"])
+        assert args.parallel is False
+
+    def test_parallel_flag_can_be_set(self):
+        """Test that --parallel can be set to True."""
+        script = GenerateMorphologistGraphs()
+        args = script.parse_args(["/input", "/output", "--parallel"])
+        assert args.parallel is True
+
+    def test_enable_sulcal_recognition_default_false(self):
+        """Test that --enable-sulcal-recognition defaults to False."""
+        script = GenerateMorphologistGraphs()
+        args = script.parse_args(["/input", "/output"])
+        assert args.enable_sulcal_recognition is False
+
+    def test_enable_sulcal_recognition_can_be_set(self):
+        """Test that --enable-sulcal-recognition can be set to True."""
+        script = GenerateMorphologistGraphs()
+        args = script.parse_args(["/input", "/output", "--enable-sulcal-recognition"])
+        assert args.enable_sulcal_recognition is True
+
 
 class TestGetInputFiles:
     """Test _get_input_files method."""
@@ -147,8 +171,8 @@ class TestValidatePaths:
 class TestRunMethod:
     """Test the run method."""
 
-    @patch('os.chdir')
-    @patch('os.getcwd', return_value="/original/dir")
+    @patch('generate_morphologist_graphs.chdir')
+    @patch('generate_morphologist_graphs.getcwd', return_value="/original/dir")
     def test_run_changes_directory(self, mock_getcwd, mock_chdir, temp_dir):
         """Test that run changes to input directory."""
         script = GenerateMorphologistGraphs()
@@ -177,8 +201,8 @@ class TestRunMethod:
         with patch.object(script, 'validate_paths', return_value=True):
             with patch.object(script, '_get_input_files', return_value=test_files):
                 with patch.object(script, 'execute_command', return_value=0) as mock_exec:
-                    with patch('os.chdir'):
-                        with patch('os.getcwd', return_value="/original"):
+                    with patch('generate_morphologist_graphs.chdir'):
+                        with patch('generate_morphologist_graphs.getcwd', return_value="/original"):
                             script.run()
 
                             # Check the command
@@ -199,8 +223,8 @@ class TestRunMethod:
         with patch.object(script, 'validate_paths', return_value=True):
             with patch.object(script, '_get_input_files', return_value=["test.nii"]):
                 with patch.object(script, 'execute_command', return_value=0) as mock_exec:
-                    with patch('os.chdir'):
-                        with patch('os.getcwd', return_value="/original"):
+                    with patch('generate_morphologist_graphs.chdir'):
+                        with patch('generate_morphologist_graphs.getcwd', return_value="/original"):
                             script.run()
 
                             # Check that shell=True was passed
@@ -214,8 +238,8 @@ class TestRunMethod:
         with patch.object(script, 'validate_paths', return_value=True):
             with patch.object(script, '_get_input_files', return_value=["test.nii"]):
                 with patch.object(script, 'execute_command', return_value=42):
-                    with patch('os.chdir'):
-                        with patch('os.getcwd', return_value="/original"):
+                    with patch('generate_morphologist_graphs.chdir'):
+                        with patch('generate_morphologist_graphs.getcwd', return_value="/original"):
                             result = script.run()
                             assert result == 42
 
@@ -225,8 +249,8 @@ class TestRunMethod:
         script.parse_args([temp_dir, temp_dir])
         original_dir = "/original/dir"
 
-        with patch('os.getcwd', return_value=original_dir) as mock_getcwd:
-            with patch('os.chdir') as mock_chdir:
+        with patch('generate_morphologist_graphs.getcwd', return_value=original_dir):
+            with patch('generate_morphologist_graphs.chdir') as mock_chdir:
                 with patch.object(script, 'validate_paths', return_value=True):
                     with patch.object(script, '_get_input_files', return_value=["test.nii"]):
                         with patch.object(script, 'execute_command', return_value=0):
@@ -258,6 +282,76 @@ class TestMainFunction:
                 mock_instance.print_args.assert_called_once()
                 mock_instance.run.assert_called_once()
                 assert result == 0
+
+
+class TestCommandFlags:
+    """Test that --parallel and --enable-sulcal-recognition affect the command."""
+
+    def test_parallel_adds_swf_to_command(self, temp_dir):
+        """Test that --parallel adds --swf to the command."""
+        script = GenerateMorphologistGraphs()
+        input_dir = Path(temp_dir) / "input"
+        output_dir = Path(temp_dir) / "output"
+        input_dir.mkdir()
+        output_dir.mkdir()
+        (input_dir / "subject.nii.gz").touch()
+
+        script.parse_args([str(input_dir), str(output_dir), "--parallel"])
+
+        with patch.object(script, 'execute_command', return_value=0) as mock_exec:
+            script.run()
+            cmd = mock_exec.call_args[0][0]
+            assert "--swf" in cmd
+
+    def test_no_parallel_does_not_add_swf(self, temp_dir):
+        """Test that without --parallel, --swf is not in the command."""
+        script = GenerateMorphologistGraphs()
+        input_dir = Path(temp_dir) / "input"
+        output_dir = Path(temp_dir) / "output"
+        input_dir.mkdir()
+        output_dir.mkdir()
+        (input_dir / "subject.nii.gz").touch()
+
+        script.parse_args([str(input_dir), str(output_dir)])
+
+        with patch.object(script, 'execute_command', return_value=0) as mock_exec:
+            script.run()
+            cmd = mock_exec.call_args[0][0]
+            assert "--swf" not in cmd
+
+    def test_default_skips_sulcal_recognition(self, temp_dir):
+        """Test that without --enable-sulcal-recognition, sulci_labelling=False is in cmd."""
+        script = GenerateMorphologistGraphs()
+        input_dir = Path(temp_dir) / "input"
+        output_dir = Path(temp_dir) / "output"
+        input_dir.mkdir()
+        output_dir.mkdir()
+        (input_dir / "subject.nii.gz").touch()
+
+        script.parse_args([str(input_dir), str(output_dir)])
+
+        with patch.object(script, 'execute_command', return_value=0) as mock_exec:
+            script.run()
+            cmd = mock_exec.call_args[0][0]
+            cmd_str = " ".join(cmd) if isinstance(cmd, list) else cmd
+            assert "sulci_labelling=False" in cmd_str
+
+    def test_enable_sulcal_recognition_removes_disable_step(self, temp_dir):
+        """Test that --enable-sulcal-recognition removes the pipeline_steps disable."""
+        script = GenerateMorphologistGraphs()
+        input_dir = Path(temp_dir) / "input"
+        output_dir = Path(temp_dir) / "output"
+        input_dir.mkdir()
+        output_dir.mkdir()
+        (input_dir / "subject.nii.gz").touch()
+
+        script.parse_args([str(input_dir), str(output_dir), "--enable-sulcal-recognition"])
+
+        with patch.object(script, 'execute_command', return_value=0) as mock_exec:
+            script.run()
+            cmd = mock_exec.call_args[0][0]
+            cmd_str = " ".join(cmd) if isinstance(cmd, list) else cmd
+            assert "sulci_labelling=False" not in cmd_str
 
 
 @pytest.mark.integration
