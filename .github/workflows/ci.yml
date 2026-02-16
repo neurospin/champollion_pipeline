@@ -28,23 +28,9 @@ jobs:
         with:
           pixi-version: v0.59.0
           manifest-path: pixi.toml
+          cache: true
           auth-host: prefix.dev
           auth-token: ${{ secrets.PREFIX_DEV_TOKEN }}
-
-
-      - name: Debug Pixi environment location
-        run: |
-          echo "Listing ./.pixi/envs:"
-          ls -la ./.pixi/envs
-
-      - name: Cache Pixi environment
-        uses: actions/cache@v5
-        id: cache-pixi
-        with:
-          path: ./.pixi/envs
-          key: ${{ runner.os }}-pixi-${{ hashFiles('pixi.toml', 'pixi.lock') }}
-          restore-keys: |
-            ${{ runner.os }}-pixi-
 
       - name: Install dependencies
         run: pixi run install-all
