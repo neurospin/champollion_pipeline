@@ -28,8 +28,6 @@ jobs:
         with:
           pixi-version: v0.59.0
           manifest-path: pixi.toml
-          cache: true
-          cache-write: ${{ github.event_name == 'push' && github.ref_name == 'main' }}
           auth-host: prefix.dev
           auth-token: ${{ secrets.PREFIX_DEV_TOKEN }}
 
