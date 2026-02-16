@@ -3,6 +3,5 @@
 settings.json
 __pycache__*
 .pytest_cache
-pixi.lock
 *.prof
 .env
