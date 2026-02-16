@@ -100,6 +100,8 @@ pixi run python3 src/run_cortical_tiles.py \
 | `--sk_qc_path` | Path to QC file (optional) |
 | `--njobs` | Number of CPU cores to use (default: auto) |
 | `--region-file` | Custom sulcal region configuration file |
+| `--input-types` | Input types to generate (e.g. `skeleton foldlabel extremities`). Default: all types |
+| `--skip-distbottom` | Skip distbottom generation (unused during inference, saves time) |
 
 ### QC File Format
 
@@ -297,6 +299,53 @@ Check that 56 CSV files were created:
 ls /path/to/data/TESTXX/derivatives/champollion_V1/embeddings/*.csv | wc -l
 ```
 
+## 7. Generate Visualization Snapshots
+
+Generate visualizations of the pipeline outputs: sulcal graph meshes, cortical tiles masks, and UMAP scatter plots.
+
+### All snapshots at once
+
+```bash
+pixi run python3 src/generate_snapshots.py \
+    --morphologist_dir /path/to/data/TESTXX/derivatives/morphologist-6.0/ \
+    --cortical_tiles_dir /path/to/data/TESTXX/derivatives/cortical_tiles-2026/crops/2mm/ \
+    --embeddings_dir /path/to/data/TESTXX/derivatives/champollion_V1/embeddings/ \
+    --reference_data_dir reference_data/ \
+    --output_dir /path/to/data/TESTXX/derivatives/champollion_V1/snapshots/
+```
+
+### Single snapshot type
+
+Use `--sulcal-only`, `--tiles-only`, or `--umap-only` to generate only one type:
+
+```bash
+pixi run python3 src/generate_snapshots.py \
+    --embeddings_dir /path/to/embeddings/ \
+    --reference_data_dir reference_data/ \
+    --output_dir /path/to/snapshots/ \
+    --umap-only
+```
+
+### Options
+
+| Option | Description |
+|--------|-------------|
+| `--morphologist_dir` | Path to Morphologist output (for sulcal graph snapshots) |
+| `--cortical_tiles_dir` | Path to crops/2mm/ directory (for tiles mask snapshots) |
+| `--embeddings_dir` | Path to combined embeddings (for UMAP scatter plots) |
+| `--reference_data_dir` | Path to pre-trained UMAP models and reference coordinates |
+| `--output_dir` | Directory to save snapshot images |
+| `--sulcal-only` | Only generate sulcal graph snapshots |
+| `--tiles-only` | Only generate cortical tiles snapshots |
+| `--umap-only` | Only generate UMAP scatter plots |
+| `--width` / `--height` | Snapshot dimensions (default: 800x600) |
+
+### UMAP Visualization
+
+The UMAP scatter plot projects a new subject's collateral sulcus embedding onto a pre-trained 2D map fitted on 42,433 UKBioBank40 reference subjects. The reference appears as a blue cloud, with the new subject highlighted in red.
+
+Pre-trained UMAP artifacts are stored in `reference_data/` and contain no subject identifiers (only anonymous 2D coordinates and fitted model parameters).
+
 ## Project Structure
 
 ```
@@ -304,10 +353,12 @@ champollion_pipeline/
     external/
         champollion_V1/     # Champollion v1 submodule
         cortical_tiles/     # Cortical tiles submodule
+    reference_data/         # Pre-trained UMAP models and anonymous reference coords
     src/
         generate_champollion_config.py
         generate_embeddings.py
         generate_morphologist_graphs.py
+        generate_snapshots.py
         put_together_embeddings.py
         run_cortical_tiles.py
         train_model.py
