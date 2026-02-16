@@ -32,7 +32,7 @@ jobs:
           auth-token: ${{ secrets.PREFIX_DEV_TOKEN }}
 
       - name: Cache Pixi environment
-        uses: actions/cache@v3
+        uses: actions/cache@v5
         id: cache-pixi
         with:
           path: |
