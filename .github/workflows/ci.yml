@@ -29,6 +29,7 @@ jobs:
           pixi-version: v0.59.0
           manifest-path: pixi.toml
           cache: true
+          locked: false
           auth-host: prefix.dev
           auth-token: ${{ secrets.PREFIX_DEV_TOKEN }}
 
