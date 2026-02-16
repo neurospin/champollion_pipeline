@@ -3,11 +3,10 @@
 """
 Generate visualization snapshots for the Champollion pipeline.
 
-Creates four types of visualizations:
+Creates three types of visualizations:
 1. Sulcal graph mesh from Morphologist output
-2. Region coverage map showing which regions have embeddings
-3. Cortical tiles mask overlay (one snapshot per hemisphere)
-4. UMAP scatter plot — new subject projected onto UKB40 reference
+2. Cortical tiles mask overlay (one snapshot per hemisphere)
+3. UMAP scatter plot — new subject projected onto UKB40 reference
 
 Requires the BrainVISA/Anatomist environment (runs in headless mode).
 """
@@ -36,27 +35,6 @@ def find_sulcal_graphs(morphologist_dir):
     # Filter to get only the main sulcal graphs (L and R hemispheres)
     sulcal_graphs = [g for g in graphs if "sulci" in g.lower() or "folds" in g.lower()]
     return sulcal_graphs
-
-
-def find_embeddings(embeddings_dir):
-    """Find embedding CSV files and extract region names.
-
-    Args:
-        embeddings_dir: Path to embeddings output directory
-
-    Returns:
-        Set of region names that have embeddings
-    """
-    csv_files = glob.glob(osp.join(embeddings_dir, "*.csv"))
-    regions = set()
-    for f in csv_files:
-        # Extract region from filename like "F.C.M._left--model_embeddings.csv"
-        basename = osp.basename(f)
-        if "_embeddings.csv" in basename:
-            region_part = basename.replace("_embeddings.csv", "")
-            # Region name is before the hemisphere indicator
-            regions.add(region_part)
-    return regions
 
 
 def find_white_mesh(graph_path):
@@ -154,112 +132,6 @@ def generate_sulcal_graph_snapshot(graph_path, output_path, size=(800, 600),
     print(f"  Saved: {output_path}")
 
     return output_path
-
-
-def _parse_embedding_regions(embeddings_dir):
-    """Parse region names from embedding CSV filenames.
-
-    Filenames follow the pattern: {region}_{model}_embeddings.csv
-    e.g. FCLp-subsc-FCLa-INSULA_left_name17--43--58--232_embeddings.csv
-    The region is everything before the last _model_ part before _embeddings.csv.
-
-    Args:
-        embeddings_dir: Path to embeddings output directory
-
-    Returns:
-        Dict mapping region names to 1.0, or empty dict if none found.
-    """
-    csv_files = glob.glob(osp.join(embeddings_dir, "*_embeddings.csv"))
-    if not csv_files:
-        # Also try recursive search
-        csv_files = glob.glob(
-            osp.join(embeddings_dir, "**", "*_embeddings.csv"),
-            recursive=True
-        )
-    if not csv_files:
-        print("  No embedding files found")
-        return {}
-
-    regions = set()
-    for f in csv_files:
-        basename = osp.basename(f)
-        # Remove _embeddings.csv suffix
-        name = basename.replace("_embeddings.csv", "")
-        # The model part is the last _-separated token (e.g. name17--43--58--232)
-        # The region is everything before it
-        parts = name.rsplit("_", 1)
-        if len(parts) == 2:
-            regions.add(parts[0])
-        else:
-            regions.add(name)
-
-    print(f"  Found {len(regions)} region(s) from {len(csv_files)} CSV file(s)")
-    return {r: 1.0 for r in regions}
-
-
-def generate_coverage_map(embeddings_dir, output_path, size=(800, 600)):
-    """Generate a coverage map showing which regions have embeddings.
-
-    Tries Anatomist glassbrain first, falls back to matplotlib bar chart.
-
-    Args:
-        embeddings_dir: Path to embeddings output directory
-        output_path: Path to save the coverage map image
-        size: Tuple of (width, height)
-    """
-    coverage_data = _parse_embedding_regions(embeddings_dir)
-    if not coverage_data:
-        print("  No regions found, skipping coverage map")
-        return None
-
-    # Try glassbrain visualization first
-    try:
-        import anatomist.headless as ana
-        from deep_folding.visualization.champo_glassbrain import glassbrain
-
-        a = ana.Anatomist()
-
-        glassbrain(
-            regions_csv=coverage_data,
-            filenames=output_path,
-            sizes=[size],
-            palette="Blue-Green-Red-Yellow",
-            bounds=[0, 1],
-        )
-        print(f"  Saved glassbrain coverage map: {output_path}")
-        return output_path
-
-    except Exception as e:
-        print(f"  Glassbrain unavailable ({e}), using matplotlib fallback")
-
-    # Matplotlib fallback: produce a .png bar chart of covered regions
-    try:
-        import matplotlib
-        matplotlib.use("Agg")
-        import matplotlib.pyplot as plt
-
-        regions = sorted(coverage_data.keys())
-        fig, ax = plt.subplots(
-            figsize=(size[0] / 100, max(size[1] / 100, len(regions) * 0.35))
-        )
-        ax.barh(range(len(regions)), [1] * len(regions), color="#4CAF50")
-        ax.set_yticks(range(len(regions)))
-        ax.set_yticklabels(regions, fontsize=8)
-        ax.set_xlabel("Coverage")
-        ax.set_title(
-            f"Embedding Coverage: {len(regions)} region(s)",
-            fontsize=12
-        )
-        ax.set_xlim(0, 1.2)
-        plt.tight_layout()
-        plt.savefig(output_path, dpi=150)
-        plt.close(fig)
-        print(f"  Saved matplotlib coverage map: {output_path}")
-        return output_path
-
-    except Exception as e2:
-        print(f"  Matplotlib also failed ({e2}), skipping coverage map")
-        return None
 
 
 def generate_tiles_snapshot(crops_dir, output_path, size=(800, 600)):
@@ -504,11 +376,6 @@ def main():
         help="Only generate sulcal graph snapshots"
     )
     parser.add_argument(
-        "--coverage-only",
-        action="store_true",
-        help="Only generate coverage map"
-    )
-    parser.add_argument(
         "--tiles-only",
         action="store_true",
         help="Only generate cortical tiles snapshots"
@@ -534,12 +401,10 @@ def main():
     # --*-only flags restrict to a single type.
     only_flags = (
         args.sulcal_only,
-        args.coverage_only,
         args.tiles_only,
         args.umap_only,
     )
     run_sulcal = not any(only_flags) or args.sulcal_only
-    run_coverage = not any(only_flags) or args.coverage_only
     run_tiles = not any(only_flags) or args.tiles_only
     run_umap = not any(only_flags) or args.umap_only
 
@@ -619,31 +484,6 @@ def main():
             print(
                 f"Cortical tiles directory not found: "
                 f"{args.cortical_tiles_dir}"
-            )
-
-    # Generate coverage map
-    if run_coverage:
-        if (args.embeddings_dir
-                and osp.exists(args.embeddings_dir)):
-            print("\nGenerating region coverage map...")
-            out = osp.join(
-                args.output_dir, "coverage_map.png"
-            )
-            try:
-                result = generate_coverage_map(
-                    args.embeddings_dir, out, size
-                )
-                if result:
-                    all_snapshots.append(result)
-            except Exception as e:
-                print(
-                    f"  Error generating coverage map: "
-                    f"{e}"
-                )
-        elif args.embeddings_dir:
-            print(
-                f"Embeddings directory not found: "
-                f"{args.embeddings_dir}"
             )
 
     # Generate UMAP scatter plots
