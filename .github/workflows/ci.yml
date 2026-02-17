@@ -40,3 +40,7 @@ jobs:
 
       - name: Pytest
         run: pixi run test
+
+      - name: pip-audit (CVE scan)
+        continue-on-error: true
+        run: pixi run audit
