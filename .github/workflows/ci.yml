@@ -35,8 +35,8 @@ jobs:
       - name: Install dependencies
         run: pixi run install-all
 
-      - name: Ruff lint
-        run: pixi run lint
+      - name: Ruff lint (auto-fix)
+        run: pixi run lint-fix
 
       - name: Pytest
         run: pixi run test
