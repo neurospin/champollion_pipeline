@@ -426,7 +426,7 @@ class GenerateEmbeddings(ScriptBuilder):
          .add_flag("--verbose", "Enable verbose output.")
          .add_flag("--cpu", "Force CPU usage (disable CUDA).")
          .add_flag("--profiling", "Enable Python profiling (cProfile).")
-         .add_flag("--skip-cka", "Skip CKA coherence test after embeddings.")
+         .add_flag("--run-cka", "Run CKA coherence test after embeddings.")
          .add_flag("--no-cache", "Force re-extraction of archive (ignore cache).")
          .add_optional_argument(
             "--nb_jobs",
@@ -597,8 +597,8 @@ class GenerateEmbeddings(ScriptBuilder):
 
         result = self.execute_command(cmd, shell=False)
 
-        # Run CKA coherence test by default (skip if --skip-cka)
-        if not self.args.skip_cka:
+        # Run CKA coherence test only if explicitly requested
+        if self.args.run_cka:
             self._run_cka_test()
 
         os.chdir(local_dir)
