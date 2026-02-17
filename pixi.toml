@@ -11,6 +11,7 @@ soma-env = ">=0.0"
 libjpeg-turbo = { channel = "conda-forge", version = ">=3.0" }
 anatomist = ">=0.0.29"
 morphologist = ">=0.0.29"
+disco = ">=6.0"
 pip = ">=25.3,<26"
 setuptools = ">=65.0,<81"
 flake8 = ">=7.3.0,<8"
