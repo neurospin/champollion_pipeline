@@ -35,9 +35,8 @@ jobs:
       - name: Install dependencies
         run: pixi run install-all
 
-      - name: Flake8 (non-blocking)
-        continue-on-error: true
-        run: pixi run flake8 src/ tests/
+      - name: Ruff lint
+        run: pixi run lint
 
       - name: Pytest
         run: pixi run test
