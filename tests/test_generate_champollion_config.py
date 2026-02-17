@@ -5,9 +5,8 @@ Unit tests for generate_champollion_config.py
 """
 
 import pytest
-import os
 from pathlib import Path
-from unittest.mock import MagicMock, patch, call, mock_open
+from unittest.mock import MagicMock, patch, mock_open
 
 from generate_champollion_config import GenerateChampollionConfig
 
