@@ -29,7 +29,7 @@ _CHAMPOLLION_DIR = abspath(join(
 if _CHAMPOLLION_DIR not in sys.path:
     sys.path.insert(0, _CHAMPOLLION_DIR)
 
-from contrastive.evaluation.cka_coherence import test_models_coherence_from_directory
+from contrastive.evaluation.cka_coherence import test_models_coherence_from_directory  # noqa: E402
 
 
 class ModelFetchStrategy(ABC):

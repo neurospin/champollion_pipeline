@@ -24,6 +24,7 @@ huggingface-hub = ">=0.20.0"
 transformers = ">=4.36.0"
 datasets = ">=2.16.0"
 ruff = ">=0.9.0"
+pip-audit = ">=2.7.0"
 
 [tasks]
 # Initialize submodules
@@ -96,6 +97,7 @@ uninstall-all = """
 lint = "ruff check src/ tests/"
 lint-fix = "ruff check --fix src/ tests/"
 format = "ruff format src/ tests/"
+audit = "pip-audit"
 
 # Testing tasks
 test = "pytest tests/ -v"
