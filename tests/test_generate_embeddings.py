@@ -71,7 +71,7 @@ class TestGenerateEmbeddingsArguments:
         assert args.verbose is False
         assert args.cpu is False
         assert args.profiling is False
-        assert args.skip_cka is False
+        assert args.run_cka is False
         assert args.no_cache is False
 
     def test_flags_can_be_set(self):
@@ -85,7 +85,7 @@ class TestGenerateEmbeddingsArguments:
             "--verbose",
             "--cpu",
             "--profiling",
-            "--skip-cka",
+            "--run-cka",
             "--no-cache"
         ])
         assert args.overwrite is True
@@ -94,7 +94,7 @@ class TestGenerateEmbeddingsArguments:
         assert args.verbose is True
         assert args.cpu is True
         assert args.profiling is True
-        assert args.skip_cka is True
+        assert args.run_cka is True
         assert args.no_cache is True
 
     def test_nb_jobs_default_none(self):
