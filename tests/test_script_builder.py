@@ -6,8 +6,7 @@ Unit tests for the ScriptBuilder base class.
 
 import pytest
 import sys
-import os
-from unittest.mock import MagicMock, patch, call
+from unittest.mock import MagicMock, patch
 from pathlib import Path
 
 from champollion_utils.script_builder import ScriptBuilder

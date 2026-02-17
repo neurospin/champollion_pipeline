@@ -5,7 +5,6 @@ Unit tests for put_together_embeddings.py
 """
 
 import pytest
-import os
 from pathlib import Path
 from unittest.mock import MagicMock, patch, call
 

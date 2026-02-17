@@ -5,7 +5,6 @@ Unit tests for generate_morphologist_graphs.py
 """
 
 import pytest
-import os
 from pathlib import Path
 from unittest.mock import MagicMock, patch, call
 

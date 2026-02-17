@@ -6,7 +6,6 @@ Unit tests for run_cortical_tiles.py
 
 import json
 import pytest
-import os
 from pathlib import Path
 from unittest.mock import MagicMock, patch, call
 
