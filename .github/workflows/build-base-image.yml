@@ -31,10 +31,20 @@ jobs:
           username: ${{ secrets.DOCKERHUB_USERNAME }}
           password: ${{ secrets.DOCKERHUB_TOKEN }}
 
+      - name: Log in to GitHub Container Registry
+        uses: docker/login-action@v3
+        with:
+          registry: ghcr.io
+          username: ${{ github.actor }}
+          password: ${{ secrets.GITHUB_TOKEN }}
+
       - name: Build and push base image
         uses: docker/build-push-action@v6
         with:
           context: .
           file: .github/Dockerfile.base
           push: true
-          tags: bdrabczuk/neurospin:champollion-base
+          tags: |
+            bdrabczuk/champollion-base:latest
+            ghcr.io/bdrabczuk/champollion-base:latest
+
