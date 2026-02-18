@@ -48,11 +48,9 @@ class RunCorticalTiles(ScriptBuilder):
         # Convert input to absolute path
         input_abs = abspath(self.args.input)
 
-        # Copy pipeline config template next to the input directory
-        parent_dir = dirname(input_abs)
-        config_file_path: str = join(
-            parent_dir, "pipeline_loop_2mm.json"
-        )
+        # Copy pipeline config template inside the input directory
+        # (generate_sulcal_regions.py always looks for it at {path_dataset}/pipeline_loop_2mm.json)
+        config_file_path: str = join(input_abs, "pipeline_loop_2mm.json")
         if not self.validate_paths([config_file_path]):
             source_config = abspath(join(
                 dirname(__file__), '..', 'pipeline_loop_2mm.json'
