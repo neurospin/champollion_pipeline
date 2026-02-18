@@ -321,18 +321,14 @@ class TestSkipDistbottom:
 
     def test_skip_distbottom_modifies_config(self, temp_dir):
         """Test that --skip-distbottom sets skip_distbottom in pipeline JSON."""
-        # Create input as a subdirectory (subjects dir)
-        subjects_dir = Path(temp_dir) / "subjects"
-        subjects_dir.mkdir()
-
-        # Config goes in parent of input (temp_dir)
+        # Config lives inside the input directory
         config_data = {"graphs_dir": "", "other_key": "value"}
         config_path = Path(temp_dir) / "pipeline_loop_2mm.json"
         config_path.write_text(json.dumps(config_data))
 
         script = RunCorticalTiles()
         script.parse_args([
-            str(subjects_dir), temp_dir,
+            temp_dir, temp_dir,
             "--path_to_graph", "graphs",
             "--path_sk_with_hull", "skeleton",
             "--skip-distbottom"
@@ -350,17 +346,13 @@ class TestSkipDistbottom:
 
     def test_no_skip_distbottom_does_not_modify_config(self, temp_dir):
         """Test that without --skip-distbottom, config is unchanged for that key."""
-        # Create input as a subdirectory (subjects dir)
-        subjects_dir = Path(temp_dir) / "subjects"
-        subjects_dir.mkdir()
-
         config_data = {"graphs_dir": "", "other_key": "value"}
         config_path = Path(temp_dir) / "pipeline_loop_2mm.json"
         config_path.write_text(json.dumps(config_data))
 
         script = RunCorticalTiles()
         script.parse_args([
-            str(subjects_dir), temp_dir,
+            temp_dir, temp_dir,
             "--path_to_graph", "graphs",
             "--path_sk_with_hull", "skeleton",
         ])
@@ -376,16 +368,13 @@ class TestSkipDistbottom:
 
     def test_graphs_dir_set_to_input(self, temp_dir):
         """Test that graphs_dir in config is set to input path."""
-        subjects_dir = Path(temp_dir) / "subjects"
-        subjects_dir.mkdir()
-
         config_data = {"graphs_dir": "$local", "other_key": "value"}
         config_path = Path(temp_dir) / "pipeline_loop_2mm.json"
         config_path.write_text(json.dumps(config_data))
 
         script = RunCorticalTiles()
         script.parse_args([
-            str(subjects_dir), temp_dir,
+            temp_dir, temp_dir,
             "--path_to_graph", "graphs",
             "--path_sk_with_hull", "skeleton",
         ])
@@ -398,7 +387,7 @@ class TestSkipDistbottom:
 
                         updated = json.loads(config_path.read_text())
                         assert updated['graphs_dir'] == str(
-                            subjects_dir.resolve()
+                            Path(temp_dir).resolve()
                         )
 
 
