@@ -87,10 +87,16 @@ Use cortical_tiles to extract sulcal regions from Morphologist's graphs:
 
 ```bash
 pixi run python3 src/run_cortical_tiles.py \
-    /path/to/data/TESTXX/ \
+    /path/to/data/TESTXX/derivatives/morphologist-6.0/subjects \
     /path/to/data/TESTXX/derivatives/ \
     --path_to_graph "t1mri/default_acquisition/default_analysis/folds/3.1" \
     --path_sk_with_hull "t1mri/default_acquisition/default_analysis/segmentation"
+```
+
+The `input` argument is the directory containing subject folders (e.g., morphologist's output subjects directory). The `--path_to_graph` supports wildcards (`*`) for variable path segments, e.g.:
+
+```bash
+--path_to_graph "t1mri/default_acquisition/*/folds/3.1"
 ```
 
 ### Options
@@ -163,8 +169,10 @@ pixi run python3 src/generate_embeddings.py \
     <datasets_root> \
     <short_name> \
     --embeddings_only \
-    --config_path /path/to/data/TESTXX/derivatives/champollion_V1/configs/
+    --config_path /path/to/data/TESTXX/derivatives/champollion_V1/configs/dataset
 ```
+
+To re-run on an existing dataset, add `--overwrite` to replace previously generated embeddings.
 
 | Positional Argument | Description |
 |---------------------|-------------|
@@ -196,8 +204,7 @@ pixi run python3 src/generate_embeddings.py \
     TESTXX \
     my_run \
     --embeddings_only \
-    --skip-cka \
-    --config_path /path/to/data/TESTXX/derivatives/champollion_V1/configs/
+    --config_path /path/to/data/TESTXX/derivatives/champollion_V1/configs/dataset
 ```
 
 Reuse previously cached models with CPU-only mode:
@@ -210,7 +217,7 @@ pixi run python3 src/generate_embeddings.py \
     my_run \
     --embeddings_only \
     --cpu \
-    --config_path /path/to/data/TESTXX/derivatives/champollion_V1/configs/
+    --config_path /path/to/data/TESTXX/derivatives/champollion_V1/configs/dataset
 ```
 
 Generate embeddings and train classifiers (requires a `subject_labels_file` in the dataset configs):
@@ -221,7 +228,7 @@ pixi run python3 src/generate_embeddings.py \
     local \
     TESTXX \
     my_run \
-    --config_path /path/to/data/TESTXX/derivatives/champollion_V1/configs/
+    --config_path /path/to/data/TESTXX/derivatives/champollion_V1/configs/dataset
 ```
 
 ### Options
@@ -232,7 +239,7 @@ pixi run python3 src/generate_embeddings.py \
 | `--embeddings_only` | Only compute embeddings (skip classifier training) |
 | `--cpu` | Force CPU usage (disable CUDA) |
 | `--overwrite` | Overwrite existing embeddings |
-| `--skip-cka` | Skip CKA coherence test after embeddings |
+| `--run-cka` | Run CKA coherence test after embeddings |
 | `--no-cache` | Force re-extraction of archive (ignore cache) |
 | `--split` | Splitting strategy: `random` or `custom` (default: `random`) |
 | `--use_best_model` | Use the best model saved during training |

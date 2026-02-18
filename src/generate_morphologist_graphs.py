@@ -33,7 +33,8 @@ class GenerateMorphologistGraphs(ScriptBuilder):
         LIST_OF_EXTENSIONS = [".nii.gz", ".nii", ".gz"]
 
         input_files = [
-            f for f in listdir(self.args.input)
+            f.strip('"').strip("'")
+            for f in listdir(self.args.input)
             if isfile(join(self.args.input, f))
             and splitext(basename(f))[1] in LIST_OF_EXTENSIONS
         ]

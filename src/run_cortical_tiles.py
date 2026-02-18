@@ -6,8 +6,6 @@ Script to generate sulcal regions with cortical_tiles from Morphologist's graphs
 
 import sys
 import json
-import re
-from glob import glob
 from os import getcwd, chdir
 from os.path import abspath, dirname, join, exists
 from joblib import cpu_count
@@ -24,7 +22,8 @@ class RunCorticalTiles(ScriptBuilder):
             description="Generating sulcal regions with cortical_tiles from Morphologist's graphs."
         )
         # Configure arguments using method chaining
-        (self.add_argument("input", help="Absolute path to Morphologist's graphs.")
+        (self.add_argument("input", help="Absolute path to the directory containing subject folders "
+                                        "(e.g., morphologist's output subjects directory).")
          .add_argument("output", help="Absolute path to the generated sulcal regions from cortical_tiles.")
          .add_optional_argument("--region-file", "Absolute path to the user's sulcal region's configuration file.")
          .add_required_argument("--path_to_graph", "Contains the sub-path that, for each subject, permits getting the sulcal graphs.")
@@ -49,46 +48,27 @@ class RunCorticalTiles(ScriptBuilder):
         # Convert input to absolute path
         input_abs = abspath(self.args.input)
 
-        # If not exist in the current dataset copy config file
-        config_file_path: str = join(input_abs, "pipeline_loop_2mm.json")
+        # Copy pipeline config template next to the input directory
+        parent_dir = dirname(input_abs)
+        config_file_path: str = join(
+            parent_dir, "pipeline_loop_2mm.json"
+        )
         if not self.validate_paths([config_file_path]):
-            source_config = abspath(join(dirname(__file__), '..', 'pipeline_loop_2mm.json'))
-            self.execute_command(["cp", source_config, config_file_path], shell=False)
+            source_config = abspath(join(
+                dirname(__file__), '..', 'pipeline_loop_2mm.json'
+            ))
+            self.execute_command(
+                ["cp", source_config, config_file_path],
+                shell=False
+            )
 
-        # Fix graphs_dir in pipeline_loop_2mm.json
-        # The config expects graphs_dir to point to where the morphologist subjects are located
-        # This is typically input_path/derivatives/morphologist-X.Y
+        # Set graphs_dir to the input path (the subjects directory)
         if exists(config_file_path):
             with open(config_file_path, 'r') as f:
                 config = json.load(f)
-
-            graphs_dir = config.get('graphs_dir', '')
-
-            # Check if graphs_dir points to morphologist directory
-            # Pattern matches /morphologist-X.Y where X.Y is version number
-            morphologist_pattern = r'/morphologist-\d+\.\d+$'
-
-            # If graphs_dir doesn't end with morphologist-X.Y, find it
-            if not re.search(morphologist_pattern, graphs_dir):
-                # Look for morphologist directory
-                morpho_path = join(input_abs, 'derivatives', 'morphologist-*')
-                morphologist_dirs = glob(morpho_path)
-
-                if morphologist_dirs:
-                    # Use the first morphologist directory found
-                    morphologist_path = morphologist_dirs[0]
-                    config['graphs_dir'] = morphologist_path
-
-                    # Write back the corrected config
-                    with open(config_file_path, 'w') as f:
-                        json.dump(config, f, indent=3)
-
-                    print(f"run_cortical_tiles.py: Corrected graphs_dir "
-                          f"from {graphs_dir} to {morphologist_path}")
-                else:
-                    print(f"run_cortical_tiles.py: Warning - "
-                          f"no morphologist directory found in "
-                          f"{input_abs}/derivatives/")
+            config['graphs_dir'] = input_abs
+            with open(config_file_path, 'w') as f:
+                json.dump(config, f, indent=3)
 
         # Set skip_distbottom in pipeline JSON if requested
         if self.args.skip_distbottom and exists(config_file_path):

@@ -321,14 +321,18 @@ class TestSkipDistbottom:
 
     def test_skip_distbottom_modifies_config(self, temp_dir):
         """Test that --skip-distbottom sets skip_distbottom in pipeline JSON."""
-        # Create a pipeline config file
-        config_data = {"graphs_dir": "/some/morphologist-6.0", "other_key": "value"}
+        # Create input as a subdirectory (subjects dir)
+        subjects_dir = Path(temp_dir) / "subjects"
+        subjects_dir.mkdir()
+
+        # Config goes in parent of input (temp_dir)
+        config_data = {"graphs_dir": "", "other_key": "value"}
         config_path = Path(temp_dir) / "pipeline_loop_2mm.json"
         config_path.write_text(json.dumps(config_data))
 
         script = RunCorticalTiles()
         script.parse_args([
-            temp_dir, temp_dir,
+            str(subjects_dir), temp_dir,
             "--path_to_graph", "graphs",
             "--path_sk_with_hull", "skeleton",
             "--skip-distbottom"
@@ -346,13 +350,17 @@ class TestSkipDistbottom:
 
     def test_no_skip_distbottom_does_not_modify_config(self, temp_dir):
         """Test that without --skip-distbottom, config is unchanged for that key."""
-        config_data = {"graphs_dir": "/some/morphologist-6.0", "other_key": "value"}
+        # Create input as a subdirectory (subjects dir)
+        subjects_dir = Path(temp_dir) / "subjects"
+        subjects_dir.mkdir()
+
+        config_data = {"graphs_dir": "", "other_key": "value"}
         config_path = Path(temp_dir) / "pipeline_loop_2mm.json"
         config_path.write_text(json.dumps(config_data))
 
         script = RunCorticalTiles()
         script.parse_args([
-            temp_dir, temp_dir,
+            str(subjects_dir), temp_dir,
             "--path_to_graph", "graphs",
             "--path_sk_with_hull", "skeleton",
         ])
@@ -365,6 +373,33 @@ class TestSkipDistbottom:
 
                         updated_config = json.loads(config_path.read_text())
                         assert 'skip_distbottom' not in updated_config
+
+    def test_graphs_dir_set_to_input(self, temp_dir):
+        """Test that graphs_dir in config is set to input path."""
+        subjects_dir = Path(temp_dir) / "subjects"
+        subjects_dir.mkdir()
+
+        config_data = {"graphs_dir": "$local", "other_key": "value"}
+        config_path = Path(temp_dir) / "pipeline_loop_2mm.json"
+        config_path.write_text(json.dumps(config_data))
+
+        script = RunCorticalTiles()
+        script.parse_args([
+            str(subjects_dir), temp_dir,
+            "--path_to_graph", "graphs",
+            "--path_sk_with_hull", "skeleton",
+        ])
+
+        with patch.object(script, 'validate_paths', return_value=True):
+            with patch.object(script, 'execute_command', return_value=0):
+                with patch('run_cortical_tiles.chdir'):
+                    with patch('run_cortical_tiles.getcwd', return_value="/original"):
+                        script.run()
+
+                        updated = json.loads(config_path.read_text())
+                        assert updated['graphs_dir'] == str(
+                            subjects_dir.resolve()
+                        )
 
 
 class TestRunMethod:
