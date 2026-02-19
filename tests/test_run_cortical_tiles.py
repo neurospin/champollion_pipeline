@@ -390,6 +390,33 @@ class TestSkipDistbottom:
                             Path(temp_dir).resolve()
                         )
 
+    def test_output_dir_set_from_output_arg(self, temp_dir):
+        """Test that output_dir in config is set to output/DERIVATIVES_FOLDER."""
+        from utils.lib import DERIVATIVES_FOLDER
+        config_data = {"graphs_dir": "$local", "output_dir": "$local"}
+        config_path = Path(temp_dir) / "pipeline_loop_2mm.json"
+        config_path.write_text(json.dumps(config_data))
+
+        output_dir = Path(temp_dir) / "derivatives"
+        output_dir.mkdir()
+
+        script = RunCorticalTiles()
+        script.parse_args([
+            temp_dir, str(output_dir),
+            "--path_to_graph", "graphs",
+            "--path_sk_with_hull", "skeleton",
+        ])
+
+        with patch.object(script, 'validate_paths', return_value=True):
+            with patch.object(script, 'execute_command', return_value=0):
+                with patch('run_cortical_tiles.chdir'):
+                    with patch('run_cortical_tiles.getcwd', return_value="/original"):
+                        script.run()
+
+                        updated = json.loads(config_path.read_text())
+                        expected = str(output_dir.resolve() / DERIVATIVES_FOLDER)
+                        assert updated['output_dir'] == expected
+
 
 class TestRunMethod:
     """Test the run method."""

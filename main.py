@@ -322,10 +322,8 @@ class RunCorticalTilesStage(PipelineStage):
             )
 
             # Build arguments from config
-            # Note: run_cortical_tiles expects data root path (not morphologist path)
-            # It will find morphologist graphs in input_path/derivatives/morphologist-*
             args = [
-                str(self.config.dataset.input_path),
+                str(self.config.dataset.morphologist_graphs),
                 str(self.config.dataset.cortical_tiles_output),
                 f"--path_to_graph={self.config.dataset.path_to_graph}",
                 f"--path_sk_with_hull={self.config.dataset.path_sk_with_hull}",
