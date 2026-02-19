@@ -11,6 +11,7 @@ from os.path import abspath, dirname, join, exists
 from joblib import cpu_count
 
 from champollion_utils.script_builder import ScriptBuilder
+from utils.lib import DERIVATIVES_FOLDER
 
 
 class RunCorticalTiles(ScriptBuilder):
@@ -60,11 +61,17 @@ class RunCorticalTiles(ScriptBuilder):
                 shell=False
             )
 
-        # Set graphs_dir to the input path (the subjects directory)
+        # Set graphs_dir and output_dir in the pipeline JSON config.
+        # generate_sulcal_regions.py derives both from path_dataset (-d arg)
+        # when they are "$local". Since -d is now the subjects dir (not the
+        # dataset root), we set them explicitly so outputs land in the right place.
         if exists(config_file_path):
             with open(config_file_path, 'r') as f:
                 config = json.load(f)
             config['graphs_dir'] = input_abs
+            config['output_dir'] = join(
+                abspath(self.args.output), DERIVATIVES_FOLDER
+            )
             with open(config_file_path, 'w') as f:
                 json.dump(config, f, indent=3)
 
