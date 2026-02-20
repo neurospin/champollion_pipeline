@@ -106,7 +106,10 @@ pixi run python3 src/run_cortical_tiles.py \
     --path_sk_with_hull "t1mri/default_acquisition/default_analysis/segmentation"
 ```
 
-The `input` argument is the directory containing subject folders (e.g., morphologist's output subjects directory). The `--path_to_graph` supports wildcards (`*`) for variable path segments, e.g.:
+- **`input`** — directory containing one folder per subject (e.g., morphologist's `subjects/` output). This path may be read-only (e.g., an NFS database): the script never writes to it.
+- **`output`** — derivatives parent directory. The script writes `pipeline_loop_2mm.json` here and produces sulcal region crops at `{output}/cortical_tiles-2026/crops/2mm/`.
+
+The `--path_to_graph` supports wildcards (`*`) for variable path segments, e.g.:
 
 ```bash
 --path_to_graph "t1mri/default_acquisition/*/folds/3.1"
