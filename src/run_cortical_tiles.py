@@ -49,9 +49,11 @@ class RunCorticalTiles(ScriptBuilder):
         # Convert input to absolute path
         input_abs = abspath(self.args.input)
 
-        # Copy pipeline config template inside the input directory
-        # (generate_sulcal_regions.py always looks for it at {path_dataset}/pipeline_loop_2mm.json)
-        config_file_path: str = join(input_abs, "pipeline_loop_2mm.json")
+        # Copy pipeline config template into the output (derivatives) directory.
+        # generate_sulcal_regions.py reads it from {path_dataset}/pipeline_loop_2mm.json,
+        # and we pass output as -d so the config is never inside the subjects directory
+        # (which would cause generate_skeletons.py to list it as a subject).
+        config_file_path: str = join(abspath(self.args.output), "pipeline_loop_2mm.json")
         if not self.validate_paths([config_file_path]):
             source_config = abspath(join(
                 dirname(__file__), '..', 'pipeline_loop_2mm.json'
@@ -104,7 +106,7 @@ class RunCorticalTiles(ScriptBuilder):
         cmd = [
             sys.executable,
             script_path,
-            "-d", input_abs,
+            "-d", abspath(self.args.output),
             "--path_to_graph", self.args.path_to_graph,
             "--path_sk_with_hull", self.args.path_sk_with_hull,
             "--njobs", str(self.args.njobs)
