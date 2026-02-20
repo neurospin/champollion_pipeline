@@ -20,6 +20,10 @@ This pipeline generates Champollion embeddings from T1 MRI images. It processes 
 
 ### Setup
 
+If pixi is not setup in your environment yet, please follow the official instruction on:
+
+https://pixi.prefix.dev/latest/installation/
+
 Clone the repository and set up the environment:
 
 ```bash
