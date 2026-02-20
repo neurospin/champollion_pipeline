@@ -393,12 +393,14 @@ class TestSkipDistbottom:
     def test_output_dir_set_from_output_arg(self, temp_dir):
         """Test that output_dir in config is set to output/DERIVATIVES_FOLDER."""
         from utils.lib import DERIVATIVES_FOLDER
-        config_data = {"graphs_dir": "$local", "output_dir": "$local"}
-        config_path = Path(temp_dir) / "pipeline_loop_2mm.json"
-        config_path.write_text(json.dumps(config_data))
 
         output_dir = Path(temp_dir) / "derivatives"
         output_dir.mkdir()
+
+        # Config is placed inside the output (derivatives) directory, not the subjects dir
+        config_data = {"graphs_dir": "$local", "output_dir": "$local"}
+        config_path = output_dir / "pipeline_loop_2mm.json"
+        config_path.write_text(json.dumps(config_data))
 
         script = RunCorticalTiles()
         script.parse_args([
