@@ -22,6 +22,14 @@ WORKDIR ${HOME}/app
 
 # Copy pipeline from build context (reflects local changes; submodules in external/)
 COPY --chown=user:user . champollion_pipeline/
+# cortical_tiles/logs.py uses gitpython to record the repo HEAD commit SHA.
+# The submodule .git pointer is broken without the parent .git/modules/ tree.
+# Replace it with a minimal stub git repo so gitpython finds a valid HEAD.
+RUN rm -f champollion_pipeline/external/cortical_tiles/.git \
+    && git -C champollion_pipeline/external/cortical_tiles init \
+    && git -C champollion_pipeline/external/cortical_tiles \
+       -c user.email="build@docker" -c user.name="Docker" \
+       commit --allow-empty -m "Docker build snapshot"
 # Clone champollion_utils (separate external repository)
 RUN git clone --depth 1 -b master https://github.com/neurospin/champollion_utils.git
 
