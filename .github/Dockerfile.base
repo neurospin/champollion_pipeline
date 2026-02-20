@@ -20,10 +20,9 @@ RUN curl -fsSL https://pixi.sh/install.sh | bash
 
 WORKDIR ${HOME}/app
 
-# Clone pipeline & utils
-RUN git clone --depth 1 https://github.com/neurospin/champollion_pipeline.git && \
-    cd champollion_pipeline && \
-    git submodule update --init --recursive
+# Copy pipeline from build context (reflects local changes; submodules in external/)
+COPY --chown=user:user . champollion_pipeline/
+# Clone champollion_utils (separate external repository)
 RUN git clone --depth 1 -b master https://github.com/neurospin/champollion_utils.git
 
 # Pipeline environment (pixi + BrainVISA)

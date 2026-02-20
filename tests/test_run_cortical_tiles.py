@@ -209,6 +209,42 @@ class TestNjobsHandling:
                         )
                         assert warning_printed
 
+    @patch('run_cortical_tiles.cpu_count', return_value=1)
+    def test_njobs_minimum_one_with_cpu_count_one(self, mock_cpu):
+        """njobs is at least 1 even on a single-core machine (cpu_count=1)."""
+        script = RunCorticalTiles()
+        script.parse_args([
+            "/input", "/output",
+            "--path_to_graph", "graphs",
+            "--path_sk_with_hull", "skeleton"
+        ])
+
+        with patch.object(script, 'validate_paths', return_value=True):
+            with patch.object(script, 'execute_command', return_value=0):
+                with patch('run_cortical_tiles.chdir'):
+                    with patch('run_cortical_tiles.getcwd', return_value="/original"):
+                        script.run()
+                        # max(1, min(22, 1 - 2)) = max(1, -1) = 1
+                        assert script.args.njobs == 1
+
+    @patch('run_cortical_tiles.cpu_count', return_value=2)
+    def test_njobs_minimum_one_with_cpu_count_two(self, mock_cpu):
+        """njobs is at least 1 on a dual-core machine (cpu_count=2)."""
+        script = RunCorticalTiles()
+        script.parse_args([
+            "/input", "/output",
+            "--path_to_graph", "graphs",
+            "--path_sk_with_hull", "skeleton"
+        ])
+
+        with patch.object(script, 'validate_paths', return_value=True):
+            with patch.object(script, 'execute_command', return_value=0):
+                with patch('run_cortical_tiles.chdir'):
+                    with patch('run_cortical_tiles.getcwd', return_value="/original"):
+                        script.run()
+                        # max(1, min(22, 2 - 2)) = max(1, 0) = 1
+                        assert script.args.njobs == 1
+
 
 class TestValidatePaths:
     """Test path validation."""
@@ -321,14 +357,17 @@ class TestSkipDistbottom:
 
     def test_skip_distbottom_modifies_config(self, temp_dir):
         """Test that --skip-distbottom sets skip_distbottom in pipeline JSON."""
-        # Config lives inside the input directory
+        input_dir = Path(temp_dir) / "input"
+        output_dir = Path(temp_dir) / "output"
+        input_dir.mkdir()
+        output_dir.mkdir()
         config_data = {"graphs_dir": "", "other_key": "value"}
-        config_path = Path(temp_dir) / "pipeline_loop_2mm.json"
+        config_path = output_dir / "pipeline_loop_2mm.json"
         config_path.write_text(json.dumps(config_data))
 
         script = RunCorticalTiles()
         script.parse_args([
-            temp_dir, temp_dir,
+            str(input_dir), str(output_dir),
             "--path_to_graph", "graphs",
             "--path_sk_with_hull", "skeleton",
             "--skip-distbottom"
@@ -346,13 +385,17 @@ class TestSkipDistbottom:
 
     def test_no_skip_distbottom_does_not_modify_config(self, temp_dir):
         """Test that without --skip-distbottom, config is unchanged for that key."""
+        input_dir = Path(temp_dir) / "input"
+        output_dir = Path(temp_dir) / "output"
+        input_dir.mkdir()
+        output_dir.mkdir()
         config_data = {"graphs_dir": "", "other_key": "value"}
-        config_path = Path(temp_dir) / "pipeline_loop_2mm.json"
+        config_path = output_dir / "pipeline_loop_2mm.json"
         config_path.write_text(json.dumps(config_data))
 
         script = RunCorticalTiles()
         script.parse_args([
-            temp_dir, temp_dir,
+            str(input_dir), str(output_dir),
             "--path_to_graph", "graphs",
             "--path_sk_with_hull", "skeleton",
         ])
@@ -368,13 +411,17 @@ class TestSkipDistbottom:
 
     def test_graphs_dir_set_to_input(self, temp_dir):
         """Test that graphs_dir in config is set to input path."""
+        input_dir = Path(temp_dir) / "input"
+        output_dir = Path(temp_dir) / "output"
+        input_dir.mkdir()
+        output_dir.mkdir()
         config_data = {"graphs_dir": "$local", "other_key": "value"}
-        config_path = Path(temp_dir) / "pipeline_loop_2mm.json"
+        config_path = output_dir / "pipeline_loop_2mm.json"
         config_path.write_text(json.dumps(config_data))
 
         script = RunCorticalTiles()
         script.parse_args([
-            temp_dir, temp_dir,
+            str(input_dir), str(output_dir),
             "--path_to_graph", "graphs",
             "--path_sk_with_hull", "skeleton",
         ])
@@ -386,9 +433,7 @@ class TestSkipDistbottom:
                         script.run()
 
                         updated = json.loads(config_path.read_text())
-                        assert updated['graphs_dir'] == str(
-                            Path(temp_dir).resolve()
-                        )
+                        assert updated['graphs_dir'] == str(input_dir.resolve())
 
     def test_output_dir_set_from_output_arg(self, temp_dir):
         """Test that output_dir in config is set to output/DERIVATIVES_FOLDER."""
@@ -418,6 +463,263 @@ class TestSkipDistbottom:
                         updated = json.loads(config_path.read_text())
                         expected = str(output_dir.resolve() / DERIVATIVES_FOLDER)
                         assert updated['output_dir'] == expected
+
+    def test_existing_skip_distbottom_preserved_when_flag_not_passed(self, temp_dir):
+        """Existing skip_distbottom=True in config persists when flag is not passed."""
+        input_dir = Path(temp_dir) / "input"
+        output_dir = Path(temp_dir) / "output"
+        input_dir.mkdir()
+        output_dir.mkdir()
+        config_data = {"graphs_dir": "", "output_dir": "", "skip_distbottom": True}
+        config_path = output_dir / "pipeline_loop_2mm.json"
+        config_path.write_text(json.dumps(config_data))
+
+        script = RunCorticalTiles()
+        script.parse_args([
+            str(input_dir), str(output_dir),
+            "--path_to_graph", "graphs",
+            "--path_sk_with_hull", "skeleton",
+        ])
+
+        with patch.object(script, 'validate_paths', return_value=True):
+            with patch.object(script, 'execute_command', return_value=0):
+                with patch('run_cortical_tiles.chdir'):
+                    with patch('run_cortical_tiles.getcwd', return_value="/original"):
+                        script.run()
+
+                        updated = json.loads(config_path.read_text())
+                        # Key is preserved from original config
+                        assert updated.get('skip_distbottom') is True
+
+    def test_config_with_null_values_overwritten_correctly(self, temp_dir):
+        """JSON null (None) for graphs_dir/output_dir is overwritten with correct paths."""
+        from utils.lib import DERIVATIVES_FOLDER as DF
+        input_dir = Path(temp_dir) / "input"
+        output_dir = Path(temp_dir) / "output"
+        input_dir.mkdir()
+        output_dir.mkdir()
+        config_data = {"graphs_dir": None, "output_dir": None}
+        config_path = output_dir / "pipeline_loop_2mm.json"
+        config_path.write_text(json.dumps(config_data))
+
+        script = RunCorticalTiles()
+        script.parse_args([
+            str(input_dir), str(output_dir),
+            "--path_to_graph", "graphs",
+            "--path_sk_with_hull", "skeleton",
+        ])
+
+        with patch.object(script, 'validate_paths', return_value=True):
+            with patch.object(script, 'execute_command', return_value=0):
+                with patch('run_cortical_tiles.chdir'):
+                    with patch('run_cortical_tiles.getcwd', return_value="/original"):
+                        script.run()
+
+                        updated = json.loads(config_path.read_text())
+                        assert updated['graphs_dir'] == str(input_dir.resolve())
+                        assert updated['output_dir'] == str(output_dir.resolve() / DF)
+
+
+class TestConfigLocationInvariants:
+    """Tests that config is always written to output dir, never to input dir."""
+
+    def test_config_copied_to_output_not_input(self, temp_dir):
+        """pipeline_loop_2mm.json is copied to output dir, never to input dir."""
+        input_dir = Path(temp_dir) / "input"
+        output_dir = Path(temp_dir) / "output"
+        input_dir.mkdir()
+        output_dir.mkdir()
+        # No pre-existing config: forces the cp branch
+
+        script = RunCorticalTiles()
+        script.parse_args([
+            str(input_dir), str(output_dir),
+            "--path_to_graph", "graphs",
+            "--path_sk_with_hull", "skeleton",
+        ])
+
+        # First validate_paths call (input/output) returns True;
+        # second call (config file check) returns False → triggers cp branch.
+        with patch.object(script, 'validate_paths', side_effect=[True, False]):
+            with patch.object(script, 'execute_command', return_value=0) as mock_exec:
+                with patch('run_cortical_tiles.chdir'):
+                    with patch('run_cortical_tiles.getcwd', return_value="/original"):
+                        script.run()
+
+                        cp_cmd = mock_exec.call_args_list[0][0][0]
+                        assert cp_cmd[0] == "cp"
+                        expected = str(output_dir.resolve() / "pipeline_loop_2mm.json")
+                        assert cp_cmd[-1] == expected
+                        assert str(input_dir.resolve()) not in cp_cmd[-1]
+
+    def test_d_arg_points_to_output_not_input(self, temp_dir):
+        """-d in the generate_sulcal_regions command is output dir, not input dir."""
+        input_dir = Path(temp_dir) / "input"
+        output_dir = Path(temp_dir) / "output"
+        input_dir.mkdir()
+        output_dir.mkdir()
+        config_path = output_dir / "pipeline_loop_2mm.json"
+        config_path.write_text(json.dumps({"graphs_dir": "", "output_dir": ""}))
+
+        script = RunCorticalTiles()
+        script.parse_args([
+            str(input_dir), str(output_dir),
+            "--path_to_graph", "graphs",
+            "--path_sk_with_hull", "skeleton",
+        ])
+
+        with patch.object(script, 'validate_paths', return_value=True):
+            with patch.object(script, 'execute_command', return_value=0) as mock_exec:
+                with patch('run_cortical_tiles.chdir'):
+                    with patch('run_cortical_tiles.getcwd', return_value="/original"):
+                        script.run()
+
+                        final_cmd = mock_exec.call_args_list[-1][0][0]
+                        d_idx = final_cmd.index("-d")
+                        assert final_cmd[d_idx + 1] == str(output_dir.resolve())
+                        assert final_cmd[d_idx + 1] != str(input_dir.resolve())
+
+
+class TestHypothesisConfigInvariants:
+    """Property-based tests: config fields always written correctly for any input."""
+
+    def _run_in_temp(self, config_data):
+        """Create fresh input/output dirs, write config in output, run script."""
+        import tempfile
+        import shutil
+        tmp = tempfile.mkdtemp()
+        try:
+            input_dir = Path(tmp) / "input"
+            output_dir = Path(tmp) / "output"
+            input_dir.mkdir()
+            output_dir.mkdir()
+            config_path = output_dir / "pipeline_loop_2mm.json"
+            config_path.write_text(json.dumps(config_data))
+            script = RunCorticalTiles()
+            script.parse_args([
+                str(input_dir), str(output_dir),
+                "--path_to_graph", "g",
+                "--path_sk_with_hull", "s",
+            ])
+            with patch.object(script, 'validate_paths', return_value=True):
+                with patch.object(script, 'execute_command', return_value=0) as mock_exec:
+                    with patch('run_cortical_tiles.chdir'):
+                        with patch('run_cortical_tiles.getcwd', return_value="/orig"):
+                            script.run()
+                            updated = json.loads(config_path.read_text())
+                            return updated, input_dir, output_dir, mock_exec
+        finally:
+            shutil.rmtree(tmp, ignore_errors=True)
+
+    @pytest.mark.hypothesis
+    def test_graphs_dir_always_overwritten_to_input(self):
+        """graphs_dir is always set to abspath(input) regardless of initial value."""
+        from hypothesis import given, settings
+        from hypothesis import strategies as st
+
+        json_val = st.one_of(
+            st.none(), st.booleans(), st.integers(-10, 10),
+            st.text(max_size=30), st.just("$local"), st.just(""),
+        )
+
+        @given(initial=json_val)
+        @settings(max_examples=50)
+        def inner(initial):
+            updated, input_dir, _, _ = self._run_in_temp(
+                {"graphs_dir": initial, "output_dir": ""}
+            )
+            assert updated['graphs_dir'] == str(input_dir.resolve())
+
+        inner()
+
+    @pytest.mark.hypothesis
+    def test_output_dir_always_output_plus_derivatives(self):
+        """output_dir is always output/DERIVATIVES_FOLDER regardless of initial value."""
+        from hypothesis import given, settings
+        from hypothesis import strategies as st
+        from utils.lib import DERIVATIVES_FOLDER
+
+        json_val = st.one_of(
+            st.none(), st.booleans(), st.integers(-10, 10),
+            st.text(max_size=30), st.just("$local"), st.just(""),
+        )
+
+        @given(initial=json_val)
+        @settings(max_examples=50)
+        def inner(initial):
+            updated, _, output_dir, _ = self._run_in_temp(
+                {"graphs_dir": "", "output_dir": initial}
+            )
+            assert updated['output_dir'] == str(output_dir.resolve() / DERIVATIVES_FOLDER)
+
+        inner()
+
+    @pytest.mark.hypothesis
+    def test_extra_config_keys_are_preserved(self):
+        """Arbitrary extra keys in the config JSON survive the JSON rewrite."""
+        from hypothesis import given, settings, assume
+        from hypothesis import strategies as st
+
+        reserved = {'graphs_dir', 'output_dir', 'skip_distbottom'}
+        key_st = st.from_regex(r'[a-z][a-z0-9_]{0,15}', fullmatch=True).filter(
+            lambda k: k not in reserved
+        )
+        json_val = st.one_of(
+            st.none(), st.booleans(), st.integers(-10, 10),
+            st.text(max_size=30), st.just("$local"), st.just(""),
+        )
+
+        @given(key=key_st, value=json_val)
+        @settings(max_examples=30)
+        def inner(key, value):
+            updated, _, _, _ = self._run_in_temp(
+                {"graphs_dir": "", "output_dir": "", key: value}
+            )
+            assert key in updated
+            assert updated[key] == value
+
+        inner()
+
+    @pytest.mark.hypothesis
+    def test_d_arg_always_output_for_any_path_names(self):
+        """-d is always abspath(output), regardless of directory names."""
+        import tempfile
+        import shutil
+        from hypothesis import given, settings, assume
+        from hypothesis import strategies as st
+
+        path_part = st.from_regex(r'[a-zA-Z0-9_-]{1,15}', fullmatch=True)
+
+        @given(in_name=path_part, out_name=path_part)
+        @settings(max_examples=30)
+        def inner(in_name, out_name):
+            assume(in_name != out_name)
+            tmp = tempfile.mkdtemp()
+            try:
+                input_dir = Path(tmp) / in_name
+                output_dir = Path(tmp) / out_name
+                input_dir.mkdir(exist_ok=True)
+                output_dir.mkdir(exist_ok=True)
+                (output_dir / "pipeline_loop_2mm.json").write_text(
+                    json.dumps({"graphs_dir": "", "output_dir": ""})
+                )
+                script = RunCorticalTiles()
+                script.parse_args([
+                    str(input_dir), str(output_dir),
+                    "--path_to_graph", "g", "--path_sk_with_hull", "s",
+                ])
+                with patch.object(script, 'validate_paths', return_value=True):
+                    with patch.object(script, 'execute_command', return_value=0) as mock_exec:
+                        with patch('run_cortical_tiles.chdir'):
+                            with patch('run_cortical_tiles.getcwd', return_value="/orig"):
+                                script.run()
+                                final_cmd = mock_exec.call_args_list[-1][0][0]
+                                d_idx = final_cmd.index("-d")
+                                assert final_cmd[d_idx + 1] == str(output_dir.resolve())
+            finally:
+                shutil.rmtree(tmp, ignore_errors=True)
+
+        inner()
 
 
 class TestRunMethod:

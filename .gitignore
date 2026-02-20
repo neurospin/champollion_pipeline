@@ -5,3 +5,20 @@ __pycache__*
 .pytest_cache
 *.prof
 .env
+# pixi environments
+.pixi/*
+!.pixi/config.toml
+
+# Python compiled files
+*.pyc
+__pycache__/
+*.pyo
+*.pyd
+.Python
+
+# MCP configuration
+.mcp.json
+
+
+# Fuzzy testing whit Hypothesis
+.hypothesis
