@@ -1,0 +1,23 @@
+# Pixi-managed conda environment — rebuilt by `pixi install` inside Docker (20 GB)
+.pixi/
+
+# Python cache
+__pycache__/
+*.pyc
+*.pyo
+*.pyd
+.pytest_cache/
+.hypothesis/
+
+# Git internals (not needed in the image)
+.git/
+
+# Editor / CI artefacts
+.vscode/
+*.env
+.env
+settings.json
+*.prof
+
+# GitHub Actions (Dockerfile is specified with -f, not needed in context)
+.github/
