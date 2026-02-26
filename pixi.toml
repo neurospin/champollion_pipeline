@@ -53,10 +53,10 @@ install-all = { depends-on = ["init-submodules", "install-cortical-tiles", "inst
 update-pipeline = "git pull"
 
 # Update git submodules to latest commits on their tracked branches
+# --init handles the case where submodules were never initialized (first run)
 update-submodules = """
-  git submodule update --remote --merge external/champollion_V1 && \
-  git submodule update --remote --merge external/cortical_tiles && \
-  cd external/cortical_tiles && cd ../..
+  git submodule update --init --remote --merge external/champollion_V1 && \
+  git submodule update --init --remote --merge external/cortical_tiles
 """
 
 # Update champollion_utils (pull latest from main)
