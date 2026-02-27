@@ -31,19 +31,57 @@ ICBM_MESH_DIR_FALLBACK = (
 )
 
 
-def find_sulcal_graphs(morphologist_dir):
+def list_acquisitions(subject_dir):
+    """Return acquisition folder names that contain at least one sulcal graph.
+
+    Scans ``<subject_dir>/t1mri/`` and returns all subdirectory names whose
+    subtree contains a ``.arg`` sulcal/folds graph file.  These are the valid
+    choices for ``--acquisition``.
+
+    Args:
+        subject_dir: Path to a single subject folder.
+
+    Returns:
+        Sorted list of acquisition folder names.
+    """
+    t1mri_dir = osp.join(subject_dir, "t1mri")
+    if not osp.isdir(t1mri_dir):
+        return []
+    candidates = []
+    for name in os.listdir(t1mri_dir):
+        acq_dir = osp.join(t1mri_dir, name)
+        if not osp.isdir(acq_dir):
+            continue
+        found = any(
+            ("sulci" in g.lower() or "folds" in g.lower())
+            for g in glob.glob(osp.join(acq_dir, "**", "*.arg"), recursive=True)
+        )
+        if found:
+            candidates.append(name)
+    return sorted(candidates)
+
+
+def find_sulcal_graphs(morphologist_dir, subject=None, acquisition=None):
     """Find sulcal graph files (.arg) in the Morphologist output directory.
 
     Args:
         morphologist_dir: Path to derivatives/morphologist-6.0/ directory
+        subject: Optional subject folder name to restrict the search (e.g.
+            ``"sub_0001"``).  When omitted the entire directory is searched.
+        acquisition: Optional acquisition folder name to restrict the search
+            (e.g. ``"wk30"``).  When omitted all acquisitions are returned.
 
     Returns:
         List of paths to .arg files
     """
-    pattern = osp.join(morphologist_dir, "**", "*.arg")
+    root = osp.join(morphologist_dir, subject) if subject else morphologist_dir
+    pattern = osp.join(root, "**", "*.arg")
     graphs = glob.glob(pattern, recursive=True)
-    sulcal_graphs = [g for g in graphs if "sulci" in g.lower() or "folds" in g.lower()]
-    return sulcal_graphs
+    graphs = [g for g in graphs if "sulci" in g.lower() or "folds" in g.lower()]
+    if acquisition:
+        graphs = [g for g in graphs
+                  if f"/{acquisition}/" in g.replace("\\", "/")]
+    return graphs
 
 
 def find_white_mesh(graph_path):
@@ -367,6 +405,14 @@ def generate_umap_snapshot(embeddings_dir, reference_data_dir, output_path,
     return snapshots
 
 
+def _detect_hemi(graph_path):
+    """Return 'right' or 'left' based on graph filename."""
+    fname = osp.basename(graph_path).lower()
+    if fname.startswith("r") or "_r" in fname or "right" in fname:
+        return "right"
+    return "left"
+
+
 class GenerateSnapshots(ScriptBuilder):
     """Script for generating visualization snapshots."""
 
@@ -377,6 +423,12 @@ class GenerateSnapshots(ScriptBuilder):
         )
         (self
          .add_optional_argument("--morphologist_dir", "Path to Morphologist output directory")
+         .add_optional_argument("--subject",
+                                "Subject folder name to visualize (e.g. sub_0001). "
+                                "When omitted the first subject found is used.")
+         .add_optional_argument("--acquisition",
+                                "Acquisition folder name to use (e.g. wk30, wk40). "
+                                "Required when a subject has multiple segmentations.")
          .add_optional_argument("--embeddings_dir", "Path to embeddings output directory")
          .add_optional_argument("--cortical_tiles_dir", "Path to cortical tiles crops directory")
          .add_argument("--output_dir", type=str, required=True, help="Directory to save snapshot images")
@@ -433,39 +485,63 @@ class GenerateSnapshots(ScriptBuilder):
     def _run_sulcal(self, size):
         """Generate sulcal graph snapshots."""
         snapshots = []
-        if self.args.morphologist_dir and osp.exists(self.args.morphologist_dir):
-            print("\nGenerating sulcal graph snapshots...")
-            graphs = find_sulcal_graphs(self.args.morphologist_dir)
-            print(f"  Found {len(graphs)} sulcal graph(s)")
+        morphologist_dir = self.args.morphologist_dir
+        if not morphologist_dir or not osp.exists(morphologist_dir):
+            if morphologist_dir:
+                print(f"Morphologist directory not found: {morphologist_dir}")
+            return snapshots
 
-            QUAT_LEFT = (0.5, 0.5, 0.5, 0.5)
-            QUAT_RIGHT = (0.5, -0.5, -0.5, 0.5)
+        print("\nGenerating sulcal graph snapshots...")
+        subject = getattr(self.args, "subject", None)
+        acquisition = getattr(self.args, "acquisition", None)
 
-            for graph_path in graphs[:2]:
-                fname = osp.basename(graph_path).lower()
-                if fname.startswith("r") or "_r" in fname or "right" in fname:
-                    hemi = "right"
-                    quat = QUAT_RIGHT
-                else:
-                    hemi = "left"
-                    quat = QUAT_LEFT
+        graphs = find_sulcal_graphs(morphologist_dir, subject=subject,
+                                    acquisition=acquisition)
 
-                white_mesh = find_white_mesh(graph_path)
-                if white_mesh:
-                    print(f"  White mesh: {white_mesh}")
+        # Group by hemisphere — keep one graph per side
+        by_hemi = {"left": [], "right": []}
+        for g in graphs:
+            by_hemi[_detect_hemi(g)].append(g)
 
-                out = osp.join(self.args.output_dir, f"sulcal_graph_{hemi}.png")
-                try:
-                    snap = generate_sulcal_graph_snapshot(
-                        graph_path, out, size,
-                        view_quaternion=quat,
-                        mesh_path=white_mesh,
+        # Warn if multiple acquisitions exist and user hasn't disambiguated
+        if not acquisition:
+            for hemi, hemi_graphs in by_hemi.items():
+                if len(hemi_graphs) > 1:
+                    subject_dir = (osp.join(morphologist_dir, subject)
+                                   if subject else morphologist_dir)
+                    acqs = list_acquisitions(subject_dir)
+                    acq_list = ", ".join(acqs) if acqs else "unknown"
+                    print(
+                        f"  Warning: {len(hemi_graphs)} {hemi} graphs found "
+                        f"(acquisitions: {acq_list}). "
+                        f"Using the first one. Re-run with --acquisition <name> "
+                        f"to select a specific one."
                     )
-                    snapshots.append(snap)
-                except Exception as e:
-                    print(f"  Error processing {graph_path}: {e}")
-        elif self.args.morphologist_dir:
-            print(f"Morphologist directory not found: {self.args.morphologist_dir}")
+                    break
+
+        QUAT = {"left": (0.5, 0.5, 0.5, 0.5), "right": (0.5, -0.5, -0.5, 0.5)}
+
+        total = sum(len(v) for v in by_hemi.values())
+        print(f"  Found {total} sulcal graph(s)")
+
+        for hemi, hemi_graphs in by_hemi.items():
+            if not hemi_graphs:
+                continue
+            graph_path = hemi_graphs[0]
+            white_mesh = find_white_mesh(graph_path)
+            if white_mesh:
+                print(f"  White mesh: {white_mesh}")
+            out = osp.join(self.args.output_dir, f"sulcal_graph_{hemi}.png")
+            try:
+                snap = generate_sulcal_graph_snapshot(
+                    graph_path, out, size,
+                    view_quaternion=QUAT[hemi],
+                    mesh_path=white_mesh,
+                )
+                snapshots.append(snap)
+            except Exception as e:
+                print(f"  Error processing {graph_path}: {e}")
+
         return snapshots
 
     def _run_tiles(self, size):
