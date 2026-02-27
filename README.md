@@ -146,12 +146,15 @@ ls /path/to/data/TESTXX/derivatives/cortical_tiles-2026/crops/2mm
 
 ## 4. Generate Champollion Configuration
 
-Create dataset configuration files for Champollion:
+Create dataset configuration files for Champollion.
+
+> **Recommended:** always pass `--external-config` to keep the `local.yaml` outside the pipeline directory. This is required in read-only containers (Apptainer/Docker) and avoids accidentally committing paths specific to your machine.
 
 ```bash
 pixi run python3 src/generate_champollion_config.py \
     /path/to/data/TESTXX/derivatives/cortical_tiles-2026/crops/2mm \
-    --dataset TESTXX
+    --dataset TESTXX \
+    --external-config /path/to/data/TESTXX/derivatives/champollion_V1/configs/local.yaml
 ```
 
 ### Options
@@ -160,18 +163,7 @@ pixi run python3 src/generate_champollion_config.py \
 |--------|-------------|
 | `--champollion_loc` | Path to Champollion binaries (default: external/champollion_V1) |
 | `--output` | Custom output path for config files |
-| `--external-config` | External path for local.yaml (for read-only containers) |
-
-### Read-only Container Support (Apptainer)
-
-When running in a read-only container environment:
-
-```bash
-pixi run python3 src/generate_champollion_config.py \
-    /path/to/crops \
-    --dataset TESTXX \
-    --external-config /writable/path/local.yaml
-```
+| `--external-config` | Path for `local.yaml` outside the pipeline directory (recommended) |
 
 ## 5. Generate Embeddings
 
@@ -355,18 +347,42 @@ pixi run python3 src/generate_snapshots.py \
 | Option | Description |
 |--------|-------------|
 | `--morphologist_dir` | Path to Morphologist output (for sulcal graph snapshots) |
+| `--subject` | Subject folder name to visualize (e.g. `sub_0001`). When omitted the first subject found is used. |
+| `--acquisition` | Acquisition folder to use (e.g. `wk30`, `wk40`). Required when a subject has multiple segmentations. |
 | `--cortical_tiles_dir` | Path to crops/2mm/ directory (for tiles mask snapshots) |
 | `--embeddings_dir` | Path to combined embeddings (for UMAP scatter plots) |
 | `--reference_data_dir` | Path to pre-trained UMAP models and reference coordinates |
+| `--umap_region` | Comma-separated region name(s) to plot (e.g. `FColl-SRh,S.Or.`). Defaults to all regions with available models. |
 | `--output_dir` | Directory to save snapshot images |
 | `--sulcal-only` | Only generate sulcal graph snapshots |
 | `--tiles-only` | Only generate cortical tiles snapshots |
 | `--umap-only` | Only generate UMAP scatter plots |
 | `--width` / `--height` | Snapshot dimensions (default: 800x600) |
 
+### Disambiguating multiple segmentations
+
+If a subject has several Morphologist acquisitions (e.g. two timepoints `wk30` and `wk40`), the script warns and uses the first one found. Specify the acquisition explicitly to avoid ambiguity:
+
+```bash
+pixi run python3 src/generate_snapshots.py \
+    --morphologist_dir /path/to/subjects/ \
+    --subject sub_0001 --acquisition wk40 \
+    --output_dir /path/to/snapshots/ --sulcal-only
+```
+
 ### UMAP Visualization
 
-The UMAP scatter plot projects a new subject's collateral sulcus embedding onto a pre-trained 2D map fitted on 42,433 UKBioBank40 reference subjects. The reference appears as a blue cloud, with the new subject highlighted in red.
+The UMAP scatter plots project a new subject's sulcal region embeddings onto pre-trained 2D maps, one per region and hemisphere. Each plot shows a blue reference cloud (42,433 UKBioBank subjects) with the new subject highlighted in red.
+
+By default all regions for which both an embedding CSV and a pre-trained model exist in `reference_data/` are plotted. Use `--umap_region` to restrict the output:
+
+```bash
+pixi run python3 src/generate_snapshots.py \
+    --embeddings_dir /path/to/embeddings/ \
+    --reference_data_dir reference_data/ \
+    --output_dir /path/to/snapshots/ \
+    --umap-only --umap_region FColl-SRh
+```
 
 Pre-trained UMAP artifacts are stored in `reference_data/` and contain no subject identifiers (only anonymous 2D coordinates and fitted model parameters).
 

@@ -316,27 +316,73 @@ def generate_tiles_snapshot(crops_dir, output_path, size=(800, 600), level=1,
     return snapshots
 
 
-COLLATERAL_FILES = {
-    "left": "FColl-SRh_left_name06-43-43--210_embeddings.csv",
-    "right": "FColl-SRh_right_name06-56-15--113_embeddings.csv",
-}
+def discover_umap_pairs(embeddings_dir, reference_data_dir, regions=None):
+    """Find (csv_path, model_path, coords_path, region, hemi) tuples.
+
+    Scans ``embeddings_dir`` for ``*_embeddings.csv`` files and matches each
+    one to pre-trained UMAP model artefacts in ``reference_data_dir``.
+
+    CSV filenames are expected to follow the pattern::
+
+        {region}_{hemi}_{identifier}_embeddings.csv
+
+    where ``hemi`` is ``left`` or ``right``.  The corresponding model files
+    must be named::
+
+        umap_{region}_{hemi}.pkl
+        umap_{region}_{hemi}_coords.npy
+
+    Args:
+        embeddings_dir: Directory containing embedding CSV files.
+        reference_data_dir: Directory containing pre-trained UMAP models.
+        regions: Optional list of region names to include.  ``None`` means
+            include all regions for which model artefacts exist.
+
+    Returns:
+        List of tuples ``(csv_path, model_path, coords_path, region, hemi)``.
+    """
+    csv_files = sorted(glob.glob(osp.join(embeddings_dir, "*_embeddings.csv")))
+    pairs = []
+    for csv_path in csv_files:
+        parts = osp.basename(csv_path).split("_")
+        if len(parts) < 3:
+            continue
+        region, hemi = parts[0], parts[1]
+        if hemi not in ("left", "right"):
+            continue
+        if regions and region not in regions:
+            continue
+        model_path = osp.join(reference_data_dir, f"umap_{region}_{hemi}.pkl")
+        coords_path = osp.join(reference_data_dir,
+                               f"umap_{region}_{hemi}_coords.npy")
+        if osp.exists(model_path) and osp.exists(coords_path):
+            pairs.append((csv_path, model_path, coords_path, region, hemi))
+        else:
+            print(f"  UMAP model not found for {region} {hemi} — skipping "
+                  f"(expected {osp.basename(model_path)} in reference_data_dir)")
+    return pairs
 
 
 def generate_umap_snapshot(embeddings_dir, reference_data_dir, output_path,
-                           size=(800, 600)):
-    """Generate UMAP scatter plots for the collateral sulcus region.
+                           size=(800, 600), regions=None):
+    """Generate UMAP scatter plots for embedding regions.
 
-    Projects the pipeline's new subject(s) onto a pre-trained UMAP fitted
-    on UKBioBank40 reference embeddings. Produces one plot per hemisphere.
+    Discovers embedding CSV files in ``embeddings_dir`` and generates a UMAP
+    projection plot for every (region, hemisphere) pair that has both a CSV and
+    pre-trained model artefacts in ``reference_data_dir``.
 
     Args:
-        embeddings_dir: Path to pipeline embeddings (stage 5 output)
-        reference_data_dir: Path to pre-trained UMAP models and coords
-        output_path: Base path for output images (suffixed with _left/_right)
-        size: Tuple of (width, height)
+        embeddings_dir: Path to pipeline embeddings directory.
+        reference_data_dir: Path to pre-trained UMAP models and reference
+            coordinate arrays.
+        output_path: Base path for output images.  Each plot is saved as
+            ``{basename}_{region}_{hemi}{ext}``.
+        size: Tuple of (width, height) in pixels.
+        regions: Optional list of region names to include.  ``None`` means
+            generate plots for all available regions.
 
     Returns:
-        List of generated snapshot file paths
+        List of generated snapshot file paths.
     """
     import joblib
     import matplotlib
@@ -348,35 +394,23 @@ def generate_umap_snapshot(embeddings_dir, reference_data_dir, output_path,
     ext = osp.splitext(output_path)[1] or ".png"
     snapshots = []
 
-    for hemi, csv_name in COLLATERAL_FILES.items():
-        region = csv_name.split("_")[0]
-        model_path = osp.join(
-            reference_data_dir, f"umap_{region}_{hemi}.pkl"
-        )
-        coords_path = osp.join(
-            reference_data_dir, f"umap_{region}_{hemi}_coords.npy"
-        )
-        if not osp.exists(model_path) or not osp.exists(coords_path):
-            print(f"  UMAP artifacts not found for {hemi}, skipping")
-            continue
+    pairs = discover_umap_pairs(embeddings_dir, reference_data_dir,
+                                regions=regions)
+    if not pairs:
+        print("  No matching (embedding CSV, UMAP model) pairs found")
+        return snapshots
 
+    for csv_path, model_path, coords_path, region, hemi in pairs:
         model = joblib.load(model_path)
         ref_coords = np.load(coords_path)
-        print(f"  [{hemi}] Loaded {ref_coords.shape[0]} reference points")
+        print(f"  [{region} {hemi}] Loaded {ref_coords.shape[0]} reference points")
 
-        new_csv = osp.join(embeddings_dir, csv_name)
-        if not osp.exists(new_csv):
-            print(f"  [{hemi}] No embedding found at {new_csv}, skipping")
-            continue
-
-        df = pd.read_csv(new_csv)
+        df = pd.read_csv(csv_path)
         X_new = df.drop(columns=["ID"]).values.astype(np.float32)
         new_coords = model.transform(X_new)
-        print(f"  [{hemi}] Projected {X_new.shape[0]} new subject(s)")
+        print(f"  [{region} {hemi}] Projected {X_new.shape[0]} new subject(s)")
 
-        fig, ax = plt.subplots(
-            figsize=(size[0] / 100, size[1] / 100)
-        )
+        fig, ax = plt.subplots(figsize=(size[0] / 100, size[1] / 100))
         ax.scatter(
             ref_coords[:, 0], ref_coords[:, 1],
             s=1, c="#4a90d9", alpha=0.08,
@@ -387,16 +421,14 @@ def generate_umap_snapshot(embeddings_dir, reference_data_dir, output_path,
             s=80, c="#e74c3c", edgecolors="white", linewidths=0.8,
             zorder=5, label="Your subject",
         )
-        ax.set_title(
-            f"Collateral sulcus \u2014 {hemi}", fontsize=12
-        )
+        ax.set_title(f"{region} \u2014 {hemi}", fontsize=12)
         ax.legend(loc="best", fontsize=9, framealpha=0.9)
         ax.set_xlabel("UMAP 1", fontsize=9)
         ax.set_ylabel("UMAP 2", fontsize=9)
         ax.tick_params(labelsize=8)
         plt.tight_layout()
 
-        snap = f"{basename}_{hemi}{ext}"
+        snap = f"{basename}_{region}_{hemi}{ext}"
         plt.savefig(snap, dpi=150)
         plt.close(fig)
         snapshots.append(snap)
@@ -440,6 +472,10 @@ class GenerateSnapshots(ScriptBuilder):
          .add_optional_argument(
              "--reference_data_dir",
              "Path to pre-trained UMAP models and reference coords")
+         .add_optional_argument(
+             "--umap_region",
+             "Comma-separated list of region names to generate UMAP plots for "
+             "(e.g. FColl-SRh,S.Or.). Defaults to all regions with available models.")
          .add_optional_argument(
              "--tiles_level",
              "Region threshold level (0-3)",
@@ -568,23 +604,35 @@ class GenerateSnapshots(ScriptBuilder):
     def _run_umap(self, size):
         """Generate UMAP scatter plots."""
         snapshots = []
-        if (self.args.embeddings_dir
-                and osp.exists(self.args.embeddings_dir)
-                and self.args.reference_data_dir
-                and osp.exists(self.args.reference_data_dir)):
-            print("\nGenerating UMAP scatter plots...")
-            out = osp.join(self.args.output_dir, "umap_collateral.png")
-            try:
-                snaps = generate_umap_snapshot(
-                    self.args.embeddings_dir,
-                    self.args.reference_data_dir,
-                    out, size,
-                )
-                snapshots.extend(snaps)
-            except Exception as e:
-                print(f"  Error generating UMAP snapshot: {e}")
-        elif self.args.reference_data_dir and not osp.exists(self.args.reference_data_dir):
+
+        if not self.args.embeddings_dir:
+            return snapshots
+        if not osp.exists(self.args.embeddings_dir):
+            print(f"Embeddings directory not found: {self.args.embeddings_dir}")
+            return snapshots
+        if not self.args.reference_data_dir:
+            return snapshots
+        if not osp.exists(self.args.reference_data_dir):
             print(f"Reference data directory not found: {self.args.reference_data_dir}")
+            return snapshots
+
+        regions = None
+        umap_region = getattr(self.args, "umap_region", None)
+        if umap_region:
+            regions = [r.strip() for r in umap_region.split(",")]
+            print(f"\nUMAP region filter: {', '.join(regions)}")
+
+        print("\nGenerating UMAP scatter plots...")
+        out = osp.join(self.args.output_dir, "umap.png")
+        try:
+            snaps = generate_umap_snapshot(
+                self.args.embeddings_dir,
+                self.args.reference_data_dir,
+                out, size, regions=regions,
+            )
+            snapshots.extend(snaps)
+        except Exception as e:
+            print(f"  Error generating UMAP snapshot: {e}")
         return snapshots
 
 
