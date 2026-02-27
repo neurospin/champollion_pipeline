@@ -91,8 +91,9 @@ Set the maximum number of CPUs (e.g., 24) in the "Computing resources" subwindow
 Then run with the `--swf` flag:
 
 ```bash
-morphologist-cli $LIST_MRI_FILES $OUTPUT_PATH -- --of morphologist-auto-nonoverlap-1.0 --swf
+morphologist-cli $LIST_MRI_FILES $OUTPUT_PATH -- --of morphologist-auto-nonoverlap-1.0 --if morphologist-auto-nonoverlap-1.0 --swf
 ```
+
 
 ## 3. Generate Sulcal Regions
 
