@@ -75,7 +75,7 @@ Generate sulcal graphs from T1 MRI images using morphologist-cli.
 ```bash
 LIST_MRI_FILES="/path/to/data/sub-0001.nii.gz /path/to/data/sub-0002.nii.gz"
 OUTPUT_PATH="/path/to/data/TESTXX/"
-morphologist-cli $LIST_MRI_FILES $OUTPUT_PATH -- --of morphologist-auto-nonoverlap-1.0
+morphologist-cli $LIST_MRI_FILES $OUTPUT_PATH -- --of morphologist-auto-nonoverlap-1.0 --if morphologist-auto-nonoverlap-1.0
 ```
 
 ### Parallel Processing with soma-workflow
