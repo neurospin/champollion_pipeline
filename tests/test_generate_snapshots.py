@@ -14,7 +14,7 @@ from generate_snapshots import (
     find_sulcal_graphs,
     find_white_mesh,
     find_completed_regions,
-    COLLATERAL_FILES,
+    discover_umap_pairs,
     GenerateSnapshots,
     main,
 )
@@ -70,7 +70,7 @@ class TestFindWhiteMesh:
     """Test find_white_mesh function."""
 
     def test_morphologist_60_structure(self, temp_dir):
-        """Test finding mesh in Morphologist 6.0 layout (default_acquisition/0)."""
+        """Test finding mesh in Morphologist 6.0 layout."""
         # Build: sub-01/default_acquisition/0/segmentation/mesh/sub-01_Lwhite.gii
         base = Path(temp_dir) / "sub-01" / "default_acquisition" / "0"
         mesh_dir = base / "segmentation" / "mesh"
@@ -129,7 +129,7 @@ class TestFindWhiteMesh:
         assert result is None
 
     def test_no_anchor_dir_returns_none(self):
-        """Test that a path without default_analysis or default_acquisition/0 returns None."""
+        """Test that a path without known anchors returns None."""
         result = find_white_mesh("/some/random/path/graph.arg")
         assert result is None
 
@@ -205,6 +205,8 @@ class TestGenerateSnapshotsInit:
         args = script.parse_args([
             "--output_dir", temp_dir,
             "--morphologist_dir", "/morpho",
+            "--subject", "sub_0001",
+            "--acquisition", "wk30",
             "--embeddings_dir", "/emb",
             "--cortical_tiles_dir", "/tiles",
             "--width", "1024",
@@ -212,9 +214,12 @@ class TestGenerateSnapshotsInit:
             "--sulcal-only",
             "--tiles_level", "2",
             "--reference_data_dir", "/ref",
+            "--umap_region", "FColl-SRh,S.Or.",
         ])
         assert args.output_dir == temp_dir
         assert args.morphologist_dir == "/morpho"
+        assert args.subject == "sub_0001"
+        assert args.acquisition == "wk30"
         assert args.embeddings_dir == "/emb"
         assert args.cortical_tiles_dir == "/tiles"
         assert args.width == 1024
@@ -222,6 +227,7 @@ class TestGenerateSnapshotsInit:
         assert args.sulcal_only is True
         assert args.tiles_level == 2
         assert args.reference_data_dir == "/ref"
+        assert args.umap_region == "FColl-SRh,S.Or."
 
     def test_default_values(self, temp_dir):
         """Test default argument values."""
@@ -270,8 +276,10 @@ class TestGenerateSnapshotsRun:
 class TestOnlyFlagLogic:
     """Test the --*-only flag logic without running the full main()."""
 
-    def _compute_flags(self, sulcal_only=False, tiles_only=False, umap_only=False):
-        """Helper to compute run_sulcal, run_tiles, run_umap from only flags."""
+    def _compute_flags(
+        self, sulcal_only=False, tiles_only=False, umap_only=False
+    ):
+        """Helper to compute run_sulcal, run_tiles, run_umap from flags."""
         only_flags = (sulcal_only, tiles_only, umap_only)
         run_sulcal = not any(only_flags) or sulcal_only
         run_tiles = not any(only_flags) or tiles_only
@@ -307,18 +315,73 @@ class TestOnlyFlagLogic:
         assert run_u is True
 
 
-class TestCollateralFilesConstant:
-    """Test the COLLATERAL_FILES constant."""
+class TestDiscoverUmapPairs:
+    """Test the discover_umap_pairs function."""
 
-    def test_has_left_and_right(self):
-        """Test that COLLATERAL_FILES has both hemispheres."""
-        assert "left" in COLLATERAL_FILES
-        assert "right" in COLLATERAL_FILES
+    def test_returns_empty_when_no_csvs(self, temp_dir):
+        """Test that an empty embeddings dir returns no pairs."""
+        result = discover_umap_pairs(temp_dir, temp_dir)
+        assert result == []
 
-    def test_values_end_with_csv(self):
-        """Test that file names end with .csv."""
-        for hemi, fname in COLLATERAL_FILES.items():
-            assert fname.endswith(".csv"), f"{hemi} file does not end with .csv"
+    def test_returns_pair_when_model_exists(self, temp_dir):
+        """Test that a matching CSV + model pair is returned."""
+        emb_dir = Path(temp_dir) / "embeddings"
+        ref_dir = Path(temp_dir) / "reference"
+        emb_dir.mkdir()
+        ref_dir.mkdir()
+
+        (emb_dir / "FColl-SRh_left_name01_embeddings.csv").touch()
+        (ref_dir / "umap_FColl-SRh_left.pkl").touch()
+        (ref_dir / "umap_FColl-SRh_left_coords.npy").touch()
+
+        result = discover_umap_pairs(str(emb_dir), str(ref_dir))
+        assert len(result) == 1
+        _, _, _, region, hemi = result[0]
+        assert region == "FColl-SRh"
+        assert hemi == "left"
+
+
+    def test_skips_csv_without_model(self, temp_dir):
+        """Test that a CSV without a matching model is skipped."""
+        emb_dir = Path(temp_dir) / "embeddings"
+        ref_dir = Path(temp_dir) / "reference"
+        emb_dir.mkdir()
+        ref_dir.mkdir()
+
+        (emb_dir / "S.Or._left_name01_embeddings.csv").touch()
+        # No model files created
+
+        result = discover_umap_pairs(str(emb_dir), str(ref_dir))
+        assert result == []
+
+    def test_region_filter(self, temp_dir):
+        """Test that the regions filter excludes unwanted regions."""
+        emb_dir = Path(temp_dir) / "embeddings"
+        ref_dir = Path(temp_dir) / "reference"
+        emb_dir.mkdir()
+        ref_dir.mkdir()
+
+        for region in ("FColl-SRh", "S.Or."):
+            (emb_dir / f"{region}_left_name01_embeddings.csv").touch()
+            (ref_dir / f"umap_{region}_left.pkl").touch()
+            (ref_dir / f"umap_{region}_left_coords.npy").touch()
+
+        result = discover_umap_pairs(str(emb_dir), str(ref_dir),
+                                     regions=["FColl-SRh"])
+        assert len(result) == 1
+        assert result[0][3] == "FColl-SRh"
+
+    def test_ignores_files_with_bad_hemi(self, temp_dir):
+        """Test that CSVs whose second token is not left/right are ignored."""
+        emb_dir = Path(temp_dir) / "embeddings"
+        ref_dir = Path(temp_dir) / "reference"
+        emb_dir.mkdir()
+        ref_dir.mkdir()
+
+        (emb_dir / "FColl-SRh_both_name01_embeddings.csv").touch()
+
+        result = discover_umap_pairs(str(emb_dir), str(ref_dir))
+        assert result == []
 
 
 class TestMainFunction:
@@ -388,19 +451,19 @@ class TestMainFunction:
             result = main()
             assert result == 0
 
-
     def test_main_calls_build_print_run(self, temp_dir):
         """Test that main() follows the ScriptBuilder pattern."""
         output_dir = os.path.join(temp_dir, "out")
+        stub = GenerateSnapshots.__new__(GenerateSnapshots)
         with patch('sys.argv', [
             'generate_snapshots.py',
             '--output_dir', output_dir,
         ]):
-            with patch.object(GenerateSnapshots, 'build',
-                              return_value=GenerateSnapshots.__new__(GenerateSnapshots)) as mock_build:
-                mock_instance = mock_build.return_value
-                mock_instance.print_args = lambda: mock_instance
-                mock_instance.run = lambda: 0
+            with patch.object(
+                GenerateSnapshots, 'build', return_value=stub
+            ) as mock_build:
+                stub.print_args = lambda: stub
+                stub.run = lambda: 0
                 result = main()
                 mock_build.assert_called_once()
                 assert result == 0
