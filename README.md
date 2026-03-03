@@ -148,22 +148,36 @@ ls /path/to/data/TESTXX/derivatives/cortical_tiles-2026/crops/2mm
 
 Create dataset configuration files for Champollion.
 
-> **Recommended:** always pass `--external-config` to keep the `local.yaml` outside the pipeline directory. This is required in read-only containers (Apptainer/Docker) and avoids accidentally committing paths specific to your machine.
+Use `--output` to write the dataset config into your data directory (keeps everything in one place and makes the `--config_path` for step 5 obvious):
 
 ```bash
 pixi run python3 src/generate_champollion_config.py \
     /path/to/data/TESTXX/derivatives/cortical_tiles-2026/crops/2mm \
     --dataset TESTXX \
-    --external-config /path/to/data/TESTXX/derivatives/champollion_V1/configs/local.yaml
+    --output /path/to/data/TESTXX/derivatives/champollion_V1/configs/dataset/TESTXX
 ```
+
+This creates `reference.yaml` (and related files) inside the `--output` directory, and updates the `dataset_folder` path in the internal `local.yaml` inside `external/champollion_V1/`.
 
 ### Options
 
 | Option | Description |
 |--------|-------------|
 | `--champollion_loc` | Path to Champollion binaries (default: external/champollion_V1) |
-| `--output` | Custom output path for config files |
-| `--external-config` | Path for `local.yaml` outside the pipeline directory (recommended) |
+| `--output` | Directory where dataset config files are written. Use a path inside your data directory so that `--config_path` in step 5 is self-contained. |
+| `--external-config` | For **read-only containers only** (Apptainer/Docker): write `local.yaml` to a writable path instead of updating it inside `external/champollion_V1/`. |
+
+### Read-only Container Support (Apptainer)
+
+When the pipeline directory is read-only, combine both options:
+
+```bash
+pixi run python3 src/generate_champollion_config.py \
+    /path/to/crops/2mm \
+    --dataset TESTXX \
+    --output /writable/path/configs/dataset/TESTXX \
+    --external-config /writable/path/configs/local.yaml
+```
 
 ## 5. Generate Embeddings
 
@@ -178,8 +192,10 @@ pixi run python3 src/generate_embeddings.py \
     <datasets_root> \
     <short_name> \
     --embeddings_only \
-    --config_path /path/to/data/TESTXX/derivatives/champollion_V1/configs/dataset
+    --config_path /path/to/data/TESTXX/derivatives/champollion_V1/configs/dataset/TESTXX
 ```
+
+> **Note:** `--config_path` must be the **dataset config directory** created in step 4 (the `--output` path). It should contain `reference.yaml`. Do not pass `local.yaml` here — that is a separate file.
 
 To re-run on an existing dataset, add `--overwrite` to replace previously generated embeddings.
 
@@ -213,7 +229,7 @@ pixi run python3 src/generate_embeddings.py \
     TESTXX \
     my_run \
     --embeddings_only \
-    --config_path /path/to/data/TESTXX/derivatives/champollion_V1/configs/dataset
+    --config_path /path/to/data/TESTXX/derivatives/champollion_V1/configs/dataset/TESTXX
 ```
 
 Reuse previously cached models with CPU-only mode:
@@ -226,7 +242,7 @@ pixi run python3 src/generate_embeddings.py \
     my_run \
     --embeddings_only \
     --cpu \
-    --config_path /path/to/data/TESTXX/derivatives/champollion_V1/configs/dataset
+    --config_path /path/to/data/TESTXX/derivatives/champollion_V1/configs/dataset/TESTXX
 ```
 
 Generate embeddings and train classifiers (requires a `subject_labels_file` in the dataset configs):
@@ -237,7 +253,7 @@ pixi run python3 src/generate_embeddings.py \
     local \
     TESTXX \
     my_run \
-    --config_path /path/to/data/TESTXX/derivatives/champollion_V1/configs/dataset
+    --config_path /path/to/data/TESTXX/derivatives/champollion_V1/configs/dataset/TESTXX
 ```
 
 ### Options
