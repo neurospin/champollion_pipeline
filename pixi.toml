@@ -26,6 +26,7 @@ datasets = ">=2.16.0"
 ruff = ">=0.9.0"
 pip-audit = ">=2.7.0"
 hypothesis = ">=6.0"
+umap-learn = ">=0.5"
 
 [tasks]
 # Initialize submodules
@@ -109,3 +110,7 @@ test-cov = "pytest tests/ -v --cov=src --cov-report=html --cov-report=term"
 test-fast = "pytest tests/ -v -x --tb=short"
 test-verbose = "pytest tests/ -vv"
 test-specific = "pytest"  # Usage: pixi run test-specific tests/test_script_builder.py
+
+# Generate UMAP reference models for all ROIs
+# Usage: pixi run generate-umap-reference --models_dir /path/to/Champollion_V1_after_ablation --reference_subpath ukb40_random_embeddings/full_embeddings.csv
+generate-umap-reference = "python3 src/generate_umap_reference.py"
