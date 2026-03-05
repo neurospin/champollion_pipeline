@@ -317,44 +317,22 @@ def generate_tiles_snapshot(crops_dir, output_path, size=(800, 600), level=1,
 
 
 def discover_umap_pairs(embeddings_dir, reference_data_dir, regions=None):
-    """Find (csv_path, model_path, coords_path, region, hemi) tuples.
-
-    Scans ``embeddings_dir`` for ``*_embeddings.csv`` files and matches each
-    one to pre-trained UMAP model artefacts in ``reference_data_dir``.
-
-    CSV filenames are expected to follow the pattern::
-
-        {region}_{hemi}_{identifier}_embeddings.csv
-
-    where ``hemi`` is ``left`` or ``right``.  The corresponding model files
-    must be named::
-
-        umap_{region}_{hemi}.pkl
-        umap_{region}_{hemi}_coords.npy
-
-    Args:
-        embeddings_dir: Directory containing embedding CSV files.
-        reference_data_dir: Directory containing pre-trained UMAP models.
-        regions: Optional list of region names to include.  ``None`` means
-            include all regions for which model artefacts exist.
-
-    Returns:
-        List of tuples ``(csv_path, model_path, coords_path, region, hemi)``.
-    """
     csv_files = sorted(glob.glob(osp.join(embeddings_dir, "*_embeddings.csv")))
+    if not csv_files:
+        print(f"  No *_embeddings.csv files found in: {embeddings_dir}")
+        return []
+    print(f"  Found {len(csv_files)} embedding CSV file(s)")
+
     pairs = []
     for csv_path in csv_files:
-        parts = osp.basename(csv_path).split("_")
-        if len(parts) < 3:
-            continue
-        region, hemi = parts[0], parts[1]
-        if hemi not in ("left", "right"):
+        region, hemi = _parse_embedding_csv_name(osp.basename(csv_path))
+        if region is None:
+            print(f"  Unrecognized filename format: {osp.basename(csv_path)}")
             continue
         if regions and region not in regions:
             continue
         model_path = osp.join(reference_data_dir, f"umap_{region}_{hemi}.pkl")
-        coords_path = osp.join(reference_data_dir,
-                               f"umap_{region}_{hemi}_coords.npy")
+        coords_path = osp.join(reference_data_dir, f"umap_{region}_{hemi}_coords.npy")
         if osp.exists(model_path) and osp.exists(coords_path):
             pairs.append((csv_path, model_path, coords_path, region, hemi))
         else:
@@ -443,6 +421,34 @@ def _detect_hemi(graph_path):
     if fname.startswith("r") or "_r" in fname or "right" in fname:
         return "right"
     return "left"
+
+
+def _parse_embedding_csv_name(name):
+    """Parse (region, hemi) from an embeddings CSV filename.
+
+    Handles both old and new naming conventions:
+      - Old: {region}_{hemi}_{id}_embeddings.csv
+      - New: _{region}--{hemi}--{model}_embeddings.csv
+
+    Returns (region, hemi) or (None, None) if not parseable.
+    """
+    import re
+
+    if not name.endswith("_embeddings.csv"):
+        return None, None
+
+    # Single regex to match both formats:
+    # - Optional leading _
+    # - Region: any chars except separator
+    # - Separator: _ or --
+    # - Hemisphere: left or right
+    # - Separator: _ or --
+    # - ID/model: any chars
+    pattern = r"^_?(.*?)(?:--|_)((?:left|right))(?:--|_).*_embeddings\.csv$"
+    match = re.match(pattern, name)
+    if match:
+        return match.group(1), match.group(2)
+    return None, None
 
 
 class GenerateSnapshots(ScriptBuilder):
