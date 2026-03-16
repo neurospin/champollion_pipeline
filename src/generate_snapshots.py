@@ -75,6 +75,18 @@ def find_sulcal_graphs(morphologist_dir, subject=None, acquisition=None):
         List of paths to .arg files
     """
     root = osp.join(morphologist_dir, subject) if subject else morphologist_dir
+    if subject and not osp.isdir(root):
+        candidates = [
+            m for m in glob.glob(osp.join(morphologist_dir, "**", subject),
+                                 recursive=True)
+            if osp.isdir(m)
+        ]
+        if candidates:
+            root = candidates[0]
+            print(f"  Subject found at: {root}")
+        else:
+            print(f"  Subject directory not found for '{subject}' under {morphologist_dir}")
+            return []
     pattern = osp.join(root, "**", "*.arg")
     graphs = glob.glob(pattern, recursive=True)
     graphs = [g for g in graphs if "sulci" in g.lower() or "folds" in g.lower()]
@@ -397,7 +409,7 @@ def generate_umap_snapshot(embeddings_dir, reference_data_dir, output_path,
         ax.scatter(
             new_coords[:, 0], new_coords[:, 1],
             s=80, c="#e74c3c", edgecolors="white", linewidths=0.8,
-            zorder=5, label="Your subject",
+            zorder=5, label=f"Your subject(s) (n={X_new.shape[0]})",
         )
         ax.set_title(f"{region} \u2014 {hemi}", fontsize=12)
         ax.legend(loc="best", fontsize=9, framealpha=0.9)
@@ -447,7 +459,8 @@ def _parse_embedding_csv_name(name):
     pattern = r"^_?(.*?)(?:--|_)((?:left|right))(?:--|_).*_embeddings\.csv$"
     match = re.match(pattern, name)
     if match:
-        return match.group(1), match.group(2)
+        region = match.group(1).replace("--", "_")
+        return region, match.group(2)
     return None, None
 
 
@@ -573,7 +586,8 @@ class GenerateSnapshots(ScriptBuilder):
             white_mesh = find_white_mesh(graph_path)
             if white_mesh:
                 print(f"  White mesh: {white_mesh}")
-            out = osp.join(self.args.output_dir, f"sulcal_graph_{hemi}.png")
+            acq_tag = f"_{acquisition}" if acquisition else ""
+            out = osp.join(self.args.output_dir, f"sulcal_graph{acq_tag}_{hemi}.png")
             try:
                 snap = generate_sulcal_graph_snapshot(
                     graph_path, out, size,
