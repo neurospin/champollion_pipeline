@@ -1,0 +1,841 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1.0" />
+<title>Champollion Pipeline — NeuroSpin / CEA</title>
+<link rel="preconnect" href="https://fonts.googleapis.com" />
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+<link href="https://fonts.googleapis.com/css2?family=Source+Sans+3:ital,wght@0,300;0,400;0,600;0,700;1,400&family=Source+Serif+4:ital,opsz,wght@0,8..60,400;0,8..60,600;1,8..60,400&display=swap" rel="stylesheet" />
+<style>
+/* ── CEA Design Tokens ──────────────────────────────────── */
+:root {
+  --cea-navy:   #00326c;
+  --cea-navy-d: #001f46;
+  --cea-red:    #e30613;
+  --cea-red-d:  #b00010;
+  --cea-blue:   #0057a8;
+  --cea-gray:   #f4f5f7;
+  --cea-border: #d9dde4;
+  --text:       #1a1a2e;
+  --text-mid:   #4a5568;
+  --text-dim:   #718096;
+  --white:      #ffffff;
+  --ff-sans:    'Source Sans 3', 'Helvetica Neue', Arial, sans-serif;
+  --ff-serif:   'Source Serif 4', Georgia, serif;
+}
+
+/* ── Reset ──────────────────────────────────────────────── */
+*, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+html { scroll-behavior: smooth; }
+body { background: var(--white); color: var(--text); font-family: var(--ff-sans); font-size: 16px; line-height: 1.65; }
+a { color: var(--cea-blue); text-decoration: none; }
+a:hover { color: var(--cea-red); text-decoration: underline; }
+img { display: block; max-width: 100%; }
+
+/* ── Layout helpers ─────────────────────────────────────── */
+.wrap { max-width: 1160px; margin: 0 auto; padding: 0 24px; }
+
+/* ══════════════════════════════════════════════════════════
+   TOP UTILITY BAR
+══════════════════════════════════════════════════════════ */
+.util-bar {
+  background: var(--cea-navy-d);
+  color: rgba(255,255,255,0.7);
+  font-size: 12px;
+  letter-spacing: 0.02em;
+  padding: 6px 0;
+}
+.util-bar .wrap {
+  display: flex; align-items: center; justify-content: space-between; gap: 12px;
+}
+.util-left { display: flex; align-items: center; gap: 6px; }
+.util-left a { color: rgba(255,255,255,0.7); font-size: 12px; }
+.util-left a:hover { color: #fff; text-decoration: none; }
+.util-sep { color: rgba(255,255,255,0.3); }
+.util-right { display: flex; gap: 16px; }
+.util-right a { color: rgba(255,255,255,0.6); font-size: 11px; letter-spacing: 0.05em; text-transform: uppercase; }
+.util-right a:hover { color: #fff; text-decoration: none; }
+
+/* ══════════════════════════════════════════════════════════
+   HEADER / MASTHEAD
+══════════════════════════════════════════════════════════ */
+.masthead {
+  background: var(--cea-navy);
+  padding: 18px 0;
+  border-bottom: 4px solid var(--cea-red);
+}
+.masthead .wrap {
+  display: flex; align-items: center; justify-content: space-between; gap: 24px;
+}
+.cea-logo-block {
+  display: flex; align-items: center; gap: 16px; text-decoration: none;
+}
+.cea-logo-box {
+  background: var(--cea-red);
+  color: #fff;
+  font-family: var(--ff-sans);
+  font-weight: 700;
+  font-size: 22px;
+  letter-spacing: 0.06em;
+  padding: 8px 14px;
+  line-height: 1;
+  flex-shrink: 0;
+}
+.cea-logo-text {
+  color: rgba(255,255,255,0.9);
+  font-size: 12px;
+  line-height: 1.35;
+  max-width: 240px;
+}
+.cea-logo-text strong {
+  display: block;
+  font-size: 13px;
+  font-weight: 600;
+  color: #fff;
+}
+.masthead-divider {
+  width: 1px; height: 44px;
+  background: rgba(255,255,255,0.2);
+  flex-shrink: 0;
+}
+.project-name {
+  color: #fff;
+  font-size: 15px;
+  font-weight: 600;
+  letter-spacing: 0.01em;
+}
+.project-name span {
+  display: block;
+  font-size: 11px;
+  font-weight: 400;
+  color: rgba(255,255,255,0.6);
+  letter-spacing: 0.05em;
+  text-transform: uppercase;
+  margin-bottom: 2px;
+}
+.masthead-actions {
+  display: flex; gap: 10px; flex-shrink: 0;
+}
+.btn-sm {
+  display: inline-flex; align-items: center; gap: 6px;
+  font-size: 13px; font-weight: 600;
+  padding: 8px 16px;
+  border-radius: 2px;
+  cursor: pointer;
+  transition: background .15s, color .15s;
+  line-height: 1;
+}
+.btn-red { background: var(--cea-red); color: #fff; }
+.btn-red:hover { background: var(--cea-red-d); color: #fff; text-decoration: none; }
+.btn-outline { border: 1px solid rgba(255,255,255,0.45); color: rgba(255,255,255,0.9); background: transparent; }
+.btn-outline:hover { background: rgba(255,255,255,0.12); color: #fff; text-decoration: none; }
+
+/* ══════════════════════════════════════════════════════════
+   MAIN NAV
+══════════════════════════════════════════════════════════ */
+.main-nav {
+  background: var(--cea-blue);
+  position: sticky; top: 0; z-index: 100;
+}
+.main-nav .wrap { display: flex; align-items: stretch; }
+.main-nav a {
+  display: flex; align-items: center;
+  color: rgba(255,255,255,0.88);
+  font-size: 13.5px;
+  font-weight: 600;
+  padding: 13px 18px;
+  letter-spacing: 0.01em;
+  border-bottom: 3px solid transparent;
+  transition: background .15s, border-color .15s;
+}
+.main-nav a:hover { background: rgba(255,255,255,0.1); color: #fff; text-decoration: none; border-bottom-color: rgba(255,255,255,0.5); }
+.main-nav a.active { border-bottom-color: var(--cea-red); color: #fff; }
+.nav-spacer { flex: 1; }
+.main-nav .nav-gh {
+  background: rgba(255,255,255,0.12);
+  padding: 0 20px;
+  font-size: 12.5px;
+}
+.main-nav .nav-gh:hover { background: rgba(255,255,255,0.2); border-bottom-color: transparent; }
+
+/* ══════════════════════════════════════════════════════════
+   BREADCRUMB
+══════════════════════════════════════════════════════════ */
+.breadcrumb {
+  background: var(--cea-gray);
+  border-bottom: 1px solid var(--cea-border);
+  padding: 10px 0;
+  font-size: 12.5px;
+  color: var(--text-dim);
+}
+.breadcrumb .wrap { display: flex; align-items: center; gap: 6px; flex-wrap: wrap; }
+.breadcrumb a { color: var(--cea-blue); }
+.breadcrumb a:hover { color: var(--cea-red); text-decoration: none; }
+.bc-sep { color: #bbb; }
+
+/* ══════════════════════════════════════════════════════════
+   HERO BANNER
+══════════════════════════════════════════════════════════ */
+.hero {
+  background: var(--cea-navy);
+  color: #fff;
+  padding: 64px 0 56px;
+  position: relative;
+  overflow: hidden;
+}
+.hero::before {
+  content: '';
+  position: absolute;
+  left: 0; top: 0; bottom: 0;
+  width: 5px;
+  background: var(--cea-red);
+}
+.hero .wrap { display: grid; grid-template-columns: 1fr auto; align-items: center; gap: 48px; }
+.hero-text { position: relative; z-index: 1; }
+.hero-eyebrow {
+  font-size: 11px; letter-spacing: 0.14em; text-transform: uppercase;
+  color: rgba(255,255,255,0.5);
+  margin-bottom: 16px;
+  display: flex; align-items: center; gap: 8px;
+}
+.hero-eyebrow::before {
+  content: '';
+  display: block; width: 24px; height: 2px;
+  background: var(--cea-red);
+  flex-shrink: 0;
+}
+.hero h1 {
+  font-family: var(--ff-serif);
+  font-size: clamp(30px, 4vw, 48px);
+  font-weight: 600;
+  line-height: 1.15;
+  color: #fff;
+  margin-bottom: 18px;
+}
+.hero h1 em {
+  font-style: italic;
+  color: rgba(255,255,255,0.7);
+  font-weight: 400;
+  display: block;
+}
+.hero-desc {
+  font-size: 16px;
+  color: rgba(255,255,255,0.72);
+  max-width: 580px;
+  line-height: 1.7;
+  margin-bottom: 28px;
+}
+.hero-badges {
+  display: flex; flex-wrap: wrap; gap: 8px;
+  margin-bottom: 32px;
+}
+.hero-badge {
+  display: inline-block;
+  font-size: 11px; font-weight: 600; letter-spacing: 0.06em;
+  text-transform: uppercase;
+  padding: 4px 10px;
+  border: 1px solid rgba(255,255,255,0.22);
+  color: rgba(255,255,255,0.72);
+  background: rgba(255,255,255,0.06);
+  border-radius: 1px;
+}
+.hero-cta { display: flex; gap: 12px; flex-wrap: wrap; }
+.hero-stat-box {
+  background: rgba(255,255,255,0.05);
+  border: 1px solid rgba(255,255,255,0.1);
+  border-top: 3px solid var(--cea-red);
+  padding: 28px 32px;
+  min-width: 210px;
+  flex-shrink: 0;
+}
+.hero-stat { margin-bottom: 24px; }
+.hero-stat:last-child { margin-bottom: 0; }
+.hero-stat-num {
+  font-family: var(--ff-serif);
+  font-size: 38px;
+  font-weight: 600;
+  color: #fff;
+  line-height: 1;
+}
+.hero-stat-label {
+  font-size: 12px;
+  color: rgba(255,255,255,0.5);
+  margin-top: 5px;
+  line-height: 1.4;
+}
+
+/* ══════════════════════════════════════════════════════════
+   PAGE BODY — two-column
+══════════════════════════════════════════════════════════ */
+.page-body {
+  display: grid;
+  grid-template-columns: 1fr 280px;
+  gap: 40px;
+  align-items: start;
+  padding: 48px 0 80px;
+}
+
+/* ── Section headings ───────────────────────────────────── */
+.sec-heading {
+  border-top: 3px solid var(--cea-red);
+  padding-top: 14px;
+  margin-bottom: 28px;
+}
+.sec-heading h2 {
+  font-family: var(--ff-serif);
+  font-size: 22px;
+  font-weight: 600;
+  color: var(--cea-navy);
+  margin-bottom: 5px;
+}
+.sec-heading p { font-size: 14px; color: var(--text-mid); }
+
+/* ── Prose ──────────────────────────────────────────────── */
+.prose { font-size: 15.5px; color: var(--text-mid); line-height: 1.72; }
+.prose strong { color: var(--text); }
+.prose a { color: var(--cea-blue); }
+.prose a:hover { color: var(--cea-red); }
+code {
+  font-family: 'Consolas', 'Courier New', monospace;
+  font-size: 0.87em;
+  background: #eef1f6;
+  padding: 1px 5px;
+  border-radius: 2px;
+  color: var(--cea-navy);
+}
+
+/* ── Pipeline steps ─────────────────────────────────────── */
+.pipeline-step {
+  display: grid;
+  grid-template-columns: 50px 1fr;
+  border: 1px solid var(--cea-border);
+  border-bottom: none;
+  background: #fff;
+  transition: background .15s;
+}
+.pipeline-step:first-child { border-radius: 2px 2px 0 0; }
+.pipeline-step:last-child { border-bottom: 1px solid var(--cea-border); border-radius: 0 0 2px 2px; }
+.pipeline-step:hover { background: var(--cea-gray); }
+.step-num-col {
+  background: var(--cea-navy);
+  display: flex; align-items: flex-start; justify-content: center;
+  padding: 16px 0 0;
+  font-size: 12px; font-weight: 700; letter-spacing: 0.04em;
+  color: rgba(255,255,255,0.5);
+}
+.step-num-col.red { background: var(--cea-red); color: rgba(255,255,255,0.8); }
+.step-content { padding: 15px 18px 15px 16px; }
+.step-title { font-size: 14px; font-weight: 700; color: var(--cea-navy); margin-bottom: 5px; }
+.step-desc { font-size: 13.5px; color: var(--text-mid); line-height: 1.6; }
+.step-tags { display: flex; gap: 6px; flex-wrap: wrap; margin-top: 8px; }
+.step-tag {
+  font-size: 11px; font-weight: 600; letter-spacing: 0.05em; text-transform: uppercase;
+  color: var(--cea-blue);
+  border: 1px solid var(--cea-border);
+  padding: 2px 8px;
+  border-radius: 1px;
+  background: var(--cea-gray);
+}
+
+/* ── Installation block ─────────────────────────────────── */
+.install-block {
+  margin-top: 40px;
+  border: 1px solid var(--cea-border);
+  border-top: 3px solid var(--cea-blue);
+  border-radius: 2px;
+  overflow: hidden;
+}
+.install-label {
+  background: var(--cea-gray);
+  border-bottom: 1px solid var(--cea-border);
+  padding: 10px 18px;
+  font-size: 12px; font-weight: 700; text-transform: uppercase; letter-spacing: 0.08em;
+  color: var(--text-mid);
+}
+.code-wrap { background: #1e2532; padding: 20px 22px; overflow-x: auto; }
+.code-wrap pre {
+  font-family: 'Consolas', 'Courier New', monospace;
+  font-size: 13px;
+  line-height: 1.8;
+  color: #abb2bf;
+  white-space: pre;
+}
+.code-wrap .c  { color: #5c6370; font-style: italic; }
+.code-wrap .k  { color: #61afef; }
+.code-wrap .s  { color: #98c379; }
+.install-reqs {
+  display: grid; grid-template-columns: 1fr 1fr;
+}
+.req-col { padding: 18px 20px; border-top: 1px solid var(--cea-border); }
+.req-col + .req-col { border-left: 1px solid var(--cea-border); }
+.req-col h4 {
+  font-size: 11px; font-weight: 700; text-transform: uppercase; letter-spacing: 0.09em;
+  color: var(--cea-navy); margin-bottom: 10px;
+}
+.req-col ul { list-style: none; }
+.req-col li {
+  font-size: 13.5px; color: var(--text-mid);
+  padding: 3px 0;
+  display: flex; align-items: center; gap: 7px;
+}
+.req-col li::before { content: '›'; color: var(--cea-red); font-weight: 700; font-size: 15px; }
+
+/* ── Sidebar ────────────────────────────────────────────── */
+.aside-card {
+  border: 1px solid var(--cea-border);
+  border-top: 3px solid var(--cea-red);
+  margin-bottom: 24px;
+  border-radius: 2px;
+  overflow: hidden;
+}
+.aside-card-head {
+  padding: 11px 16px;
+  font-size: 11px; font-weight: 700; text-transform: uppercase; letter-spacing: 0.08em;
+  color: var(--cea-navy);
+  background: var(--cea-gray);
+  border-bottom: 1px solid var(--cea-border);
+}
+.aside-links { list-style: none; }
+.aside-links li { border-bottom: 1px solid var(--cea-border); }
+.aside-links li:last-child { border-bottom: none; }
+.aside-links a {
+  display: flex; align-items: center; gap: 8px;
+  padding: 11px 16px;
+  font-size: 13.5px;
+  color: var(--text);
+  transition: background .12s, color .12s;
+}
+.aside-links a:hover { background: var(--cea-gray); color: var(--cea-red); text-decoration: none; }
+.aside-links .icon { font-size: 15px; width: 20px; text-align: center; flex-shrink: 0; }
+.aside-links .arrow { margin-left: auto; color: #bbb; }
+.aside-info { padding: 14px 16px; }
+.aside-info p { font-size: 13px; color: var(--text-mid); line-height: 1.6; margin-bottom: 10px; }
+.aside-info a { font-size: 13px; color: var(--cea-blue); }
+.aside-info a:hover { color: var(--cea-red); }
+.badge-row { display: flex; flex-direction: column; gap: 7px; padding: 14px 16px; }
+.badge-row img { height: 20px; }
+
+/* ══════════════════════════════════════════════════════════
+   BLUE HIGHLIGHT BAR
+══════════════════════════════════════════════════════════ */
+.highlight-bar {
+  background: var(--cea-blue);
+  color: #fff;
+  padding: 32px 0;
+}
+.highlight-bar .wrap {
+  display: flex; align-items: center; justify-content: space-between; gap: 24px; flex-wrap: wrap;
+}
+.highlight-bar h3 { font-family: var(--ff-serif); font-size: 20px; margin-bottom: 6px; }
+.highlight-bar p { font-size: 14px; color: rgba(255,255,255,0.72); max-width: 540px; }
+
+/* ══════════════════════════════════════════════════════════
+   FOOTER
+══════════════════════════════════════════════════════════ */
+footer {
+  background: var(--cea-navy-d);
+  color: rgba(255,255,255,0.65);
+  padding: 36px 0;
+  font-size: 13px;
+}
+.footer-grid {
+  display: grid;
+  grid-template-columns: 1fr 1fr 1fr;
+  gap: 32px;
+}
+.footer-col h4 {
+  font-size: 11px; font-weight: 700; text-transform: uppercase; letter-spacing: 0.1em;
+  color: rgba(255,255,255,0.5);
+  margin-bottom: 14px;
+  padding-bottom: 8px;
+  border-bottom: 1px solid rgba(255,255,255,0.1);
+}
+.footer-col ul { list-style: none; }
+.footer-col li { padding: 4px 0; }
+.footer-col a { color: rgba(255,255,255,0.65); transition: color .12s; }
+.footer-col a:hover { color: #fff; text-decoration: none; }
+.footer-bottom {
+  margin-top: 32px;
+  padding-top: 20px;
+  border-top: 1px solid rgba(255,255,255,0.1);
+  display: flex; align-items: center; justify-content: space-between; flex-wrap: wrap; gap: 10px;
+}
+.footer-cea-mark { display: flex; align-items: center; gap: 10px; color: rgba(255,255,255,0.8); }
+.footer-cea-box {
+  background: var(--cea-red);
+  color: #fff;
+  font-weight: 700; font-size: 13px;
+  padding: 4px 8px;
+  letter-spacing: 0.04em;
+}
+
+/* ══════════════════════════════════════════════════════════
+   RESPONSIVE
+══════════════════════════════════════════════════════════ */
+@media (max-width: 860px) {
+  .hero .wrap { grid-template-columns: 1fr; }
+  .hero-stat-box { display: none; }
+  .page-body { grid-template-columns: 1fr; }
+  .page-aside { order: -1; }
+  .footer-grid { grid-template-columns: 1fr 1fr; gap: 24px; }
+  .install-reqs { grid-template-columns: 1fr; }
+  .req-col + .req-col { border-left: none; border-top: 1px solid var(--cea-border); }
+}
+@media (max-width: 600px) {
+  .util-right { display: none; }
+  .main-nav .nav-gh { display: none; }
+  .masthead-actions { display: none; }
+  .footer-grid { grid-template-columns: 1fr; }
+}
+</style>
+</head>
+<body>
+
+<!-- ── Utility bar ───────────────────────────────────────── -->
+<div class="util-bar">
+  <div class="wrap">
+    <div class="util-left">
+      <a href="https://www.cea.fr">CEA.fr</a>
+      <span class="util-sep">›</span>
+      <a href="https://www.cea.fr/Pages/domaines-recherche/sante-sciences-du-vivant.aspx">Health &amp; Life Sciences</a>
+      <span class="util-sep">›</span>
+      <a href="https://www.cea.fr/drf/irig">NeuroSpin</a>
+      <span class="util-sep">›</span>
+      <span>Champollion Pipeline</span>
+    </div>
+    <div class="util-right">
+      <a href="https://huggingface.co/spaces/neurospin/Champollion_demo">Live Demo</a>
+      <a href="https://github.com/neurospin/champollion_pipeline">GitHub</a>
+      <a href="https://huggingface.co/neurospin/Champollion_V1">Hugging Face</a>
+    </div>
+  </div>
+</div>
+
+<!-- ── Masthead ──────────────────────────────────────────── -->
+<header class="masthead">
+  <div class="wrap">
+    <a class="cea-logo-block" href="https://www.cea.fr">
+      <div class="cea-logo-box">CEA</div>
+      <div class="cea-logo-text">
+        <strong>Commissariat à l'Énergie Atomique</strong>
+        et aux Énergies Alternatives
+      </div>
+    </a>
+    <div class="masthead-divider"></div>
+    <div class="project-name">
+      <span>NeuroSpin · Software</span>
+      Champollion Pipeline
+    </div>
+    <div class="masthead-actions">
+      <a class="btn-sm btn-red" href="https://huggingface.co/spaces/neurospin/Champollion_demo">🤗 Live Demo</a>
+      <a class="btn-sm btn-outline" href="https://github.com/neurospin/champollion_pipeline">GitHub ↗</a>
+    </div>
+  </div>
+</header>
+
+<!-- ── Main Nav ──────────────────────────────────────────── -->
+<nav class="main-nav">
+  <div class="wrap">
+    <a href="#overview" class="active">Overview</a>
+    <a href="#pipeline">Pipeline</a>
+    <a href="#install">Installation</a>
+    <a href="#resources">Resources</a>
+    <div class="nav-spacer"></div>
+    <a class="nav-gh" href="https://github.com/neurospin/champollion_pipeline">⭐ View on GitHub</a>
+  </div>
+</nav>
+
+<!-- ── Breadcrumb ────────────────────────────────────────── -->
+<div class="breadcrumb">
+  <div class="wrap">
+    <a href="https://www.cea.fr">CEA</a>
+    <span class="bc-sep">›</span>
+    <a href="https://www.cea.fr/Pages/domaines-recherche/sante-sciences-du-vivant.aspx">Health &amp; Life Sciences</a>
+    <span class="bc-sep">›</span>
+    <a href="https://www.cea.fr/drf/irig">NeuroSpin</a>
+    <span class="bc-sep">›</span>
+    <span>Champollion Pipeline</span>
+  </div>
+</div>
+
+<!-- ── Hero ─────────────────────────────────────────────── -->
+<section class="hero" id="overview">
+  <div class="wrap">
+    <div class="hero-text">
+      <p class="hero-eyebrow">NeuroSpin &mdash; CEA Paris-Saclay &mdash; Open Source</p>
+      <h1>Champollion Pipeline<em>From raw MRI to cortical embeddings</em></h1>
+      <p class="hero-desc">
+        An end-to-end pipeline that transforms T1 MRI images into compact, meaningful
+        embeddings of sulcal morphology — ready for population-scale brain analysis,
+        sex classification, and disease prediction.
+      </p>
+      <div class="hero-badges">
+        <span class="hero-badge">Python ≥ 3.8</span>
+        <span class="hero-badge">PyTorch</span>
+        <span class="hero-badge">Pixi</span>
+        <span class="hero-badge">CeCILL-B</span>
+        <span class="hero-badge">Morphologist</span>
+      </div>
+      <div class="hero-cta">
+        <a class="btn-sm btn-red" href="https://huggingface.co/spaces/neurospin/Champollion_demo">🤗 Try the Live Demo</a>
+        <a class="btn-sm btn-outline" href="https://github.com/neurospin/champollion_pipeline">View on GitHub ↗</a>
+        <a class="btn-sm btn-outline" href="https://huggingface.co/neurospin/Champollion_V1">HF Model ↗</a>
+      </div>
+    </div>
+    <div class="hero-stat-box">
+      <div class="hero-stat">
+        <div class="hero-stat-num">56</div>
+        <div class="hero-stat-label">Pre-trained model folds<br />(28 regions × 2 hemispheres)</div>
+      </div>
+      <div class="hero-stat">
+        <div class="hero-stat-num">42k+</div>
+        <div class="hero-stat-label">UKBioBank reference<br />subjects</div>
+      </div>
+      <div class="hero-stat">
+        <div class="hero-stat-num">7</div>
+        <div class="hero-stat-label">Pipeline steps from<br />MRI to embeddings</div>
+      </div>
+    </div>
+  </div>
+</section>
+
+<!-- ── Page body ─────────────────────────────────────────── -->
+<div class="wrap">
+  <div class="page-body">
+
+    <!-- Main column -->
+    <main class="page-main">
+
+      <!-- Overview -->
+      <div class="sec-heading">
+        <h2>About the pipeline</h2>
+        <p>A complete, reproducible workflow for cortical sulcal analysis</p>
+      </div>
+      <p class="prose">
+        The <strong>Champollion Pipeline</strong> orchestrates the full journey from raw anatomical
+        MRI data to compact embeddings of sulcal morphology. It leverages
+        <strong>Morphologist</strong> to extract sulcal fold graphs, then uses
+        <strong>cortical_tiles</strong> to tile 28 sulcal regions, and finally generates embeddings
+        using pre-trained <strong>Champollion V1</strong> transformer models hosted on Hugging Face.
+      </p>
+      <p class="prose" style="margin-top:12px">
+        A <a href="https://huggingface.co/spaces/neurospin/Champollion_demo">live demo</a> is
+        available on Hugging Face Spaces for quick single-subject testing.
+        For batch processing or production use, install locally to leverage all available CPUs and GPUs.
+      </p>
+
+      <!-- Pipeline steps -->
+      <div id="pipeline" style="margin-top:52px">
+        <div class="sec-heading">
+          <h2>Pipeline steps</h2>
+          <p>Seven stages, from installation to visualisation</p>
+        </div>
+
+        <div class="pipeline-step">
+          <div class="step-num-col">01</div>
+          <div class="step-content">
+            <div class="step-title">Installation &amp; Environment Setup</div>
+            <div class="step-desc">Clone the repository and run <code>pixi run install-all</code>. Pixi initialises git submodules (<em>champollion_V1</em>, <em>cortical_tiles</em>), installs all Python packages in editable mode, and creates the data directory automatically.</div>
+            <div class="step-tags"><span class="step-tag">Pixi</span></div>
+          </div>
+        </div>
+
+        <div class="pipeline-step">
+          <div class="step-num-col">02</div>
+          <div class="step-content">
+            <div class="step-title">Generate Morphologist Sulcal Graphs</div>
+            <div class="step-desc">Run <code>morphologist-cli</code> on T1 NIfTI files to extract sulcal fold graphs. Supports serial and parallel execution via <strong>soma-workflow</strong> with a configurable CPU count.</div>
+            <div class="step-tags"><span class="step-tag">morphologist-cli</span><span class="step-tag">soma-workflow</span></div>
+          </div>
+        </div>
+
+        <div class="pipeline-step">
+          <div class="step-num-col">03</div>
+          <div class="step-content">
+            <div class="step-title">Generate Sulcal Regions (cortical_tiles)</div>
+            <div class="step-desc">Extract 28 sulcal region crops from Morphologist output. Accepts wildcard path segments, optional QC files (tab-separated <code>participant_id / qc</code>), and configurable input types: skeleton, foldlabel, extremities.</div>
+            <div class="step-tags"><span class="step-tag">cortical_tiles</span></div>
+          </div>
+        </div>
+
+        <div class="pipeline-step">
+          <div class="step-num-col red">04</div>
+          <div class="step-content">
+            <div class="step-title">Generate Champollion Configuration</div>
+            <div class="step-desc">Auto-generate the YAML dataset config consumed by the embedding scripts. Supports read-only container environments (Apptainer) via the <code>--external-config</code> flag.</div>
+            <div class="step-tags"><span class="step-tag">YAML</span><span class="step-tag">Apptainer</span></div>
+          </div>
+        </div>
+
+        <div class="pipeline-step">
+          <div class="step-num-col red">05</div>
+          <div class="step-content">
+            <div class="step-title">Generate Embeddings</div>
+            <div class="step-desc">Run all 56 pre-trained model folds to produce one <code>full_embeddings.csv</code> per region. Models can be fetched from a local path, a <code>.tar.gz</code> archive, or directly from the Hugging Face hub (<code>neurospin/Champollion_V1</code>). GPU and CPU modes supported.</div>
+            <div class="step-tags"><span class="step-tag">PyTorch</span><span class="step-tag">Hugging Face</span></div>
+          </div>
+        </div>
+
+        <div class="pipeline-step">
+          <div class="step-num-col">06</div>
+          <div class="step-content">
+            <div class="step-title">Combine Embeddings</div>
+            <div class="step-desc">Merge all 56 per-region CSV files into a single output directory using <code>put_together_embeddings.py</code>. Verify with a quick <code>ls … | wc -l</code> check (expected: 56 files).</div>
+            <div class="step-tags"><span class="step-tag">CSV aggregation</span></div>
+          </div>
+        </div>
+
+        <div class="pipeline-step">
+          <div class="step-num-col">07</div>
+          <div class="step-content">
+            <div class="step-title">Generate Visualization Snapshots</div>
+            <div class="step-desc">Produce sulcal graph meshes, cortical tile masks, and UMAP scatter plots. Each new subject is projected onto a pre-trained 2D UMAP fitted on 42,433 anonymous UKBioBank reference subjects, displayed as a blue cloud with the new subject highlighted in red.</div>
+            <div class="step-tags"><span class="step-tag">UMAP</span><span class="step-tag">anatomist</span></div>
+          </div>
+        </div>
+
+      </div><!-- /#pipeline -->
+
+      <!-- Installation -->
+      <div id="install" style="margin-top:52px">
+        <div class="sec-heading">
+          <h2>Installation</h2>
+          <p>Requires <a href="https://pixi.sh/">Pixi</a> and Git — all other dependencies are managed automatically</p>
+        </div>
+
+        <div class="install-block">
+          <div class="install-label">bash — Quick setup</div>
+          <div class="code-wrap">
+<pre><span class="c"># 1. Clone the repository</span>
+mkdir Champollion && cd Champollion
+<span class="k">git</span> clone https://github.com/neurospin/champollion_pipeline.git
+<span class="k">cd</span> champollion_pipeline
+
+<span class="c"># 2. Install all dependencies (submodules + Python packages)</span>
+<span class="k">pixi</span> run install-all
+
+<span class="c"># 3. Activate the Pixi environment</span>
+<span class="k">pixi</span> shell
+
+<span class="c"># 4. (Optional) Run the test suite</span>
+<span class="k">pixi</span> run test</pre>
+          </div>
+          <div class="install-reqs">
+            <div class="req-col">
+              <h4>Prerequisites</h4>
+              <ul>
+                <li><a href="https://pixi.sh/">Pixi</a> package manager</li>
+                <li>Git (with submodule support)</li>
+                <li>soma-env / BrainVISA (for Morphologist)</li>
+                <li>Python ≥ 3.8</li>
+              </ul>
+            </div>
+            <div class="req-col">
+              <h4>Key dependencies</h4>
+              <ul>
+                <li>PyTorch</li>
+                <li>huggingface-hub &amp; transformers</li>
+                <li>morphologist, anatomist</li>
+                <li>cortical_tiles, champollion_V1</li>
+              </ul>
+            </div>
+          </div>
+        </div>
+      </div>
+
+    </main>
+
+    <!-- Sidebar -->
+    <aside class="page-aside" id="resources">
+
+      <div class="aside-card">
+        <div class="aside-card-head">Quick links</div>
+        <ul class="aside-links">
+          <li><a href="https://github.com/neurospin/champollion_pipeline"><span class="icon">⚙️</span> Source code<span class="arrow">›</span></a></li>
+          <li><a href="https://huggingface.co/spaces/neurospin/Champollion_demo"><span class="icon">🤗</span> Live demo (HF Spaces)<span class="arrow">›</span></a></li>
+          <li><a href="https://huggingface.co/neurospin/Champollion_V1"><span class="icon">🧠</span> Champollion V1 model<span class="arrow">›</span></a></li>
+          <li><a href="https://github.com/neurospin/champollion_pipeline/blob/main/README.md"><span class="icon">📖</span> Full documentation<span class="arrow">›</span></a></li>
+          <li><a href="https://github.com/neurospin/champollion_pipeline/blob/main/LICENSE"><span class="icon">⚖️</span> Licence CeCILL-B<span class="arrow">›</span></a></li>
+          <li><a href="https://github.com/neurospin"><span class="icon">🔬</span> NeuroSpin on GitHub<span class="arrow">›</span></a></li>
+        </ul>
+      </div>
+
+      <div class="aside-card">
+        <div class="aside-card-head">Badges</div>
+        <div class="badge-row">
+          <a href="https://www.python.org/"><img src="https://img.shields.io/badge/python-%E2%89%A53.8-blue?logo=python&logoColor=white" alt="Python" /></a>
+          <a href="https://pytorch.org/"><img src="https://img.shields.io/badge/PyTorch-framework-EE4C2C?logo=pytorch&logoColor=white" alt="PyTorch" /></a>
+          <a href="https://pixi.sh/"><img src="https://img.shields.io/badge/pixi-package%20manager-yellow?logo=prefix&logoColor=white" alt="Pixi" /></a>
+          <a href="https://cecill.info/licences/Licence_CeCILL-B_V1-en.html"><img src="https://img.shields.io/badge/license-CeCILL--B-blue" alt="License CeCILL-B" /></a>
+          <a href="https://huggingface.co/neurospin/Champollion_V1"><img src="https://img.shields.io/badge/🤗-Champollion_V1-orange" alt="HF Model" /></a>
+        </div>
+      </div>
+
+      <div class="aside-card">
+        <div class="aside-card-head">About NeuroSpin</div>
+        <div class="aside-info">
+          <p>NeuroSpin is a high-field MRI research centre at <strong>CEA Paris-Saclay</strong>, dedicated to new methods for brain imaging and analysis.</p>
+          <a href="https://www.cea.fr/drf/irig">Visit NeuroSpin ›</a>
+        </div>
+      </div>
+
+    </aside>
+
+  </div><!-- /.page-body -->
+</div><!-- /.wrap -->
+
+<!-- ── Highlight bar ─────────────────────────────────────── -->
+<div class="highlight-bar">
+  <div class="wrap">
+    <div>
+      <h3>Try Champollion in your browser</h3>
+      <p>The Hugging Face Spaces demo runs on 2 CPU cores — ideal for quick single-subject testing with no installation required.</p>
+    </div>
+    <a class="btn-sm btn-red" href="https://huggingface.co/spaces/neurospin/Champollion_demo" style="flex-shrink:0; font-size:14px; padding:12px 24px;">Open Live Demo →</a>
+  </div>
+</div>
+
+<!-- ── Footer ────────────────────────────────────────────── -->
+<footer>
+  <div class="wrap">
+    <div class="footer-grid">
+      <div class="footer-col">
+        <h4>Project</h4>
+        <ul>
+          <li><a href="https://github.com/neurospin/champollion_pipeline">Source code</a></li>
+          <li><a href="https://github.com/neurospin/champollion_pipeline/blob/main/README.md">Documentation</a></li>
+          <li><a href="https://github.com/neurospin/champollion_pipeline/blob/main/LICENSE">Licence CeCILL-B</a></li>
+          <li><a href="https://github.com/neurospin/champollion_pipeline/issues">Issues &amp; bug reports</a></li>
+        </ul>
+      </div>
+      <div class="footer-col">
+        <h4>Models &amp; Demo</h4>
+        <ul>
+          <li><a href="https://huggingface.co/neurospin/Champollion_V1">Champollion V1 (HF)</a></li>
+          <li><a href="https://huggingface.co/spaces/neurospin/Champollion_demo">Live Demo (HF Spaces)</a></li>
+          <li><a href="https://pixi.sh/">Pixi package manager</a></li>
+        </ul>
+      </div>
+      <div class="footer-col">
+        <h4>CEA / NeuroSpin</h4>
+        <ul>
+          <li><a href="https://www.cea.fr">CEA.fr</a></li>
+          <li><a href="https://www.cea.fr/drf/irig">NeuroSpin</a></li>
+          <li><a href="https://www.cea.fr/Pages/le-cea/les-centres-cea/paris-saclay.aspx">CEA Paris-Saclay</a></li>
+          <li><a href="https://github.com/neurospin">NeuroSpin on GitHub</a></li>
+        </ul>
+      </div>
+    </div>
+    <div class="footer-bottom">
+      <div class="footer-cea-mark">
+        <div class="footer-cea-box">CEA</div>
+        <span>Commissariat à l'Énergie Atomique et aux Énergies Alternatives</span>
+      </div>
+      <span style="font-size:12px">Licence CeCILL-B &mdash; NeuroSpin &mdash; CEA Paris-Saclay</span>
+    </div>
+  </div>
+</footer>
+
+</body>
+</html>
