@@ -41,6 +41,7 @@ try:
     from generate_champollion_config import GenerateChampollionConfig
     from generate_embeddings import GenerateEmbeddings
     from put_together_embeddings import PutTogetherEmbeddings
+    from generate_snapshots import GenerateSnapshots
 except ImportError as e:
     print(f"Warning: Could not import pipeline scripts: {e}")
     print("Some stages may not be available.")
@@ -94,6 +95,10 @@ class DatasetConfig:
     # CPU mode (disable CUDA)
     cpu: bool = False
 
+    # Snapshots parameters
+    snapshots_path: str = ""
+    reference_data_path: str = ""
+
 
 @dataclass
 class PipelineConfig:
@@ -112,6 +117,7 @@ class PipelineConfig:
         'generate_champollion_config': False,
         'generate_embeddings': True,
         'put_together_embeddings': False,
+        'generate_snapshots': False,
     })
 
     # Stage dependencies
@@ -121,6 +127,7 @@ class PipelineConfig:
         'generate_champollion_config': ['run_cortical_tiles'],
         'generate_embeddings': ['generate_champollion_config'],
         'put_together_embeddings': ['generate_embeddings'],
+        'generate_snapshots': ['put_together_embeddings'],
     })
 
     # Execution settings
@@ -211,6 +218,8 @@ class ConfigLoader:
                 'hf_token': config.dataset.hf_token,
                 'config_path': config.dataset.config_path,
                 'cpu': config.dataset.cpu,
+                'snapshots_path': config.dataset.snapshots_path,
+                'reference_data_path': config.dataset.reference_data_path,
             }
         }
 
@@ -546,6 +555,73 @@ class PutTogetherEmbeddingsStage(PipelineStage):
         return result
 
 
+class GenerateSnapshotsStage(PipelineStage):
+    """Stage for generating visualization snapshots."""
+
+    def validate(self) -> bool:
+        """Validate that embeddings exist and output path is set."""
+        if not self.config.dataset.snapshots_path:
+            self.logger.error("snapshots_path must be set in config")
+            return False
+        embeddings_path = Path(self.config.dataset.embeddings_path)
+        if self.config.dataset.embeddings_path and not embeddings_path.exists():
+            self.logger.error(
+                f"Embeddings path does not exist: {embeddings_path}"
+            )
+            return False
+        return True
+
+    def execute(self) -> StageResult:
+        """Execute snapshot generation."""
+        self.log_start()
+        try:
+            self.logger.info("Generating visualization snapshots...")
+
+            args = [f"--output_dir={self.config.dataset.snapshots_path}"]
+
+            if self.config.dataset.embeddings_path:
+                args.append(
+                    f"--embeddings_dir={self.config.dataset.embeddings_path}"
+                )
+            if self.config.dataset.morphologist_graphs:
+                args.append(
+                    f"--morphologist_dir={self.config.dataset.morphologist_graphs}"
+                )
+            if self.config.dataset.crops_path:
+                args.append(
+                    f"--cortical_tiles_dir={self.config.dataset.crops_path}"
+                )
+            if self.config.dataset.reference_data_path:
+                args.append(
+                    f"--reference_data_dir={self.config.dataset.reference_data_path}"
+                )
+
+            script = GenerateSnapshots()
+            script.parse_args(args)
+            return_code = script.run()
+
+            result = StageResult(
+                stage_name=self.name,
+                success=(return_code == 0),
+                message=(
+                    "Snapshots generated" if return_code == 0
+                    else "Snapshot generation failed"
+                ),
+                return_code=return_code,
+            )
+        except Exception as e:
+            self.logger.exception(f"Exception in {self.name}")
+            result = StageResult(
+                stage_name=self.name,
+                success=False,
+                message=f"Failed: {str(e)}",
+                return_code=1,
+            )
+
+        self.log_end(result)
+        return result
+
+
 # ====================== Pipeline Orchestrator ======================
 
 class PipelineOrchestrator:
@@ -558,6 +634,7 @@ class PipelineOrchestrator:
         'generate_champollion_config': GenerateChampollionConfigStage,
         'generate_embeddings': GenerateEmbeddingsStage,
         'put_together_embeddings': PutTogetherEmbeddingsStage,
+        'generate_snapshots': GenerateSnapshotsStage,
     }
 
     def __init__(self, config: PipelineConfig):
