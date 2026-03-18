@@ -9,6 +9,8 @@
 
 This pipeline generates Champollion embeddings from T1 MRI images. It processes MRIs through Morphologist to extract sulcal graphs, then uses cortical_tiles to create sulcal regions, and finally generates embeddings using pre-trained Champollion models.
 
+> **Project website:** [https://www.neurospin.fr/champollion_pipeline](https://www.neurospin.fr/champollion_pipeline)
+
 > **Try it online:** A [live demo is available on Hugging Face Spaces](https://huggingface.co/spaces/neurospin/Champollion_demo). It runs on 2 CPU cores and is suited for quick testing with a single subject. For batch processing or production use, install this pipeline locally where it can leverage all available CPUs and GPUs.
 
 ## 1. Installation
