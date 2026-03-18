@@ -3,18 +3,20 @@
 <head>
 <meta charset="UTF-8" />
 <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-<title>Champollion Pipeline — NeuroSpin / CEA</title>
+<title>Champollion Pipeline — NeuroSpin / CEA · BrainVISA</title>
 <link rel="preconnect" href="https://fonts.googleapis.com" />
 <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
 <link href="https://fonts.googleapis.com/css2?family=Source+Sans+3:ital,wght@0,300;0,400;0,600;0,700;1,400&family=Source+Serif+4:ital,opsz,wght@0,8..60,400;0,8..60,600;1,8..60,400&display=swap" rel="stylesheet" />
 <style>
-/* ── CEA Design Tokens ──────────────────────────────────── */
 :root {
   --cea-navy:   #00326c;
   --cea-navy-d: #001f46;
   --cea-red:    #e30613;
   --cea-red-d:  #b00010;
   --cea-blue:   #0057a8;
+  --bv-teal:    #2a7fa5;
+  --bv-teal-d:  #1b5e7a;
+  --bv-teal-l:  #e8f4f9;
   --cea-gray:   #f4f5f7;
   --cea-border: #d9dde4;
   --text:       #1a1a2e;
@@ -24,475 +26,234 @@
   --ff-sans:    'Source Sans 3', 'Helvetica Neue', Arial, sans-serif;
   --ff-serif:   'Source Serif 4', Georgia, serif;
 }
-
-/* ── Reset ──────────────────────────────────────────────── */
 *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
 html { scroll-behavior: smooth; }
 body { background: var(--white); color: var(--text); font-family: var(--ff-sans); font-size: 16px; line-height: 1.65; }
 a { color: var(--cea-blue); text-decoration: none; }
 a:hover { color: var(--cea-red); text-decoration: underline; }
 img { display: block; max-width: 100%; }
-
-/* ── Layout helpers ─────────────────────────────────────── */
 .wrap { max-width: 1160px; margin: 0 auto; padding: 0 24px; }
 
-/* ══════════════════════════════════════════════════════════
-   TOP UTILITY BAR
-══════════════════════════════════════════════════════════ */
-.util-bar {
-  background: var(--cea-navy-d);
-  color: rgba(255,255,255,0.7);
-  font-size: 12px;
-  letter-spacing: 0.02em;
-  padding: 6px 0;
-}
-.util-bar .wrap {
-  display: flex; align-items: center; justify-content: space-between; gap: 12px;
-}
-.util-left { display: flex; align-items: center; gap: 6px; }
-.util-left a { color: rgba(255,255,255,0.7); font-size: 12px; }
+/* ── Util bar ───────────────────────────────────────────── */
+.util-bar { background: var(--cea-navy-d); padding: 6px 0; font-size: 12px; }
+.util-bar .wrap { display: flex; align-items: center; justify-content: space-between; gap: 12px; }
+.util-left { display: flex; align-items: center; gap: 6px; color: rgba(255,255,255,0.6); }
+.util-left a { color: rgba(255,255,255,0.65); }
 .util-left a:hover { color: #fff; text-decoration: none; }
-.util-sep { color: rgba(255,255,255,0.3); }
+.util-sep { color: rgba(255,255,255,0.25); }
 .util-right { display: flex; gap: 16px; }
 .util-right a { color: rgba(255,255,255,0.6); font-size: 11px; letter-spacing: 0.05em; text-transform: uppercase; }
 .util-right a:hover { color: #fff; text-decoration: none; }
 
-/* ══════════════════════════════════════════════════════════
-   HEADER / MASTHEAD
-══════════════════════════════════════════════════════════ */
-.masthead {
-  background: var(--cea-navy);
-  padding: 18px 0;
-  border-bottom: 4px solid var(--cea-red);
-}
-.masthead .wrap {
-  display: flex; align-items: center; justify-content: space-between; gap: 24px;
-}
-.cea-logo-block {
-  display: flex; align-items: center; gap: 16px; text-decoration: none;
-}
-.cea-logo-box {
-  background: var(--cea-red);
-  color: #fff;
-  font-family: var(--ff-sans);
-  font-weight: 700;
-  font-size: 22px;
-  letter-spacing: 0.06em;
-  padding: 8px 14px;
-  line-height: 1;
-  flex-shrink: 0;
-}
-.cea-logo-text {
-  color: rgba(255,255,255,0.9);
-  font-size: 12px;
-  line-height: 1.35;
-  max-width: 240px;
-}
-.cea-logo-text strong {
-  display: block;
-  font-size: 13px;
-  font-weight: 600;
-  color: #fff;
-}
-.masthead-divider {
-  width: 1px; height: 44px;
-  background: rgba(255,255,255,0.2);
-  flex-shrink: 0;
-}
-.project-name {
-  color: #fff;
-  font-size: 15px;
-  font-weight: 600;
-  letter-spacing: 0.01em;
-}
-.project-name span {
-  display: block;
-  font-size: 11px;
-  font-weight: 400;
-  color: rgba(255,255,255,0.6);
-  letter-spacing: 0.05em;
-  text-transform: uppercase;
-  margin-bottom: 2px;
-}
-.masthead-actions {
-  display: flex; gap: 10px; flex-shrink: 0;
-}
-.btn-sm {
-  display: inline-flex; align-items: center; gap: 6px;
-  font-size: 13px; font-weight: 600;
-  padding: 8px 16px;
-  border-radius: 2px;
-  cursor: pointer;
-  transition: background .15s, color .15s;
-  line-height: 1;
-}
+/* ── Masthead ───────────────────────────────────────────── */
+.masthead { background: var(--cea-navy); padding: 16px 0; border-bottom: 4px solid var(--cea-red); }
+.masthead .wrap { display: flex; align-items: center; gap: 20px; flex-wrap: wrap; }
+.cea-logo-block { display: flex; align-items: center; gap: 12px; text-decoration: none; flex-shrink: 0; }
+.cea-logo-img { height: 52px; width: 52px; border-radius: 6px; object-fit: cover; flex-shrink: 0; }
+.cea-logo-text { color: rgba(255,255,255,0.88); font-size: 12px; line-height: 1.35; max-width: 210px; }
+.cea-logo-text strong { display: block; font-size: 13px; font-weight: 600; color: #fff; }
+.mh-divider { width: 1px; height: 44px; background: rgba(255,255,255,0.18); flex-shrink: 0; }
+/* BrainVISA logo in masthead */
+.bv-logo-block { display: flex; align-items: center; gap: 10px; text-decoration: none; flex-shrink: 0; }
+.bv-logo-block img { height: 36px; filter: brightness(0) invert(1); opacity: 0.9; }
+.bv-logo-block:hover img { opacity: 1; }
+.bv-logo-label { font-size: 11px; color: rgba(255,255,255,0.55); line-height: 1.3; }
+.bv-logo-label strong { display: block; font-size: 13px; font-weight: 600; color: rgba(255,255,255,0.88); }
+.mh-spacer { flex: 1; }
+.project-name { color: #fff; font-size: 15px; font-weight: 600; text-align: right; }
+.project-name span { display: block; font-size: 11px; font-weight: 400; color: rgba(255,255,255,0.55); letter-spacing: 0.05em; text-transform: uppercase; margin-bottom: 2px; }
+.masthead-actions { display: flex; gap: 10px; flex-shrink: 0; }
+.btn-sm { display: inline-flex; align-items: center; gap: 6px; font-size: 13px; font-weight: 600; padding: 8px 16px; border-radius: 2px; cursor: pointer; transition: background .15s, color .15s; line-height: 1; }
 .btn-red { background: var(--cea-red); color: #fff; }
 .btn-red:hover { background: var(--cea-red-d); color: #fff; text-decoration: none; }
-.btn-outline { border: 1px solid rgba(255,255,255,0.45); color: rgba(255,255,255,0.9); background: transparent; }
+.btn-outline { border: 1px solid rgba(255,255,255,0.4); color: rgba(255,255,255,0.88); background: transparent; }
 .btn-outline:hover { background: rgba(255,255,255,0.12); color: #fff; text-decoration: none; }
+.btn-teal { background: var(--bv-teal); color: #fff; }
+.btn-teal:hover { background: var(--bv-teal-d); color: #fff; text-decoration: none; }
 
-/* ══════════════════════════════════════════════════════════
-   MAIN NAV
-══════════════════════════════════════════════════════════ */
-.main-nav {
-  background: var(--cea-blue);
-  position: sticky; top: 0; z-index: 100;
-}
+/* ── Main Nav ───────────────────────────────────────────── */
+.main-nav { background: var(--cea-blue); position: sticky; top: 0; z-index: 100; }
 .main-nav .wrap { display: flex; align-items: stretch; }
-.main-nav a {
-  display: flex; align-items: center;
-  color: rgba(255,255,255,0.88);
-  font-size: 13.5px;
-  font-weight: 600;
-  padding: 13px 18px;
-  letter-spacing: 0.01em;
-  border-bottom: 3px solid transparent;
-  transition: background .15s, border-color .15s;
-}
-.main-nav a:hover { background: rgba(255,255,255,0.1); color: #fff; text-decoration: none; border-bottom-color: rgba(255,255,255,0.5); }
+.main-nav a { display: flex; align-items: center; color: rgba(255,255,255,0.85); font-size: 13.5px; font-weight: 600; padding: 13px 18px; border-bottom: 3px solid transparent; transition: background .15s, border-color .15s; }
+.main-nav a:hover { background: rgba(255,255,255,0.1); color: #fff; text-decoration: none; border-bottom-color: rgba(255,255,255,0.45); }
 .main-nav a.active { border-bottom-color: var(--cea-red); color: #fff; }
 .nav-spacer { flex: 1; }
-.main-nav .nav-gh {
-  background: rgba(255,255,255,0.12);
-  padding: 0 20px;
-  font-size: 12.5px;
-}
+.main-nav .nav-bv { background: rgba(255,255,255,0.08); border-left: 1px solid rgba(255,255,255,0.12); font-size: 12.5px; }
+.main-nav .nav-bv:hover { background: rgba(255,255,255,0.18); border-bottom-color: transparent; }
+.main-nav .nav-gh { background: rgba(255,255,255,0.12); font-size: 12.5px; border-left: 1px solid rgba(255,255,255,0.12); }
 .main-nav .nav-gh:hover { background: rgba(255,255,255,0.2); border-bottom-color: transparent; }
 
-/* ══════════════════════════════════════════════════════════
-   BREADCRUMB
-══════════════════════════════════════════════════════════ */
-.breadcrumb {
-  background: var(--cea-gray);
-  border-bottom: 1px solid var(--cea-border);
-  padding: 10px 0;
-  font-size: 12.5px;
-  color: var(--text-dim);
-}
+/* ── Breadcrumb ─────────────────────────────────────────── */
+.breadcrumb { background: var(--cea-gray); border-bottom: 1px solid var(--cea-border); padding: 9px 0; font-size: 12.5px; color: var(--text-dim); }
 .breadcrumb .wrap { display: flex; align-items: center; gap: 6px; flex-wrap: wrap; }
 .breadcrumb a { color: var(--cea-blue); }
 .breadcrumb a:hover { color: var(--cea-red); text-decoration: none; }
 .bc-sep { color: #bbb; }
 
-/* ══════════════════════════════════════════════════════════
-   HERO BANNER
-══════════════════════════════════════════════════════════ */
-.hero {
-  background: var(--cea-navy);
-  color: #fff;
-  padding: 64px 0 56px;
-  position: relative;
-  overflow: hidden;
-}
-.hero::before {
-  content: '';
-  position: absolute;
-  left: 0; top: 0; bottom: 0;
-  width: 5px;
-  background: var(--cea-red);
-}
+/* ── Hero ───────────────────────────────────────────────── */
+.hero { background: var(--cea-navy); color: #fff; padding: 60px 0 52px; position: relative; overflow: hidden; }
+.hero::before { content: ''; position: absolute; left: 0; top: 0; bottom: 0; width: 5px; background: var(--cea-red); }
 .hero .wrap { display: grid; grid-template-columns: 1fr auto; align-items: center; gap: 48px; }
 .hero-text { position: relative; z-index: 1; }
-.hero-eyebrow {
-  font-size: 11px; letter-spacing: 0.14em; text-transform: uppercase;
-  color: rgba(255,255,255,0.5);
-  margin-bottom: 16px;
-  display: flex; align-items: center; gap: 8px;
-}
-.hero-eyebrow::before {
-  content: '';
-  display: block; width: 24px; height: 2px;
-  background: var(--cea-red);
-  flex-shrink: 0;
-}
-.hero h1 {
-  font-family: var(--ff-serif);
-  font-size: clamp(30px, 4vw, 48px);
-  font-weight: 600;
-  line-height: 1.15;
-  color: #fff;
-  margin-bottom: 18px;
-}
-.hero h1 em {
-  font-style: italic;
-  color: rgba(255,255,255,0.7);
-  font-weight: 400;
-  display: block;
-}
-.hero-desc {
-  font-size: 16px;
-  color: rgba(255,255,255,0.72);
-  max-width: 580px;
-  line-height: 1.7;
-  margin-bottom: 28px;
-}
-.hero-badges {
-  display: flex; flex-wrap: wrap; gap: 8px;
-  margin-bottom: 32px;
-}
-.hero-badge {
-  display: inline-block;
-  font-size: 11px; font-weight: 600; letter-spacing: 0.06em;
-  text-transform: uppercase;
-  padding: 4px 10px;
-  border: 1px solid rgba(255,255,255,0.22);
-  color: rgba(255,255,255,0.72);
-  background: rgba(255,255,255,0.06);
-  border-radius: 1px;
-}
+.hero-eyebrow { font-size: 11px; letter-spacing: 0.14em; text-transform: uppercase; color: rgba(255,255,255,0.48); margin-bottom: 14px; display: flex; align-items: center; gap: 8px; }
+.hero-eyebrow::before { content: ''; display: block; width: 24px; height: 2px; background: var(--cea-red); flex-shrink: 0; }
+.hero h1 { font-family: var(--ff-serif); font-size: clamp(28px, 4vw, 46px); font-weight: 600; line-height: 1.15; color: #fff; margin-bottom: 16px; }
+.hero h1 em { font-style: italic; color: rgba(255,255,255,0.68); font-weight: 400; display: block; }
+.hero-desc { font-size: 16px; color: rgba(255,255,255,0.7); max-width: 580px; line-height: 1.7; margin-bottom: 24px; }
+.hero-badges { display: flex; flex-wrap: wrap; gap: 8px; margin-bottom: 30px; }
+.hero-badge { display: inline-block; font-size: 11px; font-weight: 600; letter-spacing: 0.06em; text-transform: uppercase; padding: 4px 10px; border: 1px solid rgba(255,255,255,0.2); color: rgba(255,255,255,0.7); background: rgba(255,255,255,0.06); border-radius: 1px; }
+.hero-badge.bv { border-color: rgba(42,127,165,0.6); background: rgba(42,127,165,0.15); color: rgba(255,255,255,0.8); }
 .hero-cta { display: flex; gap: 12px; flex-wrap: wrap; }
-.hero-stat-box {
-  background: rgba(255,255,255,0.05);
-  border: 1px solid rgba(255,255,255,0.1);
-  border-top: 3px solid var(--cea-red);
-  padding: 28px 32px;
-  min-width: 210px;
-  flex-shrink: 0;
-}
-.hero-stat { margin-bottom: 24px; }
+.hero-stat-box { background: rgba(255,255,255,0.05); border: 1px solid rgba(255,255,255,0.1); border-top: 3px solid var(--cea-red); padding: 28px 32px; min-width: 210px; flex-shrink: 0; }
+.hero-stat { margin-bottom: 22px; }
 .hero-stat:last-child { margin-bottom: 0; }
-.hero-stat-num {
-  font-family: var(--ff-serif);
-  font-size: 38px;
-  font-weight: 600;
-  color: #fff;
-  line-height: 1;
-}
-.hero-stat-label {
-  font-size: 12px;
-  color: rgba(255,255,255,0.5);
-  margin-top: 5px;
-  line-height: 1.4;
-}
+.hero-stat-num { font-family: var(--ff-serif); font-size: 36px; font-weight: 600; color: #fff; line-height: 1; }
+.hero-stat-label { font-size: 12px; color: rgba(255,255,255,0.48); margin-top: 5px; line-height: 1.4; }
 
-/* ══════════════════════════════════════════════════════════
-   PAGE BODY — two-column
-══════════════════════════════════════════════════════════ */
-.page-body {
-  display: grid;
-  grid-template-columns: 1fr 280px;
-  gap: 40px;
-  align-items: start;
-  padding: 48px 0 80px;
+/* ── BrainVISA ecosystem banner ─────────────────────────── */
+.bv-banner {
+  background: var(--bv-teal-l);
+  border-top: 3px solid var(--bv-teal);
+  border-bottom: 1px solid #b8d9ea;
+  padding: 18px 0;
 }
+.bv-banner .wrap { display: flex; align-items: center; gap: 20px; flex-wrap: wrap; }
+.bv-banner-logo { display: flex; align-items: center; gap: 10px; flex-shrink: 0; }
+.bv-banner-logo img { height: 30px; }
+.bv-banner-text { font-size: 14px; color: var(--bv-teal-d); }
+.bv-banner-text strong { color: var(--bv-teal-d); }
+.bv-banner-links { display: flex; gap: 0; margin-left: auto; flex-shrink: 0; }
+.bv-banner-links a { font-size: 13px; font-weight: 600; color: var(--bv-teal-d); padding: 6px 14px; border: 1px solid #9dcfe5; border-radius: 2px; margin-left: 8px; background: #fff; transition: background .15s, color .15s; }
+.bv-banner-links a:hover { background: var(--bv-teal); color: #fff; text-decoration: none; }
+
+/* ── Page body ──────────────────────────────────────────── */
+.page-body { display: grid; grid-template-columns: 1fr 280px; gap: 40px; align-items: start; padding: 48px 0 80px; }
 
 /* ── Section headings ───────────────────────────────────── */
-.sec-heading {
-  border-top: 3px solid var(--cea-red);
-  padding-top: 14px;
-  margin-bottom: 28px;
-}
-.sec-heading h2 {
-  font-family: var(--ff-serif);
-  font-size: 22px;
-  font-weight: 600;
-  color: var(--cea-navy);
-  margin-bottom: 5px;
-}
+.sec-heading { border-top: 3px solid var(--cea-red); padding-top: 14px; margin-bottom: 26px; }
+.sec-heading.bv-accent { border-top-color: var(--bv-teal); }
+.sec-heading h2 { font-family: var(--ff-serif); font-size: 22px; font-weight: 600; color: var(--cea-navy); margin-bottom: 5px; }
 .sec-heading p { font-size: 14px; color: var(--text-mid); }
-
-/* ── Prose ──────────────────────────────────────────────── */
+code { font-family: 'Consolas','Courier New',monospace; font-size: 0.87em; background: #eef1f6; padding: 1px 5px; border-radius: 2px; color: var(--cea-navy); }
 .prose { font-size: 15.5px; color: var(--text-mid); line-height: 1.72; }
 .prose strong { color: var(--text); }
 .prose a { color: var(--cea-blue); }
 .prose a:hover { color: var(--cea-red); }
-code {
-  font-family: 'Consolas', 'Courier New', monospace;
-  font-size: 0.87em;
-  background: #eef1f6;
-  padding: 1px 5px;
-  border-radius: 2px;
-  color: var(--cea-navy);
-}
 
 /* ── Pipeline steps ─────────────────────────────────────── */
-.pipeline-step {
-  display: grid;
-  grid-template-columns: 50px 1fr;
-  border: 1px solid var(--cea-border);
-  border-bottom: none;
-  background: #fff;
-  transition: background .15s;
-}
+.pipeline-step { display: grid; grid-template-columns: 50px 1fr; border: 1px solid var(--cea-border); border-bottom: none; background: #fff; transition: background .15s; }
 .pipeline-step:first-child { border-radius: 2px 2px 0 0; }
 .pipeline-step:last-child { border-bottom: 1px solid var(--cea-border); border-radius: 0 0 2px 2px; }
-.pipeline-step:hover { background: var(--cea-gray); }
-.step-num-col {
-  background: var(--cea-navy);
-  display: flex; align-items: flex-start; justify-content: center;
-  padding: 16px 0 0;
-  font-size: 12px; font-weight: 700; letter-spacing: 0.04em;
-  color: rgba(255,255,255,0.5);
-}
-.step-num-col.red { background: var(--cea-red); color: rgba(255,255,255,0.8); }
-.step-content { padding: 15px 18px 15px 16px; }
+.pipeline-step:hover { background: #f9fafb; }
+.step-num-col { background: var(--cea-navy); display: flex; align-items: flex-start; justify-content: center; padding: 15px 0 0; font-size: 12px; font-weight: 700; letter-spacing: 0.04em; color: rgba(255,255,255,0.48); }
+.step-num-col.red { background: var(--cea-red); color: rgba(255,255,255,0.78); }
+.step-content { padding: 14px 18px 14px 16px; }
 .step-title { font-size: 14px; font-weight: 700; color: var(--cea-navy); margin-bottom: 5px; }
 .step-desc { font-size: 13.5px; color: var(--text-mid); line-height: 1.6; }
+.step-desc a { color: var(--bv-teal); }
+.step-desc a:hover { color: var(--bv-teal-d); text-decoration: underline; }
 .step-tags { display: flex; gap: 6px; flex-wrap: wrap; margin-top: 8px; }
-.step-tag {
-  font-size: 11px; font-weight: 600; letter-spacing: 0.05em; text-transform: uppercase;
-  color: var(--cea-blue);
-  border: 1px solid var(--cea-border);
-  padding: 2px 8px;
-  border-radius: 1px;
-  background: var(--cea-gray);
-}
+.step-tag { font-size: 11px; font-weight: 600; letter-spacing: 0.05em; text-transform: uppercase; color: var(--cea-blue); border: 1px solid var(--cea-border); padding: 2px 8px; border-radius: 1px; background: var(--cea-gray); }
+.step-tag.bv { color: var(--bv-teal-d); border-color: #9dcfe5; background: var(--bv-teal-l); }
 
-/* ── Installation block ─────────────────────────────────── */
-.install-block {
-  margin-top: 40px;
-  border: 1px solid var(--cea-border);
-  border-top: 3px solid var(--cea-blue);
-  border-radius: 2px;
-  overflow: hidden;
-}
-.install-label {
-  background: var(--cea-gray);
-  border-bottom: 1px solid var(--cea-border);
-  padding: 10px 18px;
-  font-size: 12px; font-weight: 700; text-transform: uppercase; letter-spacing: 0.08em;
-  color: var(--text-mid);
-}
+/* ── BrainVISA tools grid ───────────────────────────────── */
+.bv-tools-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 12px; margin-top: 8px; }
+.bv-tool-card { border: 1px solid #b8d9ea; border-left: 3px solid var(--bv-teal); background: var(--bv-teal-l); padding: 14px 16px; border-radius: 2px; text-decoration: none; display: block; transition: background .15s, border-left-color .15s; }
+.bv-tool-card:hover { background: #d4edf6; border-left-color: var(--bv-teal-d); text-decoration: none; }
+.bv-tool-card h4 { font-size: 14px; font-weight: 700; color: var(--bv-teal-d); margin-bottom: 4px; }
+.bv-tool-card p { font-size: 13px; color: #2d6a87; line-height: 1.5; }
+
+/* ── Install block ──────────────────────────────────────── */
+.install-block { margin-top: 40px; border: 1px solid var(--cea-border); border-top: 3px solid var(--cea-blue); border-radius: 2px; overflow: hidden; }
+.install-label { background: var(--cea-gray); border-bottom: 1px solid var(--cea-border); padding: 10px 18px; font-size: 12px; font-weight: 700; text-transform: uppercase; letter-spacing: 0.08em; color: var(--text-mid); }
 .code-wrap { background: #1e2532; padding: 20px 22px; overflow-x: auto; }
-.code-wrap pre {
-  font-family: 'Consolas', 'Courier New', monospace;
-  font-size: 13px;
-  line-height: 1.8;
-  color: #abb2bf;
-  white-space: pre;
-}
-.code-wrap .c  { color: #5c6370; font-style: italic; }
-.code-wrap .k  { color: #61afef; }
-.code-wrap .s  { color: #98c379; }
-.install-reqs {
-  display: grid; grid-template-columns: 1fr 1fr;
-}
+.code-wrap pre { font-family: 'Consolas','Courier New',monospace; font-size: 13px; line-height: 1.8; color: #abb2bf; white-space: pre; }
+.code-wrap .c { color: #5c6370; font-style: italic; }
+.code-wrap .k { color: #61afef; }
+.install-reqs { display: grid; grid-template-columns: 1fr 1fr; }
 .req-col { padding: 18px 20px; border-top: 1px solid var(--cea-border); }
 .req-col + .req-col { border-left: 1px solid var(--cea-border); }
-.req-col h4 {
-  font-size: 11px; font-weight: 700; text-transform: uppercase; letter-spacing: 0.09em;
-  color: var(--cea-navy); margin-bottom: 10px;
-}
+.req-col h4 { font-size: 11px; font-weight: 700; text-transform: uppercase; letter-spacing: 0.09em; color: var(--cea-navy); margin-bottom: 10px; }
 .req-col ul { list-style: none; }
-.req-col li {
-  font-size: 13.5px; color: var(--text-mid);
-  padding: 3px 0;
-  display: flex; align-items: center; gap: 7px;
-}
+.req-col li { font-size: 13.5px; color: var(--text-mid); padding: 3px 0; display: flex; align-items: center; gap: 7px; }
 .req-col li::before { content: '›'; color: var(--cea-red); font-weight: 700; font-size: 15px; }
+.req-col a { color: var(--bv-teal); }
+.req-col a:hover { color: var(--bv-teal-d); }
 
 /* ── Sidebar ────────────────────────────────────────────── */
-.aside-card {
-  border: 1px solid var(--cea-border);
-  border-top: 3px solid var(--cea-red);
-  margin-bottom: 24px;
-  border-radius: 2px;
-  overflow: hidden;
-}
-.aside-card-head {
-  padding: 11px 16px;
-  font-size: 11px; font-weight: 700; text-transform: uppercase; letter-spacing: 0.08em;
-  color: var(--cea-navy);
-  background: var(--cea-gray);
-  border-bottom: 1px solid var(--cea-border);
-}
+.aside-card { border: 1px solid var(--cea-border); border-top: 3px solid var(--cea-red); margin-bottom: 24px; border-radius: 2px; overflow: hidden; }
+.aside-card.bv-card { border-top-color: var(--bv-teal); }
+.aside-card-head { padding: 11px 16px; font-size: 11px; font-weight: 700; text-transform: uppercase; letter-spacing: 0.08em; color: var(--cea-navy); background: var(--cea-gray); border-bottom: 1px solid var(--cea-border); }
+.aside-card.bv-card .aside-card-head { background: var(--bv-teal-l); color: var(--bv-teal-d); border-bottom-color: #b8d9ea; }
 .aside-links { list-style: none; }
 .aside-links li { border-bottom: 1px solid var(--cea-border); }
 .aside-links li:last-child { border-bottom: none; }
-.aside-links a {
-  display: flex; align-items: center; gap: 8px;
-  padding: 11px 16px;
-  font-size: 13.5px;
-  color: var(--text);
-  transition: background .12s, color .12s;
-}
+.aside-links a { display: flex; align-items: center; gap: 8px; padding: 11px 16px; font-size: 13.5px; color: var(--text); transition: background .12s, color .12s; }
 .aside-links a:hover { background: var(--cea-gray); color: var(--cea-red); text-decoration: none; }
+.bv-card .aside-links a:hover { background: var(--bv-teal-l); color: var(--bv-teal-d); }
 .aside-links .icon { font-size: 15px; width: 20px; text-align: center; flex-shrink: 0; }
 .aside-links .arrow { margin-left: auto; color: #bbb; }
 .aside-info { padding: 14px 16px; }
 .aside-info p { font-size: 13px; color: var(--text-mid); line-height: 1.6; margin-bottom: 10px; }
-.aside-info a { font-size: 13px; color: var(--cea-blue); }
-.aside-info a:hover { color: var(--cea-red); }
 .badge-row { display: flex; flex-direction: column; gap: 7px; padding: 14px 16px; }
 .badge-row img { height: 20px; }
+/* BrainVISA logo in sidebar */
+.bv-sidebar-logo { display: flex; align-items: center; gap: 10px; padding: 12px 16px; border-bottom: 1px solid #b8d9ea; }
+.bv-sidebar-logo img { height: 28px; }
+.bv-sidebar-logo span { font-size: 13px; color: var(--bv-teal-d); font-weight: 600; }
 
-/* ══════════════════════════════════════════════════════════
-   BLUE HIGHLIGHT BAR
-══════════════════════════════════════════════════════════ */
-.highlight-bar {
-  background: var(--cea-blue);
-  color: #fff;
-  padding: 32px 0;
-}
-.highlight-bar .wrap {
-  display: flex; align-items: center; justify-content: space-between; gap: 24px; flex-wrap: wrap;
-}
+/* ── Highlight bar ──────────────────────────────────────── */
+.highlight-bar { background: var(--cea-blue); color: #fff; padding: 30px 0; }
+.highlight-bar .wrap { display: flex; align-items: center; justify-content: space-between; gap: 24px; flex-wrap: wrap; }
 .highlight-bar h3 { font-family: var(--ff-serif); font-size: 20px; margin-bottom: 6px; }
 .highlight-bar p { font-size: 14px; color: rgba(255,255,255,0.72); max-width: 540px; }
 
-/* ══════════════════════════════════════════════════════════
-   FOOTER
-══════════════════════════════════════════════════════════ */
-footer {
-  background: var(--cea-navy-d);
-  color: rgba(255,255,255,0.65);
-  padding: 36px 0;
-  font-size: 13px;
-}
-.footer-grid {
-  display: grid;
-  grid-template-columns: 1fr 1fr 1fr;
-  gap: 32px;
-}
-.footer-col h4 {
-  font-size: 11px; font-weight: 700; text-transform: uppercase; letter-spacing: 0.1em;
-  color: rgba(255,255,255,0.5);
-  margin-bottom: 14px;
-  padding-bottom: 8px;
-  border-bottom: 1px solid rgba(255,255,255,0.1);
-}
+/* ── Partners strip ─────────────────────────────────────── */
+.partners-strip { background: var(--cea-gray); border-top: 1px solid var(--cea-border); border-bottom: 1px solid var(--cea-border); padding: 28px 0; }
+.partners-strip .wrap { display: flex; align-items: center; gap: 16px; flex-wrap: wrap; }
+.partners-label { font-size: 11px; font-weight: 700; text-transform: uppercase; letter-spacing: 0.1em; color: var(--text-dim); margin-right: 8px; flex-shrink: 0; }
+.partner-logo { display: flex; align-items: center; justify-content: center; padding: 6px 16px; background: #fff; border: 1px solid var(--cea-border); border-radius: 2px; font-size: 13px; font-weight: 700; color: var(--text-mid); text-decoration: none; transition: border-color .15s, color .15s; }
+.partner-logo:hover { border-color: var(--bv-teal); color: var(--bv-teal); text-decoration: none; }
+.partner-logo img { height: 22px; }
+
+/* ── Footer ─────────────────────────────────────────────── */
+footer { background: var(--cea-navy-d); color: rgba(255,255,255,0.65); padding: 36px 0; font-size: 13px; }
+.footer-grid { display: grid; grid-template-columns: 1fr 1fr 1fr 1fr; gap: 28px; }
+.footer-col h4 { font-size: 11px; font-weight: 700; text-transform: uppercase; letter-spacing: 0.1em; color: rgba(255,255,255,0.45); margin-bottom: 14px; padding-bottom: 8px; border-bottom: 1px solid rgba(255,255,255,0.1); }
 .footer-col ul { list-style: none; }
 .footer-col li { padding: 4px 0; }
 .footer-col a { color: rgba(255,255,255,0.65); transition: color .12s; }
 .footer-col a:hover { color: #fff; text-decoration: none; }
-.footer-bottom {
-  margin-top: 32px;
-  padding-top: 20px;
-  border-top: 1px solid rgba(255,255,255,0.1);
-  display: flex; align-items: center; justify-content: space-between; flex-wrap: wrap; gap: 10px;
-}
-.footer-cea-mark { display: flex; align-items: center; gap: 10px; color: rgba(255,255,255,0.8); }
-.footer-cea-box {
-  background: var(--cea-red);
-  color: #fff;
-  font-weight: 700; font-size: 13px;
-  padding: 4px 8px;
-  letter-spacing: 0.04em;
-}
+.footer-bottom { margin-top: 32px; padding-top: 20px; border-top: 1px solid rgba(255,255,255,0.1); display: flex; align-items: center; justify-content: space-between; flex-wrap: wrap; gap: 12px; }
+.footer-logos { display: flex; align-items: center; gap: 16px; }
+.footer-cea-img { height: 32px; width: 32px; border-radius: 4px; object-fit: cover; }
+.footer-bv-img { height: 24px; filter: brightness(0) invert(1); opacity: 0.7; }
 
-/* ══════════════════════════════════════════════════════════
-   RESPONSIVE
-══════════════════════════════════════════════════════════ */
+/* ── Responsive ─────────────────────────────────────────── */
+@media (max-width: 960px) {
+  .footer-grid { grid-template-columns: 1fr 1fr; gap: 24px; }
+}
 @media (max-width: 860px) {
   .hero .wrap { grid-template-columns: 1fr; }
   .hero-stat-box { display: none; }
   .page-body { grid-template-columns: 1fr; }
   .page-aside { order: -1; }
-  .footer-grid { grid-template-columns: 1fr 1fr; gap: 24px; }
+  .bv-tools-grid { grid-template-columns: 1fr; }
   .install-reqs { grid-template-columns: 1fr; }
   .req-col + .req-col { border-left: none; border-top: 1px solid var(--cea-border); }
 }
 @media (max-width: 600px) {
   .util-right { display: none; }
-  .main-nav .nav-gh { display: none; }
+  .main-nav .nav-gh, .main-nav .nav-bv { display: none; }
   .masthead-actions { display: none; }
   .footer-grid { grid-template-columns: 1fr; }
+  .bv-banner-links { display: none; }
 }
 </style>
 </head>
 <body>
 
-<!-- ── Utility bar ───────────────────────────────────────── -->
+<!-- ── Util bar ──────────────────────────────────────────── -->
 <div class="util-bar">
   <div class="wrap">
     <div class="util-left">
@@ -500,14 +261,14 @@ footer {
       <span class="util-sep">›</span>
       <a href="https://www.cea.fr/Pages/domaines-recherche/sante-sciences-du-vivant.aspx">Health &amp; Life Sciences</a>
       <span class="util-sep">›</span>
-      <a href="https://www.cea.fr/drf/irig">NeuroSpin</a>
+      <a href="https://brainvisa.info/web/">BrainVISA</a>
       <span class="util-sep">›</span>
       <span>Champollion Pipeline</span>
     </div>
     <div class="util-right">
       <a href="https://huggingface.co/spaces/neurospin/Champollion_demo">Live Demo</a>
+      <a href="https://brainvisa.info/web/download.html">Download BrainVISA</a>
       <a href="https://github.com/neurospin/champollion_pipeline">GitHub</a>
-      <a href="https://huggingface.co/neurospin/Champollion_V1">Hugging Face</a>
     </div>
   </div>
 </div>
@@ -516,19 +277,28 @@ footer {
 <header class="masthead">
   <div class="wrap">
     <a class="cea-logo-block" href="https://www.cea.fr">
-      <div class="cea-logo-box">CEA</div>
+      <img class="cea-logo-img" src="data:image/jpeg;base64,/9j/4AAQSkZJRgABAQEBLAEsAAD/2wBDAAYEBQUFBAYFBQUHBgYHCQ8KCQgICRMNDgsPFhMXFxYTFRUYGyMeGBohGhUVHikfISQlJygnGB0rLismLiMmJyb/2wBDAQYHBwkICRIKChImGRUZJiYmJiYmJiYmJiYmJiYmJiYmJiYmJiYmJiYmJiYmJiYmJiYmJiYmJiYmJiYmJiYmJib/wAARCAIAAgADASIAAhEBAxEB/8QAHwAAAQUBAQEBAQEAAAAAAAAAAAECAwQFBgcICQoL/8QAtRAAAgEDAwIEAwUFBAQAAAF9AQIDAAQRBRIhMUEGE1FhByJxFDKBkaEII0KxwRVS0fAkM2JyggkKFhcYGRolJicoKSo0NTY3ODk6Q0RFRkdISUpTVFVWV1hZWmNkZWZnaGlqc3R1dnd4eXqDhIWGh4iJipKTlJWWl5iZmqKjpKWmp6ipqrKztLW2t7i5usLDxMXGx8jJytLT1NXW19jZ2uHi4+Tl5ufo6erx8vP09fb3+Pn6/8QAHwEAAwEBAQEBAQEBAQAAAAAAAAECAwQFBgcICQoL/8QAtREAAgECBAQDBAcFBAQAAQJ3AAECAxEEBSExBhJBUQdhcRMiMoEIFEKRobHBCSMzUvAVYnLRChYkNOEl8RcYGRomJygpKjU2Nzg5OkNERUZHSElKU1RVVldYWVpjZGVmZ2hpanN0dXZ3eHl6goOEhYaHiImKkpOUlZaXmJmaoqOkpaanqKmqsrO0tba3uLm6wsPExcbHyMnK0tPU1dbX2Nna4uPk5ebn6Onq8vP09fb3+Pn6/9oADAMBAAIRAxEAPwDzOiiivnD+lQooooAKKKKACiiigAooooAKKKKACiiigAooooAKKKKACiiigAooooAKKKKACiiigAooooAKKKKACiiigAooooAKKKKACiiigAooooAKKKKACiiigAooooAKKKKACiiigAooooAKKKKACiiigAooooAKKKKACiiigAqW1/4+Yf8AfH86iqW1/wCPmH/fH86YpbMiooopDCiiigAooooAKKKKACiiigAooooAKKKKACiiigAooooAKKKKACiiigAooooAKKKKACiiigAooooAKKKKACiiigAooooAKKKKACiiigAooooAKKKKACiiigAooooAKKKKACiiigAooooAKKKKACiiigAooooAKKKKACpbX/j5h/3x/Ooqltf+PmH/AHx/OmKWzIqKKKQwooooAKKKKACiiigAooooAKKKKACiiigAooooAKKKKACiiigAooooAKKKKACiiigAooooAKKKKACiiigAooooAKKKKACiiigAooooAKKKKACiiigAooooAKKKKACiiigAooooAKKKKACiiigAooooAKKKKACiiigAqW1/4+Yf98fzqKpbX/j5h/3x/OmKWzIqKKKQwooooAKKKKACiiigAooooAKKKKACiiigAooooAKKKKACiiigAooooAKKKKACiiigAooooAKKKKACiiigAooooAKKKKACiiigAooooAKKKKACiiigAooooAKKKKACiiigAooooAKKKKACiiigAooooAKKKKACiiigAqW1/wCPmH/fH86iqW1/4+Yf98fzpilsyKiiikMKKKKACiiigAooooAKKKKACiiigAooooAKKKKACiiigAooooAKKKKACiiigAooooAKKKKACiiigAooooAKKKKACiiigAooooAKKKKACiiigAooooAKKKKACiiigAooooAKKKKACiiigAooooAKKKKACiiigAooooAKltf+PmH/AHx/Ooqltf8Aj5h/3x/OmKWzIqKKKQwooooAKKKKACiiigAooooAKKKKACiiigAooooAKKKKACiiigAooooAKKKKACiiigAooooAKKKKACiiigAooooAKKKKACiiigAooooAKKKKACiiigAooooAKKKKACiiigAooooAKKKKACiiigAooooAKKKKACiiigAqW1/4+Yf98fzqKpbX/j5h/wB8fzpilsyKiiikMKKKKACiiigAooooAKKKKACiiigAooooAKKKKACiiigAooooAKKKKACiiigAooooAKKKKACiiigAooooAKKKKACiiigAooooAKKKKACiiigAooooAKKKKACiiigAooooAKKKKACiiigAooooAKKKKACiiigAooooAKltf+PmH/fH86iqW1/4+Yf98fzpilsyKiiikMKKKKACiiigAooooAKKKKACiiigAooooAKKKKACiiigAooooAKKKKACiiigAooooAKKKKACiiigAooooAKKKKACiiigAooooAKKKKACiiigAooooAKKKKACiiigAooooAKKKKACiiigAooooAKKKKACiiigAooooAKltf8Aj5h/3x/Ooqltf+PmH/fH86YpbMiooopDCiiigAooooAKKKKACiiigAooooAKKKKACiiigAooooAKKKKACiiigAooooAKKKKACiiigAooooAKKKKACiiigAooooAKKKKACiiigAooooAKKKKACiiigAooooAKKKKACiiigAooooAKKKKACiiigAooooAKKKKACpbX/j5h/wB8fzqKpbX/AI+Yf98fzpilsyKiiikMKKKKACiiigAooooAKKKKACiiigAooooAKKKKACiiigAooooAKKKKACiiigAooooAKKKKACiiigAooooAKKKKACiiigAooooAKKKKACiiigAooooAKKKKACiiigAooooAKKKKACiiigAooooAKKKKACiiigAooooAKltf+PmH/fH86iqW1/4+Yf8AfH86YpbMiooopDCiiigAooooAKKKKACiiigAooooAKKKKACiiuo8I+BPE3ipwdL09vs2cG6m+SIf8CPX6DNUouTsjGtXpYeDqVZKKXV6HL0V9DeH/gHp8arJr2szXD94rRQij/gRyT+Qrt9P+FXgOxUbNAimYfxXEjyE/mcfpXVHCVHvofKYjjDLaTtC8/RafjY+QqK+14fBvhOHGzw3pYx62iH+YpJvBvhOYESeG9LIPpaIv8hV/Updzz/9eMPf+C/vR8U0V9e6h8KfAd6Dv0COFj/FbyPHj8AcfpXIax8A9DmDNpWsXdm3ZZlEq/0NRLCVFtqd9DjHLajtPmj6q/5X/I+caK9P1/4K+MdNDSWSW+qxD/n3fa//AHy2P0JrzvUtN1DS7g22pWNxZzDrHPGUP5GuaVOUPiR9LhcwwuLV6FRS9Hr925UoooqDtCiiigAorT0HQdY1+7Fpo+nz3svfy1yFHqx6AfWvXPDXwEvplWbxFqyWoPJgtF3t9Cx4H4A1rClOfwo8vG5tgsB/vFRJ9t39y1PEKK+s9K+D3gSwVfM0t76Qfx3MzNn8AQP0robfwT4RtwBF4a0wAf3rZW/mK6Vg59WfMVeNsHF2p05P7l+rPiuivtiXwf4UlGH8N6X6cWiD+QrKvvhj4EvQRL4ctkz3hLRH/wAdIpvBS6MiHG+Fb9+lJeln/kfHlFfSutfAfw3cqzaXqF5p8h6ByJkH4HB/WvMfFPwe8XaIjz20CatbLzvtMlwPdDz+Wawnh6kOh7uD4ky3FtRjU5X2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u6ikvuCiiioOkKKKKACiiigAooooAKKKKACpbX/j5h/3x/Ooqltf+PmH/fH86YpbMiooopDCiiigAooooAKKKKACiiigAooooAKKKKACiiigAooooAKKKKACiiigAooooAKKKKACiiigAooooAKKKKACiiigAooooAKKKKACiiigAooooAKKKKACiiigAooooAKKKKACiiigAooooAKKKKACiiigAooooAKKKKACpbX/AI+Yf98fzqKpbX/j5h/3x/OmKWzIqKKKQwooooAKKKKACiiigAooooAKKKKACiiigAooooAKKKKACiiigAooooAKKKKACiiigAooooAKKKKACiiigAooooAKKKKACiiigAooooAKKKKACiiigAooooAKKKKACiiigAooooAKKKKACiiigAooooAKKKKACiiigAqW1/4+Yf8AfH86iqW1/wCPmH/fH86YpbMiooopDCiiigAooooAKKKKACiiigAooooAKKKKACiiigAooooAKKKKACiiigAooooAKKKKACiiigAooooAKKKKACiiigAooooAKKKKACiiigAooooAKKKKACiiigAooooAKKKKACiiigAooooAKKKKACiiigAooooAKKKKACpbX/j5h/3x/Ooqltf+PmH/AHx/OmKWzIqKKKQwooooAKKKKACiiigAooooAKKKKACiiigAooooAKKKKACiiigAooooAKKKKACiiigAooooAKKKKACiiigAooooAKKKKACiiigAooooAKKKKACiiigAooooAKKKKACiiigAooooAKKKKACiiigAooooAKKKKACiiigAqW1/4+Yf98fzqKpbX/j5h/3x/OmKWzIqKKKQwooooAKKKKACiiigAooooAKKKKACiiigAooooAKKKKACiiigAooooAKKKKACiiigAooooAKKKKACiiigAooooAKKKKACiiigAooooAKKKKACiiigAooooAKKKKACiiigAooooAKKKKACiiigAooooAKKKKACiiigAqW1/wCPmH/fH86iqW1/4+Yf98fzpilsyKiiikMKKKKACiiigAooooAKKKKACiiigAooooAKKKKACiiigAooooAKKKKACiiigAooooAKKKKACiiigAooooAKKKKACiiigAooooAKKKKACiiigAooooAKKKKACiiigAooooAKKKKACiiigAooooAKKKKACiiigAooooAKltf+PmH/AHx/Ooqltf8Aj5h/3x/OmKWzIqKKKQwooooAKKKKACiiigAooooAKKKKACiiigAooooAKKKKACiiigAooooAKKKKACiiigAooooAKKKKACiiigAooooAKKKKACiiigAooooAKKKKACiiigAooooAKKKKACiiigAooooAKKKKACiiigAooooAKKKKACiiigAqW1/4+Yf98fzqKpbX/j5h/wB8fzpilsyKiiikMKKKKACiiigAooooAKKKKACiiigAooooAKKKKACiiigAooooAKKKKACiiigAooooAKKKKACiiigAooooAKKKKACiiigAooooAKKKKACiiigAooooAKKKKACiiigAooooAKKKKACiiigAooooAKKKKACiiigAooooAKltf+PmH/fH86iqW1/4+Yf98fzpilsyKiiikMKKKKACiiigAooooAKKKKACiiigAooooAKKKKACiiigAooooAKKKKACiiigAooooAKKKKACiiigAooooAKKKKACiiigAooooAKKKKACiiigAooooAKKKKACiiigAooooAKKKKACiiigAooooAKKKKACiiigAooooAKltf8Aj5h/3x/Ooqltf+PmH/fH86YpbMioqX7PP/zwk/75NH2ef/nhJ/3yaA5l3IqKl+zz/wDPCT/vk0fZ5/8AnhJ/3yaA5l3IqKl+zz/88JP++TR9nn/54Sf98mgOZdyKipfs8/8Azwk/75NH2ef/AJ4Sf98mgOZdyKipfs8//PCT/vk0fZ5/+eEn/fJoDmXcioqX7PP/AM8JP++TR9nn/wCeEn/fJoDmXcioqX7PP/zwk/75NH2ef/nhJ/3yaA5l3IqKl+zz/wDPCT/vk0fZ5/8AnhJ/3yaA5l3IqKl+zz/88JP++TR9nn/54Sf98mgOZdyKipfs8/8Azwk/75NH2ef/AJ4Sf98mgOZdyKipfs8//PCT/vk0fZ5/+eEn/fJoDmXcioqX7PP/AM8JP++TR9nn/wCeEn/fJoDmXcioqX7PP/zwk/75NH2ef/nhJ/3yaA5l3IqKl+zz/wDPCT/vk0fZ5/8AnhJ/3yaA5l3IqKl+zz/88JP++TR9nn/54Sf98mgOZdyKipfs8/8Azwk/75NH2ef/AJ4Sf98mgOZdyKipfs8//PCT/vk0fZ5/+eEn/fJoDmXcioqX7PP/AM8JP++TR9nn/wCeEn/fJoDmXcioqX7PP/zwk/75NH2ef/nhJ/3yaA5l3IqKl+zz/wDPCT/vk0fZ5/8AnhJ/3yaA5l3IqKl+zz/88JP++TR9nn/54Sf98mgOZdyKipfs8/8Azwk/75NH2ef/AJ4Sf98mgOZdyKipfs8//PCT/vk0fZ5/+eEn/fJoDmXcioqX7PP/AM8JP++TR9nn/wCeEn/fJoDmXcioqX7PP/zwk/75NH2ef/nhJ/3yaA5l3IqKl+zz/wDPCT/vk0fZ5/8AnhJ/3yaA5l3IqKl+zz/88JP++TR9nn/54Sf98mgOZdyKipfs8/8Azwk/75NH2ef/AJ4Sf98mgOZdyKipfs8//PCT/vk0fZ5/+eEn/fJoDmXcioqX7PP/AM8JP++TR9nn/wCeEn/fJoDmXcioqX7PP/zwk/75NH2ef/nhJ/3yaA5l3Iqltf8Aj5h/3x/Oj7PP/wA8JP8Avk1JbW8/2mL9zJ98fwn1oFKSs9T/2Q==" alt="CEA" />
       <div class="cea-logo-text">
         <strong>Commissariat à l'Énergie Atomique</strong>
         et aux Énergies Alternatives
       </div>
     </a>
-    <div class="masthead-divider"></div>
+    <div class="mh-divider"></div>
+    <a class="bv-logo-block" href="https://brainvisa.info/web/">
+      <img src="https://brainvisa.info/web/_static/images/brainvisa.png" alt="BrainVISA" />
+      <div class="bv-logo-label">
+        <strong>BrainVISA</strong>
+        Neuroimaging Platform
+      </div>
+    </a>
+    <div class="mh-spacer"></div>
     <div class="project-name">
       <span>NeuroSpin · Software</span>
       Champollion Pipeline
     </div>
     <div class="masthead-actions">
       <a class="btn-sm btn-red" href="https://huggingface.co/spaces/neurospin/Champollion_demo">🤗 Live Demo</a>
+      <a class="btn-sm btn-teal" href="https://brainvisa.info/web/download.html">Download BrainVISA</a>
       <a class="btn-sm btn-outline" href="https://github.com/neurospin/champollion_pipeline">GitHub ↗</a>
     </div>
   </div>
@@ -539,10 +309,12 @@ footer {
   <div class="wrap">
     <a href="#overview" class="active">Overview</a>
     <a href="#pipeline">Pipeline</a>
+    <a href="#brainvisa">BrainVISA Tools</a>
     <a href="#install">Installation</a>
     <a href="#resources">Resources</a>
     <div class="nav-spacer"></div>
-    <a class="nav-gh" href="https://github.com/neurospin/champollion_pipeline">⭐ View on GitHub</a>
+    <a class="nav-bv" href="https://brainvisa.info/web/">🧠 BrainVISA ↗</a>
+    <a class="nav-gh" href="https://github.com/neurospin/champollion_pipeline">⭐ GitHub ↗</a>
   </div>
 </nav>
 
@@ -553,9 +325,11 @@ footer {
     <span class="bc-sep">›</span>
     <a href="https://www.cea.fr/Pages/domaines-recherche/sante-sciences-du-vivant.aspx">Health &amp; Life Sciences</a>
     <span class="bc-sep">›</span>
-    <a href="https://www.cea.fr/drf/irig">NeuroSpin</a>
+    <a href="https://brainvisa.info/web/">BrainVISA</a>
     <span class="bc-sep">›</span>
-    <span>Champollion Pipeline</span>
+    <a href="https://brainvisa.info/web/tools.html#champol">Champollion</a>
+    <span class="bc-sep">›</span>
+    <span>champollion_pipeline</span>
   </div>
 </div>
 
@@ -563,23 +337,25 @@ footer {
 <section class="hero" id="overview">
   <div class="wrap">
     <div class="hero-text">
-      <p class="hero-eyebrow">NeuroSpin &mdash; CEA Paris-Saclay &mdash; Open Source</p>
+      <p class="hero-eyebrow">NeuroSpin &mdash; CEA Paris-Saclay &mdash; BrainVISA 6.0</p>
       <h1>Champollion Pipeline<em>From raw MRI to cortical embeddings</em></h1>
       <p class="hero-desc">
-        An end-to-end pipeline that transforms T1 MRI images into compact, meaningful
-        embeddings of sulcal morphology — ready for population-scale brain analysis,
-        sex classification, and disease prediction.
+        An end-to-end pipeline that transforms T1 MRI images into compact embeddings
+        of sulcal morphology — built on the <strong>BrainVISA / Morphologist</strong> ecosystem
+        and ready for population-scale brain analysis and disease prediction.
       </p>
       <div class="hero-badges">
         <span class="hero-badge">Python ≥ 3.8</span>
         <span class="hero-badge">PyTorch</span>
         <span class="hero-badge">Pixi</span>
         <span class="hero-badge">CeCILL-B</span>
-        <span class="hero-badge">Morphologist</span>
+        <span class="hero-badge bv">BrainVISA 6.0</span>
+        <span class="hero-badge bv">Morphologist</span>
       </div>
       <div class="hero-cta">
-        <a class="btn-sm btn-red" href="https://huggingface.co/spaces/neurospin/Champollion_demo">🤗 Try the Live Demo</a>
-        <a class="btn-sm btn-outline" href="https://github.com/neurospin/champollion_pipeline">View on GitHub ↗</a>
+        <a class="btn-sm btn-red" href="https://huggingface.co/spaces/neurospin/Champollion_demo">🤗 Live Demo</a>
+        <a class="btn-sm btn-teal" href="https://brainvisa.info/web/download.html">Download BrainVISA</a>
+        <a class="btn-sm btn-outline" href="https://github.com/neurospin/champollion_pipeline">GitHub ↗</a>
         <a class="btn-sm btn-outline" href="https://huggingface.co/neurospin/Champollion_V1">HF Model ↗</a>
       </div>
     </div>
@@ -593,21 +369,38 @@ footer {
         <div class="hero-stat-label">UKBioBank reference<br />subjects</div>
       </div>
       <div class="hero-stat">
-        <div class="hero-stat-num">7</div>
-        <div class="hero-stat-label">Pipeline steps from<br />MRI to embeddings</div>
+        <div class="hero-stat-num">6.0</div>
+        <div class="hero-stat-label">BrainVISA / Morphologist<br />release</div>
       </div>
     </div>
   </div>
 </section>
 
+<!-- ── BrainVISA ecosystem banner ────────────────────────── -->
+<div class="bv-banner">
+  <div class="wrap">
+    <div class="bv-banner-logo">
+      <img src="https://brainvisa.info/web/_static/images/brainvisa.png" alt="BrainVISA" />
+    </div>
+    <div class="bv-banner-text">
+      Part of the <strong>BrainVISA 6.0</strong> neuroimaging platform — providing Morphologist brain segmentation,
+      Anatomist 3D visualisation, and the full sulcal analysis ecosystem.
+    </div>
+    <div class="bv-banner-links">
+      <a href="https://brainvisa.info/web/">brainvisa.info ↗</a>
+      <a href="https://brainvisa.info/web/morphologist.html">Morphologist ↗</a>
+      <a href="https://brainvisa.info/web/download.html">Download ↗</a>
+    </div>
+  </div>
+</div>
+
 <!-- ── Page body ─────────────────────────────────────────── -->
 <div class="wrap">
   <div class="page-body">
 
-    <!-- Main column -->
     <main class="page-main">
 
-      <!-- Overview -->
+      <!-- About -->
       <div class="sec-heading">
         <h2>About the pipeline</h2>
         <p>A complete, reproducible workflow for cortical sulcal analysis</p>
@@ -615,7 +408,8 @@ footer {
       <p class="prose">
         The <strong>Champollion Pipeline</strong> orchestrates the full journey from raw anatomical
         MRI data to compact embeddings of sulcal morphology. It leverages
-        <strong>Morphologist</strong> to extract sulcal fold graphs, then uses
+        <strong><a href="https://brainvisa.info/web/morphologist.html">Morphologist</a></strong>
+        (part of BrainVISA 6.0) to extract sulcal fold graphs, then uses
         <strong>cortical_tiles</strong> to tile 28 sulcal regions, and finally generates embeddings
         using pre-trained <strong>Champollion V1</strong> transformer models hosted on Hugging Face.
       </p>
@@ -623,6 +417,8 @@ footer {
         A <a href="https://huggingface.co/spaces/neurospin/Champollion_demo">live demo</a> is
         available on Hugging Face Spaces for quick single-subject testing.
         For batch processing or production use, install locally to leverage all available CPUs and GPUs.
+        BrainVISA 6.0, DISCO, and Champollion are all
+        <a href="https://brainvisa.info/web/download.html">available for download</a> together.
       </p>
 
       <!-- Pipeline steps -->
@@ -645,8 +441,8 @@ footer {
           <div class="step-num-col">02</div>
           <div class="step-content">
             <div class="step-title">Generate Morphologist Sulcal Graphs</div>
-            <div class="step-desc">Run <code>morphologist-cli</code> on T1 NIfTI files to extract sulcal fold graphs. Supports serial and parallel execution via <strong>soma-workflow</strong> with a configurable CPU count.</div>
-            <div class="step-tags"><span class="step-tag">morphologist-cli</span><span class="step-tag">soma-workflow</span></div>
+            <div class="step-desc">Run <code>morphologist-cli</code> on T1 NIfTI files to extract sulcal fold graphs using <a href="https://brainvisa.info/web/morphologist.html">Morphologist</a> (BrainVISA 6.0). Supports serial and parallel execution via <strong>soma-workflow</strong> with a configurable CPU count.</div>
+            <div class="step-tags"><span class="step-tag bv">Morphologist</span><span class="step-tag bv">BrainVISA 6.0</span><span class="step-tag">soma-workflow</span></div>
           </div>
         </div>
 
@@ -654,8 +450,8 @@ footer {
           <div class="step-num-col">03</div>
           <div class="step-content">
             <div class="step-title">Generate Sulcal Regions (cortical_tiles)</div>
-            <div class="step-desc">Extract 28 sulcal region crops from Morphologist output. Accepts wildcard path segments, optional QC files (tab-separated <code>participant_id / qc</code>), and configurable input types: skeleton, foldlabel, extremities.</div>
-            <div class="step-tags"><span class="step-tag">cortical_tiles</span></div>
+            <div class="step-desc">Extract 28 sulcal region crops from Morphologist output. Accepts wildcard path segments, optional QC files, and configurable input types: skeleton, foldlabel, extremities.</div>
+            <div class="step-tags"><span class="step-tag bv">cortical_tiles</span><span class="step-tag bv">BrainVISA</span></div>
           </div>
         </div>
 
@@ -672,7 +468,7 @@ footer {
           <div class="step-num-col red">05</div>
           <div class="step-content">
             <div class="step-title">Generate Embeddings</div>
-            <div class="step-desc">Run all 56 pre-trained model folds to produce one <code>full_embeddings.csv</code> per region. Models can be fetched from a local path, a <code>.tar.gz</code> archive, or directly from the Hugging Face hub (<code>neurospin/Champollion_V1</code>). GPU and CPU modes supported.</div>
+            <div class="step-desc">Run all 56 pre-trained model folds to produce one <code>full_embeddings.csv</code> per region. Models load from local paths, archives, or directly from the Hugging Face hub (<code>neurospin/Champollion_V1</code>). GPU and CPU modes supported.</div>
             <div class="step-tags"><span class="step-tag">PyTorch</span><span class="step-tag">Hugging Face</span></div>
           </div>
         </div>
@@ -690,27 +486,59 @@ footer {
           <div class="step-num-col">07</div>
           <div class="step-content">
             <div class="step-title">Generate Visualization Snapshots</div>
-            <div class="step-desc">Produce sulcal graph meshes, cortical tile masks, and UMAP scatter plots. Each new subject is projected onto a pre-trained 2D UMAP fitted on 42,433 anonymous UKBioBank reference subjects, displayed as a blue cloud with the new subject highlighted in red.</div>
-            <div class="step-tags"><span class="step-tag">UMAP</span><span class="step-tag">anatomist</span></div>
+            <div class="step-desc">Produce sulcal graph meshes, cortical tile masks, and UMAP scatter plots using <a href="https://brainvisa.info/web/anatomist.html">Anatomist</a>. Each new subject is projected onto a pre-trained 2D UMAP fitted on 42,433 anonymous UKBioBank reference subjects.</div>
+            <div class="step-tags"><span class="step-tag bv">Anatomist</span><span class="step-tag">UMAP</span></div>
           </div>
         </div>
+      </div>
 
-      </div><!-- /#pipeline -->
+      <!-- BrainVISA Tools -->
+      <div id="brainvisa" style="margin-top:52px">
+        <div class="sec-heading bv-accent">
+          <h2>BrainVISA ecosystem</h2>
+          <p>Champollion builds on the following BrainVISA tools — part of the broader neuroimaging platform</p>
+        </div>
+        <div class="bv-tools-grid">
+          <a class="bv-tool-card" href="https://brainvisa.info/web/morphologist.html">
+            <h4>🧠 Morphologist</h4>
+            <p>Brain segmentation and sulcal morphometry. Extracts the fold graphs that feed into this pipeline. Available in BrainVISA 6.0.</p>
+          </a>
+          <a class="bv-tool-card" href="https://brainvisa.info/web/anatomist.html">
+            <h4>🔬 Anatomist</h4>
+            <p>Interactive 3D neuroimaging data visualisation. Used in step 7 to render sulcal graph meshes and cortical tile masks.</p>
+          </a>
+          <a class="bv-tool-card" href="https://brainvisa.info/web/cortical_surface.html">
+            <h4>🗺 Cortical Surface</h4>
+            <p>Cortical surface analysis toolbox within the BrainVISA framework, complementing sulcal region extraction.</p>
+          </a>
+          <a class="bv-tool-card" href="https://brainvisa.info/web/tools.html#champol">
+            <h4>✨ Champollion (BrainVISA)</h4>
+            <p>Deep learning model for cortical folding — listed in the BrainVISA tools catalogue. This pipeline is its production deployment.</p>
+          </a>
+          <a class="bv-tool-card" href="https://brainvisa.info/web/tools.html#disco">
+            <h4>🔄 DISCO</h4>
+            <p>Constraints-based diffeomorphic registration, also part of BrainVISA 6.0 and downloadable alongside Champollion.</p>
+          </a>
+          <a class="bv-tool-card" href="https://brainvisa.info/web/download.html">
+            <h4>⬇️ Download BrainVISA 6.0</h4>
+            <p>BrainVISA 6.0, DISCO, and Champollion are all available in a single download from brainvisa.info.</p>
+          </a>
+        </div>
+      </div>
 
       <!-- Installation -->
       <div id="install" style="margin-top:52px">
         <div class="sec-heading">
           <h2>Installation</h2>
-          <p>Requires <a href="https://pixi.sh/">Pixi</a> and Git — all other dependencies are managed automatically</p>
+          <p>Requires <a href="https://pixi.sh/">Pixi</a> and Git — all other dependencies managed automatically</p>
         </div>
-
         <div class="install-block">
           <div class="install-label">bash — Quick setup</div>
           <div class="code-wrap">
 <pre><span class="c"># 1. Clone the repository</span>
 mkdir Champollion && cd Champollion
-<span class="k">git</span> clone https://github.com/neurospin/champollion_pipeline.git
-<span class="k">cd</span> champollion_pipeline
+git clone https://github.com/neurospin/champollion_pipeline.git
+cd champollion_pipeline
 
 <span class="c"># 2. Install all dependencies (submodules + Python packages)</span>
 <span class="k">pixi</span> run install-all
@@ -727,7 +555,7 @@ mkdir Champollion && cd Champollion
               <ul>
                 <li><a href="https://pixi.sh/">Pixi</a> package manager</li>
                 <li>Git (with submodule support)</li>
-                <li>soma-env / BrainVISA (for Morphologist)</li>
+                <li><a href="https://brainvisa.info/web/download.html">BrainVISA 6.0</a> (for Morphologist)</li>
                 <li>Python ≥ 3.8</li>
               </ul>
             </div>
@@ -736,7 +564,7 @@ mkdir Champollion && cd Champollion
               <ul>
                 <li>PyTorch</li>
                 <li>huggingface-hub &amp; transformers</li>
-                <li>morphologist, anatomist</li>
+                <li><a href="https://brainvisa.info/web/morphologist.html">Morphologist</a>, <a href="https://brainvisa.info/web/anatomist.html">Anatomist</a></li>
                 <li>cortical_tiles, champollion_V1</li>
               </ul>
             </div>
@@ -755,9 +583,26 @@ mkdir Champollion && cd Champollion
           <li><a href="https://github.com/neurospin/champollion_pipeline"><span class="icon">⚙️</span> Source code<span class="arrow">›</span></a></li>
           <li><a href="https://huggingface.co/spaces/neurospin/Champollion_demo"><span class="icon">🤗</span> Live demo (HF Spaces)<span class="arrow">›</span></a></li>
           <li><a href="https://huggingface.co/neurospin/Champollion_V1"><span class="icon">🧠</span> Champollion V1 model<span class="arrow">›</span></a></li>
-          <li><a href="https://github.com/neurospin/champollion_pipeline/blob/main/README.md"><span class="icon">📖</span> Full documentation<span class="arrow">›</span></a></li>
+          <li><a href="https://github.com/neurospin/champollion_pipeline/blob/main/README.md"><span class="icon">📖</span> Documentation<span class="arrow">›</span></a></li>
           <li><a href="https://github.com/neurospin/champollion_pipeline/blob/main/LICENSE"><span class="icon">⚖️</span> Licence CeCILL-B<span class="arrow">›</span></a></li>
-          <li><a href="https://github.com/neurospin"><span class="icon">🔬</span> NeuroSpin on GitHub<span class="arrow">›</span></a></li>
+        </ul>
+      </div>
+
+      <div class="aside-card bv-card">
+        <div class="aside-card-head">BrainVISA platform</div>
+        <div class="bv-sidebar-logo">
+          <img src="https://brainvisa.info/web/_static/images/brainvisa.png" alt="BrainVISA" />
+          <span>BrainVISA 6.0</span>
+        </div>
+        <ul class="aside-links">
+          <li><a href="https://brainvisa.info/web/"><span class="icon">🏠</span> BrainVISA home<span class="arrow">›</span></a></li>
+          <li><a href="https://brainvisa.info/web/morphologist.html"><span class="icon">🧠</span> Morphologist<span class="arrow">›</span></a></li>
+          <li><a href="https://brainvisa.info/web/anatomist.html"><span class="icon">🔬</span> Anatomist<span class="arrow">›</span></a></li>
+          <li><a href="https://brainvisa.info/web/cortical_surface.html"><span class="icon">🗺</span> Cortical Surface<span class="arrow">›</span></a></li>
+          <li><a href="https://brainvisa.info/web/tools.html#champol"><span class="icon">✨</span> Champollion (BV)<span class="arrow">›</span></a></li>
+          <li><a href="https://brainvisa.info/web/download.html"><span class="icon">⬇️</span> Download BrainVISA<span class="arrow">›</span></a></li>
+          <li><a href="https://brainvisa.info/web/support.html"><span class="icon">💬</span> Support<span class="arrow">›</span></a></li>
+          <li><a href="https://brainvisa.info/web/publications.html"><span class="icon">📄</span> Publications<span class="arrow">›</span></a></li>
         </ul>
       </div>
 
@@ -769,23 +614,24 @@ mkdir Champollion && cd Champollion
           <a href="https://pixi.sh/"><img src="https://img.shields.io/badge/pixi-package%20manager-yellow?logo=prefix&logoColor=white" alt="Pixi" /></a>
           <a href="https://cecill.info/licences/Licence_CeCILL-B_V1-en.html"><img src="https://img.shields.io/badge/license-CeCILL--B-blue" alt="License CeCILL-B" /></a>
           <a href="https://huggingface.co/neurospin/Champollion_V1"><img src="https://img.shields.io/badge/🤗-Champollion_V1-orange" alt="HF Model" /></a>
+          <a href="https://brainvisa.info/web/"><img src="https://img.shields.io/badge/BrainVISA-6.0-2a7fa5" alt="BrainVISA 6.0" /></a>
         </div>
       </div>
 
       <div class="aside-card">
         <div class="aside-card-head">About NeuroSpin</div>
         <div class="aside-info">
-          <p>NeuroSpin is a high-field MRI research centre at <strong>CEA Paris-Saclay</strong>, dedicated to new methods for brain imaging and analysis.</p>
+          <p>NeuroSpin is a high-field MRI research centre at <strong>CEA Paris-Saclay</strong>, dedicated to new methods for brain imaging and analysis. It is one of the main contributors to the BrainVISA infrastructure.</p>
           <a href="https://www.cea.fr/drf/irig">Visit NeuroSpin ›</a>
         </div>
       </div>
 
     </aside>
 
-  </div><!-- /.page-body -->
-</div><!-- /.wrap -->
+  </div>
+</div>
 
-<!-- ── Highlight bar ─────────────────────────────────────── -->
+<!-- ── CTA bar ───────────────────────────────────────────── -->
 <div class="highlight-bar">
   <div class="wrap">
     <div>
@@ -796,25 +642,54 @@ mkdir Champollion && cd Champollion
   </div>
 </div>
 
+<!-- ── Partners strip ────────────────────────────────────── -->
+<div class="partners-strip">
+  <div class="wrap">
+    <span class="partners-label">Partners &amp; ecosystem</span>
+    <a class="partner-logo" href="https://www.cea.fr">
+      <img src="data:image/jpeg;base64,/9j/4AAQSkZJRgABAQEBLAEsAAD/2wBDAAYEBQUFBAYFBQUHBgYHCQ8KCQgICRMNDgsPFhMXFxYTFRUYGyMeGBohGhUVHikfISQlJygnGB0rLismLiMmJyb/2wBDAQYHBwkICRIKChImGRUZJiYmJiYmJiYmJiYmJiYmJiYmJiYmJiYmJiYmJiYmJiYmJiYmJiYmJiYmJiYmJiYmJib/wAARCAIAAgADASIAAhEBAxEB/8QAHwAAAQUBAQEBAQEAAAAAAAAAAAECAwQFBgcICQoL/8QAtRAAAgEDAwIEAwUFBAQAAAF9AQIDAAQRBRIhMUEGE1FhByJxFDKBkaEII0KxwRVS0fAkM2JyggkKFhcYGRolJicoKSo0NTY3ODk6Q0RFRkdISUpTVFVWV1hZWmNkZWZnaGlqc3R1dnd4eXqDhIWGh4iJipKTlJWWl5iZmqKjpKWmp6ipqrKztLW2t7i5usLDxMXGx8jJytLT1NXW19jZ2uHi4+Tl5ufo6erx8vP09fb3+Pn6/8QAHwEAAwEBAQEBAQEBAQAAAAAAAAECAwQFBgcICQoL/8QAtREAAgECBAQDBAcFBAQAAQJ3AAECAxEEBSExBhJBUQdhcRMiMoEIFEKRobHBCSMzUvAVYnLRChYkNOEl8RcYGRomJygpKjU2Nzg5OkNERUZHSElKU1RVVldYWVpjZGVmZ2hpanN0dXZ3eHl6goOEhYaHiImKkpOUlZaXmJmaoqOkpaanqKmqsrO0tba3uLm6wsPExcbHyMnK0tPU1dbX2Nna4uPk5ebn6Onq8vP09fb3+Pn6/9oADAMBAAIRAxEAPwDzOiiivnD+lQooooAKKKKACiiigAooooAKKKKACiiigAooooAKKKKACiiigAooooAKKKKACiiigAooooAKKKKACiiigAooooAKKKKACiiigAooooAKKKKACiiigAooooAKKKKACiiigAooooAKKKKACiiigAooooAKKKKACiiigAqW1/4+Yf8AfH86iqW1/wCPmH/fH86YpbMiooopDCiiigAooooAKKKKACiiigAooooAKKKKACiiigAooooAKKKKACiiigAooooAKKKKACiiigAooooAKKKKACiiigAooooAKKKKACiiigAooooAKKKKACiiigAooooAKKKKACiiigAooooAKKKKACiiigAooooAKKKKACpbX/j5h/3x/Ooqltf+PmH/AHx/OmKWzIqKKKQwooooAKKKKACiiigAooooAKKKKACiiigAooooAKKKKACiiigAooooAKKKKACiiigAooooAKKKKACiiigAooooAKKKKACiiigAooooAKKKKACiiigAooooAKKKKACiiigAooooAKKKKACiiigAooooAKKKKACiiigAqW1/4+Yf98fzqKpbX/j5h/3x/OmKWzIqKKKQwooooAKKKKACiiigAooooAKKKKACiiigAooooAKKKKACiiigAooooAKKKKACiiigAooooAKKKKACiiigAooooAKKKKACiiigAooooAKKKKACiiigAooooAKKKKACiiigAooooAKKKKACiiigAooooAKKKKACiiigAqW1/wCPmH/fH86iqW1/4+Yf98fzpilsyKiiikMKKKKACiiigAooooAKKKKACiiigAooooAKKKKACiiigAooooAKKKKACiiigAooooAKKKKACiiigAooooAKKKKACiiigAooooAKKKKACiiigAooooAKKKKACiiigAooooAKKKKACiiigAooooAKKKKACiiigAooooAKltf+PmH/AHx/Ooqltf8Aj5h/3x/OmKWzIqKKKQwooooAKKKKACiiigAooooAKKKKACiiigAooooAKKKKACiiigAooooAKKKKACiiigAooooAKKKKACiiigAooooAKKKKACiiigAooooAKKKKACiiigAooooAKKKKACiiigAooooAKKKKACiiigAooooAKKKKACiiigAqW1/4+Yf98fzqKpbX/j5h/wB8fzpilsyKiiikMKKKKACiiigAooooAKKKKACiiigAooooAKKKKACiiigAooooAKKKKACiiigAooooAKKKKACiiigAooooAKKKKACiiigAooooAKKKKACiiigAooooAKKKKACiiigAooooAKKKKACiiigAooooAKKKKACiiigAooooAKltf+PmH/fH86iqW1/4+Yf98fzpilsyKiiikMKKKKACiiigAooooAKKKKACiiigAooooAKKKKACiiigAooooAKKKKACiiigAooooAKKKKACiiigAooooAKKKKACiiigAooooAKKKKACiiigAooooAKKKKACiiigAooooAKKKKACiiigAooooAKKKKACiiigAooooAKltf8Aj5h/3x/Ooqltf+PmH/fH86YpbMiooopDCiiigAooooAKKKKACiiigAooooAKKKKACiiigAooooAKKKKACiiigAooooAKKKKACiiigAooooAKKKKACiiigAooooAKKKKACiiigAooooAKKKKACiiigAooooAKKKKACiiigAooooAKKKKACiiigAooooAKKKKACpbX/j5h/wB8fzqKpbX/AI+Yf98fzpilsyKiiikMKKKKACiiigAooooAKKKKACiiigAooooAKKKKACiiigAooooAKKKKACiiigAooooAKKKKACiiigAooooAKKKKACiiigAooooAKKKKACiiigAooooAKKKKACiiigAooooAKKKKACiiigAooooAKKKKACiiigAooooAKltf+PmH/fH86iqW1/4+Yf8AfH86YpbMiooopDCiiigAooooAKKKKACiiigAooooAKKKKACiiuo8I+BPE3ipwdL09vs2cG6m+SIf8CPX6DNUouTsjGtXpYeDqVZKKXV6HL0V9DeH/gHp8arJr2szXD94rRQij/gRyT+Qrt9P+FXgOxUbNAimYfxXEjyE/mcfpXVHCVHvofKYjjDLaTtC8/RafjY+QqK+14fBvhOHGzw3pYx62iH+YpJvBvhOYESeG9LIPpaIv8hV/Updzz/9eMPf+C/vR8U0V9e6h8KfAd6Dv0COFj/FbyPHj8AcfpXIax8A9DmDNpWsXdm3ZZlEq/0NRLCVFtqd9DjHLajtPmj6q/5X/I+caK9P1/4K+MdNDSWSW+qxD/n3fa//AHy2P0JrzvUtN1DS7g22pWNxZzDrHPGUP5GuaVOUPiR9LhcwwuLV6FRS9Hr925UoooqDtCiiigAorT0HQdY1+7Fpo+nz3svfy1yFHqx6AfWvXPDXwEvplWbxFqyWoPJgtF3t9Cx4H4A1rClOfwo8vG5tgsB/vFRJ9t39y1PEKK+s9K+D3gSwVfM0t76Qfx3MzNn8AQP0robfwT4RtwBF4a0wAf3rZW/mK6Vg59WfMVeNsHF2p05P7l+rPiuivtiXwf4UlGH8N6X6cWiD+QrKvvhj4EvQRL4ctkz3hLRH/wAdIpvBS6MiHG+Fb9+lJeln/kfHlFfSutfAfw3cqzaXqF5p8h6ByJkH4HB/WvMfFPwe8XaIjz20CatbLzvtMlwPdDz+Wawnh6kOh7uD4ky3FtRjU5X2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u6ikvuCiiioOkKKKKACiiigAooooAKKKKACpbX/j5h/3x/Ooqltf+PmH/fH86YpbMiooopDCiiigAooooAKKKKACiiigAooooAKKKKACiiigAooooAKKKKACiiigAooooAKKKKACiiigAooooAKKKKACiiigAooooAKKKKACiiigAooooAKKKKACiiigAooooAKKKKACiiigAooooAKKKKACiiigAooooAKKKKACpbX/AI+Yf98fzqKpbX/j5h/3x/OmKWzIqKKKQwooooAKKKKACiiigAooooAKKKKACiiigAooooAKKKKACiiigAooooAKKKKACiiigAooooAKKKKACiiigAooooAKKKKACiiigAooooAKKKKACiiigAooooAKKKKACiiigAooooAKKKKACiiigAooooAKKKKACiiigAqW1/4+Yf8AfH86iqW1/wCPmH/fH86YpbMiooopDCiiigAooooAKKKKACiiigAooooAKKKKACiiigAooooAKKKKACiiigAooooAKKKKACiiigAooooAKKKKACiiigAooooAKKKKACiiigAooooAKKKKACiiigAooooAKKKKACiiigAooooAKKKKACiiigAooooAKKKKACpbX/j5h/3x/Ooqltf+PmH/AHx/OmKWzIqKKKQwooooAKKKKACiiigAooooAKKKKACiiigAooooAKKKKACiiigAooooAKKKKACiiigAooooAKKKKACiiigAooooAKKKKACiiigAooooAKKKKACiiigAooooAKKKKACiiigAooooAKKKKACiiigAooooAKKKKACiiigAqW1/4+Yf98fzqKpbX/j5h/3x/OmKWzIqKKKQwooooAKKKKACiiigAooooAKKKKACiiigAooooAKKKKACiiigAooooAKKKKACiiigAooooAKKKKACiiigAooooAKKKKACiiigAooooAKKKKACiiigAooooAKKKKACiiigAooooAKKKKACiiigAooooAKKKKACiiigAqW1/wCPmH/fH86iqW1/4+Yf98fzpilsyKiiikMKKKKACiiigAooooAKKKKACiiigAooooAKKKKACiiigAooooAKKKKACiiigAooooAKKKKACiiigAooooAKKKKACiiigAooooAKKKKACiiigAooooAKKKKACiiigAooooAKKKKACiiigAooooAKKKKACiiigAooooAKltf+PmH/AHx/Ooqltf8Aj5h/3x/OmKWzIqKKKQwooooAKKKKACiiigAooooAKKKKACiiigAooooAKKKKACiiigAooooAKKKKACiiigAooooAKKKKACiiigAooooAKKKKACiiigAooooAKKKKACiiigAooooAKKKKACiiigAooooAKKKKACiiigAooooAKKKKACiiigAqW1/4+Yf98fzqKpbX/j5h/wB8fzpilsyKiiikMKKKKACiiigAooooAKKKKACiiigAooooAKKKKACiiigAooooAKKKKACiiigAooooAKKKKACiiigAooooAKKKKACiiigAooooAKKKKACiiigAooooAKKKKACiiigAooooAKKKKACiiigAooooAKKKKACiiigAooooAKltf+PmH/fH86iqW1/4+Yf98fzpilsyKiiikMKKKKACiiigAooooAKKKKACiiigAooooAKKKKACiiigAooooAKKKKACiiigAooooAKKKKACiiigAooooAKKKKACiiigAooooAKKKKACiiigAooooAKKKKACiiigAooooAKKKKACiiigAooooAKKKKACiiigAooooAKltf8Aj5h/3x/Ooqltf+PmH/fH86YpbMioqX7PP/zwk/75NH2ef/nhJ/3yaA5l3IqKl+zz/wDPCT/vk0fZ5/8AnhJ/3yaA5l3IqKl+zz/88JP++TR9nn/54Sf98mgOZdyKipfs8/8Azwk/75NH2ef/AJ4Sf98mgOZdyKipfs8//PCT/vk0fZ5/+eEn/fJoDmXcioqX7PP/AM8JP++TR9nn/wCeEn/fJoDmXcioqX7PP/zwk/75NH2ef/nhJ/3yaA5l3IqKl+zz/wDPCT/vk0fZ5/8AnhJ/3yaA5l3IqKl+zz/88JP++TR9nn/54Sf98mgOZdyKipfs8/8Azwk/75NH2ef/AJ4Sf98mgOZdyKipfs8//PCT/vk0fZ5/+eEn/fJoDmXcioqX7PP/AM8JP++TR9nn/wCeEn/fJoDmXcioqX7PP/zwk/75NH2ef/nhJ/3yaA5l3IqKl+zz/wDPCT/vk0fZ5/8AnhJ/3yaA5l3IqKl+zz/88JP++TR9nn/54Sf98mgOZdyKipfs8/8Azwk/75NH2ef/AJ4Sf98mgOZdyKipfs8//PCT/vk0fZ5/+eEn/fJoDmXcioqX7PP/AM8JP++TR9nn/wCeEn/fJoDmXcioqX7PP/zwk/75NH2ef/nhJ/3yaA5l3IqKl+zz/wDPCT/vk0fZ5/8AnhJ/3yaA5l3IqKl+zz/88JP++TR9nn/54Sf98mgOZdyKipfs8/8Azwk/75NH2ef/AJ4Sf98mgOZdyKipfs8//PCT/vk0fZ5/+eEn/fJoDmXcioqX7PP/AM8JP++TR9nn/wCeEn/fJoDmXcioqX7PP/zwk/75NH2ef/nhJ/3yaA5l3IqKl+zz/wDPCT/vk0fZ5/8AnhJ/3yaA5l3IqKl+zz/88JP++TR9nn/54Sf98mgOZdyKipfs8/8Azwk/75NH2ef/AJ4Sf98mgOZdyKipfs8//PCT/vk0fZ5/+eEn/fJoDmXcioqX7PP/AM8JP++TR9nn/wCeEn/fJoDmXcioqX7PP/zwk/75NH2ef/nhJ/3yaA5l3Iqltf8Aj5h/3x/Oj7PP/wA8JP8Avk1JbW8/2mL9zJ98fwn1oFKSs9T/2Q==" alt="CEA" style="height:22px;width:22px;border-radius:3px;object-fit:cover;" />
+      &nbsp;CEA
+    </a>
+    <a class="partner-logo" href="https://brainvisa.info/web/">
+      <img src="https://brainvisa.info/web/_static/images/brainvisa.png" alt="BrainVISA" />
+    </a>
+    <a class="partner-logo" href="https://huggingface.co/neurospin">🤗 Hugging Face</a>
+    <a class="partner-logo" href="http://cati-neuroimaging.com">CATI Neuroimaging</a>
+    <a class="partner-logo" href="http://inserm.fr">Inserm</a>
+    <a class="partner-logo" href="https://www.humanbrainproject.eu/">Human Brain Project</a>
+  </div>
+</div>
+
 <!-- ── Footer ────────────────────────────────────────────── -->
 <footer>
   <div class="wrap">
     <div class="footer-grid">
       <div class="footer-col">
-        <h4>Project</h4>
+        <h4>Pipeline</h4>
         <ul>
           <li><a href="https://github.com/neurospin/champollion_pipeline">Source code</a></li>
           <li><a href="https://github.com/neurospin/champollion_pipeline/blob/main/README.md">Documentation</a></li>
           <li><a href="https://github.com/neurospin/champollion_pipeline/blob/main/LICENSE">Licence CeCILL-B</a></li>
-          <li><a href="https://github.com/neurospin/champollion_pipeline/issues">Issues &amp; bug reports</a></li>
+          <li><a href="https://github.com/neurospin/champollion_pipeline/issues">Issues</a></li>
         </ul>
       </div>
       <div class="footer-col">
         <h4>Models &amp; Demo</h4>
         <ul>
           <li><a href="https://huggingface.co/neurospin/Champollion_V1">Champollion V1 (HF)</a></li>
-          <li><a href="https://huggingface.co/spaces/neurospin/Champollion_demo">Live Demo (HF Spaces)</a></li>
-          <li><a href="https://pixi.sh/">Pixi package manager</a></li>
+          <li><a href="https://huggingface.co/spaces/neurospin/Champollion_demo">Live Demo</a></li>
+          <li><a href="https://pixi.sh/">Pixi</a></li>
+        </ul>
+      </div>
+      <div class="footer-col">
+        <h4>BrainVISA</h4>
+        <ul>
+          <li><a href="https://brainvisa.info/web/">brainvisa.info</a></li>
+          <li><a href="https://brainvisa.info/web/morphologist.html">Morphologist</a></li>
+          <li><a href="https://brainvisa.info/web/anatomist.html">Anatomist</a></li>
+          <li><a href="https://brainvisa.info/web/download.html">Download</a></li>
+          <li><a href="https://brainvisa.info/web/publications.html">Publications</a></li>
+          <li><a href="https://brainvisa.info/web/support.html">Support</a></li>
         </ul>
       </div>
       <div class="footer-col">
@@ -823,16 +698,17 @@ mkdir Champollion && cd Champollion
           <li><a href="https://www.cea.fr">CEA.fr</a></li>
           <li><a href="https://www.cea.fr/drf/irig">NeuroSpin</a></li>
           <li><a href="https://www.cea.fr/Pages/le-cea/les-centres-cea/paris-saclay.aspx">CEA Paris-Saclay</a></li>
-          <li><a href="https://github.com/neurospin">NeuroSpin on GitHub</a></li>
+          <li><a href="https://github.com/neurospin">NeuroSpin GitHub</a></li>
         </ul>
       </div>
     </div>
     <div class="footer-bottom">
-      <div class="footer-cea-mark">
-        <div class="footer-cea-box">CEA</div>
-        <span>Commissariat à l'Énergie Atomique et aux Énergies Alternatives</span>
+      <div class="footer-logos">
+        <img class="footer-cea-img" src="data:image/jpeg;base64,/9j/4AAQSkZJRgABAQEBLAEsAAD/2wBDAAYEBQUFBAYFBQUHBgYHCQ8KCQgICRMNDgsPFhMXFxYTFRUYGyMeGBohGhUVHikfISQlJygnGB0rLismLiMmJyb/2wBDAQYHBwkICRIKChImGRUZJiYmJiYmJiYmJiYmJiYmJiYmJiYmJiYmJiYmJiYmJiYmJiYmJiYmJiYmJiYmJiYmJib/wAARCAIAAgADASIAAhEBAxEB/8QAHwAAAQUBAQEBAQEAAAAAAAAAAAECAwQFBgcICQoL/8QAtRAAAgEDAwIEAwUFBAQAAAF9AQIDAAQRBRIhMUEGE1FhByJxFDKBkaEII0KxwRVS0fAkM2JyggkKFhcYGRolJicoKSo0NTY3ODk6Q0RFRkdISUpTVFVWV1hZWmNkZWZnaGlqc3R1dnd4eXqDhIWGh4iJipKTlJWWl5iZmqKjpKWmp6ipqrKztLW2t7i5usLDxMXGx8jJytLT1NXW19jZ2uHi4+Tl5ufo6erx8vP09fb3+Pn6/8QAHwEAAwEBAQEBAQEBAQAAAAAAAAECAwQFBgcICQoL/8QAtREAAgECBAQDBAcFBAQAAQJ3AAECAxEEBSExBhJBUQdhcRMiMoEIFEKRobHBCSMzUvAVYnLRChYkNOEl8RcYGRomJygpKjU2Nzg5OkNERUZHSElKU1RVVldYWVpjZGVmZ2hpanN0dXZ3eHl6goOEhYaHiImKkpOUlZaXmJmaoqOkpaanqKmqsrO0tba3uLm6wsPExcbHyMnK0tPU1dbX2Nna4uPk5ebn6Onq8vP09fb3+Pn6/9oADAMBAAIRAxEAPwDzOiiivnD+lQooooAKKKKACiiigAooooAKKKKACiiigAooooAKKKKACiiigAooooAKKKKACiiigAooooAKKKKACiiigAooooAKKKKACiiigAooooAKKKKACiiigAooooAKKKKACiiigAooooAKKKKACiiigAooooAKKKKACiiigAqW1/4+Yf8AfH86iqW1/wCPmH/fH86YpbMiooopDCiiigAooooAKKKKACiiigAooooAKKKKACiiigAooooAKKKKACiiigAooooAKKKKACiiigAooooAKKKKACiiigAooooAKKKKACiiigAooooAKKKKACiiigAooooAKKKKACiiigAooooAKKKKACiiigAooooAKKKKACpbX/j5h/3x/Ooqltf+PmH/AHx/OmKWzIqKKKQwooooAKKKKACiiigAooooAKKKKACiiigAooooAKKKKACiiigAooooAKKKKACiiigAooooAKKKKACiiigAooooAKKKKACiiigAooooAKKKKACiiigAooooAKKKKACiiigAooooAKKKKACiiigAooooAKKKKACiiigAqW1/4+Yf98fzqKpbX/j5h/3x/OmKWzIqKKKQwooooAKKKKACiiigAooooAKKKKACiiigAooooAKKKKACiiigAooooAKKKKACiiigAooooAKKKKACiiigAooooAKKKKACiiigAooooAKKKKACiiigAooooAKKKKACiiigAooooAKKKKACiiigAooooAKKKKACiiigAqW1/wCPmH/fH86iqW1/4+Yf98fzpilsyKiiikMKKKKACiiigAooooAKKKKACiiigAooooAKKKKACiiigAooooAKKKKACiiigAooooAKKKKACiiigAooooAKKKKACiiigAooooAKKKKACiiigAooooAKKKKACiiigAooooAKKKKACiiigAooooAKKKKACiiigAooooAKltf+PmH/AHx/Ooqltf8Aj5h/3x/OmKWzIqKKKQwooooAKKKKACiiigAooooAKKKKACiiigAooooAKKKKACiiigAooooAKKKKACiiigAooooAKKKKACiiigAooooAKKKKACiiigAooooAKKKKACiiigAooooAKKKKACiiigAooooAKKKKACiiigAooooAKKKKACiiigAqW1/4+Yf98fzqKpbX/j5h/wB8fzpilsyKiiikMKKKKACiiigAooooAKKKKACiiigAooooAKKKKACiiigAooooAKKKKACiiigAooooAKKKKACiiigAooooAKKKKACiiigAooooAKKKKACiiigAooooAKKKKACiiigAooooAKKKKACiiigAooooAKKKKACiiigAooooAKltf+PmH/fH86iqW1/4+Yf98fzpilsyKiiikMKKKKACiiigAooooAKKKKACiiigAooooAKKKKACiiigAooooAKKKKACiiigAooooAKKKKACiiigAooooAKKKKACiiigAooooAKKKKACiiigAooooAKKKKACiiigAooooAKKKKACiiigAooooAKKKKACiiigAooooAKltf8Aj5h/3x/Ooqltf+PmH/fH86YpbMiooopDCiiigAooooAKKKKACiiigAooooAKKKKACiiigAooooAKKKKACiiigAooooAKKKKACiiigAooooAKKKKACiiigAooooAKKKKACiiigAooooAKKKKACiiigAooooAKKKKACiiigAooooAKKKKACiiigAooooAKKKKACpbX/j5h/wB8fzqKpbX/AI+Yf98fzpilsyKiiikMKKKKACiiigAooooAKKKKACiiigAooooAKKKKACiiigAooooAKKKKACiiigAooooAKKKKACiiigAooooAKKKKACiiigAooooAKKKKACiiigAooooAKKKKACiiigAooooAKKKKACiiigAooooAKKKKACiiigAooooAKltf+PmH/fH86iqW1/4+Yf8AfH86YpbMiooopDCiiigAooooAKKKKACiiigAooooAKKKKACiiuo8I+BPE3ipwdL09vs2cG6m+SIf8CPX6DNUouTsjGtXpYeDqVZKKXV6HL0V9DeH/gHp8arJr2szXD94rRQij/gRyT+Qrt9P+FXgOxUbNAimYfxXEjyE/mcfpXVHCVHvofKYjjDLaTtC8/RafjY+QqK+14fBvhOHGzw3pYx62iH+YpJvBvhOYESeG9LIPpaIv8hV/Updzz/9eMPf+C/vR8U0V9e6h8KfAd6Dv0COFj/FbyPHj8AcfpXIax8A9DmDNpWsXdm3ZZlEq/0NRLCVFtqd9DjHLajtPmj6q/5X/I+caK9P1/4K+MdNDSWSW+qxD/n3fa//AHy2P0JrzvUtN1DS7g22pWNxZzDrHPGUP5GuaVOUPiR9LhcwwuLV6FRS9Hr925UoooqDtCiiigAorT0HQdY1+7Fpo+nz3svfy1yFHqx6AfWvXPDXwEvplWbxFqyWoPJgtF3t9Cx4H4A1rClOfwo8vG5tgsB/vFRJ9t39y1PEKK+s9K+D3gSwVfM0t76Qfx3MzNn8AQP0robfwT4RtwBF4a0wAf3rZW/mK6Vg59WfMVeNsHF2p05P7l+rPiuivtiXwf4UlGH8N6X6cWiD+QrKvvhj4EvQRL4ctkz3hLRH/wAdIpvBS6MiHG+Fb9+lJeln/kfHlFfSutfAfw3cqzaXqF5p8h6ByJkH4HB/WvMfFPwe8XaIjz20CatbLzvtMlwPdDz+Wawnh6kOh7uD4ky3FtRjU5X2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u6ikvuCiiioOkKKKKACiiigAooooAKKKKACpbX/j5h/3x/Ooqltf+PmH/fH86YpbMiooopDCiiigAooooAKKKKACiiigAooooAKKKKACiiigAooooAKKKKACiiigAooooAKKKKACiiigAooooAKKKKACiiigAooooAKKKKACiiigAooooAKKKKACiiigAooooAKKKKACiiigAooooAKKKKACiiigAooooAKKKKACpbX/AI+Yf98fzqKpbX/j5h/3x/OmKWzIqKKKQwooooAKKKKACiiigAooooAKKKKACiiigAooooAKKKKACiiigAooooAKKKKACiiigAooooAKKKKACiiigAooooAKKKKACiiigAooooAKKKKACiiigAooooAKKKKACiiigAooooAKKKKACiiigAooooAKKKKACiiigAqW1/4+Yf8AfH86iqW1/wCPmH/fH86YpbMiooopDCiiigAooooAKKKKACiiigAooooAKKKKACiiigAooooAKKKKACiiigAooooAKKKKACiiigAooooAKKKKACiiigAooooAKKKKACiiigAooooAKKKKACiiigAooooAKKKKACiiigAooooAKKKKACiiigAooooAKKKKACpbX/j5h/3x/Ooqltf+PmH/AHx/OmKWzIqKKKQwooooAKKKKACiiigAooooAKKKKACiiigAooooAKKKKACiiigAooooAKKKKACiiigAooooAKKKKACiiigAooooAKKKKACiiigAooooAKKKKACiiigAooooAKKKKACiiigAooooAKKKKACiiigAooooAKKKKACiiigAqW1/4+Yf98fzqKpbX/j5h/3x/OmKWzIqKKKQwooooAKKKKACiiigAooooAKKKKACiiigAooooAKKKKACiiigAooooAKKKKACiiigAooooAKKKKACiiigAooooAKKKKACiiigAooooAKKKKACiiigAooooAKKKKACiiigAooooAKKKKACiiigAooooAKKKKACiiigAqW1/wCPmH/fH86iqW1/4+Yf98fzpilsyKiiikMKKKKACiiigAooooAKKKKACiiigAooooAKKKKACiiigAooooAKKKKACiiigAooooAKKKKACiiigAooooAKKKKACiiigAooooAKKKKACiiigAooooAKKKKACiiigAooooAKKKKACiiigAooooAKKKKACiiigAooooAKltf+PmH/AHx/Ooqltf8Aj5h/3x/OmKWzIqKKKQwooooAKKKKACiiigAooooAKKKKACiiigAooooAKKKKACiiigAooooAKKKKACiiigAooooAKKKKACiiigAooooAKKKKACiiigAooooAKKKKACiiigAooooAKKKKACiiigAooooAKKKKACiiigAooooAKKKKACiiigAqW1/4+Yf98fzqKpbX/j5h/wB8fzpilsyKiiikMKKKKACiiigAooooAKKKKACiiigAooooAKKKKACiiigAooooAKKKKACiiigAooooAKKKKACiiigAooooAKKKKACiiigAooooAKKKKACiiigAooooAKKKKACiiigAooooAKKKKACiiigAooooAKKKKACiiigAooooAKltf+PmH/fH86iqW1/4+Yf98fzpilsyKiiikMKKKKACiiigAooooAKKKKACiiigAooooAKKKKACiiigAooooAKKKKACiiigAooooAKKKKACiiigAooooAKKKKACiiigAooooAKKKKACiiigAooooAKKKKACiiigAooooAKKKKACiiigAooooAKKKKACiiigAooooAKltf8Aj5h/3x/Ooqltf+PmH/fH86YpbMioqX7PP/zwk/75NH2ef/nhJ/3yaA5l3IqKl+zz/wDPCT/vk0fZ5/8AnhJ/3yaA5l3IqKl+zz/88JP++TR9nn/54Sf98mgOZdyKipfs8/8Azwk/75NH2ef/AJ4Sf98mgOZdyKipfs8//PCT/vk0fZ5/+eEn/fJoDmXcioqX7PP/AM8JP++TR9nn/wCeEn/fJoDmXcioqX7PP/zwk/75NH2ef/nhJ/3yaA5l3IqKl+zz/wDPCT/vk0fZ5/8AnhJ/3yaA5l3IqKl+zz/88JP++TR9nn/54Sf98mgOZdyKipfs8/8Azwk/75NH2ef/AJ4Sf98mgOZdyKipfs8//PCT/vk0fZ5/+eEn/fJoDmXcioqX7PP/AM8JP++TR9nn/wCeEn/fJoDmXcioqX7PP/zwk/75NH2ef/nhJ/3yaA5l3IqKl+zz/wDPCT/vk0fZ5/8AnhJ/3yaA5l3IqKl+zz/88JP++TR9nn/54Sf98mgOZdyKipfs8/8Azwk/75NH2ef/AJ4Sf98mgOZdyKipfs8//PCT/vk0fZ5/+eEn/fJoDmXcioqX7PP/AM8JP++TR9nn/wCeEn/fJoDmXcioqX7PP/zwk/75NH2ef/nhJ/3yaA5l3IqKl+zz/wDPCT/vk0fZ5/8AnhJ/3yaA5l3IqKl+zz/88JP++TR9nn/54Sf98mgOZdyKipfs8/8Azwk/75NH2ef/AJ4Sf98mgOZdyKipfs8//PCT/vk0fZ5/+eEn/fJoDmXcioqX7PP/AM8JP++TR9nn/wCeEn/fJoDmXcioqX7PP/zwk/75NH2ef/nhJ/3yaA5l3IqKl+zz/wDPCT/vk0fZ5/8AnhJ/3yaA5l3IqKl+zz/88JP++TR9nn/54Sf98mgOZdyKipfs8/8Azwk/75NH2ef/AJ4Sf98mgOZdyKipfs8//PCT/vk0fZ5/+eEn/fJoDmXcioqX7PP/AM8JP++TR9nn/wCeEn/fJoDmXcioqX7PP/zwk/75NH2ef/nhJ/3yaA5l3Iqltf8Aj5h/3x/Oj7PP/wA8JP8Avk1JbW8/2mL9zJ98fwn1oFKSs9T/2Q==" alt="CEA" />
+        <img class="footer-bv-img" src="https://brainvisa.info/web/_static/images/brainvisa.png" alt="BrainVISA" />
+        <span>Commissariat à l'Énergie Atomique · BrainVISA Group</span>
       </div>
-      <span style="font-size:12px">Licence CeCILL-B &mdash; NeuroSpin &mdash; CEA Paris-Saclay</span>
+      <span style="font-size:12px">Licence CeCILL-B &mdash; NeuroSpin &mdash; CEA Paris-Saclay &mdash; BrainVISA 6.0</span>
     </div>
   </div>
 </footer>
