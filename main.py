@@ -65,6 +65,9 @@ class DatasetConfig:
     crops_path: str = ""
     embeddings_path: str = ""
 
+    # Region filter (empty = all 56 regions)
+    regions: List[str] = field(default_factory=list)
+
     # Processing parameters
     njobs: int = 22
     path_to_graph: str = "t1mri/default_acquisition/default_analysis/folds/3.3/base"
@@ -202,6 +205,7 @@ class ConfigLoader:
                 'path_to_graph': config.dataset.path_to_graph,
                 'path_sk_with_hull': config.dataset.path_sk_with_hull,
                 'sk_qc_path': config.dataset.sk_qc_path,
+                'regions': config.dataset.regions,
                 'classifier_name': config.dataset.classifier_name,
                 'overwrite': config.dataset.overwrite,
                 'embeddings_only': config.dataset.embeddings_only,
@@ -341,6 +345,9 @@ class RunCorticalTilesStage(PipelineStage):
 
             if self.config.dataset.sk_qc_path:
                 args.append(f"--sk_qc_path={self.config.dataset.sk_qc_path}")
+
+            if self.config.dataset.regions:
+                args.extend(["--regions"] + self.config.dataset.regions)
 
             # Parse and run
             script = RunCorticalTiles()
