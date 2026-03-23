@@ -36,8 +36,9 @@ class RunCorticalTiles(ScriptBuilder):
                             "Default: all types.")
          .add_flag("--skip-distbottom",
                    "Skip distbottom generation (unused during inference).")
-         .add_optional_argument("--regions", "Restrict processing to these sulcal regions (space-separated). "
-                                "Default: all 28 regions.", default=None, nargs="+"))
+         .add_argument("--regions", nargs="+", default=None,
+                       help="Restrict processing to these sulcal regions (space-separated). "
+                            "Default: all 28 regions."))
 
     def run(self):
         """Execute the cortical_tiles script."""
