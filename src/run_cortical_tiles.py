@@ -35,7 +35,9 @@ class RunCorticalTiles(ScriptBuilder):
                        help="Input types to generate (e.g. skeleton foldlabel extremities). "
                             "Default: all types.")
          .add_flag("--skip-distbottom",
-                   "Skip distbottom generation (unused during inference)."))
+                   "Skip distbottom generation (unused during inference).")
+         .add_optional_argument("--regions", "Restrict processing to these sulcal regions (space-separated). "
+                                "Default: all 28 regions.", default=None, nargs="+"))
 
     def run(self):
         """Execute the cortical_tiles script."""
@@ -124,6 +126,9 @@ class RunCorticalTiles(ScriptBuilder):
         #     ))
         #     if exists(default_region_file):
         #         cmd.extend(["--region-file", default_region_file])
+
+        if self.args.regions:
+            cmd.extend(["-r"] + self.args.regions)
 
         if self.args.sk_qc_path:
             cmd.extend(["--sk_qc_path", self.args.sk_qc_path])
