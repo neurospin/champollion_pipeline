@@ -23,3 +23,6 @@ __pycache__/
 
 # Fuzzy testing whit Hypothesis
 .hypothesis
+
+# test
+.coverage
