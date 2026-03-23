@@ -29,6 +29,7 @@ from abc import ABC, abstractmethod
 from typing import Dict, List, Optional, Any
 from pathlib import Path
 from dataclasses import dataclass, field
+from champollion_utils.update_check import check_for_updates
 
 # Add src to path for imports
 pipeline_src = Path(__file__).parent / "src"
@@ -882,6 +883,7 @@ Examples:
 
 def main() -> int:
     """Main entry point for the pipeline."""
+    check_for_updates()
     args = parse_arguments()
 
     # Generate config template if requested
