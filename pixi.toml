@@ -114,3 +114,7 @@ test-specific = "pytest"  # Usage: pixi run test-specific tests/test_script_buil
 # Generate UMAP reference models for all ROIs
 # Usage: pixi run generate-umap-reference --models_dir /path/to/Champollion_V1_after_ablation --reference_subpath ukb40_random_embeddings/full_embeddings.csv
 generate-umap-reference = "python3 src/generate_umap_reference.py"
+
+# Generate sulcal mask files from manually labelled graphs
+# Usage: pixi run generate-masks --labeled_subjects_dir /path/to/subjects --path_to_graph_supervised "t1mri/t1/default_analysis/folds/3.3/base2026_manual" --output_dir /path/to/masks
+generate-masks = "python3 src/generate_masks.py"
