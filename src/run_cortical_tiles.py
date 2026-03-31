@@ -2,6 +2,19 @@
 # -*- coding: utf-8 -*-
 """
 Script to generate sulcal regions with cortical_tiles from Morphologist's graphs.
+
+Output structure
+----------------
+Sulcal region crops are written to::
+
+    {output}/cortical_tiles-{VERSION}/crops/{voxel_size}mm/{region}/
+
+where ``{voxel_size}mm`` is the voxel resolution (e.g. ``2mm``) and
+``{VERSION}`` is the cortical_tiles release year (e.g. ``2026``).
+
+When a mask version tag is provided via ``--masks`` (e.g. ``canonical_25``),
+it overrides the ``masks_version`` field in the pipeline JSON config so that
+the correct labelled masks are used during region extraction.
 """
 
 import sys
@@ -37,8 +50,13 @@ class RunCorticalTiles(ScriptBuilder):
          .add_flag("--skip-distbottom",
                    "Skip distbottom generation (unused during inference).")
          .add_argument("--regions", nargs="+", default=None,
-                       help="Restrict processing to these sulcal regions (space-separated). "
-                            "Default: all 28 regions."))
+                       help="Restrict processing to these sulcal regions "
+                            "(space-separated). Default: all 28 regions.")
+         .add_optional_argument(
+             "--masks",
+             "Mask version tag (e.g. 'canonical_25'). Overrides "
+             "masks_version in the pipeline JSON config.",
+             default=None))
 
     def run(self):
         """Execute the cortical_tiles script."""
@@ -77,6 +95,8 @@ class RunCorticalTiles(ScriptBuilder):
             config['output_dir'] = join(
                 abspath(self.args.output), DERIVATIVES_FOLDER
             )
+            if self.args.masks:
+                config['masks_version'] = self.args.masks
             with open(config_file_path, 'w') as f:
                 json.dump(config, f, indent=3)
 
