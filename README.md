@@ -127,6 +127,8 @@ The `--path_to_graph` supports wildcards (`*`) for variable path segments, e.g.:
 | `--region-file` | Custom sulcal region configuration file |
 | `--input-types` | Input types to generate (e.g. `skeleton foldlabel extremities`). Default: all types |
 | `--skip-distbottom` | Skip distbottom generation (unused during inference, saves time) |
+| `--masks` | Mask version tag (e.g. `canonical_25`). Overrides `masks_version` in the pipeline JSON config. |
+| `--regions` | Restrict processing to specific sulcal regions (space-separated). Default: all 28 regions. |
 
 ### QC File Format
 

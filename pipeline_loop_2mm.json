@@ -25,5 +25,6 @@
    "no_mask": false,
    "threshold": 0,
    "dilation": 5,
-   "skip_distbottom": false
+   "skip_distbottom": false,
+   "masks_version": "canonical_25"
 }
