@@ -95,6 +95,8 @@ class RunCorticalTiles(ScriptBuilder):
             config['output_dir'] = join(
                 abspath(self.args.output), DERIVATIVES_FOLDER
             )
+            config['path_to_graph'] = self.args.path_to_graph
+            config['path_to_skeleton_with_hull'] = self.args.path_sk_with_hull
             if self.args.masks:
                 config['masks_version'] = self.args.masks
             with open(config_file_path, 'w') as f:
