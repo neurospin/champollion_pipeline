@@ -520,6 +520,73 @@ class TestSkipDistbottom:
                         assert updated['output_dir'] == str(output_dir.resolve() / DF)
 
 
+class TestGraphPathConfigOverride:
+    """Test that path_to_graph and path_sk_with_hull are written into the JSON config."""
+
+    def _run_with_config(self, temp_dir, config_data, graph_path, skel_path):
+        from pathlib import Path as _Path
+        input_dir = _Path(temp_dir) / "input"
+        output_dir = _Path(temp_dir) / "output"
+        input_dir.mkdir()
+        output_dir.mkdir()
+        config_path = output_dir / "pipeline_loop_2mm.json"
+        config_path.write_text(json.dumps(config_data))
+        script = RunCorticalTiles()
+        script.parse_args([
+            str(input_dir), str(output_dir),
+            "--path_to_graph", graph_path,
+            "--path_sk_with_hull", skel_path,
+        ])
+        with patch.object(script, 'validate_paths', return_value=True):
+            with patch.object(script, 'execute_command', return_value=0):
+                with patch('run_cortical_tiles.chdir'):
+                    with patch('run_cortical_tiles.getcwd', return_value="/original"):
+                        script.run()
+        return json.loads(config_path.read_text())
+
+    def test_path_to_graph_written_to_config(self, temp_dir):
+        """path_to_graph CLI arg is written into pipeline_loop_2mm.json."""
+        updated = self._run_with_config(
+            temp_dir,
+            {"graphs_dir": "", "output_dir": ""},
+            "t1mri/M12/default_analysis/folds/3.1",
+            "t1mri/M12/default_analysis/segmentation",
+        )
+        assert updated['path_to_graph'] == "t1mri/M12/default_analysis/folds/3.1"
+
+    def test_path_sk_with_hull_written_to_config(self, temp_dir):
+        """path_sk_with_hull CLI arg is written into pipeline_loop_2mm.json."""
+        updated = self._run_with_config(
+            temp_dir,
+            {"graphs_dir": "", "output_dir": ""},
+            "t1mri/M12/default_analysis/folds/3.1",
+            "t1mri/M12/default_analysis/segmentation",
+        )
+        assert updated['path_to_skeleton_with_hull'] == "t1mri/M12/default_analysis/segmentation"
+
+    def test_path_to_graph_overrides_hardcoded_default(self, temp_dir):
+        """CLI arg overrides the old hardcoded default value in the JSON."""
+        updated = self._run_with_config(
+            temp_dir,
+            {"graphs_dir": "", "output_dir": "",
+             "path_to_graph": "t1mri/default_acquisition/0/folds/3.1"},
+            "t1mri/M12/custom/folds/3.1",
+            "t1mri/M12/custom/segmentation",
+        )
+        assert updated['path_to_graph'] == "t1mri/M12/custom/folds/3.1"
+
+    def test_path_sk_with_hull_overrides_hardcoded_default(self, temp_dir):
+        """CLI arg overrides the old hardcoded skeleton default value in the JSON."""
+        updated = self._run_with_config(
+            temp_dir,
+            {"graphs_dir": "", "output_dir": "",
+             "path_to_skeleton_with_hull": "t1mri/default_acquisition/0/segmentation"},
+            "t1mri/M12/custom/folds/3.1",
+            "t1mri/M12/custom/segmentation",
+        )
+        assert updated['path_to_skeleton_with_hull'] == "t1mri/M12/custom/segmentation"
+
+
 class TestConfigLocationInvariants:
     """Tests that config is always written to output dir, never to input dir."""
 
