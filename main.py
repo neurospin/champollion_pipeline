@@ -47,6 +47,12 @@ except ImportError as e:
     print(f"Warning: Could not import pipeline scripts: {e}")
     print("Some stages may not be available.")
 
+try:
+    from file_indexer.pipeline_checks import SubjectEligibilityChecker, build_output_report
+except ImportError:
+    SubjectEligibilityChecker = None
+    build_output_report = None
+
 
 # ====================== Configuration Management ======================
 
@@ -274,6 +280,18 @@ class PipelineStage(ABC):
         self.logger.info(f"{status}: {self.name} - {result.message}")
         self.logger.info(f"{'='*60}\n")
 
+    def subject_input_dir(self) -> Optional[str]:
+        """Return the subjects directory to index before this stage. None = skip."""
+        return None
+
+    def required_file_patterns(self) -> List[str]:
+        """Glob patterns (relative to subject dir) required per subject."""
+        return []
+
+    def output_dir(self) -> Optional[str]:
+        """Return the output directory to index after this stage. None = skip."""
+        return None
+
 
 class GenerateMorphologistGraphsStage(PipelineStage):
     """Stage for generating Morphologist graphs."""
@@ -372,6 +390,23 @@ class RunCorticalTilesStage(PipelineStage):
 
         self.log_end(result)
         return result
+
+    def subject_input_dir(self) -> Optional[str]:
+        d = self.config.dataset.morphologist_graphs
+        return d if d and os.path.exists(d) else None
+
+    def required_file_patterns(self) -> List[str]:
+        side = "R"
+        g = self.config.dataset.path_to_graph
+        s = self.config.dataset.path_sk_with_hull
+        return [
+            f"{g}/{side}*.arg",
+            f"{s}/{side}*.nii.gz",
+        ]
+
+    def output_dir(self) -> Optional[str]:
+        d = self.config.dataset.cortical_tiles_output
+        return d if d else None
 
 
 class GenerateChampollionConfigStage(PipelineStage):
@@ -767,8 +802,42 @@ class PipelineOrchestrator:
                     break
                 continue
 
+            # Pre-stage: index input + eligibility report
+            if SubjectEligibilityChecker is not None:
+                input_dir = stage.subject_input_dir()
+                if input_dir:
+                    patterns = stage.required_file_patterns()
+                    if patterns:
+                        index_path = None
+                        if self.config.outputs_path:
+                            os.makedirs(self.config.outputs_path, exist_ok=True)
+                            index_path = os.path.join(
+                                self.config.outputs_path,
+                                f"index_pre_{stage_name}.json",
+                            )
+                        checker = SubjectEligibilityChecker(
+                            input_dir, patterns, stage_name=stage_name
+                        )
+                        pre_report = checker.check(save_index_to=index_path)
+                        pre_report.print()
+
             # Execute
             result = stage.execute()
+
+            # Post-stage: index output + summary report
+            if result.success and build_output_report is not None:
+                out_dir = stage.output_dir()
+                if out_dir and os.path.exists(out_dir):
+                    index_path = None
+                    if self.config.outputs_path:
+                        index_path = os.path.join(
+                            self.config.outputs_path,
+                            f"index_post_{stage_name}.json",
+                        )
+                    out_report = build_output_report(
+                        out_dir, stage_name, save_index_to=index_path
+                    )
+                    out_report.print()
 
             if result.success:
                 completed_stages.append(stage_name)

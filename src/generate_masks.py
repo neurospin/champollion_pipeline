@@ -4,13 +4,12 @@
 Script to generate sulcal mask files from manually labelled graph data.
 """
 
-import glob
+from abc import ABC, abstractmethod
+from dataclasses import dataclass
 import json
 import os
 import sys
 from os.path import abspath, dirname, exists, join
-
-import numpy as np
 
 from champollion_utils.script_builder import ScriptBuilder
 
@@ -29,6 +28,41 @@ _REGIONS_DEFAULT = [
     "F.C.L.p.-subsc.-F.C.L.a.-INSULA.", "S.F.int.-S.R.",
     "S.Call.", "S.Call.-S.s.P.-S.intraCing.",
 ]
+
+# Canonical return values for runner status results.
+# Always compare against these keys rather than raw strings.
+RETURN_DICTIONARY = {
+    'ok': 'ok',
+    'skipped': 'skipped',
+    'invalid_foldlabel': 'invalid_foldlabel',
+}
+
+
+def _log_invalid_subject(log_path: str, subject_info: str) -> None:
+    """Append one line to the invalid-subject log file.
+
+    Each line is: ISO-8601 timestamp TAB subject_info.
+    The file is created if it does not exist (append mode).
+    """
+    import datetime as _dt
+    os.makedirs(os.path.dirname(log_path), exist_ok=True)
+    with open(log_path, 'a') as fh:
+        fh.write(f"{_dt.datetime.now().isoformat()}\t{subject_info}\n")
+
+
+@dataclass
+class RunConfig:
+    """All parameters needed to execute a mask generation run."""
+    sulci: set
+    sides: list
+    mask_dir: str
+    labeled_subjects_dir: str
+    path_to_graph_supervised: str
+    nb_subjects: int
+    voxel_size: float
+    force: bool
+    brainvisa_dir: str
+    public_use: bool = False
 
 
 def get_sulci_for_regions(regions, sides, json_path):
@@ -52,6 +86,10 @@ def get_sulci_for_regions(regions, sides, json_path):
     return sulci
 
 
+# --------------------------------------------------------------------------- #
+# Module-level joblib workers (must be picklable — do NOT nest in classes)
+# --------------------------------------------------------------------------- #
+
 def _compute_one_sulcus(sulcus_full, per_subject_voxels, voxel_size_tuple,
                         mask_dir, side, brainvisa_dir, public_use=False):
     """Worker: build one sulcal mask from pre-extracted voxel coords.
@@ -64,13 +102,14 @@ def _compute_one_sulcus(sulcus_full, per_subject_voxels, voxel_size_tuple,
     aggregated count mask is produced.
     """
     import os as _os  # noqa: PLC0415
-    import sys  # noqa: PLC0415
+    import sys as _sys  # noqa: PLC0415
     import numpy as _np  # noqa: PLC0415
     from os.path import join as _join  # noqa: PLC0415
-    if brainvisa_dir not in sys.path:
-        sys.path.insert(0, brainvisa_dir)
+    if brainvisa_dir not in _sys.path:
+        _sys.path.insert(0, brainvisa_dir)
     from soma import aims  # noqa: PLC0415
     from compute_mask import initialize_mask, write_mask  # noqa: PLC0415
+    from generate_masks import RETURN_DICTIONARY  # noqa: PLC0415
 
     try:
         sample_dir = _join(mask_dir, side, sulcus_full)
@@ -85,8 +124,15 @@ def _compute_one_sulcus(sulcus_full, per_subject_voxels, voxel_size_tuple,
             voxels = sub_voxels.get(sulcus_full, _np.empty((0, 3), dtype=_np.int32))
             arr_one = _np.zeros(arr.shape, dtype=_np.int16)
             if len(voxels):
-                # vectorised: no Python loop over individual voxel coords
-                arr_one[voxels[:, 0], voxels[:, 1], voxels[:, 2], 0] = 1
+                dims = arr.shape[:3]
+                valid = (
+                    (voxels[:, 0] >= 0) & (voxels[:, 0] < dims[0]) &
+                    (voxels[:, 1] >= 0) & (voxels[:, 1] < dims[1]) &
+                    (voxels[:, 2] >= 0) & (voxels[:, 2] < dims[2])
+                )
+                voxels = voxels[valid]
+                if len(voxels):
+                    arr_one[voxels[:, 0], voxels[:, 1], voxels[:, 2], 0] = 1
             if not public_use:
                 vol_one = aims.Volume(arr_one)
                 vol_one.copyHeaderFrom(mask.header())
@@ -97,7 +143,7 @@ def _compute_one_sulcus(sulcus_full, per_subject_voxels, voxel_size_tuple,
         write_mask(mask, _join(mask_dir, side, sulcus_full + '.nii.gz'))
     except Exception as e:
         return f"failed: {e}"
-    return "ok"
+    return RETURN_DICTIONARY['ok']
 
 
 def _load_and_extract_subject(sub, sulci_full_set, voxel_size_tuple,
@@ -107,13 +153,16 @@ def _load_and_extract_subject(sub, sulci_full_set, voxel_size_tuple,
     Returns (sub_name, sub_data) where sub_data is
     {sulcus_full: np.ndarray (K,3) int32}, or (sub_name, None) if no graph
     file was found.
+
+    Accumulates voxels across all vertices that share the same sulcus name
+    (a single sulcus can have many separate labelled patches in the graph).
     """
     import glob as _glob  # noqa: PLC0415
-    import sys  # noqa: PLC0415
+    import sys as _sys  # noqa: PLC0415
     import numpy as _np  # noqa: PLC0415
     from os.path import join as _join  # noqa: PLC0415
-    if brainvisa_dir not in sys.path:
-        sys.path.insert(0, brainvisa_dir)
+    if brainvisa_dir not in _sys.path:
+        _sys.path.insert(0, brainvisa_dir)
     from soma import aims  # noqa: PLC0415
 
     matches = _glob.glob(_join(sub['dir'], sub['graph_file'] % sub))
@@ -124,12 +173,11 @@ def _load_and_extract_subject(sub, sulci_full_set, voxel_size_tuple,
     g_to_icbm = aims.GraphManip.getICBM2009cTemplateTransform(graph)
     voxel_size_in = graph['voxel_size'][:3]
 
-    sub_data: dict = {}
+    all_parts: dict = {}
     for vertex in graph.vertices():
         vname = vertex.get('name')
         if vname not in sulci_full_set:
             continue
-        parts = []
         for bucket_name in ('aims_ss', 'aims_bottom', 'aims_other'):
             bucket = vertex.get(bucket_name)
             if bucket is None:
@@ -140,122 +188,241 @@ def _load_and_extract_subject(sub, sulci_full_set, voxel_size_tuple,
             ])
             if vr.shape[0] == 0:
                 continue
-            parts.append(
+            all_parts.setdefault(vname, []).append(
                 _np.round(vr / voxel_size_tuple).astype(_np.int32))
-        sub_data[vname] = (
-            _np.vstack(parts) if parts
-            else _np.empty((0, 3), dtype=_np.int32))
+    sub_data = {
+        vname: _np.vstack(parts)
+        for vname, parts in all_parts.items()
+    }
     return sub['subject'], sub_data
 
 
-def _run_buffered(sulci, sides, mask_dir, labeled_subjects_dir,
-                  path_to_graph_supervised, nb_subjects, voxel_size, force,
-                  njobs, brainvisa_dir, public_use=False):
-    """Load and extract subject graphs in parallel, then compute masks.
+# --------------------------------------------------------------------------- #
+# Runner class hierarchy
+# --------------------------------------------------------------------------- #
 
-    Yields (side, results_dict) where results_dict maps sulcus → status string
-    ('ok', 'skipped', or 'failed: <msg>').
+class MaskRunner(ABC):
+    """Abstract base class for mask generation strategies.
 
-    Two-phase approach:
-      Phase 1 (parallel) — M subject workers each load one graph and extract
-                           voxel coords for all sulci; returns pure-numpy data.
-      Phase 2 (parallel) — N sulcus workers each build one mask from the
-                           pre-extracted voxels.
-
-    Peak memory: one graph at a time per thread (no full graph_buffer).
-    Vertex iterations: M (one pass per subject, not M×N).
+    Subclasses implement __call__ and yield (side, results_dict) for each
+    hemisphere side processed.  results_dict maps bare sulcus name to a value
+    from RETURN_DICTIONARY, or 'failed: <msg>' for errors.
     """
-    from joblib import Parallel, delayed  # noqa: PLC0415
-    from deep_folding.brainvisa.utils.subjects import (  # noqa: PLC0415
-        get_all_subjects_as_dictionary,
-        select_subjects_int_if_list_of_dict,
-    )
-    from deep_folding.brainvisa.utils.sulcus import (  # noqa: PLC0415
-        complete_sulci_name,
-    )
 
-    voxel_size_tuple = (voxel_size, voxel_size, voxel_size)
+    def __init__(self, verbose: bool = False):
+        self.verbose = verbose
 
-    for side in sides:
-        graph_file_pattern = (
-            '%(subject)s/'
-            + path_to_graph_supervised
-            + '/%(side)s%(subject)s*.arg'
+    @classmethod
+    def create(cls, buffered: bool, njobs, verbose: bool = False) -> 'MaskRunner':
+        """Factory: return the correct MaskRunner for the given CLI flags.
+
+        +-----------+--------+----------------------------------+
+        | --buffered | --njobs | Strategy                        |
+        +-----------+--------+----------------------------------+
+        | no        | no     | SerialRunner()                  |
+        | yes       | no     | BufferedRunner(1)               |
+        | yes/no    | N      | BufferedRunner(N)               |
+        +-----------+--------+----------------------------------+
+        """
+        if njobs is not None:
+            return BufferedRunner(njobs, verbose=verbose)
+        if buffered:
+            return BufferedRunner(1, verbose=verbose)
+        return SerialRunner(verbose=verbose)
+
+    @abstractmethod
+    def __call__(self, config: RunConfig):
+        """Yield (side, results_dict) for each side processed."""
+
+
+class SerialRunner(MaskRunner):
+    """Serial unbuffered strategy: one graph read per (sulcus × subject).
+
+    Delegates each sulcus to compute_mask.compute_mask — the reference
+    serial implementation.  No buffering, no parallelism.
+
+    verbose logs: parameters passed to compute_mask for each sulcus.
+    """
+
+    def __call__(self, config: RunConfig):
+        if config.brainvisa_dir not in sys.path:
+            sys.path.insert(0, config.brainvisa_dir)
+        from compute_mask import compute_mask as _compute_mask  # noqa: PLC0415
+        from deep_folding.brainvisa.utils.sulcus import (  # noqa: PLC0415
+            complete_sulci_name,
         )
 
-        subjects = get_all_subjects_as_dictionary(
-            [labeled_subjects_dir], [graph_file_pattern], side)
-        subjects = select_subjects_int_if_list_of_dict(
-            subjects, subjects, nb_subjects)
+        for side in config.sides:
+            results = {}
+            for sulcus in sorted(config.sulci):
+                sulcus_full = complete_sulci_name(sulcus, side)
+                mask_file = join(config.mask_dir, side, sulcus_full + '.nii.gz')
+                if not config.force and exists(mask_file):
+                    results[sulcus] = RETURN_DICTIONARY['skipped']
+                    continue
+                if self.verbose:
+                    print(f"    [{side}] {sulcus_full}: calling compute_mask "
+                          f"(src_dir={config.labeled_subjects_dir}, "
+                          f"path_to_graph={config.path_to_graph_supervised}, "
+                          f"nb_subjects={config.nb_subjects}, "
+                          f"voxel_size={config.voxel_size})")
+                try:
+                    _compute_mask(
+                        src_dir=config.labeled_subjects_dir,
+                        path_to_graph=config.path_to_graph_supervised,
+                        mask_dir=config.mask_dir,
+                        sulcus=sulcus,
+                        new_sulcus=None,
+                        side=side,
+                        number_subjects=config.nb_subjects,
+                        out_voxel_size=config.voxel_size,
+                    )
+                    results[sulcus] = RETURN_DICTIONARY['ok']
+                except Exception as e:
+                    cause = e.__cause__ or e
+                    if "too many simple surfaces" in str(cause):
+                        log_path = join(config.mask_dir, 'invalid_subjects.log')
+                        _log_invalid_subject(
+                            log_path,
+                            f"[{side}] sulcus={sulcus_full}  graph={e}"
+                        )
+                        print(f"  ⚠ [{side}] {sulcus_full}: invalid foldlabel — "
+                              f"logged to {log_path}")
+                        results[sulcus] = RETURN_DICTIONARY['invalid_foldlabel']
+                    else:
+                        results[sulcus] = f'failed: {e}'
+            yield side, results
 
-        # ── Phase 1b: determine which sulci need work ──────────────────────
-        sulci_to_run = {
-            complete_sulci_name(s, side): s
-            for s in sorted(sulci)
-            if force or not exists(
-                join(mask_dir, side, complete_sulci_name(s, side) + '.nii.gz'))
-        }
-        sulci_full_set = set(sulci_to_run)
 
-        # ── Phase 1: parallel load + extract per subject ───────────────────
-        print(f"  [{side}] Loading and extracting {len(subjects)} subjects "
-              f"({len(sulci_to_run)} sulci) with {njobs} worker(s)…")
-        raw_results = Parallel(n_jobs=njobs, prefer='processes')(
-            delayed(_load_and_extract_subject)(
-                sub, sulci_full_set, voxel_size_tuple, brainvisa_dir,
-            )
-            for sub in subjects
+class BufferedRunner(MaskRunner):
+    """Two-phase buffered strategy (serial or parallel depending on njobs).
+
+    Phase 1 (parallel): M subject workers each load one graph and extract
+                        voxel coords for all sulci; returns pure-numpy data.
+    Phase 2 (parallel): N sulcus workers each build one mask from the
+                        pre-extracted voxels.
+
+    Peak memory: one graph at a time per worker (no full graph buffer).
+    Graph reads: M total (one per subject), not M×N.
+
+    verbose logs:
+      Phase 1 — per-subject: sulci count + total voxels extracted.
+      Phase 2 — per-sulcus: contributing subject count + total voxels.
+    """
+
+    def __init__(self, njobs: int, verbose: bool = False):
+        super().__init__(verbose)
+        self.njobs = njobs
+
+    def __call__(self, config: RunConfig):
+        from joblib import Parallel, delayed  # noqa: PLC0415
+        from deep_folding.brainvisa.utils.subjects import (  # noqa: PLC0415
+            get_all_subjects_as_dictionary,
+            select_subjects_int_if_list_of_dict,
         )
-        per_subject_voxels: dict = {}
-        for sub_name, sub_data in raw_results:
-            if sub_data is None:
-                print(f"  [{side}] WARNING: no graph for {sub_name}, skipped")
-            else:
-                per_subject_voxels[sub_name] = sub_data
-        print(f"  [{side}] Load+extract done ({len(per_subject_voxels)} subjects).")
+        from deep_folding.brainvisa.utils.sulcus import (  # noqa: PLC0415
+            complete_sulci_name,
+        )
 
-        # ── Phase 2: parallel sulcus compute ──────────────────────────────
-        print(f"  [{side}] Computing {len(sulci_to_run)} sulci "
-              f"with {njobs} worker(s)…")
-        sorted_sulci_full = sorted(sulci_to_run)
-        try:
-            job_outputs = Parallel(n_jobs=njobs, prefer='threads')(
-                delayed(_compute_one_sulcus)(
-                    sf, per_subject_voxels, voxel_size_tuple,
-                    mask_dir, side, brainvisa_dir, public_use,
-                )
-                for sf in sorted_sulci_full
+        voxel_size_tuple = (config.voxel_size, config.voxel_size, config.voxel_size)
+
+        for side in config.sides:
+            graph_file_pattern = (
+                '%(subject)s/'
+                + config.path_to_graph_supervised
+                + '/%(side)s%(subject)s*.arg'
             )
-            run_results = {
-                sulci_to_run[sf]: r
-                for sf, r in zip(sorted_sulci_full, job_outputs)
+
+            subjects = get_all_subjects_as_dictionary(
+                [config.labeled_subjects_dir], [graph_file_pattern], side)
+            subjects = select_subjects_int_if_list_of_dict(
+                subjects, subjects, config.nb_subjects)
+
+            # Determine which sulci need work (skip existing unless --force)
+            sulci_to_run = {
+                complete_sulci_name(s, side): s
+                for s in sorted(config.sulci)
+                if config.force or not exists(
+                    join(config.mask_dir, side,
+                         complete_sulci_name(s, side) + '.nii.gz'))
             }
-        except Exception as e:
-            run_results = {sulci_to_run[sf]: f"failed: {e}"
-                          for sf in sorted_sulci_full}
+            sulci_full_set = set(sulci_to_run)
 
-        # merge skipped entries
-        results = {}
-        for s in sorted(sulci):
-            sf = complete_sulci_name(s, side)
-            results[s] = run_results.get(s, "skipped") if sf in sulci_full_set \
-                else "skipped"
+            # ── Phase 1: parallel load + extract per subject ───────────────
+            print(f"  [{side}] Loading and extracting {len(subjects)} subjects "
+                  f"({len(sulci_to_run)} sulci) with {self.njobs} worker(s)…")
+            raw_results = Parallel(n_jobs=self.njobs, prefer='processes')(
+                delayed(_load_and_extract_subject)(
+                    sub, sulci_full_set, voxel_size_tuple, config.brainvisa_dir,
+                )
+                for sub in subjects
+            )
+            per_subject_voxels: dict = {}
+            for sub_name, sub_data in raw_results:
+                if sub_data is None:
+                    print(f"  [{side}] WARNING: no graph for {sub_name}, skipped")
+                else:
+                    per_subject_voxels[sub_name] = sub_data
+                    if self.verbose:
+                        n_sulci_loaded = len(sub_data)
+                        total_v = sum(len(v) for v in sub_data.values())
+                        print(f"    loaded {sub_name}: "
+                              f"{n_sulci_loaded} sulci, {total_v} voxels")
+            print(f"  [{side}] Load+extract done ({len(per_subject_voxels)} subjects).")
 
-        # completeness check: warn about any expected mask files missing on disk
-        missing = [
-            sf for sf in sulci_to_run
-            if not exists(join(mask_dir, side, sf + '.nii.gz'))
-        ]
-        if missing:
-            print(f"  [{side}] WARNING: {len(missing)} mask file(s) missing "
-                  f"after run:")
-            for sf in missing:
-                print(f"    MISSING: {sf}.nii.gz")
-        else:
-            print(f"  [{side}] All {len(sulci_to_run)} mask files present.")
+            # ── Phase 2: parallel sulcus compute ──────────────────────────
+            print(f"  [{side}] Computing {len(sulci_to_run)} sulci "
+                  f"with {self.njobs} worker(s)…")
+            sorted_sulci_full = sorted(sulci_to_run)
+            if self.verbose:
+                for sf in sorted_sulci_full:
+                    n_subs = sum(
+                        1 for d in per_subject_voxels.values() if sf in d)
+                    total_v = sum(
+                        len(d[sf]) for d in per_subject_voxels.values()
+                        if sf in d)
+                    print(f"    {sf}: {n_subs} subjects contributing, "
+                          f"{total_v} voxels total")
+            try:
+                job_outputs = Parallel(n_jobs=self.njobs, prefer='threads')(
+                    delayed(_compute_one_sulcus)(
+                        sf, per_subject_voxels, voxel_size_tuple,
+                        config.mask_dir, side, config.brainvisa_dir,
+                        config.public_use,
+                    )
+                    for sf in sorted_sulci_full
+                )
+                run_results = {
+                    sulci_to_run[sf]: r
+                    for sf, r in zip(sorted_sulci_full, job_outputs)
+                }
+            except Exception as e:
+                run_results = {sulci_to_run[sf]: f"failed: {e}"
+                               for sf in sorted_sulci_full}
 
-        yield side, results
+            # All sulci default to skipped; overwrite with actual run results
+            results = {s: RETURN_DICTIONARY['skipped'] for s in config.sulci}
+            results.update(run_results)
 
+            # Completeness check
+            missing = [
+                sf for sf in sulci_to_run
+                if not exists(join(config.mask_dir, side, sf + '.nii.gz'))
+            ]
+            if missing:
+                print(f"  [{side}] WARNING: {len(missing)} mask file(s) missing "
+                      f"after run:")
+                for sf in missing:
+                    print(f"    MISSING: {sf}.nii.gz")
+            else:
+                print(f"  [{side}] All {len(sulci_to_run)} mask files present.")
+
+            yield side, results
+
+
+# --------------------------------------------------------------------------- #
+# CLI script class
+# --------------------------------------------------------------------------- #
 
 class GenerateMasks(ScriptBuilder):
     """Script for generating sulcal mask files from manually labelled graphs."""
@@ -311,13 +478,17 @@ class GenerateMasks(ScriptBuilder):
              help="Force recompute even if the mask file already exists.")
          .add_flag(
              "--public_use",
-             "Skip per-subject NIfTI files; write only the aggregated mask."))
+             "Skip per-subject NIfTI files; write only the aggregated mask.")
+         .add_flag(
+             "--verbose",
+             "Print detailed per-subject and per-sulcus progress logs."))
 
     def run(self):
         """Execute mask generation for all (sulcus × side) combinations."""
         print(f"generate_masks.py/labeled_subjects_dir: {self.args.labeled_subjects_dir}")
         print(f"generate_masks.py/path_to_graph_supervised: {self.args.path_to_graph_supervised}")
         print(f"generate_masks.py/output_dir: {self.args.output_dir}")
+        print(f"Argument values: {self.args}")
 
         regions = self.args.regions if self.args.regions else _REGIONS_DEFAULT
         sides = self.args.sides
@@ -328,8 +499,6 @@ class GenerateMasks(ScriptBuilder):
         ))
         if brainvisa_dir not in sys.path:
             sys.path.insert(0, brainvisa_dir)
-
-        from compute_mask import compute_mask  # noqa: PLC0415
 
         json_path = abspath(join(
             dirname(__file__), '..', 'sulci_regions_champollion_V1.json'
@@ -345,66 +514,52 @@ class GenerateMasks(ScriptBuilder):
             else join(abspath(self.args.output_dir), vox_str)
         )
 
+        njobs = None
+        if self.args.njobs is not None:
+            from deep_folding.brainvisa.utils.parallel import define_njobs  # noqa: PLC0415
+            njobs = define_njobs(self.args.njobs)
+
+        runner = MaskRunner.create(
+            self.args.buffered, njobs, verbose=self.args.verbose)
+        mode = (
+            f"parallel buffered ({njobs} workers)" if njobs is not None
+            else "serial buffered" if self.args.buffered
+            else "serial unbuffered"
+        )
+        print(f"generate_masks.py: {mode} mode")
+
+        config = RunConfig(
+            sulci=sulci,
+            sides=sides,
+            mask_dir=mask_dir,
+            labeled_subjects_dir=self.args.labeled_subjects_dir,
+            path_to_graph_supervised=self.args.path_to_graph_supervised,
+            nb_subjects=self.args.nb_subjects,
+            voxel_size=self.args.voxel_size,
+            force=self.args.force,
+            brainvisa_dir=brainvisa_dir,
+            public_use=self.args.public_use,
+        )
+
         n_ok = 0
         n_skipped = 0
         n_failed = 0
+        n_invalid = 0
 
-        use_buffered = self.args.buffered or (self.args.njobs is not None)
-        if self.args.njobs is not None and not self.args.buffered:
-            print("generate_masks.py: --njobs implies --buffered, "
-                  "enabling buffered mode automatically.")
-
-        if use_buffered:
-            from deep_folding.brainvisa.utils.parallel import define_njobs  # noqa: PLC0415
-            njobs = define_njobs(self.args.njobs)
-            print(f"generate_masks.py: buffered mode — "
-                  f"loading graphs once per side, {njobs} worker(s)")
-            for side, results in _run_buffered(
-                    sulci, sides, mask_dir,
-                    self.args.labeled_subjects_dir,
-                    self.args.path_to_graph_supervised,
-                    self.args.nb_subjects,
-                    self.args.voxel_size,
-                    self.args.force,
-                    njobs,
-                    brainvisa_dir,
-                    public_use=self.args.public_use):
-                for sulcus, result in results.items():
-                    if result == "skipped":
-                        print(f"  ✓ [{side}] {sulcus} (already exists, skipping)")
-                        n_skipped += 1
-                    elif result == "ok":
-                        print(f"  → [{side}] {sulcus} ok")
-                        n_ok += 1
-                    else:
-                        print(f"  ✗ [{side}] {sulcus}  {result}")
-                        n_failed += 1
-        else:
-            for side in sides:
-                side_suffix = "_left" if side == "L" else "_right"
-                for sulcus in sorted(sulci):
-                    mask_file = join(
-                        mask_dir, side, sulcus + side_suffix + ".nii.gz")
-                    if not self.args.force and exists(mask_file):
-                        print(f"  ✓ [{side}] {sulcus} (already exists, skipping)")
-                        n_skipped += 1
-                        continue
-                    print(f"  → [{side}] {sulcus}")
-                    try:
-                        compute_mask(
-                            src_dir=self.args.labeled_subjects_dir,
-                            path_to_graph=self.args.path_to_graph_supervised,
-                            mask_dir=mask_dir,
-                            sulcus=sulcus,
-                            new_sulcus=None,
-                            side=side,
-                            number_subjects=self.args.nb_subjects,
-                            out_voxel_size=self.args.voxel_size,
-                        )
-                        n_ok += 1
-                    except Exception as e:
-                        print(f"     ERROR: {e}")
-                        n_failed += 1
+        for side, results in runner(config):
+            for sulcus, result in results.items():
+                if result == RETURN_DICTIONARY['skipped']:
+                    print(f"  ✓ [{side}] {sulcus} (already exists, skipping)")
+                    n_skipped += 1
+                elif result == RETURN_DICTIONARY['ok']:
+                    print(f"  → [{side}] {sulcus} ok")
+                    n_ok += 1
+                elif result == RETURN_DICTIONARY['invalid_foldlabel']:
+                    print(f"  ⚠ [{side}] {sulcus} (invalid foldlabel — subject logged)")
+                    n_invalid += 1
+                else:
+                    print(f"  ✗ [{side}] {sulcus}  {result}")
+                    n_failed += 1
 
         sep = "=" * 60
         print(f"\n{sep}")
@@ -412,6 +567,7 @@ class GenerateMasks(ScriptBuilder):
         print(f"  Total:    {len(sulci) * len(sides)}")
         print(f"  Skipped:  {n_skipped} (already exist)")
         print(f"  Success:  {n_ok}")
+        print(f"  Invalid:  {n_invalid} (invalid foldlabel — see {mask_dir}/invalid_subjects.log)")
         print(f"  Failed:   {n_failed}")
         print(f"\n  Output:   {mask_dir}/{{side}}/{{sulcus}}.nii.gz")
         print(f"{sep}\n")
