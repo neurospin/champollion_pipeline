@@ -11,7 +11,7 @@ import os
 import sys
 from os.path import abspath, dirname, exists, join
 
-from indexed_script_builder import IndexedScriptBuilder
+from champollion_utils.script_builder import ScriptBuilder
 
 # Default regions — same 28 as generate_sulcal_regions.py
 _REGIONS_DEFAULT = [
@@ -424,7 +424,7 @@ class BufferedRunner(MaskRunner):
 # CLI script class
 # --------------------------------------------------------------------------- #
 
-class GenerateMasks(IndexedScriptBuilder):
+class GenerateMasks(ScriptBuilder):
     """Script for generating sulcal mask files from manually labelled graphs."""
 
     def __init__(self):
@@ -482,15 +482,6 @@ class GenerateMasks(IndexedScriptBuilder):
          .add_flag(
              "--verbose",
              "Print detailed per-subject and per-sulcus progress logs."))
-
-    def subject_input_dir(self):
-        return self.args.labeled_subjects_dir
-
-    def required_file_patterns(self):
-        return [f"{self.args.path_to_graph_supervised}/*.arg"]
-
-    def script_output_dir(self):
-        return self.args.output_dir
 
     def run(self):
         """Execute mask generation for all (sulcus × side) combinations."""
