@@ -118,3 +118,11 @@ generate-umap-reference = "python3 src/generate_umap_reference.py"
 # Generate sulcal mask files from manually labelled graphs
 # Usage: pixi run generate-masks --labeled_subjects_dir /path/to/subjects --path_to_graph_supervised "t1mri/t1/default_analysis/folds/3.3/base2026_manual" --output_dir /path/to/masks
 generate-masks = "python3 src/generate_masks.py"
+
+# Check sulcal labeling coverage per subject in a BrainVISA database
+# Usage: pixi run check-labeling --labeled_subjects_dir /path/to/db --path_to_graph "t1mri/t1/default_analysis/folds/3.3/base2018b_manual" --side both --output /tmp/labeling.csv
+check-labeling = "python3 src/check_labeling.py"
+
+# Compare sulcal labeling between two graph annotation campaigns + optional mask sets
+# Usage: pixi run compare-databases --labeled_subjects_dir /path/to/db --path_to_graph_a "...base2018_manual" --path_to_graph_b "...base2018b_manual" --label_a base2018 --label_b base2018b --masks_a external/cortical_tiles/data/mask/canonical_25/2mm --masks_b /path/to/new/masks/2.0 --output /tmp/comparison.csv
+compare-databases = "python3 src/compare_databases.py"
