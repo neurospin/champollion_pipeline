@@ -11,7 +11,7 @@ import os
 import sys
 from os.path import abspath, dirname, exists, join
 
-from champollion_utils.script_builder import ScriptBuilder
+from indexed_script_builder import IndexedScriptBuilder
 
 # Default regions — same 28 as generate_sulcal_regions.py
 _REGIONS_DEFAULT = [
@@ -424,7 +424,7 @@ class BufferedRunner(MaskRunner):
 # CLI script class
 # --------------------------------------------------------------------------- #
 
-class GenerateMasks(ScriptBuilder):
+class GenerateMasks(IndexedScriptBuilder):
     """Script for generating sulcal mask files from manually labelled graphs."""
 
     def __init__(self):
@@ -483,6 +483,15 @@ class GenerateMasks(ScriptBuilder):
              "--verbose",
              "Print detailed per-subject and per-sulcus progress logs."))
 
+    def subject_input_dir(self):
+        return self.args.labeled_subjects_dir
+
+    def required_file_patterns(self):
+        return [f"{self.args.path_to_graph_supervised}/*.arg"]
+
+    def script_output_dir(self):
+        return self.args.output_dir
+
     def run(self):
         """Execute mask generation for all (sulcus × side) combinations."""
         print(f"generate_masks.py/labeled_subjects_dir: {self.args.labeled_subjects_dir}")
@@ -518,6 +527,8 @@ class GenerateMasks(ScriptBuilder):
         if self.args.njobs is not None:
             from deep_folding.brainvisa.utils.parallel import define_njobs  # noqa: PLC0415
             njobs = define_njobs(self.args.njobs)
+            if not self.args.buffered:
+                print("  Note: --njobs implies --buffered")
 
         runner = MaskRunner.create(
             self.args.buffered, njobs, verbose=self.args.verbose)
@@ -578,7 +589,7 @@ class GenerateMasks(ScriptBuilder):
 def main():
     """Main entry point."""
     script = GenerateMasks()
-    return script.build().print_args().run()
+    return script.main()
 
 
 if __name__ == "__main__":
