@@ -318,7 +318,15 @@ class TestLoadAndExtractSubject:
         """Vertices outside sulci_full_set are not included in sub_data."""
         def make_vertex(name):
             v = MagicMock()
-            v.get.side_effect = lambda k: name if k == 'name' else None
+            mock_bucket = MagicMock()
+            mock_bucket.__getitem__ = MagicMock(return_value={(0, 0, 0): None})
+            def _get(k):
+                if k == 'name':
+                    return name
+                if k == 'aims_ss':
+                    return mock_bucket
+                return None
+            v.get.side_effect = _get
             return v
 
         modules, mock_aims, _, _ = _mock_aims_env()
@@ -407,17 +415,19 @@ class TestNjobsAutoBuffered:
         ]):
             gm.parse_args()
 
+        mock_runner = MagicMock()
+        mock_runner.return_value = iter([])
         with patch.dict(sys.modules, self._bv_modules(4)), \
              patch('generate_masks.get_sulci_for_regions',
                    return_value=set()), \
-             patch('generate_masks._run_buffered', return_value=iter([])):
+             patch('generate_masks.MaskRunner.create', return_value=mock_runner):
             gm.run()
 
         out = capsys.readouterr().out
         assert '--njobs implies --buffered' in out
 
     def test_njobs_without_buffered_uses_buffered_path(self, tmp_path):
-        """--njobs alone triggers _run_buffered."""
+        """--njobs alone triggers the buffered runner."""
         gm = GenerateMasks()
         with patch('sys.argv', [
             'generate_masks',
@@ -428,19 +438,18 @@ class TestNjobsAutoBuffered:
         ]):
             gm.parse_args()
 
-        run_buffered_called = []
+        runner_called = []
 
-        def _side(*a, **kw):
-            run_buffered_called.append(True)
-            return iter([])
+        mock_runner = MagicMock()
+        mock_runner.side_effect = lambda config: (runner_called.append(True) or iter([]))
 
         with patch.dict(sys.modules, self._bv_modules(2)), \
              patch('generate_masks.get_sulci_for_regions',
                    return_value=set()), \
-             patch('generate_masks._run_buffered', side_effect=_side):
+             patch('generate_masks.MaskRunner.create', return_value=mock_runner):
             gm.run()
 
-        assert run_buffered_called, "_run_buffered was not called"
+        assert runner_called, "buffered runner was not called"
 
 
 # ---------------------------------------------------------------------------
@@ -461,7 +470,7 @@ class TestVoxStrOutputPath:
         }
 
     def test_vox_str_uses_mm_suffix(self, tmp_path):
-        """mask_dir passed to _run_buffered contains '2mm', not '2.0'."""
+        """mask_dir in RunConfig contains '2mm', not '2.0'."""
         gm = GenerateMasks()
         with patch('sys.argv', [
             'generate_masks',
@@ -474,15 +483,17 @@ class TestVoxStrOutputPath:
 
         captured = {}
 
-        def fake_run_buffered(*args, **kwargs):
-            captured['mask_dir'] = args[2]
+        def fake_runner_call(config):
+            captured['mask_dir'] = config.mask_dir
             return iter([])
+
+        mock_runner = MagicMock()
+        mock_runner.side_effect = fake_runner_call
 
         with patch.dict(sys.modules, self._bv_modules()), \
              patch('generate_masks.get_sulci_for_regions',
                    return_value=set()), \
-             patch('generate_masks._run_buffered',
-                   side_effect=fake_run_buffered):
+             patch('generate_masks.MaskRunner.create', return_value=mock_runner):
             gm.run()
 
         mask_dir = captured.get('mask_dir', '')
@@ -504,15 +515,17 @@ class TestVoxStrOutputPath:
 
         captured = {}
 
-        def fake_run_buffered(*args, **kwargs):
-            captured['mask_dir'] = args[2]
+        def fake_runner_call(config):
+            captured['mask_dir'] = config.mask_dir
             return iter([])
+
+        mock_runner = MagicMock()
+        mock_runner.side_effect = fake_runner_call
 
         with patch.dict(sys.modules, self._bv_modules()), \
              patch('generate_masks.get_sulci_for_regions',
                    return_value=set()), \
-             patch('generate_masks._run_buffered',
-                   side_effect=fake_run_buffered):
+             patch('generate_masks.MaskRunner.create', return_value=mock_runner):
             gm.run()
 
         mask_dir = captured.get('mask_dir', '')
