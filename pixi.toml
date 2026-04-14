@@ -50,8 +50,11 @@ setup-data = "mkdir -p ../data"
 # Global task to install everything
 install-all = { depends-on = ["init-submodules", "install-cortical-tiles", "install-champollion", "install-utils", "setup-data"] }
 
-# Pull latest changes for the main champollion_pipeline repo
-update-pipeline = "git pull"
+# Pull latest changes for the main champollion_pipeline repo.
+# pixi.lock is tracked by git but regenerated locally by pixi, which causes
+# conflicts on git pull.  We resolve this by always taking the remote version
+# of pixi.lock: fetch first, overwrite the lock from FETCH_HEAD, then merge.
+update-pipeline = "git fetch && git checkout FETCH_HEAD -- pixi.lock && git merge FETCH_HEAD"
 
 # Update git submodules to latest commits on their tracked branches
 # --init handles the case where submodules were never initialized (first run)
