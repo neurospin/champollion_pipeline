@@ -49,9 +49,11 @@ except ImportError as e:
 
 try:
     from file_indexer.pipeline_checks import SubjectEligibilityChecker, build_output_report
+    from file_indexer.scan_id import ScanId
 except ImportError:
     SubjectEligibilityChecker = None
     build_output_report = None
+    ScanId = None
 
 
 # ====================== Configuration Management ======================
@@ -105,6 +107,9 @@ class DatasetConfig:
     # CPU mode (disable CUDA)
     cpu: bool = False
 
+    # BIDS database layout (subjects/sub-*/ses-*/...)
+    bids: bool = False
+
     # Snapshots parameters
     snapshots_path: str = ""
     reference_data_path: str = ""
@@ -142,6 +147,8 @@ class PipelineConfig:
 
     # Execution settings
     mode: str = "sequential"
+    n_workers: int = 0        # 0 means use os.cpu_count()
+    worker_timeout: int = 7200  # seconds per worker
     stop_on_error: bool = True
     verbose: bool = False
 
@@ -229,6 +236,7 @@ class ConfigLoader:
                 'hf_token': config.dataset.hf_token,
                 'config_path': config.dataset.config_path,
                 'cpu': config.dataset.cpu,
+                'bids': config.dataset.bids,
                 'snapshots_path': config.dataset.snapshots_path,
                 'reference_data_path': config.dataset.reference_data_path,
             }
@@ -365,6 +373,9 @@ class RunCorticalTilesStage(PipelineStage):
             if self.config.dataset.sk_qc_path:
                 args.append(f"--sk_qc_path={self.config.dataset.sk_qc_path}")
 
+            if self.config.dataset.bids:
+                args.append("--bids")
+
             if self.config.dataset.regions:
                 args.extend(["--regions"] + self.config.dataset.regions)
 
@@ -396,9 +407,15 @@ class RunCorticalTilesStage(PipelineStage):
         return d if d and os.path.exists(d) else None
 
     def required_file_patterns(self) -> List[str]:
+        import re as _re
         side = "R"
         g = self.config.dataset.path_to_graph
         s = self.config.dataset.path_sk_with_hull
+        if self.config.dataset.bids:
+            # scan_id.path_prefix already includes the session directory;
+            # strip the leading ses-XXX/ segment so patterns are session-relative.
+            g = _re.sub(r"^ses-[^/]*/+", "", g)
+            s = _re.sub(r"^ses-[^/]*/+", "", s)
         return [
             f"{g}/{side}*.arg",
             f"{s}/{side}*.nii.gz",
@@ -816,7 +833,11 @@ class PipelineOrchestrator:
                                 f"index_pre_{stage_name}.json",
                             )
                         checker = SubjectEligibilityChecker(
-                            input_dir, patterns, stage_name=stage_name
+                            input_dir,
+                            patterns,
+                            stage_name=stage_name,
+                            bids=self.config.dataset.bids,
+                            path_to_graph=self.config.dataset.path_to_graph,
                         )
                         pre_report = checker.check(save_index_to=index_path)
                         pre_report.print()
@@ -947,6 +968,48 @@ Examples:
         help="Generate a template configuration file and exit"
     )
 
+    parser.add_argument(
+        "--bids",
+        action="store_true",
+        help=(
+            "Input database follows BIDS layout "
+            "(subjects/sub-*/ses-*/...). "
+            "Activates BIDS-aware scan enumeration in eligibility checks "
+            "and passes --bids to cortical_tiles."
+        ),
+    )
+
+    parser.add_argument(
+        "--mode",
+        choices=["sequential", "streaming"],
+        default=None,
+        help=(
+            "Execution mode: 'sequential' (default, stage-centric batch) or "
+            "'streaming' (scan-centric parallel, one worker per scan). "
+            "Streaming mode requires --embeddings-only."
+        ),
+    )
+    parser.add_argument(
+        "--n-workers",
+        type=int,
+        default=None,
+        metavar="N",
+        help="Number of parallel scan workers (streaming mode only). "
+             "Defaults to os.cpu_count().",
+    )
+    parser.add_argument(
+        "--worker-timeout",
+        type=int,
+        default=None,
+        metavar="SECONDS",
+        help="Per-worker timeout waiting for prerequisite files (default: 7200).",
+    )
+    parser.add_argument(
+        "--dry-run",
+        action="store_true",
+        help="Enumerate scans and report without processing (streaming mode only).",
+    )
+
     return parser.parse_args()
 
 
@@ -992,7 +1055,43 @@ def main() -> int:
         config.verbose = True
         config.log_level = "DEBUG"
 
+    if args.bids:
+        config.dataset.bids = True
+
+    if args.mode:
+        config.mode = args.mode
+    if args.n_workers is not None:
+        config.n_workers = args.n_workers
+    if args.worker_timeout is not None:
+        config.worker_timeout = args.worker_timeout
+
     # Run pipeline
+    if config.mode == "streaming":
+        if not config.dataset.embeddings_only:
+            print(
+                "Error: --mode streaming requires --embeddings-only "
+                "(training aggregates subjects and must remain batch).",
+                file=sys.stderr,
+            )
+            return 1
+        try:
+            from parallel_runner import run_parallel_pipeline
+        except ImportError as e:
+            print(f"Error: could not import parallel_runner: {e}", file=sys.stderr)
+            return 1
+        subjects_dir = config.dataset.input_path or config.dataset.morphologist_graphs
+        output_dir = config.outputs_path
+        log_dir = config.log_dir or str(Path(output_dir) / "logs")
+        return run_parallel_pipeline(
+            subjects_dir=subjects_dir,
+            output_dir=output_dir,
+            config=config.dataset,
+            n_workers=config.n_workers,
+            log_dir=log_dir,
+            worker_timeout=config.worker_timeout,
+            dry_run=getattr(args, "dry_run", False),
+        )
+
     orchestrator = PipelineOrchestrator(config)
     return orchestrator.run()
 

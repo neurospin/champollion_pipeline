@@ -1,5 +1,6 @@
 from .btree import BTree, BTreeNode
 from .indexer import IndexFileSystem, main
+from .scan_id import ScanId
 from .pipeline_checks import (
     SubjectEligibilityChecker,
     SubjectEligibilityReport,
@@ -12,6 +13,7 @@ __all__ = [
     "BTreeNode",
     "IndexFileSystem",
     "main",
+    "ScanId",
     "SubjectEligibilityChecker",
     "SubjectEligibilityReport",
     "OutputIndexReport",
