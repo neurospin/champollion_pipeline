@@ -17,6 +17,7 @@ from file_indexer.pipeline_checks import (
     OutputIndexReport,
     build_output_report,
 )
+from file_indexer.scan_id import ScanId
 
 
 # ---------------------------------------------------------------------------
@@ -46,7 +47,9 @@ class TestSubjectEligibilityChecker:
             self._make_subject(tmp_path, sub, ["graphs/Rsub.arg", "skel/Rsub.nii.gz"])
         checker = SubjectEligibilityChecker(str(tmp_path), patterns)
         report = checker.check()
-        assert sorted(report.eligible) == ["sub_001", "sub_002", "sub_003"]
+        assert sorted(report.eligible) == [
+            ScanId("sub_001"), ScanId("sub_002"), ScanId("sub_003")
+        ]
         assert report.ineligible == {}
 
     def test_missing_graph_file(self, tmp_path):
@@ -55,9 +58,9 @@ class TestSubjectEligibilityChecker:
         self._make_subject(tmp_path, "sub_bad", ["skel/Rsub.nii.gz"])  # no .arg
         checker = SubjectEligibilityChecker(str(tmp_path), patterns)
         report = checker.check()
-        assert "sub_ok" in report.eligible
-        assert "sub_bad" in report.ineligible
-        assert any("*.arg" in p for p in report.ineligible["sub_bad"])
+        assert ScanId("sub_ok") in report.eligible
+        assert ScanId("sub_bad") in report.ineligible
+        assert any("*.arg" in p for p in report.ineligible[ScanId("sub_bad")])
 
     def test_missing_skeleton_file(self, tmp_path):
         patterns = ["graphs/R*.arg", "skel/R*.nii.gz"]
@@ -65,16 +68,16 @@ class TestSubjectEligibilityChecker:
         self._make_subject(tmp_path, "sub_bad", ["graphs/Rsub.arg"])  # no .nii.gz
         checker = SubjectEligibilityChecker(str(tmp_path), patterns)
         report = checker.check()
-        assert "sub_ok" in report.eligible
-        assert "sub_bad" in report.ineligible
-        assert any("*.nii.gz" in p for p in report.ineligible["sub_bad"])
+        assert ScanId("sub_ok") in report.eligible
+        assert ScanId("sub_bad") in report.ineligible
+        assert any("*.nii.gz" in p for p in report.ineligible[ScanId("sub_bad")])
 
     def test_empty_patterns_all_eligible(self, tmp_path):
         (tmp_path / "sub_001").mkdir()
         (tmp_path / "sub_002").mkdir()
         checker = SubjectEligibilityChecker(str(tmp_path), [])
         report = checker.check()
-        assert sorted(report.eligible) == ["sub_001", "sub_002"]
+        assert sorted(report.eligible) == [ScanId("sub_001"), ScanId("sub_002")]
         assert report.ineligible == {}
 
     def test_empty_subjects_dir(self, tmp_path):
@@ -109,17 +112,73 @@ class TestSubjectEligibilityChecker:
         self._make_subject(tmp_path, "sub_001", ["graphs/Rsub_001.arg"])
         checker = SubjectEligibilityChecker(str(tmp_path), ["graphs/R*.arg"])
         report = checker.check()
-        assert "sub_001" in report.eligible
+        assert ScanId("sub_001") in report.eligible
 
     def test_no_wildcard_exact_match(self, tmp_path):
         self._make_subject(tmp_path, "sub_001", ["graphs/Rsub_001.arg"])
         checker = SubjectEligibilityChecker(str(tmp_path), ["graphs/Rsub_001.arg"])
         report = checker.check()
-        assert "sub_001" in report.eligible
+        assert ScanId("sub_001") in report.eligible
         # Wrong exact path → ineligible
         checker2 = SubjectEligibilityChecker(str(tmp_path), ["graphs/Rsub_999.arg"])
         report2 = checker2.check()
-        assert "sub_001" in report2.ineligible
+        assert ScanId("sub_001") in report2.ineligible
+
+    # ------------------------------------------------------------------
+    # BIDS mode tests
+    # ------------------------------------------------------------------
+
+    def test_bids_enumerates_sessions(self, tmp_path):
+        """BIDS mode returns one ScanId per (subject, session) pair."""
+        # sub-001 has ses-01 and ses-02; sub-002 has only ses-01
+        for sub, ses in [("sub-001", "ses-01"), ("sub-001", "ses-02"), ("sub-002", "ses-01")]:
+            _touch(tmp_path / sub / ses / "t1mri" / "folds" / "Rsub.arg")
+            _touch(tmp_path / sub / ses / "t1mri" / "skel" / "Rsub.nii.gz")
+
+        checker = SubjectEligibilityChecker(
+            str(tmp_path),
+            ["t1mri/folds/R*.arg", "t1mri/skel/R*.nii.gz"],
+            bids=True,
+            path_to_graph="ses-*/t1mri/folds",
+        )
+        report = checker.check()
+        eligible_strs = sorted(str(s) for s in report.eligible)
+        assert eligible_strs == ["sub-001_ses-01", "sub-001_ses-02", "sub-002_ses-01"]
+        assert report.ineligible == {}
+
+    def test_bids_ineligible_missing_file(self, tmp_path):
+        """BIDS mode flags scans missing required files at session level."""
+        _touch(tmp_path / "sub-001" / "ses-01" / "t1mri" / "folds" / "Rsub.arg")
+        _touch(tmp_path / "sub-001" / "ses-01" / "t1mri" / "skel" / "Rsub.nii.gz")
+        # ses-02 is missing the .nii.gz
+        _touch(tmp_path / "sub-001" / "ses-02" / "t1mri" / "folds" / "Rsub.arg")
+
+        checker = SubjectEligibilityChecker(
+            str(tmp_path),
+            ["t1mri/folds/R*.arg", "t1mri/skel/R*.nii.gz"],
+            bids=True,
+            path_to_graph="ses-*/t1mri/folds",
+        )
+        report = checker.check()
+        assert ScanId("sub-001", "ses-01") in report.eligible
+        assert ScanId("sub-001", "ses-02") in report.ineligible
+
+    def test_bids_with_acquisition(self, tmp_path):
+        """BIDS mode extracts acquisition entity from path_to_graph matches."""
+        _touch(tmp_path / "sub-001" / "ses-01" / "t1mri" / "acq-T1w" / "folds" / "Rsub.arg")
+
+        checker = SubjectEligibilityChecker(
+            str(tmp_path),
+            ["t1mri/acq-*/folds/R*.arg"],
+            bids=True,
+            path_to_graph="ses-*/t1mri/acq-*/folds",
+        )
+        report = checker.check()
+        assert len(report.eligible) == 1
+        scan = report.eligible[0]
+        assert scan.subject == "sub-001"
+        assert scan.session == "ses-01"
+        assert scan.acquisition == "acq-T1w"
 
 
 # ---------------------------------------------------------------------------

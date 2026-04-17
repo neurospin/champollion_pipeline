@@ -5,7 +5,9 @@ Pre- and post-stage pipeline checks using the B-tree file indexer.
 
 Before a stage runs:
     SubjectEligibilityChecker indexes the input subjects directory and
-    reports which subjects have all required files.
+    reports which scans have all required files.  In BIDS mode the unit
+    of work is a (subject, session, acquisition) triple (``ScanId``);
+    in non-BIDS mode it is simply a subject directory.
 
 After a stage runs:
     build_output_report indexes the output directory and summarises
@@ -13,13 +15,16 @@ After a stage runs:
 """
 
 import fnmatch
+import glob as glob_mod
 import json
 import os
+import re
 from dataclasses import dataclass, field
 from os.path import join, relpath, splitext
-from typing import Optional
+from typing import Dict, List, Optional
 
 from .btree import BTree
+from .scan_id import ScanId
 
 
 # ---------------------------------------------------------------------------
@@ -28,12 +33,12 @@ from .btree import BTree
 
 @dataclass
 class SubjectEligibilityReport:
-    """Result of a per-subject eligibility check before a pipeline stage."""
+    """Result of a per-scan eligibility check before a pipeline stage."""
 
     stage_name: str
     input_dir: str
-    eligible: list
-    ineligible: dict  # subject → list of missing patterns
+    eligible: List[ScanId]
+    ineligible: Dict[ScanId, List[str]]  # scan → list of missing patterns
 
     def print(self) -> None:
         n_total = len(self.eligible) + len(self.ineligible)
@@ -42,32 +47,59 @@ class SubjectEligibilityReport:
             "",
             f"--- Pre-check: {self.stage_name} ---",
             f"  Input directory : {self.input_dir}",
-            f"  Total subjects  : {n_total}",
+            f"  Total scans     : {n_total}",
             f"  Eligible        : {len(self.eligible)}",
         ]
         if self.ineligible:
             lines.append(f"  Ineligible ({len(self.ineligible)}):")
-            for sub in sorted(self.ineligible):
-                for pattern in self.ineligible[sub]:
-                    lines.append(f"    {sub}: missing {pattern}")
+            for scan_id in sorted(self.ineligible):
+                for pattern in self.ineligible[scan_id]:
+                    lines.append(f"    {scan_id}: missing {pattern}")
         lines.append(sep)
         print("\n".join(lines), flush=True)
 
 
 class SubjectEligibilityChecker:
-    """Index a subjects directory with a B-tree and check per-subject file requirements."""
+    """Index a subjects directory with a B-tree and check per-scan file requirements.
+
+    Parameters
+    ----------
+    subjects_dir:
+        Root directory whose first-level sub-directories are subject folders.
+    required_patterns:
+        Glob patterns relative to each scan's ``path_prefix`` that must all
+        match at least one indexed file for the scan to be eligible.
+    stage_name:
+        Human-readable label used in the eligibility report.
+    bids:
+        When ``True``, enumerate (subject, session, acquisition) triples
+        instead of bare subject directories.  Patterns are expected to be
+        relative to ``{subject}/{session}/``.
+    path_to_graph:
+        Glob pattern relative to the subject directory used to discover BIDS
+        scan directories (e.g. ``"ses-*/t1mri/acq-*/default_analysis/folds/3.1"``).
+        Only used when ``bids=True``.
+    btree_order:
+        B-tree minimum degree (default 64).
+    include_hidden:
+        Include hidden files and directories when walking the filesystem.
+    """
 
     def __init__(
         self,
         subjects_dir: str,
         required_patterns: list,
         stage_name: str = "",
+        bids: bool = False,
+        path_to_graph: str = "",
         btree_order: int = 64,
         include_hidden: bool = False,
     ) -> None:
         self.subjects_dir = subjects_dir
         self.required_patterns = required_patterns
         self.stage_name = stage_name
+        self.bids = bids
+        self.path_to_graph = path_to_graph
         self.btree_order = btree_order
         self.include_hidden = include_hidden
         self._tree: Optional[BTree] = None
@@ -98,24 +130,111 @@ class SubjectEligibilityChecker:
                     pass
         return tree
 
-    def _get_subjects(self) -> list:
-        """Return sorted first-level subdirectory names as subject IDs."""
+    # ------------------------------------------------------------------
+    # Scan enumeration
+    # ------------------------------------------------------------------
+
+    def _get_scan_ids(self) -> List[ScanId]:
+        """Return the list of scans to check.
+
+        Non-BIDS: one ``ScanId(subject=d)`` per top-level directory.
+        BIDS: one ``ScanId(subject, session, acquisition)`` per unique
+              scan discovered via ``path_to_graph`` glob.
+        """
+        if self.bids:
+            return self._enumerate_bids_scans()
+
         try:
-            return sorted([
+            return [
+                ScanId(subject=d)
+                for d in sorted(os.listdir(self.subjects_dir))
+                if os.path.isdir(join(self.subjects_dir, d))
+                and (self.include_hidden or not d.startswith("."))
+            ]
+        except OSError:
+            return []
+
+    def _enumerate_bids_scans(self) -> List[ScanId]:
+        """Walk *subjects_dir* and enumerate BIDS (subject, session, acquisition) triples.
+
+        Uses ``self.path_to_graph`` as a glob pattern relative to each subject
+        directory to locate actual scan directories, then extracts ``ses-*`` and
+        ``acq-*`` BIDS entities via regex — mirroring what ``cortical_tiles`` does
+        internally with the same pattern.
+
+        Falls back to listing ``ses-*`` subdirectories when no glob matches are
+        found (e.g. ``path_to_graph`` is empty or no graphs exist yet).
+        """
+        try:
+            subjects = sorted(
                 d for d in os.listdir(self.subjects_dir)
                 if os.path.isdir(join(self.subjects_dir, d))
                 and (self.include_hidden or not d.startswith("."))
-            ])
+            )
         except OSError:
             return []
+
+        scans: List[ScanId] = []
+        for subject in subjects:
+            sub_dir = join(self.subjects_dir, subject)
+            scans.extend(self._bids_scans_for_subject(sub_dir, subject))
+        return scans
+
+    def _bids_scans_for_subject(self, sub_dir: str, subject: str) -> List[ScanId]:
+        """Return all BIDS ``ScanId`` objects for one subject.
+
+        Globs ``{sub_dir}/{path_to_graph}`` and extracts ``ses-*`` / ``acq-*``
+        entities from each matching path.  When no matches are found, falls
+        back to enumerating ``ses-*`` session directories directly.
+        """
+        if self.path_to_graph:
+            pattern = join(sub_dir, self.path_to_graph)
+            matches = sorted(glob_mod.glob(pattern))
+        else:
+            matches = []
+
+        if not matches:
+            # Fallback: list ses-* dirs without acquisition detail
+            try:
+                sessions = sorted(
+                    d for d in os.listdir(sub_dir)
+                    if os.path.isdir(join(sub_dir, d)) and d.startswith("ses-")
+                )
+            except OSError:
+                sessions = []
+            if sessions:
+                return [ScanId(subject=subject, session=s) for s in sessions]
+            return [ScanId(subject=subject)]
+
+        seen: set = set()
+        result: List[ScanId] = []
+        for match in matches:
+            # Make path relative to the subject directory for entity extraction
+            rel = match[len(sub_dir):].lstrip("/\\")
+            ses_m = re.search(r"(ses-[^/\\]+)", rel)
+            acq_m = re.search(r"(acq-[^/\\]+)", rel)
+            scan_id = ScanId(
+                subject=subject,
+                session=ses_m.group(1) if ses_m else None,
+                acquisition=acq_m.group(1) if acq_m else None,
+            )
+            if scan_id not in seen:
+                seen.add(scan_id)
+                result.append(scan_id)
+
+        return sorted(result)
 
     # ------------------------------------------------------------------
     # Pattern matching
     # ------------------------------------------------------------------
 
-    def _subject_has_pattern(self, subject: str, pattern: str) -> bool:
-        """Return True if any indexed key matches <subject>/<pattern>."""
-        full_pattern = f"{subject}/{pattern}"
+    def _scan_has_pattern(self, scan_id: ScanId, pattern: str) -> bool:
+        """Return True if any indexed key matches ``{scan_id.path_prefix}/{pattern}``.
+
+        Uses ``scan_id.path_prefix`` as the range-query lower bound so the
+        B-tree only visits keys under that scan's directory.
+        """
+        full_pattern = f"{scan_id.path_prefix}/{pattern}"
         if "*" in full_pattern or "?" in full_pattern:
             prefix = full_pattern.split("*")[0].split("?")[0]
             candidates = self._tree.range_query(prefix, prefix + "\xff")
@@ -127,7 +246,7 @@ class SubjectEligibilityChecker:
     # ------------------------------------------------------------------
 
     def check(self, save_index_to: Optional[str] = None) -> SubjectEligibilityReport:
-        """Build index, check each subject, optionally save index JSON."""
+        """Build index, check each scan, optionally save index JSON."""
         self._tree = self._build_index()
 
         if save_index_to:
@@ -135,19 +254,19 @@ class SubjectEligibilityChecker:
             with open(save_index_to, "w") as fh:
                 json.dump(self._tree.to_dict(), fh, indent=2)
 
-        subjects = self._get_subjects()
-        eligible = []
-        ineligible = {}
+        scan_ids = self._get_scan_ids()
+        eligible: List[ScanId] = []
+        ineligible: Dict[ScanId, List[str]] = {}
 
-        for subject in subjects:
+        for scan_id in scan_ids:
             missing = [
                 p for p in self.required_patterns
-                if not self._subject_has_pattern(subject, p)
+                if not self._scan_has_pattern(scan_id, p)
             ]
             if missing:
-                ineligible[subject] = missing
+                ineligible[scan_id] = missing
             else:
-                eligible.append(subject)
+                eligible.append(scan_id)
 
         return SubjectEligibilityReport(
             stage_name=self.stage_name,
