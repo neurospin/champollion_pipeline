@@ -133,7 +133,7 @@ The `--path_to_graph` supports wildcards (`*`) for variable path segments, e.g.:
 
 ### Masks versions
 
-| Name | version |
+| Version name | Description |
 |------|---------|
 | `canonical_2025` | Original mask version, used for Champollion v1. |
 | `canonical_corrected_26_1` | Masks based on a new labeling for regions, removing some artifacts. |
