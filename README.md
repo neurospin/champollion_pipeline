@@ -130,6 +130,14 @@ The `--path_to_graph` supports wildcards (`*`) for variable path segments, e.g.:
 | `--masks` | Mask version tag (e.g. `canonical_25`). Overrides `masks_version` in the pipeline JSON config. |
 | `--regions` | Restrict processing to specific sulcal regions (space-separated). Default: all 28 regions. |
 
+
+### Masks versions
+
+| Name | version |
+|------|---------|
+| `canonical_2025` | Original mask version, used for Champollion v1. |
+| `canonical_corrected_26_1` | Masks based on a new labeling for regions, removing some artifacts. |
+
 ### QC File Format
 
 If you have a QC file, it should be tab-separated with columns `participant_id` and `qc`:
