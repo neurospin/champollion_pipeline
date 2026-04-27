@@ -16,9 +16,12 @@ __pycache__/
 *.pyd
 .Python
 
-# MCP configuration
+# MCP configuration / AI 
 .mcp.json
 .omc/
+AGENTS.md
+CLAUDE.md
+SPECS.md
 
 
 # Fuzzy testing whit Hypothesis
