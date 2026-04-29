@@ -48,7 +48,7 @@ install-utils = """
 setup-data = "mkdir -p ../data"
 
 # Global task to install everything
-install-all = { depends-on = ["init-submodules", "install-cortical-tiles", "install-champollion", "install-utils", "setup-data"] }
+install-all = { depends-on = ["init-submodules", "install-cortical-tiles", "install-champollion", "install-utils", "setup-data", "test-smoke"] }
 
 # Pull latest changes for the main champollion_pipeline repo.
 # pixi.lock is tracked by git but regenerated locally by pixi, which causes
@@ -129,3 +129,7 @@ check-labeling = "python3 src/check_labeling.py"
 # Compare sulcal labeling between two graph annotation campaigns + optional mask sets
 # Usage: pixi run compare-databases --labeled_subjects_dir /path/to/db --path_to_graph_a "...base2018_manual" --path_to_graph_b "...base2018b_manual" --label_a base2018 --label_b base2018b --masks_a external/cortical_tiles/data/mask/canonical_25/2mm --masks_b /path/to/new/masks/2.0 --output /tmp/comparison.csv
 compare-databases = "python3 src/compare_databases.py"
+
+# Remove cortical_tiles outputs for subjects that failed QC
+# Usage: pixi run prune-failed-subjects /path/to/output --qc /path/to/qc.tsv [--dry-run]
+prune-failed-subjects = "python3 src/prune_failed_subjects.py"
