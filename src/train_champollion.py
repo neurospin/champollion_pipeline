@@ -143,7 +143,7 @@ class TrainChampollion(ScriptBuilder):
         # +dataset/{dataset}/{region}=null appends the generated region config
         overrides = [
             f"+dataset/{self.args.dataset}={self.args.region}",
-            "dataset_localization=local",
+            "+dataset_localization=local",
             f"platform={platform}",
             f"mode={self.args.mode}",
             f"hydra.run.dir={output_dir}",
