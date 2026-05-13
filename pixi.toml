@@ -12,6 +12,7 @@ libjpeg-turbo = { channel = "conda-forge", version = ">=3.0" }
 anatomist = ">=0.0.29"
 morphologist = ">=0.0.29"
 disco = ">=6.0"
+pytorch-cuda = { channel = "pytorch", version = "12.4.*" }
 pip = ">=25.3,<26"
 setuptools = ">=65.0,<81"
 pytest = ">=7.0"
@@ -30,7 +31,7 @@ hypothesis = ">=6.0"
 umap-learn = ">=0.5"
 
 [activation]
-env = { LD_LIBRARY_PATH = "$CONDA_PREFIX/lib/python3.11/site-packages/torch/lib:${LD_LIBRARY_PATH:-}" }
+env = { LD_LIBRARY_PATH = "$CONDA_PREFIX/lib:$CONDA_PREFIX/lib/python3.11/site-packages/torch/lib:${LD_LIBRARY_PATH:-}" }
 
 [tasks]
 # Initialize submodules
