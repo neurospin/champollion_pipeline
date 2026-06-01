@@ -84,9 +84,12 @@ class GenerateChampollionConfig(ScriptBuilder):
         # Resolve champollion_loc to absolute path
         champollion_loc = abspath(self.args.champollion_loc)
 
-        # Determine output location
+        # Determine output location.
+        # When --output is given it is treated as the configs root (parallel to
+        # contrastive/configs/), so region YAMLs land at {output}/dataset/{dataset}/
+        # to match the Hydra config-group layout expected by train_champollion.py.
         if self.args.output:
-            dataset_loc = abspath(self.args.output)
+            dataset_loc = join(abspath(self.args.output), "dataset", self.args.dataset)
         else:
             dataset_loc = join(champollion_loc, "contrastive", "configs", "dataset", self.args.dataset)
 
@@ -139,7 +142,8 @@ class GenerateChampollionConfig(ScriptBuilder):
         if self.args.external_config:
             external_yaml = abspath(self.args.external_config)
             if os.path.isdir(external_yaml):
-                external_yaml = join(external_yaml, os.path.basename(local_yaml_path))
+                # Mirror the built-in layout: dataset_localization/local.yaml
+                external_yaml = join(external_yaml, "dataset_localization", os.path.basename(local_yaml_path))
             self._handle_yaml_conf(local_yaml_path, dataset_folder, external_yaml)
         else:
             self._handle_yaml_conf(local_yaml_path, dataset_folder)
