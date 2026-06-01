@@ -138,6 +138,8 @@ class GenerateChampollionConfig(ScriptBuilder):
         # Support external config for read-only containers (e.g., Apptainer)
         if self.args.external_config:
             external_yaml = abspath(self.args.external_config)
+            if os.path.isdir(external_yaml):
+                external_yaml = join(external_yaml, os.path.basename(local_yaml_path))
             self._handle_yaml_conf(local_yaml_path, dataset_folder, external_yaml)
         else:
             self._handle_yaml_conf(local_yaml_path, dataset_folder)
