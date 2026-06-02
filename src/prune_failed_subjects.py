@@ -66,6 +66,14 @@ class PruneFailedSubjects(ScriptBuilder):
         qc_file["participant_id"] = qc_file["participant_id"].astype(str)
         passing = qc_file[qc_file["qc"] != 0]["participant_id"].tolist()
         return set(passing)
+    
+    def _read_non_passing_subjects(self, qc_path: str) -> set:
+        """Return set of subject IDs with qc != 0."""
+        sep = "\t" if qc_path.endswith(".tsv") else ","
+        qc_file = pd.read_csv(qc_path, sep=sep)
+        qc_file["participant_id"] = qc_file["participant_id"].astype(str)
+        non_passing = qc_file[qc_file["qc"] != 1]["participant_id"].tolist()
+        return set(non_passing)
 
     def run(self):
         """Execute the prune operation."""
@@ -75,43 +83,31 @@ class PruneFailedSubjects(ScriptBuilder):
                 f"Derivatives directory not found: {derivatives_dir}\n"
                 f"Expected {DERIVATIVES_FOLDER}/ inside {self.args.output}"
             )
-
-        crops_dir = join(derivatives_dir, "crops", "2mm")
-        if not exists(crops_dir):
-            raise ValueError(
-                f"Crops directory not found: {crops_dir}\n"
-                "Run run_cortical_tiles.py before pruning."
-            )
-
-        all_subjects = self._discover_subjects(crops_dir)
-        if not all_subjects:
-            print("No subjects found in crops directory. Nothing to prune.")
-            return 0
-
-        passing = self._read_passing_subjects(self.args.qc)
-        to_remove = all_subjects - passing
+            
+        to_remove = self._read_non_passing_subjects(self.args.qc)
 
         if not to_remove:
             print(f"All {len(all_subjects)} subjects pass QC. Nothing to prune.")
             return 0
 
         print(f"Subjects to remove ({len(to_remove)}): {sorted(to_remove)}")
-        print(f"Subjects kept ({len(passing & all_subjects)}): {sorted(passing & all_subjects)}")
 
         deleted = 0
         for root, _dirs, files in os.walk(derivatives_dir):
             for fname in files:
                 stem = fname
-                for ext in (".nii.gz", ".nii", ".gz", ".csv", ".json", ".trm"):
+                for ext in (".nii.gz", ".nii", ".gz", ".csv", ".json", ".trm",
+                            ".nii.gz.minf", ".nii.minf", ".gz.minf", ".trm.minf"):
                     if stem.endswith(ext):
                         stem = stem[: -len(ext)]
                         break
-                if stem in to_remove:
+                if any(sub in stem for sub in to_remove):
                     fpath = join(root, fname)
                     if self.args.dry_run:
                         print(f"[dry-run] Would delete: {fpath}")
                     else:
                         os.remove(fpath)
+                        print(f"Removed: {fpath}")
                     deleted += 1
 
         action = "Would delete" if self.args.dry_run else "Deleted"
