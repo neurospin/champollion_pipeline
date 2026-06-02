@@ -97,8 +97,8 @@ class RunCorticalTiles(ScriptBuilder):
             )
             config['path_to_graph'] = self.args.path_to_graph
             config['path_to_skeleton_with_hull'] = self.args.path_sk_with_hull
-            if self.args.masks:
-                config['masks_version'] = self.args.masks
+            config['masks_version'] = self.args.masks if self.args.masks else 'canonical_25'
+            config['skel_qc_path'] = self.args.sk_qc_path if self.args.sk_qc_path else ""
             with open(config_file_path, 'w') as f:
                 json.dump(config, f, indent=3)
 
