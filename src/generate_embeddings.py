@@ -366,10 +366,19 @@ class GenerateEmbeddings(ScriptBuilder):
             help="Path to the directory containing model folders.")
          .add_argument(
             "dataset_localization", type=str,
-            help="Key for dataset localization.")
+            help=(
+                "Config key selecting dataset_localization/{key}.yaml inside "
+                "external/champollion_V1/contrastive/configs/. "
+                "Use 'local' for any dataset processed on this machine — "
+                "it maps to the dataset_folder set by generate_champollion_config.py. "
+                "Example: local"
+            ))
          .add_argument(
             "datasets_root", type=str,
-            help="Root path to the dataset YAML configs.")
+            help=(
+                "Absolute path to the dataset root directory "
+                "(e.g. /my/path/to/dataset_name/)."
+            ))
          .add_argument(
             "short_name", type=str,
             help=(
