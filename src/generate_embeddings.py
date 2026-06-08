@@ -20,6 +20,7 @@ from pathlib import Path
 from urllib.parse import urlparse
 
 from champollion_utils.script_builder import ScriptBuilder
+from utils.lib import CORTICAL_TILES_VERSION
 
 # Add champollion to path for CKA imports
 _SCRIPT_DIR = dirname(abspath(__file__))
@@ -440,7 +441,42 @@ class GenerateEmbeddings(ScriptBuilder):
          .add_optional_argument(
             "--nb_jobs",
             "Number of CPU workers for DataLoader.",
-            default=None, type_=int))
+            default=None, type_=int)
+         .add_optional_argument(
+            "--cortical_version",
+            "Derivatives folder name to use in config YAML paths "
+            "(e.g. 'cortical_tiles-2027' or 'deep_folding-2025'). "
+            f"Defaults to the current release: cortical_tiles-{CORTICAL_TILES_VERSION}. "
+            "Rewrites the folder in all YAMLs under --config_path before running. "
+            "Use --legacy as a shorthand for deep_folding-2025.",
+            default=f"cortical_tiles-{CORTICAL_TILES_VERSION}")
+         .add_flag(
+            "--legacy",
+            "Rewrite config YAML paths to use deep_folding-2025. "
+            "Shorthand for --cortical_version deep_folding-2025, "
+            "for datasets generated before the cortical_tiles rename."))
+
+    def _get_derivatives_folder(self) -> str:
+        """Return the derivatives folder to use, resolving --legacy and --cortical_version."""
+        if getattr(self.args, 'legacy', False):
+            return "deep_folding-2025"
+        return self.args.cortical_version
+
+    def _patch_config_paths(self, config_path: str, target_folder: str) -> None:
+        """Rewrite the derivatives folder in every YAML under config_path in-place."""
+        import re
+        pattern = re.compile(r'(derivatives/)([^/\n]+)(/crops/2mm)')
+        patched = 0
+        for yaml_file in Path(config_path).rglob("*.yaml"):
+            text = yaml_file.read_text()
+            new_text = pattern.sub(
+                lambda m: f"{m.group(1)}{target_folder}{m.group(3)}", text
+            )
+            if new_text != text:
+                yaml_file.write_text(new_text)
+                patched += 1
+        if patched:
+            print(f"Patched {patched} YAML file(s): derivatives folder → {target_folder}")
 
     def fetch_models(self, models_path):
         """
@@ -572,6 +608,12 @@ class GenerateEmbeddings(ScriptBuilder):
         ))
 
         os.chdir(champollion_dir)
+
+        # Patch config YAML paths if a non-default derivatives folder is requested
+        target_folder = self._get_derivatives_folder()
+        default_folder = f"cortical_tiles-{CORTICAL_TILES_VERSION}"
+        if self.args.config_path and target_folder != default_folder:
+            self._patch_config_paths(self.args.config_path, target_folder)
 
         # Use build_command to construct the command
         defaults = {
