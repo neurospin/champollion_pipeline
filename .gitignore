@@ -29,3 +29,7 @@ SPECS.md
 
 # test
 .coverage
+
+# Generated reports
+comparison_report.json
+things_tried_to_fix_compare.md
