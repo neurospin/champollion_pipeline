@@ -4,8 +4,7 @@
 Unit tests for RegionPipelineRunner in generate_sulcal_regions.py.
 """
 
-import pytest
-from unittest.mock import patch, call
+from unittest.mock import patch
 
 # RegionPipelineRunner lives in the brainvisa subdirectory; conftest adds src/
 # to sys.path but not brainvisa/. Add it here so the import works in tests.

@@ -9,7 +9,6 @@ These tests catch environment contamination and missing dependencies early,
 before users hit cryptic errors deep in the pipeline.
 """
 
-import importlib
 import sys
 
 import pytest

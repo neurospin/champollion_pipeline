@@ -181,7 +181,6 @@ class CompareDatabases(ScriptBuilder):
 
     def run(self):
         from joblib import cpu_count
-        from deep_folding.brainvisa.utils.subjects import get_all_subjects_as_dictionary
 
         brainvisa_dir = abspath(join(
             dirname(__file__),
