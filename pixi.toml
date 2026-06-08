@@ -73,7 +73,7 @@ update-submodules = """
 # Update champollion_utils (pull latest from main).
 # Errors are shown (not silenced) so network failures are visible.
 update-utils = """
-  cd ../champollion_utils && git pull origin main || echo 'WARNING: champollion_utils update failed — check the error above'
+  cd ../champollion_utils && git pull origin master || echo 'WARNING: champollion_utils update failed — check the error above'
 """
 
 # Reinstall Python packages to pick up code changes from updated submodules/utils.
