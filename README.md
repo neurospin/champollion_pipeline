@@ -76,7 +76,7 @@ Generate sulcal graphs from T1 MRI images using morphologist-cli.
 
 ```bash
 LIST_MRI_FILES="/path/to/data/sub-0001.nii.gz /path/to/data/sub-0002.nii.gz"
-OUTPUT_PATH="/path/to/data/TESTXX/"
+OUTPUT_PATH="/path/to/data/dataset_name/"
 morphologist-cli $LIST_MRI_FILES $OUTPUT_PATH -- --of morphologist-auto-nonoverlap-1.0 --if morphologist-auto-nonoverlap-1.0
 ```
 
@@ -103,8 +103,8 @@ Use cortical_tiles to extract sulcal regions from Morphologist's graphs:
 
 ```bash
 pixi run python3 src/run_cortical_tiles.py \
-    /path/to/data/TESTXX/derivatives/morphologist-6.0/subjects \
-    /path/to/data/TESTXX/derivatives/ \
+    /path/to/data/dataset_name/derivatives/morphologist-6.0/subjects \
+    /path/to/data/dataset_name/derivatives/ \
     --path_to_graph "t1mri/default_acquisition/default_analysis/folds/3.1" \
     --path_sk_with_hull "t1mri/default_acquisition/default_analysis/segmentation"
 ```
@@ -153,30 +153,45 @@ sub-1000021     1
 Check that 28 sulcal region folders were created:
 
 ```bash
-ls /path/to/data/TESTXX/derivatives/cortical_tiles-2026/crops/2mm
+ls /path/to/data/dataset_name/derivatives/cortical_tiles-2026/crops/2mm
 ```
 
 ## 4. Generate Champollion Configuration
 
 Create dataset configuration files for Champollion.
 
-Use `--output` to write the dataset config into your data directory (keeps everything in one place and makes the `--config_path` for step 5 obvious):
+Use `--output` to write the dataset config into your data directory. The script appends `dataset/{dataset}/` to whatever path you pass, so `--output` should be the **configs root**, not the dataset subdirectory:
 
 ```bash
 pixi run python3 src/generate_champollion_config.py \
-    /path/to/data/TESTXX/derivatives/cortical_tiles-2026/crops/2mm \
-    --dataset TESTXX \
-    --output /path/to/data/TESTXX/derivatives/champollion_V1/configs/dataset/TESTXX
+    /path/to/data/dataset_name/derivatives/cortical_tiles-2026/crops/2mm \
+    --dataset dataset_name \
+    --output /path/to/data/dataset_name/derivatives/champollion_V1/configs
 ```
 
-This creates `reference.yaml` (and related files) inside the `--output` directory, and updates the `dataset_folder` path in the internal `local.yaml` inside `external/champollion_V1/`.
+This writes region YAML files to `configs/dataset/dataset_name/` and updates `dataset_folder` in the internal `local.yaml` inside `external/champollion_V1/`.
+
+### Datasets with a non-standard derivatives path
+
+If your crops are **not** under `derivatives/cortical_tiles-2026/` (e.g. legacy datasets stored under `derivatives/deep_folding-2025/`), use `--external_crops` so the script derives the relative path from the actual crop location instead of assuming the standard layout:
+
+```bash
+pixi run python3 src/generate_champollion_config.py \
+    /path/to/data/dataset_name/derivatives/deep_folding-2025/crops/2mm \
+    --dataset dataset_name \
+    --external_crops \
+    --output /path/to/data/dataset_name/derivatives/champollion_V1/configs
+```
+
+Without `--external_crops` the generated YAMLs would contain `cortical_tiles-2026` in every path, causing a `FileNotFoundError` during embedding generation.
 
 ### Options
 
 | Option | Description |
 |--------|-------------|
-| `--champollion_loc` | Path to Champollion binaries (default: external/champollion_V1) |
-| `--output` | Directory where dataset config files are written. Use a path inside your data directory so that `--config_path` in step 5 is self-contained. |
+| `--champollion_loc` | Path to Champollion binaries (default: `external/champollion_V1`) |
+| `--output` | **Configs root** directory. Region YAMLs are written to `{output}/dataset/{dataset}/`. Pass this same value as the base for `--config_path` in step 5. |
+| `--external_crops` | Use the exact crop path instead of assuming `derivatives/cortical_tiles-2026/`. Required for datasets whose crops live outside the standard derivatives layout. |
 | `--external-config` | For **read-only containers only** (Apptainer/Docker): write `local.yaml` to a writable path instead of updating it inside `external/champollion_V1/`. |
 
 ### Read-only Container Support (Apptainer)
@@ -186,9 +201,9 @@ When the pipeline directory is read-only, combine both options:
 ```bash
 pixi run python3 src/generate_champollion_config.py \
     /path/to/crops/2mm \
-    --dataset TESTXX \
-    --output /writable/path/configs/dataset/TESTXX \
-    --external-config /writable/path/configs/local.yaml
+    --dataset dataset_name \
+    --output /writable/path/configs \
+    --external-config /writable/path/configs/dataset_localization/local.yaml
 ```
 
 ## 5. Generate Embeddings
@@ -204,19 +219,19 @@ pixi run python3 src/generate_embeddings.py \
     <datasets_root> \
     <short_name> \
     --embeddings_only \
-    --config_path /path/to/data/TESTXX/derivatives/champollion_V1/configs/dataset/TESTXX
+    --config_path /path/to/data/dataset_name/derivatives/champollion_V1/configs/dataset/dataset_name
 ```
 
-> **Note:** `--config_path` must be the **dataset config directory** created in step 4 (the `--output` path). It should contain `reference.yaml`. Do not pass `local.yaml` here — that is a separate file.
+> **Note:** `--config_path` must point to the **dataset subdirectory** created in step 4, i.e. `{--output}/dataset/{dataset}/`. If step 4 used `--output .../champollion_V1/configs` and `--dataset dataset_name`, then `--config_path` is `.../champollion_V1/configs/dataset/dataset_name`.
 
 To re-run on an existing dataset, add `--overwrite` to replace previously generated embeddings.
 
 | Positional Argument | Description |
 |---------------------|-------------|
 | `models_path` | Path to models: local directory, local archive, HuggingFace repo ID, or URL |
-| `dataset_localization` | Key for dataset localization (use `local` for local datasets) |
-| `datasets_root` | Name of the dataset directory under `data/` (e.g., `TESTXX`) |
-| `short_name` | Name for the output embeddings directory (e.g., `my_run`) |
+| `dataset_localization` | Config key that selects `dataset_localization/{key}.yaml` inside `external/champollion_V1/contrastive/configs/`. Use `local` for any dataset processed on this machine — it points to the `dataset_folder` set by step 4. |
+| `datasets_root` | Absolute path to the dataset root directory (e.g. `/my/path/to/dataset_name/`) |
+| `short_name` | Label for this run — used as the output folder name. Embeddings land at `{model_dir}/{short_name}_random_embeddings/full_embeddings.csv`. Use different values to keep results from separate runs. |
 
 ### Model Sources
 
@@ -238,23 +253,23 @@ Download models from Hugging Face and generate embeddings only:
 pixi run python3 src/generate_embeddings.py \
     https://huggingface.co/neurospin/Champollion_V1 \
     local \
-    TESTXX \
+    dataset_name \
     my_run \
     --embeddings_only \
-    --config_path /path/to/data/TESTXX/derivatives/champollion_V1/configs/dataset/TESTXX
+    --config_path /path/to/data/dataset_name/derivatives/champollion_V1/configs/dataset/dataset_name
 ```
 
 Reuse previously cached models with CPU-only mode:
 
 ```bash
 pixi run python3 src/generate_embeddings.py \
-    /path/to/data/TESTXX/derivatives/champollion_V1/models_cache/Champollion_V1 \
+    /path/to/data/dataset_name/derivatives/champollion_V1/models_cache/Champollion_V1 \
     local \
-    TESTXX \
+    dataset_name \
     my_run \
     --embeddings_only \
     --cpu \
-    --config_path /path/to/data/TESTXX/derivatives/champollion_V1/configs/dataset/TESTXX
+    --config_path /path/to/data/dataset_name/derivatives/champollion_V1/configs/dataset/dataset_name
 ```
 
 Generate embeddings and train classifiers (requires a `subject_labels_file` in the dataset configs):
@@ -263,9 +278,9 @@ Generate embeddings and train classifiers (requires a `subject_labels_file` in t
 pixi run python3 src/generate_embeddings.py \
     neurospin/Champollion_V1 \
     local \
-    TESTXX \
+    dataset_name \
     my_run \
-    --config_path /path/to/data/TESTXX/derivatives/champollion_V1/configs/dataset/TESTXX
+    --config_path /path/to/data/dataset_name/derivatives/champollion_V1/configs/dataset/dataset_name
 ```
 
 ### Options
@@ -322,9 +337,9 @@ Combine the per-region embeddings from all 56 model folds into a single output d
 
 ```bash
 pixi run python3 src/put_together_embeddings.py \
-    --path_models /path/to/data/TESTXX/derivatives/champollion_V1/models_cache/Champollion_V1/ \
+    --path_models /path/to/data/dataset_name/derivatives/champollion_V1/models_cache/Champollion_V1/ \
     --embeddings_subpath my_run_random_embeddings/full_embeddings.csv \
-    --output_path /path/to/data/TESTXX/derivatives/champollion_V1/embeddings/
+    --output_path /path/to/data/dataset_name/derivatives/champollion_V1/embeddings/
 ```
 
 | Argument | Description |
@@ -340,7 +355,7 @@ The subpath is constructed from `{short_name}_{split}_embeddings/full_embeddings
 Check that 56 CSV files were created:
 
 ```bash
-ls /path/to/data/TESTXX/derivatives/champollion_V1/embeddings/*.csv | wc -l
+ls /path/to/data/dataset_name/derivatives/champollion_V1/embeddings/*.csv | wc -l
 ```
 
 ## 7. Generate Visualization Snapshots
@@ -351,11 +366,11 @@ Generate visualizations of the pipeline outputs: sulcal graph meshes, cortical t
 
 ```bash
 pixi run python3 src/generate_snapshots.py \
-    --morphologist_dir /path/to/data/TESTXX/derivatives/morphologist-6.0/ \
-    --cortical_tiles_dir /path/to/data/TESTXX/derivatives/cortical_tiles-2026/crops/2mm/ \
-    --embeddings_dir /path/to/data/TESTXX/derivatives/champollion_V1/embeddings/ \
+    --morphologist_dir /path/to/data/dataset_name/derivatives/morphologist-6.0/ \
+    --cortical_tiles_dir /path/to/data/dataset_name/derivatives/cortical_tiles-2026/crops/2mm/ \
+    --embeddings_dir /path/to/data/dataset_name/derivatives/champollion_V1/embeddings/ \
     --reference_data_dir reference_data/ \
-    --output_dir /path/to/data/TESTXX/derivatives/champollion_V1/snapshots/
+    --output_dir /path/to/data/dataset_name/derivatives/champollion_V1/snapshots/
 ```
 
 ### Single snapshot type
