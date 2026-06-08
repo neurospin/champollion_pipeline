@@ -298,6 +298,9 @@ pixi run python3 src/generate_embeddings.py \
 | `--profiling` | Enable Python profiling (cProfile) |
 | `--labels` | List of labels for classifiers (default: `['Sex']`) |
 | `--classifier_name` | Classifier name (default: `svm`) |
+| `--nb_jobs` | Number of CPU workers for the DataLoader during inference |
+| `--cortical_version` | Override the cortical tiles derivatives folder name (e.g. `cortical_tiles-2025`). Defaults to the version compiled into the pipeline. |
+| `--legacy` | Rewrite config YAML paths to use `deep_folding-2025` instead of the current cortical tiles version. Use for datasets processed with older pipeline versions. |
 
 ### Archive Caching
 
@@ -401,6 +404,8 @@ pixi run python3 src/generate_snapshots.py \
 | `--tiles-only` | Only generate cortical tiles snapshots |
 | `--umap-only` | Only generate UMAP scatter plots |
 | `--width` / `--height` | Snapshot dimensions (default: 800x600) |
+| `--tiles_level` | Cortical tiles level to visualize |
+| `--champollion_data_root` | Override the root directory for Champollion reference data |
 
 ### Disambiguating multiple segmentations
 
