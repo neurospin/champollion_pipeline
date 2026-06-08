@@ -724,7 +724,7 @@ class TestHypothesisConfigInvariants:
     @pytest.mark.hypothesis
     def test_extra_config_keys_are_preserved(self):
         """Arbitrary extra keys in the config JSON survive the JSON rewrite."""
-        from hypothesis import given, settings, assume
+        from hypothesis import given, settings
         from hypothesis import strategies as st
 
         reserved = {'graphs_dir', 'output_dir', 'skip_distbottom'}

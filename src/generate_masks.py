@@ -565,7 +565,7 @@ class GenerateMasks(ScriptBuilder):
 
         sep = "=" * 60
         print(f"\n{sep}")
-        print(f"MASK GENERATION SUMMARY")
+        print("MASK GENERATION SUMMARY")
         print(f"  Total:    {len(sulci) * len(sides)}")
         print(f"  Skipped:  {n_skipped} (already exist)")
         print(f"  Success:  {n_ok}")
