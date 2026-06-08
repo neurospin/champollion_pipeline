@@ -83,8 +83,16 @@ class PruneFailedSubjects(ScriptBuilder):
                 f"Derivatives directory not found: {derivatives_dir}\n"
                 f"Expected {DERIVATIVES_FOLDER}/ inside {self.args.output}"
             )
-            
-        to_remove = self._read_non_passing_subjects(self.args.qc)
+
+        crops_2mm = join(derivatives_dir, "crops", "2mm")
+        if not exists(crops_2mm):
+            raise ValueError(
+                f"crops/2mm directory not found: {crops_2mm}"
+            )
+
+        all_subjects = self._discover_subjects(crops_2mm)
+        passing_subjects = self._read_passing_subjects(self.args.qc)
+        to_remove = all_subjects - passing_subjects
 
         if not to_remove:
             print(f"All {len(all_subjects)} subjects pass QC. Nothing to prune.")

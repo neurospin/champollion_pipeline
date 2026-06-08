@@ -137,7 +137,7 @@ class PurgeSubject(ScriptBuilder):
             self._purge_per_subject_crop_files(crops_2mm)
             self._purge_aggregated_arrays(crops_2mm)
         else:
-            print(f"No crops/2mm directory found — skipping crop purge.")
+            print("No crops/2mm directory found — skipping crop purge.")
 
         action = "Would remove" if self.args.dry_run else "Removed"
         print(f"\nDone. {action} all data for subject '{subject}'.")
