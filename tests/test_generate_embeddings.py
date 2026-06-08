@@ -230,6 +230,97 @@ class TestGenerateEmbeddingsIntegration:
                     mock_exec.assert_called_once()
 
 
+class TestCorticalVersionFlags:
+    """Tests for --cortical_version and --legacy flags."""
+
+    def test_cortical_version_default(self):
+        from utils.lib import CORTICAL_TILES_VERSION
+        script = GenerateEmbeddings()
+        args = script.parse_args(["/m", "loc", "/d", "name"])
+        assert args.cortical_version == f"cortical_tiles-{CORTICAL_TILES_VERSION}"
+
+    def test_cortical_version_can_be_overridden(self):
+        script = GenerateEmbeddings()
+        args = script.parse_args(["/m", "loc", "/d", "name", "--cortical_version", "deep_folding-2025"])
+        assert args.cortical_version == "deep_folding-2025"
+
+    def test_legacy_flag_defaults_false(self):
+        script = GenerateEmbeddings()
+        args = script.parse_args(["/m", "loc", "/d", "name"])
+        assert args.legacy is False
+
+    def test_legacy_flag_can_be_set(self):
+        script = GenerateEmbeddings()
+        args = script.parse_args(["/m", "loc", "/d", "name", "--legacy"])
+        assert args.legacy is True
+
+    def test_get_derivatives_folder_returns_cortical_version_by_default(self):
+        from utils.lib import CORTICAL_TILES_VERSION
+        script = GenerateEmbeddings()
+        script.args = script.parse_args(["/m", "loc", "/d", "name"])
+        assert script._get_derivatives_folder() == f"cortical_tiles-{CORTICAL_TILES_VERSION}"
+
+    def test_get_derivatives_folder_legacy_overrides(self):
+        script = GenerateEmbeddings()
+        script.args = script.parse_args(["/m", "loc", "/d", "name", "--legacy"])
+        assert script._get_derivatives_folder() == "deep_folding-2025"
+
+    def test_get_derivatives_folder_cortical_version_overrides(self):
+        script = GenerateEmbeddings()
+        script.args = script.parse_args(["/m", "loc", "/d", "name", "--cortical_version", "cortical_tiles-2027"])
+        assert script._get_derivatives_folder() == "cortical_tiles-2027"
+
+    def test_patch_config_paths_rewrites_derivatives_folder(self, tmp_path):
+        yaml_file = tmp_path / "SC-sylv_left.yaml"
+        yaml_file.write_text(
+            "numpy_all: /data/derivatives/deep_folding-2025/crops/2mm/S.C.-sylv./mask/Lskeleton.npy\n"
+        )
+
+        script = GenerateEmbeddings()
+        script._patch_config_paths(str(tmp_path), "cortical_tiles-2026")
+
+        content = yaml_file.read_text()
+        assert "cortical_tiles-2026" in content
+        assert "deep_folding-2025" not in content
+
+    def test_patch_config_paths_leaves_unrelated_lines_intact(self, tmp_path):
+        yaml_file = tmp_path / "config.yaml"
+        original = (
+            "numpy_all: /data/derivatives/deep_folding-2025/crops/2mm/region/mask/L.npy\n"
+            "dataset_folder: /some/unrelated/path\n"
+        )
+        yaml_file.write_text(original)
+
+        script = GenerateEmbeddings()
+        script._patch_config_paths(str(tmp_path), "cortical_tiles-2026")
+
+        content = yaml_file.read_text()
+        assert "dataset_folder: /some/unrelated/path" in content
+
+    def test_patch_config_paths_skips_already_correct_files(self, tmp_path):
+        from utils.lib import CORTICAL_TILES_VERSION
+        yaml_file = tmp_path / "config.yaml"
+        original = f"numpy_all: /data/derivatives/cortical_tiles-{CORTICAL_TILES_VERSION}/crops/2mm/L.npy\n"
+        yaml_file.write_text(original)
+        mtime_before = yaml_file.stat().st_mtime
+
+        script = GenerateEmbeddings()
+        script._patch_config_paths(str(tmp_path), f"cortical_tiles-{CORTICAL_TILES_VERSION}")
+
+        assert yaml_file.stat().st_mtime == mtime_before
+
+    def test_patch_config_paths_recurses_into_subdirs(self, tmp_path):
+        subdir = tmp_path / "dataset" / "mydata"
+        subdir.mkdir(parents=True)
+        yaml_file = subdir / "region.yaml"
+        yaml_file.write_text("path: /x/derivatives/old_folder/crops/2mm/r.npy\n")
+
+        script = GenerateEmbeddings()
+        script._patch_config_paths(str(tmp_path), "new_folder")
+
+        assert "new_folder" in yaml_file.read_text()
+
+
 @pytest.mark.smoke
 class TestGenerateEmbeddingsSmoke:
     """Smoke tests."""
