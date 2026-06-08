@@ -135,7 +135,7 @@ The `--path_to_graph` supports wildcards (`*`) for variable path segments, e.g.:
 
 | Version name | Description |
 |------|---------|
-| `canonical_2025` | Original mask version, used for Champollion v1. |
+| `canonical_25` | Original mask version, used for Champollion v1. |
 | `canonical_corrected_26_1` | Masks based on a new labeling for regions, removing some artifacts. |
 
 ### QC File Format
@@ -444,7 +444,7 @@ champollion_pipeline/
         generate_snapshots.py
         put_together_embeddings.py
         run_cortical_tiles.py
-        train_model.py
+        train_champollion.py
     data/                   # Data directory (created by install-all)
     pixi.toml               # Pixi configuration
 ```
