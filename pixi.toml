@@ -56,32 +56,38 @@ setup-data = "mkdir -p ../data"
 install-all = { depends-on = ["init-submodules", "install-cortical-tiles", "install-champollion", "install-utils", "setup-data", "test-smoke"] }
 
 # Pull latest changes for the main champollion_pipeline repo.
-# pixi.lock is tracked by git but regenerated locally by pixi, which causes
-# conflicts on git pull.  We resolve this by always taking the remote version
-# of pixi.lock: fetch first, overwrite the lock from FETCH_HEAD, then merge.
-update-pipeline = "git fetch && git checkout FETCH_HEAD -- pixi.lock && git merge FETCH_HEAD"
+# pixi.lock is tracked by git but regenerated locally by pixi, which can cause
+# conflicts on pull.  We discard the locally-regenerated pixi.lock first so it
+# matches HEAD, then merge.  -X theirs is a safety net: if pixi.lock still
+# conflicts (e.g. both sides changed it), always take the remote version.
+update-pipeline = "git fetch && git checkout -- pixi.lock && git merge --no-edit -X theirs FETCH_HEAD"
 
-# Update git submodules to latest commits on their tracked branches
-# --init handles the case where submodules were never initialized (first run)
+# Update git submodules to latest commits on their tracked branches.
+# --init handles the case where submodules were never initialized (first run).
+# --rebase avoids creating unexpected merge commits when submodules have local changes.
 update-submodules = """
-  git submodule update --init --remote --merge external/champollion_V1 && \
-  git submodule update --init --remote --merge external/cortical_tiles
+  git submodule update --init --remote --rebase external/champollion_V1 && \
+  git submodule update --init --remote --rebase external/cortical_tiles
 """
 
-# Update champollion_utils (pull latest from main)
+# Update champollion_utils (pull latest from main).
+# Errors are shown (not silenced) so network failures are visible.
 update-utils = """
-  cd ../champollion_utils && git pull origin main 2>/dev/null || echo 'champollion_utils not found or pull failed'
+  cd ../champollion_utils && git pull origin main || echo 'WARNING: champollion_utils update failed — check the error above'
 """
 
-# Reinstall Python packages to pick up dependency changes
-reinstall-packages = """
-  cd external/cortical_tiles && SKLEARN_ALLOW_DEPRECATED_SKLEARN_PACKAGE_INSTALL=True pip install -e . && \
-  cd ../champollion_V1 && pip install -e . && \
-  cd ../../.. && cd champollion_utils && pip install -e . && cd ..
-"""
+# Reinstall Python packages to pick up code changes from updated submodules/utils.
+# Uses repo-root-relative paths to avoid fragile cd chains.
+# Must run AFTER update-submodules and update-utils so it installs the new code.
+reinstall-packages = { cmd = """
+  SKLEARN_ALLOW_DEPRECATED_SKLEARN_PACKAGE_INSTALL=True pip install -e external/cortical_tiles && \
+  pip install -e external/champollion_V1 && \
+  pip install -e ../champollion_utils
+""", depends-on = ["update-submodules", "update-utils"] }
 
-# Full update: pull repos and reinstall packages
-update = { depends-on = ["update-pipeline", "update-submodules", "update-utils", "reinstall-packages"] }
+# Full update: pull all repos, then reinstall packages.
+# update-pipeline runs in parallel with reinstall-packages dependencies (safe — independent).
+update = { depends-on = ["update-pipeline", "reinstall-packages"] }
 
 # Uninstall task: removes cloned repos, installed packages, and data
 uninstall = """
