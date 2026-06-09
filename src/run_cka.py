@@ -21,6 +21,7 @@ Nested-directory mode (raw model directories with per-region subdirs):
 """
 
 import os
+import re
 import sys
 from glob import glob
 from os import makedirs
@@ -113,8 +114,11 @@ class RunCKA(ScriptBuilder):
             raise NotADirectoryError(f"--path_b must be a directory in directory mode: {path_b}")
 
         subdirs_a = [d for d in os.listdir(path_a) if isdir(join(path_a, d))]
+        # Enter nested mode only when path_a has subdirs but no direct CSVs.
+        # A lone models_cache subdir alongside CSVs should not trigger nested mode.
+        csvs_a_list = glob(join(path_a, "*.csv"))
 
-        if subdirs_a:
+        if subdirs_a and not csvs_a_list:
             # --- Nested mode: path/{region}/{subpath} ---
             regions = sorted(subdirs_a)
             if self.args.region:
@@ -134,23 +138,52 @@ class RunCKA(ScriptBuilder):
                     continue
                 pairs.append((region, file_a, file_b))
         else:
-            # --- Flat mode: put_together_embeddings output (*.csv directly in dir) ---
-            csvs_a = {basename(p): p for p in glob(join(path_a, "*.csv"))}
-            csvs_b = {basename(p): p for p in glob(join(path_b, "*.csv"))}
+            # --- Flat mode: CSVs directly in each directory ---
+            csvs_b_list = glob(join(path_b, "*.csv"))
+            csvs_a = {basename(p): p for p in csvs_a_list}
+            csvs_b = {basename(p): p for p in csvs_b_list}
             common = sorted(set(csvs_a) & set(csvs_b))
-            if self.args.region:
-                common = [n for n in common if self.args.region in n]
-                if not common:
-                    raise ValueError(
-                        f"No CSV matching region '{self.args.region}' found in both directories."
-                    )
-            pairs = [
-                (name.removesuffix(".csv"), csvs_a[name], csvs_b[name])
-                for name in common
-            ]
-            missing_b = sorted(set(csvs_a) - set(csvs_b))
-            if missing_b:
-                print(f"[info] {len(missing_b)} file(s) in path_a have no match in path_b (skipped)")
+
+            if common:
+                # Exact basename match (same naming convention on both sides)
+                if self.args.region:
+                    common = [n for n in common if self.args.region in n]
+                    if not common:
+                        raise ValueError(
+                            f"No CSV matching region '{self.args.region}' found in both directories."
+                        )
+                pairs = [
+                    (name.removesuffix("_embeddings.csv"), csvs_a[name], csvs_b[name])
+                    for name in common
+                ]
+                missing_b = sorted(set(csvs_a) - set(csvs_b))
+                if missing_b:
+                    print(f"[info] {len(missing_b)} file(s) in path_a have no match in path_b (skipped)")
+            else:
+                # Fallback: match by the model timestamp ID embedded in the filename
+                # (e.g. "name07-58-00--111"), which is stable across naming conventions.
+                _mid_re = re.compile(r'name\d{2}-\d{2}-\d{2}--\d+')
+
+                def _mid(path):
+                    m = _mid_re.search(basename(path))
+                    return m.group(0) if m else None
+
+                id_to_a = {_mid(p): p for p in csvs_a_list if _mid(p)}
+                id_to_b = {_mid(p): p for p in csvs_b_list if _mid(p)}
+                common_ids = sorted(set(id_to_a) & set(id_to_b))
+                if self.args.region:
+                    common_ids = [mid for mid in common_ids if self.args.region in basename(id_to_a[mid])]
+                    if not common_ids:
+                        raise ValueError(
+                            f"No CSV matching region '{self.args.region}' found in both directories."
+                        )
+                pairs = [
+                    (basename(id_to_a[mid]).removesuffix("_embeddings.csv"), id_to_a[mid], id_to_b[mid])
+                    for mid in common_ids
+                ]
+                missing_b = sorted(set(id_to_a) - set(id_to_b))
+                if missing_b:
+                    print(f"[info] {len(missing_b)} file(s) in path_a have no model-ID match in path_b (skipped)")
 
         if not pairs:
             raise RuntimeError(
@@ -160,7 +193,7 @@ class RunCKA(ScriptBuilder):
             )
 
         found = self._run_pairs(pairs)
-        total = len(subdirs_a) if subdirs_a else len(csvs_a)
+        total = len(subdirs_a) if (subdirs_a and not csvs_a_list) else len(csvs_a_list)
         print(f"\nCKA completed for {found}/{total} regions. Results in {self.args.output_dir}")
         return 0
 
