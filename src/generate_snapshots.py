@@ -602,11 +602,17 @@ class GenerateSnapshots(ScriptBuilder):
         """Generate cortical tiles snapshots."""
         snapshots = []
         if self.args.cortical_tiles_dir and osp.exists(self.args.cortical_tiles_dir):
+            # Accept either the crops/2mm/ path directly or the cortical_tiles root;
+            # auto-detect crops/2mm/ subdirectory when the root is given.
+            crops_dir = self.args.cortical_tiles_dir
+            candidate = osp.join(crops_dir, "crops", "2mm")
+            if osp.isdir(candidate):
+                crops_dir = candidate
             print("\nGenerating cortical tiles snapshots...")
             out = osp.join(self.args.output_dir, "tiles_masks.png")
             try:
                 snaps = generate_tiles_snapshot(
-                    self.args.cortical_tiles_dir, out, size,
+                    crops_dir, out, size,
                     level=self.args.tiles_level,
                     champollion_data_root=self.args.champollion_data_root,
                 )
