@@ -4,19 +4,19 @@
 Unit tests for RegionPipelineRunner in generate_sulcal_regions.py.
 """
 
-from unittest.mock import patch
+import os
 
 # RegionPipelineRunner lives in the brainvisa subdirectory; conftest adds src/
 # to sys.path but not brainvisa/. Add it here so the import works in tests.
 import sys
-import os
+from unittest.mock import patch
+
 sys.path.insert(0, os.path.abspath(os.path.join(
     os.path.dirname(__file__),
     '../external/cortical_tiles/deep_folding/brainvisa'
 )))
 
 from generate_sulcal_regions import RegionPipelineRunner
-
 
 RESOLVED_CONFIG = {
     "save_behavior": "best",

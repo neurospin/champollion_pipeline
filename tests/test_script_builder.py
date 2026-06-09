@@ -4,11 +4,11 @@
 Unit tests for the ScriptBuilder base class.
 """
 
-import pytest
 import sys
-from unittest.mock import MagicMock, patch
 from pathlib import Path
+from unittest.mock import MagicMock, patch
 
+import pytest
 from champollion_utils.script_builder import ScriptBuilder
 
 

@@ -27,9 +27,7 @@ import sys
 from os.path import abspath, dirname, join
 
 import numpy as np
-
 from champollion_utils.script_builder import ScriptBuilder
-
 
 # --------------------------------------------------------------------------- #
 # Parallel workers (must be module-level for joblib pickling)
@@ -149,8 +147,8 @@ class CompareDatabases(ScriptBuilder):
     def _load_database(self, path_to_graph, sides, subjects_dir,
                        njobs, brainvisa_dir) -> dict:
         """Return {subject: {sulcus: voxel_count}} for all subjects found."""
-        from joblib import Parallel, delayed
         from deep_folding.brainvisa.utils.subjects import get_all_subjects_as_dictionary
+        from joblib import Parallel, delayed
 
         all_data: dict = {}
         for side in sides:

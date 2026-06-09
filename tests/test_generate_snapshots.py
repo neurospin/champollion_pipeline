@@ -6,16 +6,17 @@ Unit tests for generate_snapshots.py
 
 import json
 import os
-import pytest
 from pathlib import Path
 from unittest.mock import patch
 
+import pytest
+
 from generate_snapshots import (
+    GenerateSnapshots,
+    discover_umap_pairs,
+    find_completed_regions,
     find_sulcal_graphs,
     find_white_mesh,
-    find_completed_regions,
-    discover_umap_pairs,
-    GenerateSnapshots,
     main,
 )
 

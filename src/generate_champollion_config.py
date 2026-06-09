@@ -5,10 +5,11 @@ Script to define and generate Champollion's configuration.
 """
 
 import os
-from os.path import exists, join, abspath, dirname
+from os.path import abspath, dirname, exists, join
 
 from champollion_utils.script_builder import ScriptBuilder
-from utils.lib import find_dataset_folder, DERIVATIVES_FOLDER
+
+from utils.lib import DERIVATIVES_FOLDER, find_dataset_folder
 
 # Get the script's directory for reliable path resolution
 _SCRIPT_DIR = dirname(abspath(__file__))

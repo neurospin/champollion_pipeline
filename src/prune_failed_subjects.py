@@ -10,12 +10,12 @@ passed to run_cortical_tiles.py from the start.
 """
 
 import os
-from os.path import join, exists
+from os.path import exists, join
 from pathlib import Path
 
 import pandas as pd
-
 from champollion_utils.script_builder import ScriptBuilder
+
 from utils.lib import DERIVATIVES_FOLDER
 
 

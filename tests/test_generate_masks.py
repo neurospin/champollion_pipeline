@@ -10,17 +10,17 @@ Unit tests for generate_masks.py:
 
 import json
 import sys
-import pytest
-import numpy as np
 from unittest.mock import MagicMock, patch
 
+import numpy as np
+import pytest
+
 from generate_masks import (
-    get_sulci_for_regions,
+    GenerateMasks,
     _compute_one_sulcus,
     _load_and_extract_subject,
-    GenerateMasks,
+    get_sulci_for_regions,
 )
-
 
 # ---------------------------------------------------------------------------
 # Shared helpers
