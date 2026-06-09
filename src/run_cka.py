@@ -14,9 +14,10 @@ Cross-directory mode (both paths are directories of per-region models):
         --output_dir /tmp/cka_comparison
 """
 
+import os
 import sys
 from os import makedirs
-from os.path import abspath, dirname, isdir, isfile, join
+from os.path import isdir, isfile, join
 
 from champollion_utils.script_builder import ScriptBuilder
 
@@ -90,7 +91,6 @@ class RunCKA(ScriptBuilder):
         if not isdir(path_b):
             raise NotADirectoryError(f"--path_b must be a directory in directory mode: {path_b}")
 
-        import os
         regions = sorted(
             d for d in os.listdir(path_a)
             if isdir(join(path_a, d))
