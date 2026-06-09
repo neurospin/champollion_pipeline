@@ -18,9 +18,7 @@ import os.path as osp
 import sys
 
 import numpy as np
-
 from champollion_utils.script_builder import ScriptBuilder
-
 
 # Fallback path for ICBM152 meshes (used when BrainVISA resource lookup fails)
 ICBM_MESH_DIR_FALLBACK = (
@@ -236,8 +234,8 @@ def generate_tiles_snapshot(crops_dir, output_path, size=(800, 600), level=1,
         List of generated snapshot file paths
     """
     import anatomist.headless as ana
-    from soma import aims
     from deep_folding import config
+    from soma import aims
 
     a = ana.Anatomist()
 

@@ -4,11 +4,11 @@
 Script to generate sulcal mask files from manually labelled graph data.
 """
 
-from abc import ABC, abstractmethod
-from dataclasses import dataclass
 import json
 import os
 import sys
+from abc import ABC, abstractmethod
+from dataclasses import dataclass
 from os.path import abspath, dirname, exists, join
 
 from champollion_utils.script_builder import ScriptBuilder
@@ -103,12 +103,14 @@ def _compute_one_sulcus(sulcus_full, per_subject_voxels, voxel_size_tuple,
     """
     import os as _os  # noqa: PLC0415
     import sys as _sys  # noqa: PLC0415
-    import numpy as _np  # noqa: PLC0415
     from os.path import join as _join  # noqa: PLC0415
+
+    import numpy as _np  # noqa: PLC0415
     if brainvisa_dir not in _sys.path:
         _sys.path.insert(0, brainvisa_dir)
-    from soma import aims  # noqa: PLC0415
     from compute_mask import initialize_mask, write_mask  # noqa: PLC0415
+    from soma import aims  # noqa: PLC0415
+
     from generate_masks import RETURN_DICTIONARY  # noqa: PLC0415
 
     try:
@@ -159,8 +161,9 @@ def _load_and_extract_subject(sub, sulci_full_set, voxel_size_tuple,
     """
     import glob as _glob  # noqa: PLC0415
     import sys as _sys  # noqa: PLC0415
-    import numpy as _np  # noqa: PLC0415
     from os.path import join as _join  # noqa: PLC0415
+
+    import numpy as _np  # noqa: PLC0415
     if brainvisa_dir not in _sys.path:
         _sys.path.insert(0, brainvisa_dir)
     from soma import aims  # noqa: PLC0415
@@ -315,7 +318,6 @@ class BufferedRunner(MaskRunner):
         self.njobs = njobs
 
     def __call__(self, config: RunConfig):
-        from joblib import Parallel, delayed  # noqa: PLC0415
         from deep_folding.brainvisa.utils.subjects import (  # noqa: PLC0415
             get_all_subjects_as_dictionary,
             select_subjects_int_if_list_of_dict,
@@ -323,6 +325,7 @@ class BufferedRunner(MaskRunner):
         from deep_folding.brainvisa.utils.sulcus import (  # noqa: PLC0415
             complete_sulci_name,
         )
+        from joblib import Parallel, delayed  # noqa: PLC0415
 
         voxel_size_tuple = (config.voxel_size, config.voxel_size, config.voxel_size)
 

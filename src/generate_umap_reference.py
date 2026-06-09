@@ -31,7 +31,6 @@ import sys
 
 import joblib
 import numpy as np
-
 from champollion_utils.script_builder import ScriptBuilder
 
 # Re-use the model-discovery helpers from champollion_V1 utils

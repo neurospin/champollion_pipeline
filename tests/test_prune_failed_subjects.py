@@ -4,12 +4,12 @@
 Unit tests for prune_failed_subjects.py
 """
 
-import pytest
 from pathlib import Path
+
+import pytest
 
 from prune_failed_subjects import PruneFailedSubjects
 from utils.lib import DERIVATIVES_FOLDER
-
 
 # ---------------------------------------------------------------------------
 # Helpers

@@ -17,13 +17,14 @@ it overrides the ``masks_version`` field in the pipeline JSON config so that
 the correct labelled masks are used during region extraction.
 """
 
-import sys
 import json
-from os import getcwd, chdir
-from os.path import abspath, dirname, join, exists
-from joblib import cpu_count
+import sys
+from os import chdir, getcwd
+from os.path import abspath, dirname, exists, join
 
 from champollion_utils.script_builder import ScriptBuilder
+from joblib import cpu_count
+
 from utils.lib import DERIVATIVES_FOLDER
 
 
@@ -40,7 +41,9 @@ class RunCorticalTiles(ScriptBuilder):
                                         "(e.g., morphologist's output subjects directory).")
          .add_argument("output", help="Absolute path to the generated sulcal regions from cortical_tiles.")
          .add_optional_argument("--region-file", "Absolute path to the user's sulcal region's configuration file.")
-         .add_required_argument("--path_to_graph", "Contains the sub-path that, for each subject, permits getting the sulcal graphs.")
+         .add_required_argument(
+             "--path_to_graph",
+             "Contains the sub-path that, for each subject, permits getting the sulcal graphs.")
          .add_required_argument("--path_sk_with_hull", "Contains the sub-path where to get the skeleton with hull.")
          .add_optional_argument("--sk_qc_path", "The path to the QC file if it exists.", default="")
          .add_optional_argument("--njobs", "Number of CPU cores allowed to use.", default=None, type_=int)
@@ -115,7 +118,10 @@ class RunCorticalTiles(ScriptBuilder):
             self.args.njobs = max(1, min(22, cpu_count() - 2))
 
         if self.args.njobs >= cpu_count():
-            print(f"run_cortical_tiles.py: Warning - {self.args.njobs} jobs requested but only {cpu_count()} cores available.")
+            print(
+                f"run_cortical_tiles.py: Warning - {self.args.njobs} jobs requested "
+                f"but only {cpu_count()} cores available."
+            )
 
         # Build command to run cortical_tiles script directly
         # Get absolute paths

@@ -5,9 +5,10 @@ Unit tests for run_cortical_tiles.py
 """
 
 import json
-import pytest
 from pathlib import Path
-from unittest.mock import MagicMock, patch, call
+from unittest.mock import MagicMock, call, patch
+
+import pytest
 
 from run_cortical_tiles import RunCorticalTiles
 
@@ -652,8 +653,8 @@ class TestHypothesisConfigInvariants:
 
     def _run_in_temp(self, config_data):
         """Create fresh input/output dirs, write config in output, run script."""
-        import tempfile
         import shutil
+        import tempfile
         tmp = tempfile.mkdtemp()
         try:
             input_dir = Path(tmp) / "input"
@@ -704,6 +705,7 @@ class TestHypothesisConfigInvariants:
         """output_dir is always output/DERIVATIVES_FOLDER regardless of initial value."""
         from hypothesis import given, settings
         from hypothesis import strategies as st
+
         from utils.lib import DERIVATIVES_FOLDER
 
         json_val = st.one_of(
@@ -750,9 +752,10 @@ class TestHypothesisConfigInvariants:
     @pytest.mark.hypothesis
     def test_d_arg_always_output_for_any_path_names(self):
         """-d is always abspath(output), regardless of directory names."""
-        import tempfile
         import shutil
-        from hypothesis import given, settings, assume
+        import tempfile
+
+        from hypothesis import assume, given, settings
         from hypothesis import strategies as st
 
         path_part = st.from_regex(r'[a-zA-Z0-9_-]{1,15}', fullmatch=True)

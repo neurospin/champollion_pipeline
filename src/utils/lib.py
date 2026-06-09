@@ -1,4 +1,4 @@
-from os.path import exists, dirname
+from os.path import dirname, exists
 from pathlib import Path
 
 # Version used for derivatives folder naming (e.g., cortical_tiles-2026)
