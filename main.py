@@ -317,15 +317,21 @@ class GenerateMorphologistGraphsStage(PipelineStage):
         self.log_start()
         try:
             self.logger.info("Generating Morphologist graphs...")
-            # Placeholder - implement actual logic
-            # script = GenerateMorphologistGraphs()
-            # result_code = script.run()
+            args = [
+                str(self.config.dataset.input_path),
+                str(self.config.dataset.morphologist_graphs),
+            ]
+            if self.config.dataset.bids or getattr(self.config, "parallel", False):
+                args.append("--parallel")
+            script = GenerateMorphologistGraphs()
+            script.parse_args(args)
+            return_code = script.run()
 
             result = StageResult(
                 stage_name=self.name,
-                success=True,
-                message="Morphologist graphs generated successfully",
-                return_code=0
+                success=(return_code == 0),
+                message="Morphologist graphs generated successfully" if return_code == 0 else "Morphologist failed",
+                return_code=return_code
             )
         except Exception as e:
             self.logger.exception(f"Exception in {self.name}")
@@ -591,16 +597,19 @@ class PutTogetherEmbeddingsStage(PipelineStage):
         self.log_start()
         try:
             self.logger.info("Putting together embeddings...")
-
-            # Placeholder - implement actual logic
-            # script = PutTogetherEmbeddings()
-            # return_code = script.run()
+            args = [
+                f"--embeddings_subpath={self.config.dataset.embeddings_path or 'champollion_V1'}",
+                f"--output_path={self.config.dataset.cortical_tiles_output or self.config.outputs_path}",
+            ]
+            script = PutTogetherEmbeddings()
+            script.parse_args(args)
+            return_code = script.run()
 
             result = StageResult(
                 stage_name=self.name,
-                success=True,
-                message="Embeddings combined successfully",
-                return_code=0
+                success=(return_code == 0),
+                message="Embeddings combined successfully" if return_code == 0 else "Combine failed",
+                return_code=return_code
             )
         except Exception as e:
             self.logger.exception(f"Exception in {self.name}")
