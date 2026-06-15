@@ -18,13 +18,15 @@ the correct labelled masks are used during region extraction.
 """
 
 import json
+import shutil
 import sys
 from os import chdir, getcwd
-from os.path import abspath, dirname, exists, join
+from os.path import abspath, dirname, exists, isdir, join
 
 from champollion_utils.script_builder import ScriptBuilder
 from joblib import cpu_count
 
+from utils.cortical_tiles_config import CorticalTilesConfigFactory, versioned_crops_exist
 from utils.lib import DERIVATIVES_FOLDER
 
 
@@ -59,7 +61,40 @@ class RunCorticalTiles(ScriptBuilder):
              "--masks",
              "Mask version tag (e.g. 'canonical_25'). Overrides "
              "masks_version in the pipeline JSON config.",
-             default=None))
+             default=None)
+         .add_flag("--overwrite",
+                   "Re-generate crops even if they already exist for this mask version."))
+
+    def _preflight_check(self, output_abs: str, config_path: str) -> bool:
+        """Check for existing crops and migrate legacy flat structure if needed.
+
+        Returns False (caller should abort) when crops for the requested mask
+        version already exist and --overwrite was not passed.
+        """
+        existing_cfg = CorticalTilesConfigFactory.from_pipeline_json(config_path)
+        requested_cfg = CorticalTilesConfigFactory.from_args(self.args)
+
+        vox_str = f"{int(requested_cfg.out_voxel_size)}mm"
+        derivatives_abs = join(output_abs, DERIVATIVES_FOLDER)
+
+        # Migrate legacy crops written before versioned path was introduced.
+        # Old structure: crops/2mm/  →  New structure: crops/{masks_version}/2mm/
+        legacy_crops = join(derivatives_abs, "crops", vox_str)
+        if isdir(legacy_crops) and existing_cfg is not None:
+            old_version = existing_cfg.masks_version
+            target = join(derivatives_abs, "crops", old_version, vox_str)
+            print(f"Migrating legacy crops to versioned path: crops/{old_version}/...")
+            shutil.move(legacy_crops, target)
+
+        if versioned_crops_exist(derivatives_abs, requested_cfg.masks_version, requested_cfg.out_voxel_size):
+            if not self.args.overwrite:
+                print(
+                    f"Crops for mask version '{requested_cfg.masks_version}' already exist. "
+                    "Use --overwrite to regenerate."
+                )
+                return False
+            print(f"Overwriting existing crops for '{requested_cfg.masks_version}'.")
+        return True
 
     def run(self):
         """Execute the cortical_tiles script."""
@@ -73,11 +108,16 @@ class RunCorticalTiles(ScriptBuilder):
         # Convert input to absolute path
         input_abs = abspath(self.args.input)
 
+        output_abs = abspath(self.args.output)
+        config_file_path: str = join(output_abs, "pipeline_loop_2mm.json")
+
+        if not self._preflight_check(output_abs, config_file_path):
+            return 0
+
         # Copy pipeline config template into the output (derivatives) directory.
         # generate_sulcal_regions.py reads it from {path_dataset}/pipeline_loop_2mm.json,
         # and we pass output as -d so the config is never inside the subjects directory
         # (which would cause generate_skeletons.py to list it as a subject).
-        config_file_path: str = join(abspath(self.args.output), "pipeline_loop_2mm.json")
         if not self.validate_paths([config_file_path]):
             source_config = abspath(join(
                 dirname(__file__), '..', 'pipeline_loop_2mm.json'

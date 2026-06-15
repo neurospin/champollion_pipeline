@@ -211,7 +211,7 @@ class TestRunMethod:
         dataset_name = "my_dataset"
         script.parse_args([temp_dir, "--dataset", dataset_name])
 
-        yaml_content = "some_key: TESTXX/path\nanother: TESTXX"
+        yaml_content = "crop_dir: ${dataset_folder}/TESTXX/crops/2mm/SC-sylv/mask/Lcrops\n"
 
         with patch('generate_champollion_config.exists', return_value=True):
             with patch.object(script, 'execute_command', return_value=0):
@@ -221,12 +221,14 @@ class TestRunMethod:
                         with patch('builtins.open', m):
                             script.run()
 
-                            # Check that file was written with replaced TESTXX
+                            # Check that file was written with dataset_name and masks_version replacing TESTXX/crops/2mm
                             write_calls = [c for c in m().writelines.call_args_list]
                             if write_calls:
                                 written_lines = write_calls[0][0][0]
                                 written_content = ''.join(written_lines)
                                 assert dataset_name in written_content
+                                assert "canonical_25" in written_content
+                                assert "TESTXX" not in written_content
 
     def test_run_calls_create_dataset_config_files(self, temp_dir):
         """Test that run calls create_dataset_config_files.py."""

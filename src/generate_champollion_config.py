@@ -37,7 +37,11 @@ class GenerateChampollionConfig(ScriptBuilder):
          .add_flag("--external_crops",
                    "Use crop_path as-is instead of deriving it from --dataset. "
                    "Replaces the dataset/derivatives/... segment with the actual crop_path location. "
-                   "Requires --dataset to be set (used for config file naming)."))
+                   "Requires --dataset to be set (used for config file naming).")
+         .add_optional_argument("--masks",
+                                "Mask version tag (e.g. 'canonical_25'). "
+                                "Must match the value used when running run_cortical_tiles.",
+                                default="canonical_25"))
 
     def _validate_inputs(self):
         """Validate input paths."""
@@ -116,9 +120,12 @@ class GenerateChampollionConfig(ScriptBuilder):
                     relative_path = os.path.relpath(self.args.crop_path, dataset_folder)
                     my_lines.append(line.replace("TESTXX/crops/2mm", relative_path))
                 else:
-                    # Standard: use the known derivatives folder structure
-                    computed_path = f"{self.args.dataset}/derivatives/{DERIVATIVES_FOLDER}"
-                    my_lines.append(line.replace("TESTXX", computed_path))
+                    # Standard: use the known derivatives folder structure including mask version
+                    computed_path = (
+                        f"{self.args.dataset}/derivatives/{DERIVATIVES_FOLDER}"
+                        f"/crops/{self.args.masks}/2mm"
+                    )
+                    my_lines.append(line.replace("TESTXX/crops/2mm", computed_path))
 
         with open(reference_yaml_dest, "w") as f:
             f.writelines(my_lines)

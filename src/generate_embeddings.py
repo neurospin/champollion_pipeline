@@ -466,7 +466,7 @@ class GenerateEmbeddings(ScriptBuilder):
     def _patch_config_paths(self, config_path: str, target_folder: str) -> None:
         """Rewrite the derivatives folder in every YAML under config_path in-place."""
         import re
-        pattern = re.compile(r'(derivatives/)([^/\n]+)(/crops/2mm)')
+        pattern = re.compile(r'(derivatives/)([^/\n]+)(/crops(?:/[^/\n]+)*/2mm)')
         patched = 0
         for yaml_file in Path(config_path).rglob("*.yaml"):
             text = yaml_file.read_text()
