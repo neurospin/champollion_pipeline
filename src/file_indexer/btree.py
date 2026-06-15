@@ -6,6 +6,7 @@ B-tree data structure for file-system path indexing.
 Keys are strings (relative paths). Values are arbitrary dicts (file metadata).
 """
 from __future__ import annotations
+
 from typing import Iterator
 
 

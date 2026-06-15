@@ -25,7 +25,7 @@ JSON files to disk.  Omit it to print the reports only.
 """
 
 import os
-from os.path import join, exists
+from os.path import exists, join
 from typing import Optional
 
 from champollion_utils.script_builder import ScriptBuilder

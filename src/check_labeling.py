@@ -89,8 +89,8 @@ class CheckLabeling(ScriptBuilder):
              default=None, type_=int))
 
     def run(self):
-        from joblib import Parallel, delayed, cpu_count
         from deep_folding.brainvisa.utils.subjects import get_all_subjects_as_dictionary
+        from joblib import Parallel, cpu_count, delayed
 
         brainvisa_dir = abspath(join(
             dirname(__file__),

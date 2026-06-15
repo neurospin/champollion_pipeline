@@ -10,14 +10,13 @@ import pytest
 SRC = Path(__file__).parent.parent / "src"
 sys.path.insert(0, str(SRC))
 
+from file_indexer.scan_id import ScanId
 from parallel_runner import (
     _scan_embeddings_exist,
     _wait_for_scan_files,
     run_parallel_pipeline,
     run_scan_worker,
 )
-from file_indexer.scan_id import ScanId
-
 
 # ---------------------------------------------------------------------------
 # Helpers
