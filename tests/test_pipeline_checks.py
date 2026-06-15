@@ -5,20 +5,15 @@ import os
 import sys
 from pathlib import Path
 
-import pytest
-
 # Make sure src/ is on the path (same pattern as other test files in this project)
 SRC = Path(__file__).parent.parent / "src"
 sys.path.insert(0, str(SRC))
 
 from file_indexer.pipeline_checks import (
     SubjectEligibilityChecker,
-    SubjectEligibilityReport,
-    OutputIndexReport,
     build_output_report,
 )
 from file_indexer.scan_id import ScanId
-
 
 # ---------------------------------------------------------------------------
 # Helpers

@@ -5,13 +5,12 @@ Unit tests for the file_indexer module (BTree + IndexFileSystem).
 """
 
 import json
-import pytest
 from pathlib import Path
-from unittest.mock import patch
 
-from file_indexer.btree import BTree, BTreeNode
+import pytest
+
+from file_indexer.btree import BTree
 from file_indexer.indexer import IndexFileSystem
-
 
 # =========================================================================== #
 # TestBTree

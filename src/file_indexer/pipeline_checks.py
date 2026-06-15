@@ -19,13 +19,12 @@ import glob as glob_mod
 import json
 import os
 import re
-from dataclasses import dataclass, field
+from dataclasses import dataclass
 from os.path import join, relpath, splitext
 from typing import Dict, List, Optional
 
 from .btree import BTree
 from .scan_id import ScanId
-
 
 # ---------------------------------------------------------------------------
 # Pre-stage eligibility check

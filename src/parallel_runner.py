@@ -35,7 +35,6 @@ sys.path.insert(0, str(Path(__file__).parent))
 from file_indexer.pipeline_checks import SubjectEligibilityChecker  # noqa: E402
 from file_indexer.scan_id import ScanId  # noqa: E402
 
-
 # ---------------------------------------------------------------------------
 # Per-worker logger
 # ---------------------------------------------------------------------------
@@ -128,7 +127,9 @@ def _find_crops_root(output_dir: str) -> Optional[str]:
 # Stage runners
 # ---------------------------------------------------------------------------
 
-def _run_cortical_tiles(scan_id: "ScanId", subjects_dir: str, output_dir: str, config: "DatasetConfig", njobs_per_worker: int) -> None:
+def _run_cortical_tiles(
+    scan_id: "ScanId", subjects_dir: str, output_dir: str, config: "DatasetConfig", njobs_per_worker: int
+) -> None:
     """Run cortical_tiles for a single scan."""
     sys.path.insert(0, str(Path(__file__).parent))
     from run_cortical_tiles import RunCorticalTiles
