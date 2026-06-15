@@ -118,8 +118,14 @@ def _make_single_subject_dir(scan_id: "ScanId", subjects_dir: str) -> tempfile.T
 # ---------------------------------------------------------------------------
 
 def _find_crops_root(output_dir: str) -> Optional[str]:
-    """Return the latest cortical_tiles crops/2mm directory, or None."""
-    matches = sorted(glob.glob(join(output_dir, "cortical_tiles-*", "crops", "2mm")))
+    """Return the latest crops/{masks_version}/2mm directory under any derivatives folder.
+
+    Matches both cortical_tiles-* (current) and deep_folding-* (--legacy datasets).
+    """
+    matches = sorted(
+        glob.glob(join(output_dir, "cortical_tiles-*", "crops", "*", "2mm"))
+        + glob.glob(join(output_dir, "deep_folding-*", "crops", "*", "2mm"))
+    )
     return matches[-1] if matches else None
 
 
@@ -145,8 +151,6 @@ def _run_cortical_tiles(
             args.append(f"--njobs={njobs_per_worker}")
         if getattr(config, "sk_qc_path", ""):
             args.append(f"--sk_qc_path={config.sk_qc_path}")
-        if getattr(config, "bids", False):
-            args.append("--bids")
         if getattr(config, "regions", None):
             args.extend(["--regions"] + config.regions)
         script = RunCorticalTiles()
@@ -275,7 +279,7 @@ def run_scan_worker(
         _wait_for_scan_files(
             output_dir,
             scan_id,
-            patterns=["cortical_tiles-*/crops/2mm/*"],
+            patterns=["*tiles-*/crops/*/2mm/*"],
             logger=logger,
             poll_interval=poll_interval,
             timeout=timeout,
