@@ -33,3 +33,7 @@ SPECS.md
 # Generated reports
 comparison_report.json
 things_tried_to_fix_compare.md
+
+# WIP scripts (not ready for PR)
+src/compare.py
+src/compare_cortical_tiles.py
