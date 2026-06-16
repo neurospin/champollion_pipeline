@@ -83,8 +83,22 @@ class RunCorticalTiles(ScriptBuilder):
         if isdir(legacy_crops) and existing_cfg is not None:
             old_version = existing_cfg.masks_version
             target = join(derivatives_abs, "crops", old_version, vox_str)
-            print(f"Migrating legacy crops to versioned path: crops/{old_version}/...")
-            shutil.move(legacy_crops, target)
+            if not isdir(target):
+                print(f"Migrating legacy crops to versioned path: crops/{old_version}/...")
+                shutil.move(legacy_crops, target)
+            else:
+                if not self.args.overwrite:
+                    print(
+                        f"Legacy crops found at crops/{vox_str}/ but versioned crops already exist "
+                        f"at crops/{old_version}/{vox_str}/. Please resolve manually or use --overwrite "
+                        "to remove both and regenerate."
+                    )
+                    return False
+                print(
+                    f"--overwrite: removing legacy crops/{vox_str}/ and existing crops/{old_version}/{vox_str}/..."
+                )
+                shutil.rmtree(legacy_crops)
+                shutil.rmtree(target)
 
         if versioned_crops_exist(derivatives_abs, requested_cfg.masks_version, requested_cfg.out_voxel_size):
             if not self.args.overwrite:
