@@ -21,3 +21,8 @@ settings.json
 
 # GitHub Actions (Dockerfile is specified with -f, not needed in context)
 .github/
+
+# Sensitive data — notebooks may contain subject IDs in executed outputs;
+# CSVs may contain participant lists. Excluded as a defence-in-depth measure.
+**/*.ipynb
+**/*.csv
