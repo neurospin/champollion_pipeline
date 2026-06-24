@@ -8,7 +8,7 @@ from pathlib import Path
 
 import pytest
 
-from utils.lib import are_paths_valid, get_nth_parent_dir
+from champollion_pipeline.utils.lib import are_paths_valid, get_nth_parent_dir
 
 
 class TestArePathsValid:

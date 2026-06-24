@@ -1,6 +1,6 @@
 import json
 
-from utils.cortical_tiles_config import (
+from champollion_pipeline.utils.cortical_tiles_config import (
     CorticalTilesConfigFactory,
     versioned_crops_exist,
 )

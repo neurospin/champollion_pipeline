@@ -235,7 +235,7 @@ class TestCorticalVersionFlags:
     """Tests for --cortical_version and --legacy flags."""
 
     def test_cortical_version_default(self):
-        from utils.lib import CORTICAL_TILES_VERSION
+        from champollion_pipeline.utils.lib import CORTICAL_TILES_VERSION
         script = GenerateEmbeddings()
         args = script.parse_args(["/m", "loc", "/d", "name"])
         assert args.cortical_version == f"cortical_tiles-{CORTICAL_TILES_VERSION}"
@@ -256,7 +256,7 @@ class TestCorticalVersionFlags:
         assert args.legacy is True
 
     def test_get_derivatives_folder_returns_cortical_version_by_default(self):
-        from utils.lib import CORTICAL_TILES_VERSION
+        from champollion_pipeline.utils.lib import CORTICAL_TILES_VERSION
         script = GenerateEmbeddings()
         script.args = script.parse_args(["/m", "loc", "/d", "name"])
         assert script._get_derivatives_folder() == f"cortical_tiles-{CORTICAL_TILES_VERSION}"
@@ -299,7 +299,7 @@ class TestCorticalVersionFlags:
         assert "dataset_folder: /some/unrelated/path" in content
 
     def test_patch_config_paths_skips_already_correct_files(self, tmp_path):
-        from utils.lib import CORTICAL_TILES_VERSION
+        from champollion_pipeline.utils.lib import CORTICAL_TILES_VERSION
         yaml_file = tmp_path / "config.yaml"
         original = f"numpy_all: /data/derivatives/cortical_tiles-{CORTICAL_TILES_VERSION}/crops/2mm/L.npy\n"
         yaml_file.write_text(original)

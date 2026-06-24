@@ -21,7 +21,7 @@ from urllib.parse import urlparse
 
 from champollion_utils.script_builder import ScriptBuilder
 
-from utils.lib import CORTICAL_TILES_VERSION
+from champollion_pipeline.utils.lib import CORTICAL_TILES_VERSION
 
 # Add champollion to path for CKA imports
 _SCRIPT_DIR = dirname(abspath(__file__))

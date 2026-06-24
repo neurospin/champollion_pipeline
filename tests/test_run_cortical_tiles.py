@@ -438,7 +438,7 @@ class TestSkipDistbottom:
 
     def test_output_dir_set_from_output_arg(self, temp_dir):
         """Test that output_dir in config is set to output/DERIVATIVES_FOLDER."""
-        from utils.lib import DERIVATIVES_FOLDER
+        from champollion_pipeline.utils.lib import DERIVATIVES_FOLDER
 
         output_dir = Path(temp_dir) / "derivatives"
         output_dir.mkdir()
@@ -494,7 +494,7 @@ class TestSkipDistbottom:
 
     def test_config_with_null_values_overwritten_correctly(self, temp_dir):
         """JSON null (None) for graphs_dir/output_dir is overwritten with correct paths."""
-        from utils.lib import DERIVATIVES_FOLDER as DF
+        from champollion_pipeline.utils.lib import DERIVATIVES_FOLDER as DF
         input_dir = Path(temp_dir) / "input"
         output_dir = Path(temp_dir) / "output"
         input_dir.mkdir()
@@ -706,7 +706,7 @@ class TestHypothesisConfigInvariants:
         from hypothesis import given, settings
         from hypothesis import strategies as st
 
-        from utils.lib import DERIVATIVES_FOLDER
+        from champollion_pipeline.utils.lib import DERIVATIVES_FOLDER
 
         json_val = st.one_of(
             st.none(), st.booleans(), st.integers(-10, 10),

@@ -127,7 +127,7 @@ def test_pipeline_src_on_path():
     add src/ to sys.path.
     """
     try:
-        from utils.lib import DERIVATIVES_FOLDER  # noqa: F401
+        from champollion_pipeline.utils.lib import DERIVATIVES_FOLDER  # noqa: F401
     except ImportError as e:
         pytest.fail(
             f"src/ is not on sys.path — run tests from the champollion_pipeline "

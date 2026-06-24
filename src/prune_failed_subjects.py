@@ -16,7 +16,7 @@ from pathlib import Path
 import pandas as pd
 from champollion_utils.script_builder import ScriptBuilder
 
-from utils.lib import DERIVATIVES_FOLDER
+from champollion_pipeline.utils.lib import DERIVATIVES_FOLDER
 
 
 class PruneFailedSubjects(ScriptBuilder):

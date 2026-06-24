@@ -26,8 +26,8 @@ from os.path import abspath, dirname, exists, isdir, join
 from champollion_utils.script_builder import ScriptBuilder
 from joblib import cpu_count
 
-from utils.cortical_tiles_config import CorticalTilesConfigFactory, versioned_crops_exist
-from utils.lib import DERIVATIVES_FOLDER
+from champollion_pipeline.utils.cortical_tiles_config import CorticalTilesConfigFactory, versioned_crops_exist
+from champollion_pipeline.utils.lib import DERIVATIVES_FOLDER
 
 
 class RunCorticalTiles(ScriptBuilder):
