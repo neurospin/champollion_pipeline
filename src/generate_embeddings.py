@@ -119,6 +119,9 @@ class LocalPathStrategy(ModelFetchStrategy):
 class HuggingFaceStrategy(ModelFetchStrategy):
     """Strategy for handling Hugging Face repository IDs and URLs."""
 
+    def __init__(self, subfolder: str = None):
+        self.subfolder = subfolder
+
     def can_handle(self, models_path: str) -> bool:
         """Check if path looks like a Hugging Face repo ID or URL."""
         # Check if it's a huggingface.co URL
@@ -153,16 +156,20 @@ class HuggingFaceStrategy(ModelFetchStrategy):
             # Extract repo ID from URL if needed
             repo_id = self._extract_repo_id(models_path)
             print(f"Attempting to download from Hugging Face: {repo_id}")
+            if self.subfolder:
+                print(f"  mask version subfolder: {self.subfolder}")
             from huggingface_hub import snapshot_download
 
-            # Create local directory based on repo name
+            # Cache per (repo, subfolder) to avoid collisions across mask versions
             repo_name = repo_id.split('/')[-1]
-            local_path = join(extract_to, repo_name)
+            cache_name = f"{repo_name}_{self.subfolder}" if self.subfolder else repo_name
+            local_path = join(extract_to, cache_name)
 
             # HuggingFace handles caching internally, but we can force redownload
             downloaded_path = snapshot_download(
                 repo_id=repo_id,
                 local_dir=local_path,
+                subfolder=self.subfolder,
                 force_download=no_cache
             )
             print(f"Successfully downloaded from Hugging Face to: "
@@ -455,7 +462,14 @@ class GenerateEmbeddings(ScriptBuilder):
             "--legacy",
             "Rewrite config YAML paths to use deep_folding-2025. "
             "Shorthand for --cortical_version deep_folding-2025, "
-            "for datasets generated before the cortical_tiles rename."))
+            "for datasets generated before the cortical_tiles rename.")
+         .add_optional_argument(
+            "--masks-version",
+            "Mask version subfolder to download from the HuggingFace repo "
+            "(e.g. 'canonical_25'). When set, only the matching subfolder is "
+            "downloaded and the local cache is keyed per version. "
+            "Ignored when models_path is a local directory.",
+            default=None))
 
     def _get_derivatives_folder(self) -> str:
         """Return the derivatives folder to use, resolving --legacy and --cortical_version."""
@@ -509,7 +523,8 @@ class GenerateEmbeddings(ScriptBuilder):
         # Check HuggingFace and URL strategies first with the ORIGINAL path
         # These strategies look for semantic patterns (e.g., "user/repo", URLs)
         # that would be destroyed by path resolution
-        hf_strategy = HuggingFaceStrategy()
+        masks_version = getattr(self.args, 'masks_version', None)
+        hf_strategy = HuggingFaceStrategy(subfolder=masks_version)
         if hf_strategy.can_handle(models_path):
             try:
                 return hf_strategy.fetch(models_path, extract_to, no_cache)
