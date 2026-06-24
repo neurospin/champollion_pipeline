@@ -1,0 +1,50 @@
+name: Bump patch version
+
+on:
+  push:
+    branches: [main]
+    paths-ignore:
+      - "pixi.toml"   # skip the bot's own version-bump commit
+
+jobs:
+  bump:
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write
+
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          # Use a token that can push back to protected branches if needed
+          token: ${{ secrets.GITHUB_TOKEN }}
+          fetch-depth: 0
+
+      - name: Bump patch in pixi.toml and pyproject.toml
+        id: bump
+        run: |
+          # Read current version from pixi.toml (first occurrence)
+          CURRENT=$(grep -m1 '^version = ' pixi.toml | sed 's/version = "\(.*\)"/\1/')
+          MAJOR=$(echo "$CURRENT" | cut -d. -f1)
+          MINOR=$(echo "$CURRENT" | cut -d. -f2)
+          PATCH=$(echo "$CURRENT" | cut -d. -f3)
+          NEW_PATCH=$((PATCH + 1))
+          NEW_VERSION="${MAJOR}.${MINOR}.${NEW_PATCH}"
+
+          echo "Bumping $CURRENT → $NEW_VERSION"
+          echo "new_version=$NEW_VERSION" >> "$GITHUB_OUTPUT"
+
+          # Update pixi.toml (first version = line only — the package version)
+          sed -i "0,/^version = \"${CURRENT}\"/s/^version = \"${CURRENT}\"/version = \"${NEW_VERSION}\"/" pixi.toml
+
+          # Update pyproject.toml if it exists
+          if [ -f pyproject.toml ]; then
+            sed -i "0,/^version = \"${CURRENT}\"/s/^version = \"${CURRENT}\"/version = \"${NEW_VERSION}\"/" pyproject.toml
+          fi
+
+      - name: Commit version bump
+        run: |
+          git config user.name  "github-actions[bot]"
+          git config user.email "github-actions[bot]@users.noreply.github.com"
+          git add pixi.toml pyproject.toml
+          git commit -m "Bump version to ${{ steps.bump.outputs.new_version }} [skip ci]"
+          git push
