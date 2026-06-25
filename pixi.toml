@@ -5,14 +5,9 @@ description = "Champollion pipeline with cortical_tiles, champollion_utils, and 
 channels = ["https://brainvisa.info/neuro-forge", "pytorch", "nvidia", "conda-forge"]
 platforms = ["linux-64"]
 
+# ── Shared base (dev tools, always present in default env) ───────────────────
 [dependencies]
 python = ">=3.8"
-soma-env = ">=0.0"
-libjpeg-turbo = { channel = "conda-forge", version = ">=3.0" }
-anatomist = ">=0.0.29"
-morphologist = ">=0.0.29"
-disco = ">=6.0"
-pytorch-cuda = { channel = "pytorch", version = "12.4.*" }
 pip = ">=25.3,<26"
 setuptools = ">=65.0,<81"
 pytest = ">=7.0"
@@ -21,75 +16,96 @@ pytest-mock = ">=3.10"
 git-filter-repo = ">=2.47.0,<3"
 
 [pypi-dependencies]
-dracopy = ">=1.4.2"
-huggingface-hub = ">=0.20.0"
-transformers = ">=4.36.0"
-datasets = ">=2.16.0,<4.5"
 ruff = ">=0.9.0"
 pip-audit = ">=2.7.0"
 hypothesis = ">=6.0"
+scipy = ">=1.10"
+numpy = ">=1.24"
+joblib = ">=1.3"
+
+# ── BrainVISA feature (morphologist graphs + snapshots) ──────────────────────
+[feature.brainvisa.dependencies]
+soma-env = ">=0.0"
+libjpeg-turbo = { channel = "conda-forge", version = ">=3.0" }
+anatomist = ">=0.0.29"
+morphologist = ">=0.0.29"
+disco = ">=6.0"
+
+[feature.brainvisa.tasks]
+morphologist = "python3 src/generate_morphologist_graphs.py"
+snapshots = "python3 src/generate_snapshots.py"
+
+# ── Cortical-tiles feature (crop generation) ──────────────────────────────────
+[feature.cortical-tiles.pypi-dependencies]
+dracopy = ">=1.4.2"
+
+[feature.cortical-tiles.tasks]
+install-cortical-tiles = "cd external/cortical_tiles && SKLEARN_ALLOW_DEPRECATED_SKLEARN_PACKAGE_INSTALL=True pip install -e ."
+cortical-tiles = "python3 src/run_cortical_tiles.py"
+prune-failed-subjects = "python3 src/prune_failed_subjects.py"
+purge-subject = "python3 src/purge_subject.py"
+
+# ── Embeddings feature (inference + training) ─────────────────────────────────
+[feature.embeddings.dependencies]
+pytorch-cuda = { channel = "pytorch", version = "12.4.*" }
+
+[feature.embeddings.pypi-dependencies]
+huggingface-hub = ">=0.20.0"
+transformers = ">=4.36.0"
+datasets = ">=2.16.0,<4.5"
 umap-learn = ">=0.5"
 
-[activation]
+[feature.embeddings.activation]
 env = { LD_LIBRARY_PATH = "$CONDA_PREFIX/lib:$CONDA_PREFIX/lib/python3.11/site-packages/torch/lib:${LD_LIBRARY_PATH:-}" }
 
+[feature.embeddings.tasks]
+install-champollion = "cd external/champollion_V1 && pip install -e ."
+install-embeddings = { depends-on = ["install-champollion", "install-utils"] }
+champollion-config = "python3 src/generate_champollion_config.py"
+embeddings = "python3 src/generate_embeddings.py"
+combine = "python3 src/put_together_embeddings.py"
+generate-umap-reference = "python3 src/generate_umap_reference.py"
+train = "python3 src/train_champollion.py"
+
+# ── Environments ──────────────────────────────────────────────────────────────
+[environments]
+default        = { features = ["brainvisa", "cortical-tiles", "embeddings"] }
+embeddings     = { features = ["embeddings"], no-default-feature = true, solve-group = "embeddings" }
+cortical-tiles = { features = ["brainvisa", "cortical-tiles"], no-default-feature = true, solve-group = "cortical-tiles" }
+brainvisa      = { features = ["brainvisa"], no-default-feature = true, solve-group = "brainvisa" }
+
+# ── Shared tasks (available in all environments) ──────────────────────────────
 [tasks]
-# Initialize submodules
 init-submodules = "git submodule update --init --recursive"
 
-# Install cortical_tiles in editable mode
-install-cortical-tiles = "cd external/cortical_tiles && SKLEARN_ALLOW_DEPRECATED_SKLEARN_PACKAGE_INSTALL=True pip install -e ."
-
-# Install Champollion v1 in editable mode
-install-champollion = "cd external/champollion_V1 && pip install -e ."
-
-# Install champollion_utils in editable mode
 install-utils = """
   cd .. && git clone https://github.com/neurospin/champollion_utils.git 2>/dev/null || echo 'champollion_utils already exists' && \
   cd champollion_utils && pip install -e . && cd ..
 """
 
-# Create data directory
 setup-data = "mkdir -p ../data"
 
-# Global task to install everything
 install-all = { depends-on = ["init-submodules", "install-cortical-tiles", "install-champollion", "install-utils", "setup-data", "test-smoke"] }
 
-# Pull latest changes for the main champollion_pipeline repo.
-# pixi.lock is tracked by git but regenerated locally by pixi, which can cause
-# conflicts on pull.  We discard the locally-regenerated pixi.lock first so it
-# matches HEAD, then merge.  -X theirs is a safety net: if pixi.lock still
-# conflicts (e.g. both sides changed it), always take the remote version.
 update-pipeline = "git fetch && git checkout -- pixi.lock && git merge --no-edit -X theirs FETCH_HEAD"
 
-# Update git submodules to latest commits on their tracked branches.
-# --init handles the case where submodules were never initialized (first run).
-# --rebase avoids creating unexpected merge commits when submodules have local changes.
 update-submodules = """
   git submodule update --init --remote --rebase external/champollion_V1 && \
   git submodule update --init --remote --rebase external/cortical_tiles
 """
 
-# Update champollion_utils (pull latest from main).
-# Errors are shown (not silenced) so network failures are visible.
 update-utils = """
   cd ../champollion_utils && git pull origin master || echo 'WARNING: champollion_utils update failed — check the error above'
 """
 
-# Reinstall Python packages to pick up code changes from updated submodules/utils.
-# Uses repo-root-relative paths to avoid fragile cd chains.
-# Must run AFTER update-submodules and update-utils so it installs the new code.
 reinstall-packages = { cmd = """
   SKLEARN_ALLOW_DEPRECATED_SKLEARN_PACKAGE_INSTALL=True pip install -e external/cortical_tiles && \
   pip install -e external/champollion_V1 && \
   pip install -e ../champollion_utils
 """, depends-on = ["update-submodules", "update-utils"] }
 
-# Full update: pull all repos, then reinstall packages.
-# update-pipeline runs in parallel with reinstall-packages dependencies (safe — independent).
 update = { depends-on = ["update-pipeline", "reinstall-packages"] }
 
-# Uninstall task: removes cloned repos, installed packages, and data
 uninstall = """
   git submodule deinit -f external/champollion_V1 && \
   git submodule deinit -f external/cortical_tiles && \
@@ -100,7 +116,6 @@ uninstall = """
   echo "Uninstallation complete."
 """
 
-# Uninstall everything, including Pixi-managed dependencies
 uninstall-all = """
   rm -rf .pixi pixi.lock && \
   rm -rf external/champollion_V1 external/cortical_tiles && \
@@ -109,13 +124,11 @@ uninstall-all = """
   echo "Uninstallation of Pixi-managed dependencies complete."
 """
 
-# Linting tasks
 lint = "ruff check src/ tests/"
 lint-fix = "ruff check --fix src/ tests/"
 format = "ruff format src/ tests/"
 audit = "pip-audit"
 
-# Testing tasks
 test = "pytest tests/ -v"
 test-unit = "pytest tests/ -v -m unit"
 test-integration = "pytest tests/ -v -m integration"
@@ -123,33 +136,8 @@ test-smoke = "pytest tests/ -v -m smoke"
 test-cov = "pytest tests/ -v --cov=src --cov-report=html --cov-report=term"
 test-fast = "pytest tests/ -v -x --tb=short"
 test-verbose = "pytest tests/ -vv"
-test-specific = "pytest"  # Usage: pixi run test-specific tests/test_script_builder.py
+test-specific = "pytest"
 
-# Generate UMAP reference models for all ROIs
-# Usage: pixi run generate-umap-reference --models_dir /path/to/Champollion_V1_after_ablation --reference_subpath ukb40_random_embeddings/full_embeddings.csv
-generate-umap-reference = "python3 src/generate_umap_reference.py"
-
-# Generate sulcal mask files from manually labelled graphs
-# Usage: pixi run generate-masks --labeled_subjects_dir /path/to/subjects --path_to_graph_supervised "t1mri/t1/default_analysis/folds/3.3/base2026_manual" --output_dir /path/to/masks
 generate-masks = "python3 src/generate_masks.py"
-
-# Check sulcal labeling coverage per subject in a BrainVISA database
-# Usage: pixi run check-labeling --labeled_subjects_dir /path/to/db --path_to_graph "t1mri/t1/default_analysis/folds/3.3/base2018b_manual" --side both --output /tmp/labeling.csv
 check-labeling = "python3 src/check_labeling.py"
-
-# Compare sulcal labeling between two graph annotation campaigns + optional mask sets
-# Usage: pixi run compare-databases --labeled_subjects_dir /path/to/db --path_to_graph_a "...base2018_manual" --path_to_graph_b "...base2018b_manual" --label_a base2018 --label_b base2018b --masks_a external/cortical_tiles/data/mask/canonical_25/2mm --masks_b /path/to/new/masks/2.0 --output /tmp/comparison.csv
 compare-databases = "python3 src/compare_databases.py"
-
-# Remove cortical_tiles outputs for subjects that failed QC
-# Usage: pixi run prune-failed-subjects /path/to/output --qc /path/to/qc.tsv [--dry-run]
-prune-failed-subjects = "python3 src/prune_failed_subjects.py"
-
-# Remove all cortical_tiles derivatives for a single subject (files + aggregated arrays)
-# Usage: pixi run purge-subject /path/to/cortical_tiles-YEAR --subject sub-123456 [--dry-run]
-purge-subject = "python3 src/purge_subject.py"
-
-# Train a champollion_V1 self-supervised encoder for a sulcal region
-# Requires dataset configs generated by generate_champollion_config.py
-# Usage: pixi run train --dataset <name> --region <region_side> [--mode encoder] [--cpu] [--overwrite]
-train = "python3 src/train_champollion.py"
