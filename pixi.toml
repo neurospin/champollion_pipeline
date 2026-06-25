@@ -35,6 +35,10 @@ morphologist = ">=0.0.29"
 disco = ">=6.0"
 
 [feature.brainvisa.tasks]
+install-utils = """
+  cd .. && git clone https://github.com/neurospin/champollion_utils.git 2>/dev/null || echo 'champollion_utils already exists' && \
+  cd champollion_utils && pip install -e . && cd ..
+"""
 morphologist = "python3 src/generate_morphologist_graphs.py"
 snapshots = "python3 src/generate_snapshots.py"
 
@@ -66,6 +70,10 @@ env = { LD_LIBRARY_PATH = "$CONDA_PREFIX/lib:$CONDA_PREFIX/lib/python3.11/site-p
 
 [feature.embeddings.tasks]
 install-champollion = "cd external/champollion_V1 && pip install -e ."
+install-utils = """
+  cd .. && git clone https://github.com/neurospin/champollion_utils.git 2>/dev/null || echo 'champollion_utils already exists' && \
+  cd champollion_utils && pip install -e . && cd ..
+"""
 install-embeddings = { depends-on = ["install-champollion", "install-utils"] }
 champollion-config = "python3 src/generate_champollion_config.py"
 embeddings = "python3 src/generate_embeddings.py"
