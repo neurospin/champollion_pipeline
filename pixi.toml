@@ -69,12 +69,19 @@ umap-learn = ">=0.5"
 env = { LD_LIBRARY_PATH = "$CONDA_PREFIX/lib:$CONDA_PREFIX/lib/python3.11/site-packages/torch/lib:${LD_LIBRARY_PATH:-}" }
 
 [feature.embeddings.tasks]
-install-champollion = "cd external/champollion_V1 && pip install -e ."
+install-champollion = "cd external/champollion_V1 && pip install -e . --no-deps"
 install-utils = """
   cd .. && git clone https://github.com/neurospin/champollion_utils.git 2>/dev/null || echo 'champollion_utils already exists' && \
   cd champollion_utils && pip install -e . && cd ..
 """
 install-embeddings = { depends-on = ["install-champollion", "install-utils"] }
+update = """
+  git fetch && git checkout -- pixi.lock && git merge --no-edit -X theirs FETCH_HEAD && \
+  git submodule update --init --remote --rebase external/champollion_V1 && \
+  cd ../champollion_utils && git pull origin master || echo 'WARNING: champollion_utils update failed' && cd - && \
+  pip install -e external/champollion_V1 --no-deps && \
+  pip install -e ../champollion_utils --no-deps
+"""
 champollion-config = "python3 src/generate_champollion_config.py"
 embeddings = "python3 src/generate_embeddings.py"
 combine = "python3 src/put_together_embeddings.py"
@@ -113,9 +120,9 @@ update-utils = """
 """
 
 reinstall-packages = { cmd = """
-  SKLEARN_ALLOW_DEPRECATED_SKLEARN_PACKAGE_INSTALL=True pip install -e external/cortical_tiles && \
-  pip install -e external/champollion_V1 && \
-  pip install -e ../champollion_utils
+  SKLEARN_ALLOW_DEPRECATED_SKLEARN_PACKAGE_INSTALL=True pip install -e external/cortical_tiles --no-deps && \
+  pip install -e external/champollion_V1 --no-deps && \
+  pip install -e ../champollion_utils --no-deps
 """, depends-on = ["update-submodules", "update-utils"] }
 
 update = { depends-on = ["update-pipeline", "reinstall-packages"] }
