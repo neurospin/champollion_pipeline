@@ -4,9 +4,12 @@
 Script to define and generate Champollion's configuration.
 """
 
+import glob
+import json
 import os
 from os.path import abspath, dirname, exists, join
 
+import numpy as np
 from champollion_utils.script_builder import ScriptBuilder
 
 from champollion_pipeline.utils.lib import DERIVATIVES_FOLDER, find_dataset_folder
@@ -42,6 +45,55 @@ class GenerateChampollionConfig(ScriptBuilder):
                                 "Mask version tag (e.g. 'canonical_25'). "
                                 "Must match the value used when running run_cortical_tiles.",
                                 default="canonical_25"))
+
+    def _get_crop_size(self, crop_dir: str, side: str) -> tuple[int, int, int] | None:
+        """Return (sizeX, sizeY, sizeZ) from .minf if present, else from .npy shape."""
+        minf_path = join(crop_dir, "mask", f"{side}mask_cropped.nii.gz.minf")
+        if exists(minf_path):
+            with open(minf_path, "r") as f:
+                raw = f.read().replace("attributes = ", "").replace("'", '"')
+            info = json.loads(raw)
+            return info["sizeX"], info["sizeY"], info["sizeZ"]
+        for suffix in (f"{side}skeleton.npy", f"{side}label.npy", f"{side}distbottom.npy"):
+            npy_path = join(crop_dir, "mask", suffix)
+            if exists(npy_path):
+                shape = np.load(npy_path, mmap_mode="r").shape
+                # shape: (N, sizeX, sizeY, sizeZ) or (N, 1, sizeX, sizeY, sizeZ)
+                if len(shape) == 4:
+                    return shape[1], shape[2], shape[3]
+                if len(shape) == 5:
+                    return shape[2], shape[3], shape[4]
+        return None
+
+    def _create_dataset_configs(self, crop_path: str, dataset_loc: str, ref: str) -> None:
+        """Inline replacement for create_dataset_config_files.py with .npy fallback."""
+        crop_dirs = sorted(glob.glob(join(crop_path, "*")))
+        skipped = []
+        for crop_dir in crop_dirs:
+            if not os.path.isdir(crop_dir):
+                continue
+            crop_name = os.path.basename(crop_dir)
+            for side in ("L", "R"):
+                size = self._get_crop_size(crop_dir, side)
+                if size is None:
+                    skipped.append(f"{crop_name}/{side}")
+                    continue
+                sx, sy, sz = size
+                side_long = "left" if side == "L" else "right"
+                dataset_name = f"{crop_name.replace('.', '')}_{side_long}"
+                filedata = (ref
+                            .replace("REPLACE_CROP_NAME", crop_name)
+                            .replace("REPLACE_DATASET", dataset_name)
+                            .replace("REPLACE_SIDE", side)
+                            .replace("REPLACE_SIZEX", str(sx))
+                            .replace("REPLACE_SIZEY", str(sy))
+                            .replace("REPLACE_SIZEZ", str(sz)))
+                result_file = join(dataset_loc, f"{dataset_name}.yaml")
+                with open(result_file, "w") as f:
+                    f.write(filedata)
+                print(result_file)
+        if skipped:
+            print(f"Skipped {len(skipped)} sulci (no .minf or .npy found): {skipped}")
 
     def _validate_inputs(self):
         """Validate input paths."""
@@ -132,16 +184,10 @@ class GenerateChampollionConfig(ScriptBuilder):
 
         print(f"generate_champollion_config.py/champollion_loc: {champollion_loc}")
 
-        # Build command for create_dataset_config_files.py using absolute paths
-        script_path = join(champollion_loc, "contrastive", "utils", "create_dataset_config_files.py")
-        cmd = [
-            "python3",
-            script_path,
-            "--path", dataset_loc,
-            "--crop_path", self.args.crop_path
-        ]
-
-        result = self.execute_command(cmd, shell=False)
+        with open(reference_yaml_dest, "r") as f:
+            ref = f.read()
+        self._create_dataset_configs(self.args.crop_path, dataset_loc, ref)
+        result = 0
 
         # Handle YAML configuration using absolute path
         local_yaml_path = join(champollion_loc, "contrastive", "configs", "dataset_localization", "local.yaml")
