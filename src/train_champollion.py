@@ -165,9 +165,9 @@ class TrainChampollion(ScriptBuilder):
                     for _line in _f:
                         if _line.strip().startswith("dataset_folder:"):
                             _dataset_folder = _line.split(":", 1)[1].strip()
-                            overrides.append(
-                                f"++dataset_localization.dataset_folder={_dataset_folder}"
-                            )
+                            # local.yaml uses @package _global_, so dataset_folder
+                            # is at the config root, not nested under dataset_localization.
+                            overrides.append(f"++dataset_folder={_dataset_folder}")
                             break
 
         overrides.append(f"load_sparse={'true' if self.args.load_sparse else 'false'}")
