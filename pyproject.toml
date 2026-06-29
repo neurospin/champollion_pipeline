@@ -4,7 +4,7 @@ build-backend = "hatchling.build"
 
 [project]
 name = "champollion-pipeline"
-version = "0.2.8"
+version = "0.2.9"
 description = "End-to-end pipeline: raw T1 MRI → sulcal embeddings via cortical tiles and contrastive learning."
 requires-python = ">=3.10"
 license = { text = "CeCILL" }
