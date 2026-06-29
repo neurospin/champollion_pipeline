@@ -166,7 +166,7 @@ class TrainChampollion(ScriptBuilder):
                         if _line.strip().startswith("dataset_folder:"):
                             _dataset_folder = _line.split(":", 1)[1].strip()
                             overrides.append(
-                                f"dataset_localization.dataset_folder={_dataset_folder}"
+                                f"++dataset_localization.dataset_folder={_dataset_folder}"
                             )
                             break
 
