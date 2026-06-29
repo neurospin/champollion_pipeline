@@ -154,9 +154,21 @@ class TrainChampollion(ScriptBuilder):
         ]
 
         if self.args.config_dir:
-            overrides.append(
-                f"hydra.searchpath=[file://{abspath(self.args.config_dir)}]"
-            )
+            config_dir_abs = abspath(self.args.config_dir)
+            overrides.append(f"hydra.searchpath=[file://{config_dir_abs}]")
+            # hydra.searchpath is appended after the primary config dir, so the built-in
+            # local.yaml would take precedence over the one in config-dir. Override
+            # dataset_folder directly to ensure the config-dir's value is used.
+            local_yaml_path = join(config_dir_abs, "dataset_localization", "local.yaml")
+            if exists(local_yaml_path):
+                with open(local_yaml_path) as _f:
+                    for _line in _f:
+                        if _line.strip().startswith("dataset_folder:"):
+                            _dataset_folder = _line.split(":", 1)[1].strip()
+                            overrides.append(
+                                f"dataset_localization.dataset_folder={_dataset_folder}"
+                            )
+                            break
 
         overrides.append(f"load_sparse={'true' if self.args.load_sparse else 'false'}")
 
