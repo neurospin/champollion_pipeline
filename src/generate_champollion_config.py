@@ -47,13 +47,11 @@ class GenerateChampollionConfig(ScriptBuilder):
                                 default="canonical_25"))
 
     def _get_crop_size(self, crop_dir: str, side: str) -> tuple[int, int, int] | None:
-        """Return (sizeX, sizeY, sizeZ) from .minf if present, else from .npy shape."""
-        minf_path = join(crop_dir, "mask", f"{side}mask_cropped.nii.gz.minf")
-        if exists(minf_path):
-            with open(minf_path, "r") as f:
-                raw = f.read().replace("attributes = ", "").replace("'", '"')
-            info = json.loads(raw)
-            return info["sizeX"], info["sizeY"], info["sizeZ"]
+        """Return (sizeX, sizeY, sizeZ) from .npy shape if present, else from .minf.
+
+        .npy is preferred: its axis order matches what the DataLoader receives at
+        runtime. .minf uses anatomical conventions that may differ (e.g. X/Y swapped).
+        """
         for suffix in (f"{side}skeleton.npy", f"{side}label.npy", f"{side}distbottom.npy"):
             npy_path = join(crop_dir, "mask", suffix)
             if exists(npy_path):
@@ -63,6 +61,12 @@ class GenerateChampollionConfig(ScriptBuilder):
                     return shape[1], shape[2], shape[3]
                 if len(shape) == 5:
                     return shape[2], shape[3], shape[4]
+        minf_path = join(crop_dir, "mask", f"{side}mask_cropped.nii.gz.minf")
+        if exists(minf_path):
+            with open(minf_path, "r") as f:
+                raw = f.read().replace("attributes = ", "").replace("'", '"')
+            info = json.loads(raw)
+            return info["sizeX"], info["sizeY"], info["sizeZ"]
         return None
 
     def _create_dataset_configs(self, crop_path: str, dataset_loc: str, ref: str) -> None:
