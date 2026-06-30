@@ -560,8 +560,15 @@ class GenerateEmbeddings(ScriptBuilder):
         fallback_strategy = InteractiveFallbackStrategy()
         return fallback_strategy.fetch(resolved_path, extract_to, no_cache)
 
+    def _validate_inputs(self):
+        if self.args.config_path and not exists(self.args.config_path):
+            raise FileNotFoundError(
+                f"--config_path does not exist: {self.args.config_path}"
+            )
+
     def run(self):
         """Execute the embeddings pipeline script."""
+        self._validate_inputs()
         if self.args.profiling:
             return self._run_with_profiling()
         return self._run_normal()
