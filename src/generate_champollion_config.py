@@ -56,11 +56,14 @@ class GenerateChampollionConfig(ScriptBuilder):
             npy_path = join(crop_dir, "mask", suffix)
             if exists(npy_path):
                 shape = np.load(npy_path, mmap_mode="r").shape
-                # shape: (N, sizeX, sizeY, sizeZ) or (N, 1, sizeX, sizeY, sizeZ)
+                # shape: (N, Z, X, Y, channel=1) — template writes (1, Z, X, Y),
+                # PaddingTensor.rotate_list then gives target (Z, X, Y, 1) = per-sample shape
+                if len(shape) == 5:
+                    return shape[1], shape[2], shape[3]
+                # shape: (N, X, Y, Z) — template writes (1, X, Y, Z),
+                # rotate_list gives (X, Y, Z) target = per-sample shape
                 if len(shape) == 4:
                     return shape[1], shape[2], shape[3]
-                if len(shape) == 5:
-                    return shape[2], shape[3], shape[4]
         minf_path = join(crop_dir, "mask", f"{side}mask_cropped.nii.gz.minf")
         if exists(minf_path):
             with open(minf_path, "r") as f:
