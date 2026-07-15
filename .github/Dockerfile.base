@@ -1,0 +1,50 @@
+FROM ubuntu:22.04
+
+ENV DEBIAN_FRONTEND=noninteractive
+
+# System deps (pipeline + visualization)
+RUN apt-get update && apt-get install -y --no-install-recommends \
+    python3 python3-pip python3-venv \
+    curl ca-certificates git \
+    libgl1-mesa-glx libglib2.0-0 libxrender1 libxext6 xvfb \
+    && rm -rf /var/lib/apt/lists/*
+
+# Non-root user (HF Spaces requires uid 1000)
+RUN useradd -m -u 1000 user
+ENV HOME=/home/user
+ENV PATH="/home/user/.pixi/bin:${PATH}"
+
+# Install pixi
+USER user
+RUN curl -fsSL https://pixi.sh/install.sh | bash
+
+WORKDIR ${HOME}/app
+
+# Copy pipeline from build context (reflects local changes; submodules in external/)
+COPY --chown=user:user . champollion_pipeline/
+# cortical_tiles/logs.py uses gitpython to record the repo HEAD commit SHA.
+# The submodule .git pointer is broken without the parent .git/modules/ tree.
+# Replace it with a minimal stub git repo so gitpython finds a valid HEAD.
+RUN rm -f champollion_pipeline/external/cortical_tiles/.git \
+    && git -C champollion_pipeline/external/cortical_tiles init -b main \
+    && git -C champollion_pipeline/external/cortical_tiles \
+       -c user.email="build@docker" -c user.name="Docker" \
+       commit --allow-empty -m "Docker build snapshot"
+# Clone champollion_utils (separate external repository)
+RUN git clone --depth 1 -b master https://github.com/neurospin/champollion_utils.git
+
+# Pipeline environment (pixi + BrainVISA)
+RUN cd champollion_pipeline && pixi install \
+    && rm -rf ${HOME}/.cache/rattler ${HOME}/.cache/pixi
+
+RUN cd champollion_pipeline \
+    && pixi run install-cortical-tiles \
+    && pixi run install-champollion \
+    && pixi run -- pip install -e ../champollion_utils \
+    && pixi run -- pip install "setuptools>=65,<81" \
+    && pixi run -- python -c "import pkg_resources; print('pkg_resources OK')" \
+    && pixi run -- pip cache purge \
+    && rm -rf /tmp/pip-*
+
+# Data directory
+RUN mkdir -p data
