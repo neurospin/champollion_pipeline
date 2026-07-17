@@ -24,7 +24,9 @@ The pipeline runs in 6 steps. Here is the minimal happy path — replace placeho
 morphologist-cli sub-001.nii.gz sub-002.nii.gz /data/myproject/ \
     -- --of morphologist-auto-nonoverlap-1.0 --if morphologist-auto-nonoverlap-1.0
 
-# 2. Extract sulcal region crops
+# 2. Extract sulcal regions
+#    # This takes as input the morphologist directory /data/myproject/derivatives/morphologist-6.0/subjects
+#    # and outputs the sulcal regions into /data/myproject/derivatives/cortical_tiles-2026
 pixi run python3 src/run_cortical_tiles.py \
     /data/myproject/derivatives/morphologist-6.0/subjects \
     /data/myproject/derivatives/
