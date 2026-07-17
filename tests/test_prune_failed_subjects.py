@@ -9,7 +9,7 @@ from pathlib import Path
 import pytest
 
 from champollion_pipeline.utils.lib import DERIVATIVES_FOLDER
-from prune_failed_subjects import PruneFailedSubjects
+from champollion_pipeline.prune_failed_subjects import PruneFailedSubjects
 
 # ---------------------------------------------------------------------------
 # Helpers

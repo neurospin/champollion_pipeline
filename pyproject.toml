@@ -21,8 +21,18 @@ dependencies = [
 [project.urls]
 Repository = "https://github.com/neurospin/champollion_pipeline"
 
+[project.scripts]
+champollion-morphologist = "champollion_pipeline.generate_morphologist_graphs:main"
+champollion-cortical-tiles = "champollion_pipeline.run_cortical_tiles:main"
+champollion-config = "champollion_pipeline.generate_champollion_config:main"
+champollion-embeddings = "champollion_pipeline.generate_embeddings:main"
+champollion-combine = "champollion_pipeline.put_together_embeddings:main"
+champollion-snapshots = "champollion_pipeline.generate_snapshots:main"
+champollion-train = "champollion_pipeline.train_champollion:main"
+champollion-prune = "champollion_pipeline.prune_failed_subjects:main"
+champollion-purge = "champollion_pipeline.purge_subject:main"
+
 [tool.hatch.build.targets.wheel]
-# Only the installable library package — scripts in src/ are invoked via pixi run
 packages = ["src/champollion_pipeline"]
 
 [tool.ruff]

@@ -13,7 +13,7 @@ from unittest.mock import MagicMock, patch
 
 import pytest
 
-# Add src directory to path for imports
+# Keep src/ on path for non-package scripts (compare tools, file_indexer, etc.)
 sys.path.insert(0, os.path.abspath(os.path.join(os.path.dirname(__file__), '../src')))
 
 # Stub all BrainVISA soma subpackages so any module that does top-level

@@ -9,7 +9,7 @@ from unittest.mock import MagicMock, call, patch
 
 import pytest
 
-from put_together_embeddings import PutTogetherEmbeddings
+from champollion_pipeline.put_together_embeddings import PutTogetherEmbeddings
 
 
 class TestPutTogetherEmbeddingsInit:
@@ -74,10 +74,10 @@ class TestRunMethod:
             "--output_path", temp_dir
         ])
 
-        with patch('put_together_embeddings.makedirs'):
+        with patch('champollion_pipeline.put_together_embeddings.makedirs'):
             with patch.object(script, 'validate_paths', return_value=True):
-                with patch('put_together_embeddings.chdir'):
-                    with patch('put_together_embeddings.getcwd', return_value="/original"):
+                with patch('champollion_pipeline.put_together_embeddings.chdir'):
+                    with patch('champollion_pipeline.put_together_embeddings.getcwd', return_value="/original"):
                         with patch.object(script, 'build_command', return_value=["cmd"]):
                             with patch.object(script, 'execute_command', return_value=0):
                                 script.run()
@@ -97,10 +97,10 @@ class TestRunMethod:
             "--output_path", str(output_dir)
         ])
 
-        with patch('put_together_embeddings.makedirs') as mock_makedirs:
+        with patch('champollion_pipeline.put_together_embeddings.makedirs') as mock_makedirs:
             with patch.object(script, 'validate_paths', return_value=True):
-                with patch('put_together_embeddings.chdir'):
-                    with patch('put_together_embeddings.getcwd', return_value="/original"):
+                with patch('champollion_pipeline.put_together_embeddings.chdir'):
+                    with patch('champollion_pipeline.put_together_embeddings.getcwd', return_value="/original"):
                         with patch.object(script, 'build_command', return_value=["cmd"]):
                             with patch.object(script, 'execute_command', return_value=0):
                                 script.run()
@@ -115,7 +115,7 @@ class TestRunMethod:
             "--output_path", temp_dir
         ])
 
-        with patch('put_together_embeddings.makedirs'):
+        with patch('champollion_pipeline.put_together_embeddings.makedirs'):
             with patch.object(script, 'validate_paths', return_value=False):
                 with pytest.raises(ValueError, match="Please input valid paths"):
                     script.run()
@@ -128,10 +128,10 @@ class TestRunMethod:
             "--output_path", temp_dir
         ])
 
-        with patch('put_together_embeddings.makedirs'):
+        with patch('champollion_pipeline.put_together_embeddings.makedirs'):
             with patch.object(script, 'validate_paths', return_value=True):
-                with patch('put_together_embeddings.chdir') as mock_chdir:
-                    with patch('put_together_embeddings.getcwd', return_value="/original"):
+                with patch('champollion_pipeline.put_together_embeddings.chdir') as mock_chdir:
+                    with patch('champollion_pipeline.put_together_embeddings.getcwd', return_value="/original"):
                         with patch.object(script, 'build_command', return_value=["cmd"]):
                             with patch.object(script, 'execute_command', return_value=0):
                                 script.run()
@@ -149,10 +149,10 @@ class TestRunMethod:
             "--path_models", "/models"
         ])
 
-        with patch('put_together_embeddings.makedirs'):
+        with patch('champollion_pipeline.put_together_embeddings.makedirs'):
             with patch.object(script, 'validate_paths', return_value=True):
-                with patch('put_together_embeddings.chdir'):
-                    with patch('put_together_embeddings.getcwd', return_value="/original"):
+                with patch('champollion_pipeline.put_together_embeddings.chdir'):
+                    with patch('champollion_pipeline.put_together_embeddings.getcwd', return_value="/original"):
                         with patch.object(script, 'build_command', return_value=["python", "script.py"]) as mock_build:
                             with patch.object(script, 'execute_command', return_value=0):
                                 script.run()
@@ -173,10 +173,10 @@ class TestRunMethod:
             "--output_path", temp_dir
         ])
 
-        with patch('put_together_embeddings.makedirs'):
+        with patch('champollion_pipeline.put_together_embeddings.makedirs'):
             with patch.object(script, 'validate_paths', return_value=True):
-                with patch('put_together_embeddings.chdir'):
-                    with patch('put_together_embeddings.getcwd', return_value="/original"):
+                with patch('champollion_pipeline.put_together_embeddings.chdir'):
+                    with patch('champollion_pipeline.put_together_embeddings.getcwd', return_value="/original"):
                         with patch.object(script, 'build_command', return_value=["cmd"]):
                             with patch.object(script, 'execute_command', return_value=0) as mock_exec:
                                 script.run()
@@ -191,10 +191,10 @@ class TestRunMethod:
             "--output_path", temp_dir
         ])
 
-        with patch('put_together_embeddings.makedirs'):
+        with patch('champollion_pipeline.put_together_embeddings.makedirs'):
             with patch.object(script, 'validate_paths', return_value=True):
-                with patch('put_together_embeddings.chdir'):
-                    with patch('put_together_embeddings.getcwd', return_value="/original"):
+                with patch('champollion_pipeline.put_together_embeddings.chdir'):
+                    with patch('champollion_pipeline.put_together_embeddings.getcwd', return_value="/original"):
                         with patch.object(script, 'build_command', return_value=["cmd"]):
                             with patch.object(script, 'execute_command', return_value=123):
                                 result = script.run()
@@ -209,10 +209,10 @@ class TestRunMethod:
         ])
         original = "/original/dir"
 
-        with patch('put_together_embeddings.makedirs'):
+        with patch('champollion_pipeline.put_together_embeddings.makedirs'):
             with patch.object(script, 'validate_paths', return_value=True):
-                with patch('put_together_embeddings.getcwd', return_value=original):
-                    with patch('put_together_embeddings.chdir') as mock_chdir:
+                with patch('champollion_pipeline.put_together_embeddings.getcwd', return_value=original):
+                    with patch('champollion_pipeline.put_together_embeddings.chdir') as mock_chdir:
                         with patch.object(script, 'build_command', return_value=["cmd"]):
                             with patch.object(script, 'execute_command', return_value=0):
                                 script.run()
@@ -225,14 +225,14 @@ class TestMainFunction:
 
     def test_main_creates_script_and_runs(self, temp_dir):
         """Test that main creates script and calls build().print_args().run()."""
-        with patch('put_together_embeddings.PutTogetherEmbeddings') as MockScript:
+        with patch('champollion_pipeline.put_together_embeddings.PutTogetherEmbeddings') as MockScript:
             mock_instance = MagicMock()
             mock_instance.build.return_value = mock_instance
             mock_instance.print_args.return_value = mock_instance
             mock_instance.run.return_value = 0
             MockScript.return_value = mock_instance
 
-            from put_together_embeddings import main
+            from champollion_pipeline.put_together_embeddings import main
 
             with patch('sys.argv', ['script', '--embeddings_subpath', 'emb', '--output_path', temp_dir]):
                 result = main()
@@ -262,8 +262,8 @@ class TestPutTogetherEmbeddingsIntegration:
         ])
 
         with patch.object(script, 'execute_command', return_value=0) as mock_exec:
-            with patch('put_together_embeddings.chdir'):
-                with patch('put_together_embeddings.getcwd', return_value="/original"):
+            with patch('champollion_pipeline.put_together_embeddings.chdir'):
+                with patch('champollion_pipeline.put_together_embeddings.getcwd', return_value="/original"):
                     result = script.run()
 
                     assert result == 0

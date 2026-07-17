@@ -15,7 +15,7 @@ from unittest.mock import MagicMock, patch
 import numpy as np
 import pytest
 
-from generate_masks import (
+from champollion_pipeline.generate_masks import (
     GenerateMasks,
     _compute_one_sulcus,
     _load_and_extract_subject,
@@ -418,9 +418,9 @@ class TestNjobsAutoBuffered:
         mock_runner = MagicMock()
         mock_runner.return_value = iter([])
         with patch.dict(sys.modules, self._bv_modules(4)), \
-             patch('generate_masks.get_sulci_for_regions',
+              patch('champollion_pipeline.generate_masks.get_sulci_for_regions',
                    return_value=set()), \
-             patch('generate_masks.MaskRunner.create', return_value=mock_runner):
+              patch('champollion_pipeline.generate_masks.MaskRunner.create', return_value=mock_runner):
             gm.run()
 
         out = capsys.readouterr().out
@@ -444,9 +444,9 @@ class TestNjobsAutoBuffered:
         mock_runner.side_effect = lambda config: (runner_called.append(True) or iter([]))
 
         with patch.dict(sys.modules, self._bv_modules(2)), \
-             patch('generate_masks.get_sulci_for_regions',
+              patch('champollion_pipeline.generate_masks.get_sulci_for_regions',
                    return_value=set()), \
-             patch('generate_masks.MaskRunner.create', return_value=mock_runner):
+              patch('champollion_pipeline.generate_masks.MaskRunner.create', return_value=mock_runner):
             gm.run()
 
         assert runner_called, "buffered runner was not called"
@@ -491,9 +491,9 @@ class TestVoxStrOutputPath:
         mock_runner.side_effect = fake_runner_call
 
         with patch.dict(sys.modules, self._bv_modules()), \
-             patch('generate_masks.get_sulci_for_regions',
+              patch('champollion_pipeline.generate_masks.get_sulci_for_regions',
                    return_value=set()), \
-             patch('generate_masks.MaskRunner.create', return_value=mock_runner):
+              patch('champollion_pipeline.generate_masks.MaskRunner.create', return_value=mock_runner):
             gm.run()
 
         mask_dir = captured.get('mask_dir', '')
@@ -523,9 +523,9 @@ class TestVoxStrOutputPath:
         mock_runner.side_effect = fake_runner_call
 
         with patch.dict(sys.modules, self._bv_modules()), \
-             patch('generate_masks.get_sulci_for_regions',
+              patch('champollion_pipeline.generate_masks.get_sulci_for_regions',
                    return_value=set()), \
-             patch('generate_masks.MaskRunner.create', return_value=mock_runner):
+              patch('champollion_pipeline.generate_masks.MaskRunner.create', return_value=mock_runner):
             gm.run()
 
         mask_dir = captured.get('mask_dir', '')
