@@ -11,7 +11,7 @@ from unittest.mock import patch
 
 import pytest
 
-from generate_snapshots import (
+from champollion_pipeline.generate_snapshots import (
     GenerateSnapshots,
     discover_umap_pairs,
     find_completed_regions,

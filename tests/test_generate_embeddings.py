@@ -9,7 +9,7 @@ from unittest.mock import MagicMock, patch
 
 import pytest
 
-from generate_embeddings import GenerateEmbeddings
+from champollion_pipeline.generate_embeddings import GenerateEmbeddings
 
 
 class TestGenerateEmbeddingsInit:
@@ -477,8 +477,8 @@ class TestProfiling:
         script = GenerateEmbeddings()
         script.parse_args([temp_dir, "loc", temp_dir, "name", "--profiling"])
 
-        with patch('generate_embeddings.cProfile.Profile'):
-            with patch('generate_embeddings.pstats.Stats', return_value=MagicMock()):
+        with patch('champollion_pipeline.generate_embeddings.cProfile.Profile'):
+            with patch('champollion_pipeline.generate_embeddings.pstats.Stats', return_value=MagicMock()):
                 with patch.object(script, '_run_normal', return_value=42) as mock_normal:
                     result = script._run_with_profiling()
                     mock_normal.assert_called_once()
@@ -490,8 +490,8 @@ class TestProfiling:
 
         mock_stats = MagicMock()
 
-        with patch('generate_embeddings.cProfile.Profile'):
-            with patch('generate_embeddings.pstats.Stats', return_value=mock_stats):
+        with patch('champollion_pipeline.generate_embeddings.cProfile.Profile'):
+            with patch('champollion_pipeline.generate_embeddings.pstats.Stats', return_value=mock_stats):
                 with patch.object(script, '_run_normal', return_value=0):
                     script._run_with_profiling()
                     mock_stats.dump_stats.assert_called_once_with('embeddings_profile.prof')
@@ -502,8 +502,8 @@ class TestProfiling:
 
         mock_stats = MagicMock()
 
-        with patch('generate_embeddings.cProfile.Profile'):
-            with patch('generate_embeddings.pstats.Stats', return_value=mock_stats):
+        with patch('champollion_pipeline.generate_embeddings.cProfile.Profile'):
+            with patch('champollion_pipeline.generate_embeddings.pstats.Stats', return_value=mock_stats):
                 with patch.object(script, '_run_normal', side_effect=RuntimeError("boom")):
                     with pytest.raises(RuntimeError):
                         script._run_with_profiling()
