@@ -4,6 +4,7 @@
 Unit tests for generate_embeddings.py
 """
 
+import os
 from unittest.mock import patch
 
 import pytest
@@ -320,6 +321,135 @@ class TestCorticalVersionFlags:
         script._patch_config_paths(str(tmp_path), "new_folder")
 
         assert "new_folder" in yaml_file.read_text()
+
+
+class TestRegionsFilter:
+    """Tests for --regions filtering."""
+
+    def test_regions_default_none(self):
+        script = GenerateEmbeddings()
+        args = script.parse_args(["/m", "loc", "/d", "name"])
+        assert args.regions is None
+
+    def test_regions_single(self):
+        script = GenerateEmbeddings()
+        args = script.parse_args(["/m", "loc", "/d", "name", "--regions", "SC-sylv_left"])
+        assert args.regions == ["SC-sylv_left"]
+
+    def test_regions_multiple(self):
+        script = GenerateEmbeddings()
+        args = script.parse_args([
+            "/m", "loc", "/d", "name",
+            "--regions", "SC-sylv_left", "SC-sylv_right", "FIP-FIPPoCinf_left"
+        ])
+        assert args.regions == ["SC-sylv_left", "SC-sylv_right", "FIP-FIPPoCinf_left"]
+
+    def test_make_regions_tmpdir_creates_symlinks(self, tmp_path):
+        (tmp_path / "SC-sylv_left").mkdir()
+        (tmp_path / "SC-sylv_right").mkdir()
+        (tmp_path / "other_region").mkdir()
+
+        script = GenerateEmbeddings()
+        script.args = script.parse_args([
+            str(tmp_path), "loc", "/d", "name",
+            "--regions", "SC-sylv_left", "SC-sylv_right"
+        ])
+
+        tmpdir = script._make_regions_tmpdir(str(tmp_path))
+        try:
+            entries = sorted(os.listdir(tmpdir))
+            assert entries == ["SC-sylv_left", "SC-sylv_right"]
+            assert os.path.islink(os.path.join(tmpdir, "SC-sylv_left"))
+            assert "other_region" not in entries
+        finally:
+            import shutil
+            shutil.rmtree(tmpdir)
+
+    def test_make_regions_tmpdir_raises_on_missing_region(self, tmp_path):
+        (tmp_path / "SC-sylv_left").mkdir()
+
+        script = GenerateEmbeddings()
+        script.args = script.parse_args([
+            str(tmp_path), "loc", "/d", "name",
+            "--regions", "SC-sylv_left", "nonexistent_region"
+        ])
+
+        with pytest.raises(FileNotFoundError, match="nonexistent_region"):
+            script._make_regions_tmpdir(str(tmp_path))
+
+    def test_run_pipeline_uses_tmpdir_when_regions_set(self, tmp_path):
+        (tmp_path / "SC-sylv_left").mkdir()
+        (tmp_path / "SC-sylv_right").mkdir()
+
+        script = GenerateEmbeddings()
+        script.parse_args([
+            str(tmp_path), "loc", str(tmp_path), "name",
+            "--regions", "SC-sylv_left"
+        ])
+
+        # Capture tmpdir state during execute_command, before cleanup
+        snapshot = {}
+
+        def fake_execute(cmd, **kwargs):
+            path = script.args.models_path
+            snapshot['path'] = path
+            snapshot['entries'] = sorted(os.listdir(path))
+            snapshot['is_symlink'] = os.path.islink(os.path.join(path, "SC-sylv_left"))
+            return 0
+
+        with patch('os.chdir'):
+            with patch('os.getcwd', return_value="/original"):
+                with patch.object(script, 'fetch_models', return_value=str(tmp_path)):
+                    with patch.object(script, 'build_command', return_value=["cmd"]):
+                        with patch.object(script, 'execute_command', side_effect=fake_execute):
+                            script.run()
+
+        assert snapshot['path'] != str(tmp_path), "should use a tmpdir, not the original path"
+        assert snapshot['entries'] == ["SC-sylv_left"], "only requested region should appear"
+        assert snapshot['is_symlink'], "region entry should be a symlink"
+        assert not os.path.exists(snapshot['path']), "tmpdir should be cleaned up after run"
+
+    def test_run_pipeline_cleans_up_tmpdir_on_error(self, tmp_path):
+        (tmp_path / "SC-sylv_left").mkdir()
+
+        script = GenerateEmbeddings()
+        script.parse_args([
+            str(tmp_path), "loc", str(tmp_path), "name",
+            "--regions", "SC-sylv_left"
+        ])
+
+        created_tmpdirs = []
+
+        original_make = script._make_regions_tmpdir
+
+        def tracking_make(models_path):
+            d = original_make(models_path)
+            created_tmpdirs.append(d)
+            return d
+
+        with patch('os.chdir'):
+            with patch('os.getcwd', return_value="/original"):
+                with patch.object(script, 'fetch_models', return_value=str(tmp_path)):
+                    with patch.object(script, '_make_regions_tmpdir', side_effect=tracking_make):
+                        with patch.object(script, 'build_command', return_value=["cmd"]):
+                            with patch.object(script, 'execute_command', side_effect=RuntimeError("boom")):
+                                with pytest.raises(RuntimeError):
+                                    script.run()
+
+        assert len(created_tmpdirs) == 1
+        assert not os.path.exists(created_tmpdirs[0]), "tmpdir must be cleaned up even on error"
+
+    def test_run_pipeline_no_tmpdir_without_regions(self, temp_dir):
+        script = GenerateEmbeddings()
+        script.parse_args([temp_dir, "loc", temp_dir, "name"])
+
+        with patch('os.chdir'):
+            with patch('os.getcwd', return_value="/original"):
+                with patch.object(script, 'build_command', return_value=["cmd"]):
+                    with patch.object(script, 'execute_command', return_value=0):
+                        with patch.object(script, '_make_regions_tmpdir') as mock_make:
+                            script.run()
+                            mock_make.assert_not_called()
 
 
 @pytest.mark.smoke

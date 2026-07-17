@@ -13,6 +13,7 @@ import pstats
 import shutil
 import sys
 import tarfile
+import tempfile
 from abc import ABC, abstractmethod
 from io import StringIO
 from os.path import abspath, dirname, exists, join
@@ -469,7 +470,26 @@ class GenerateEmbeddings(ScriptBuilder):
             "(e.g. 'canonical_25'). When set, only the matching subfolder is "
             "downloaded and the local cache is keyed per version. "
             "Ignored when models_path is a local directory.",
-            default=None))
+            default=None)
+         .add_argument(
+            "--regions", type=str, nargs="+", default=None,
+            help=(
+                "Restrict embedding generation to specific region names "
+                "(e.g. SC-sylv_left FIP-FIPPoCinf_right). "
+                "By default all regions found in models_path are processed."
+            )))
+
+    def _make_regions_tmpdir(self, models_path: str) -> str:
+        """Return a temp dir containing symlinks to only the requested region subdirs."""
+        missing = [r for r in self.args.regions if not os.path.isdir(join(models_path, r))]
+        if missing:
+            raise FileNotFoundError(
+                f"Regions not found in {models_path}: {', '.join(missing)}"
+            )
+        tmpdir = tempfile.mkdtemp(prefix="champollion_regions_")
+        for region in self.args.regions:
+            os.symlink(join(models_path, region), join(tmpdir, region))
+        return tmpdir
 
     def _get_derivatives_folder(self) -> str:
         """Return the derivatives folder to use, resolving --legacy and --cortical_version."""
@@ -624,6 +644,12 @@ class GenerateEmbeddings(ScriptBuilder):
         original_models_path = self.args.models_path
         self.args.models_path = self.fetch_models(original_models_path)
 
+        # If --regions is set, work from a temp dir of symlinks to the selected regions
+        tmpdir = None
+        if self.args.regions:
+            tmpdir = self._make_regions_tmpdir(self.args.models_path)
+            self.args.models_path = tmpdir
+
         # Get absolute path to champollion_V1/contrastive
         script_dir = dirname(abspath(__file__))
         champollion_dir = abspath(join(
@@ -669,7 +695,11 @@ class GenerateEmbeddings(ScriptBuilder):
             defaults=defaults
         )
 
-        result = self.execute_command(cmd, shell=False)
+        try:
+            result = self.execute_command(cmd, shell=False)
+        finally:
+            if tmpdir:
+                shutil.rmtree(tmpdir)
 
         # Run CKA coherence test only if explicitly requested
         if self.args.run_cka:
