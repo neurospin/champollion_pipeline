@@ -15,10 +15,12 @@ Cortical sulci — the folds of the brain surface — vary in shape across indiv
 
 ## Quick start
 
-The pipeline runs in 6 steps. Here is the minimal happy path — replace placeholders with your actual paths:
+The pipeline runs in 6 steps. Here is the minimal happy path — replace placeholders '/data/myproject' with your actual paths:
 
 ```bash
 # 1. Generate Morphologist sulcal graphs (requires BrainVISA — skip if you already have .arg files)
+#    This takes as inputs the list of T1 MRI (here: sub-001.nii.gz sub-002.nii.gz)
+#    and outputs the morphologist graphs into the folder /data/myproject/derivatives/morphologist-6.0/subjects
 morphologist-cli sub-001.nii.gz sub-002.nii.gz /data/myproject/ \
     -- --of morphologist-auto-nonoverlap-1.0 --if morphologist-auto-nonoverlap-1.0
 
