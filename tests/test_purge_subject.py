@@ -8,7 +8,7 @@ import numpy as np
 import pandas as pd
 import pytest
 
-from purge_subject import PurgeSubject
+from champollion_pipeline.purge_subject import PurgeSubject
 
 # ---------------------------------------------------------------------------
 # Helpers

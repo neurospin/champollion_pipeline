@@ -111,7 +111,7 @@ def _compute_one_sulcus(sulcus_full, per_subject_voxels, voxel_size_tuple,
     from compute_mask import initialize_mask, write_mask  # noqa: PLC0415
     from soma import aims  # noqa: PLC0415
 
-    from generate_masks import RETURN_DICTIONARY  # noqa: PLC0415
+    from champollion_pipeline.generate_masks import RETURN_DICTIONARY  # noqa: PLC0415
 
     try:
         sample_dir = _join(mask_dir, side, sulcus_full)
