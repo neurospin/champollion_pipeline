@@ -5,7 +5,7 @@ Unit tests for generate_embeddings.py
 """
 
 import os
-from unittest.mock import patch
+from unittest.mock import MagicMock, patch
 
 import pytest
 
@@ -450,6 +450,64 @@ class TestRegionsFilter:
                         with patch.object(script, '_make_regions_tmpdir') as mock_make:
                             script.run()
                             mock_make.assert_not_called()
+
+
+class TestProfiling:
+    """Tests for --profiling / cProfile behavior."""
+
+    def test_run_dispatches_to_profiling_when_flag_set(self, temp_dir):
+        script = GenerateEmbeddings()
+        script.parse_args([temp_dir, "loc", temp_dir, "name", "--profiling"])
+
+        with patch.object(script, '_validate_inputs'):
+            with patch.object(script, '_run_with_profiling', return_value=0) as mock_prof:
+                script.run()
+                mock_prof.assert_called_once()
+
+    def test_run_dispatches_to_normal_without_profiling_flag(self, temp_dir):
+        script = GenerateEmbeddings()
+        script.parse_args([temp_dir, "loc", temp_dir, "name"])
+
+        with patch.object(script, '_validate_inputs'):
+            with patch.object(script, '_run_normal', return_value=0) as mock_normal:
+                script.run()
+                mock_normal.assert_called_once()
+
+    def test_run_with_profiling_calls_run_normal(self, temp_dir):
+        script = GenerateEmbeddings()
+        script.parse_args([temp_dir, "loc", temp_dir, "name", "--profiling"])
+
+        with patch('generate_embeddings.cProfile.Profile'):
+            with patch('generate_embeddings.pstats.Stats', return_value=MagicMock()):
+                with patch.object(script, '_run_normal', return_value=42) as mock_normal:
+                    result = script._run_with_profiling()
+                    mock_normal.assert_called_once()
+                    assert result == 42
+
+    def test_run_with_profiling_dumps_profile_file(self, temp_dir):
+        script = GenerateEmbeddings()
+        script.parse_args([temp_dir, "loc", temp_dir, "name", "--profiling"])
+
+        mock_stats = MagicMock()
+
+        with patch('generate_embeddings.cProfile.Profile'):
+            with patch('generate_embeddings.pstats.Stats', return_value=mock_stats):
+                with patch.object(script, '_run_normal', return_value=0):
+                    script._run_with_profiling()
+                    mock_stats.dump_stats.assert_called_once_with('embeddings_profile.prof')
+
+    def test_run_with_profiling_dumps_on_error(self, temp_dir):
+        script = GenerateEmbeddings()
+        script.parse_args([temp_dir, "loc", temp_dir, "name", "--profiling"])
+
+        mock_stats = MagicMock()
+
+        with patch('generate_embeddings.cProfile.Profile'):
+            with patch('generate_embeddings.pstats.Stats', return_value=mock_stats):
+                with patch.object(script, '_run_normal', side_effect=RuntimeError("boom")):
+                    with pytest.raises(RuntimeError):
+                        script._run_with_profiling()
+                    mock_stats.dump_stats.assert_called_once_with('embeddings_profile.prof')
 
 
 @pytest.mark.smoke
