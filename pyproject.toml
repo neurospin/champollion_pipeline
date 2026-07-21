@@ -1,6 +1,6 @@
 [build-system]
-requires = ["hatchling"]
-build-backend = "hatchling.build"
+requires = ["setuptools>=65.0"]
+build-backend = "setuptools.build_meta"
 
 [project]
 name = "champollion-pipeline"
@@ -32,8 +32,8 @@ champollion-train = "champollion_pipeline.train_champollion:main"
 champollion-prune = "champollion_pipeline.prune_failed_subjects:main"
 champollion-purge = "champollion_pipeline.purge_subject:main"
 
-[tool.hatch.build.targets.wheel]
-packages = ["src/champollion_pipeline"]
+[tool.setuptools.packages.find]
+where = ["src"]
 
 [tool.ruff]
 line-length = 120
