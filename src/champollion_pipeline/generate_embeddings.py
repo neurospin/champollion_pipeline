@@ -27,7 +27,7 @@ from champollion_pipeline.utils.lib import CORTICAL_TILES_VERSION
 # Add champollion to path for CKA imports
 _SCRIPT_DIR = dirname(abspath(__file__))
 _CHAMPOLLION_DIR = abspath(join(
-    _SCRIPT_DIR, '..', 'external', 'champollion_V1', 'contrastive'
+    _SCRIPT_DIR, '..', '..', 'external', 'champollion_V1', 'contrastive'
 ))
 if _CHAMPOLLION_DIR not in sys.path:
     sys.path.insert(0, _CHAMPOLLION_DIR)
@@ -653,7 +653,7 @@ class GenerateEmbeddings(ScriptBuilder):
         # Get absolute path to champollion_V1/contrastive
         script_dir = dirname(abspath(__file__))
         champollion_dir = abspath(join(
-            script_dir, '..', 'external', 'champollion_V1', 'contrastive'
+            script_dir, '..', '..', 'external', 'champollion_V1', 'contrastive'
         ))
 
         os.chdir(champollion_dir)
