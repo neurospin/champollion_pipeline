@@ -9,7 +9,7 @@ from unittest.mock import MagicMock, patch
 
 import pytest
 
-from champollion_pipeline.generate_embeddings import GenerateEmbeddings
+from champollion_pipeline.generate_embeddings import GenerateEmbeddings, HuggingFaceStrategy
 
 
 class TestGenerateEmbeddingsInit:
@@ -524,3 +524,60 @@ class TestGenerateEmbeddingsSmoke:
         script = GenerateEmbeddings()
         assert hasattr(script, 'run')
         assert callable(script.run)
+
+
+@pytest.mark.unit
+class TestHuggingFaceStrategy:
+    """Unit tests for HuggingFaceStrategy.fetch() — regression for snapshot_download bugs."""
+
+    def _make_strategy(self, subfolder=None):
+        return HuggingFaceStrategy(subfolder=subfolder)
+
+    def test_fetch_without_subfolder_calls_snapshot_download_no_allow_patterns(self, tmp_path):
+        strategy = self._make_strategy(subfolder=None)
+        with patch('huggingface_hub.snapshot_download',
+                   return_value=str(tmp_path)) as mock_dl:
+            strategy.fetch("neurospin/Champollion_V1", str(tmp_path))
+        call_kwargs = mock_dl.call_args[1]
+        assert 'subfolder' not in call_kwargs
+        assert call_kwargs.get('allow_patterns') is None
+
+    def test_fetch_with_subfolder_uses_allow_patterns(self, tmp_path):
+        strategy = self._make_strategy(subfolder="canonical_corrected_26_1")
+        with patch('huggingface_hub.snapshot_download',
+                   return_value=str(tmp_path)) as mock_dl:
+            strategy.fetch("neurospin/Champollion_V1", str(tmp_path))
+        call_kwargs = mock_dl.call_args[1]
+        assert 'subfolder' not in call_kwargs
+        assert call_kwargs['allow_patterns'] == ["canonical_corrected_26_1/*"]
+
+    def test_fetch_never_passes_subfolder_kwarg(self, tmp_path):
+        for subfolder in [None, "canonical_25", "canonical_corrected_26_1"]:
+            strategy = self._make_strategy(subfolder=subfolder)
+            with patch('huggingface_hub.snapshot_download',
+                       return_value=str(tmp_path)) as mock_dl:
+                strategy.fetch("neurospin/Champollion_V1", str(tmp_path))
+            assert 'subfolder' not in mock_dl.call_args[1], \
+                f"subfolder kwarg must never be passed (subfolder={subfolder!r})"
+
+
+@pytest.mark.unit
+class TestPixiTaskPaths:
+    """Verify pixi task script paths resolve to existing files after relocation."""
+
+    PIXI_TASKS = [
+        ("champollion-config", "src/champollion_pipeline/generate_champollion_config.py"),
+        ("embeddings", "src/champollion_pipeline/generate_embeddings.py"),
+        ("combine", "src/champollion_pipeline/put_together_embeddings.py"),
+        ("train", "src/champollion_pipeline/train_champollion.py"),
+        ("generate-umap-reference", "src/generate_umap_reference.py"),
+    ]
+
+    def test_all_pixi_task_scripts_exist(self):
+        import pathlib
+        repo_root = pathlib.Path(__file__).parent.parent
+        for task_name, rel_path in self.PIXI_TASKS:
+            script = repo_root / rel_path
+            assert script.exists(), (
+                f"pixi task '{task_name}' points to '{rel_path}' which does not exist"
+            )
