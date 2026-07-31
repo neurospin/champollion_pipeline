@@ -167,10 +167,12 @@ class HuggingFaceStrategy(ModelFetchStrategy):
             local_path = join(extract_to, cache_name)
 
             # HuggingFace handles caching internally, but we can force redownload
+            # snapshot_download does not accept subfolder; use allow_patterns instead
+            allow_patterns = [f"{self.subfolder}/*"] if self.subfolder else None
             downloaded_path = snapshot_download(
                 repo_id=repo_id,
                 local_dir=local_path,
-                subfolder=self.subfolder,
+                allow_patterns=allow_patterns,
                 force_download=no_cache
             )
             print(f"Successfully downloaded from Hugging Face to: "
