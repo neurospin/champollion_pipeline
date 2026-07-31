@@ -38,26 +38,34 @@ git submodule update --init --remote --rebase external/champollion_V1
 
 ---
 
-## Issue 2 — `hatchling` missing from the pixi environment
+## Issue 2 — `hatchling` or `editables` missing from the pixi environment
 
-**Symptom:** During `pixi run install-all` or `pixi run update`, a pip install step
+**Symptom A:** During `pixi run install-all` or `pixi run update`, a pip install step
 fails with:
 
 ```
 ERROR: Could not build wheels ... No module named 'hatchling'
 ```
 
-This happens because install tasks use `--no-build-isolation`, which expects the
-build backend (`hatchling`) to already be present in the environment.
+**Symptom B:** A subsequent failure (hatchling is present but `editables` is not):
+
+```
+ModuleNotFoundError: No module named 'editables'
+```
+
+Both happen because install tasks use `--no-build-isolation`, which expects the
+build backend (`hatchling`) and its runtime dependencies (including `editables`)
+to already be present in the environment. With isolation disabled, pip does not
+install build-backend deps automatically.
 
 **Fix for existing environments (one-time):**
 
 ```bash
-pixi add hatchling
+pip install hatchling editables
 ```
 
-**Permanent fix:** included in the current version of `pixi.toml` — `pixi run update`
-will add it automatically once your repo is up to date.
+**Permanent fix:** both packages are now in `pixi.toml` — `pixi run update`
+will add them automatically once your repo is up to date.
 
 ---
 
@@ -114,8 +122,8 @@ git fetch && git checkout -- pixi.lock && git merge --no-edit -X theirs FETCH_HE
 # 3. Update submodule
 git submodule update --init --remote --rebase external/champollion_V1
 
-# 4. Ensure build backend is present
-pixi add hatchling
+# 4. Ensure build backend and its deps are present
+pip install hatchling editables
 
 # 5. Reinstall packages
 pixi run reinstall-packages
