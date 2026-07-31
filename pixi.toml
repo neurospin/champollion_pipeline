@@ -110,11 +110,11 @@ update = """
   pip install -e ../champollion_utils --no-deps --no-build-isolation && \
   pip install -e . --no-deps --no-build-isolation
 """
-champollion-config = "python3 src/generate_champollion_config.py"
-embeddings = "python3 src/generate_embeddings.py"
-combine = "python3 src/put_together_embeddings.py"
-generate-umap-reference = "python3 src/generate_umap_reference.py"
-train = "python3 src/train_champollion.py"
+champollion-config = "python3 src/champollion_pipeline/generate_champollion_config.py"
+embeddings = "python3 src/champollion_pipeline/generate_embeddings.py"
+combine = "python3 src/champollion_pipeline/put_together_embeddings.py"
+generate-umap-reference = "python3 src/champollion_pipeline/generate_umap_reference.py"
+train = "python3 src/champollion_pipeline/train_champollion.py"
 
 # ── Environments ──────────────────────────────────────────────────────────────
 [environments]
