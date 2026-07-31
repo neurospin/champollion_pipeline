@@ -4,7 +4,7 @@ build-backend = "setuptools.build_meta"
 
 [project]
 name = "champollion-pipeline"
-version = "0.2.27"
+version = "0.2.28"
 description = "End-to-end pipeline: raw T1 MRI → sulcal embeddings via cortical tiles and contrastive learning."
 requires-python = ">=3.10"
 license = { text = "CeCILL" }
