@@ -101,6 +101,15 @@ pixi run uninstall-all    # Also remove Pixi-managed dependencies
 
 > ⚠️ `uninstall-all` removes the `data/` folder as well. Back up any data stored there first.
 
+### Updating an existing install
+
+```bash
+pixi run update
+```
+
+If you hit issues (submodule URL mismatch, missing `hatchling`, stale pixi tasks, etc.),
+see [migration_manual.md](migration_manual.md) for symptoms and fixes.
+
 ---
 
 ## 2. Generate Morphologist Graphs
