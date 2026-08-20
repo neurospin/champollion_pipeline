@@ -34,7 +34,7 @@ jobs:
           auth-token: ${{ secrets.PREFIX_DEV_TOKEN }}
 
       - name: Install dependencies
-        run: pixi run install-all
+        run: pixi run --environment default install-all
 
       - name: Ruff lint (auto-fix)
         run: pixi run lint-fix
