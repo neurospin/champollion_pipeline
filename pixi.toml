@@ -119,12 +119,27 @@ combine = "python3 src/champollion_pipeline/put_together_embeddings.py"
 generate-umap-reference = "python3 src/generate_umap_reference.py"
 train = "python3 src/champollion_pipeline/train_champollion.py"
 
+# ── Docs feature (Sphinx documentation toolchain) ────────────────────────────
+[feature.docs.dependencies]
+python = ">=3.8"
+
+[feature.docs.pypi-dependencies]
+sphinx = ">=7.0,<9"
+furo = ">=2024.1"
+myst-parser = ">=3.0"
+sphinx-autodoc-typehints = ">=1.24"
+
+[feature.docs.tasks]
+docs-build = "sphinx-build -W --keep-going -b html docs docs/_build/html"
+docs-serve = "python -m http.server 8080 --directory docs/_build/html"
+
 # ── Environments ──────────────────────────────────────────────────────────────
 [environments]
 default        = { features = ["brainvisa", "cortical-tiles", "embeddings"] }
 embeddings     = { features = ["embeddings"], no-default-feature = true, solve-group = "embeddings" }
 cortical-tiles = { features = ["brainvisa", "cortical-tiles"], no-default-feature = true, solve-group = "cortical-tiles" }
 brainvisa      = { features = ["brainvisa"], no-default-feature = true, solve-group = "brainvisa" }
+docs           = { features = ["docs"], no-default-feature = true, solve-group = "docs" }
 
 # ── Shared tasks (available in all environments) ──────────────────────────────
 [tasks]
