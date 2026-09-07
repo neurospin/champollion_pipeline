@@ -12,7 +12,6 @@ REQ-WIZARD-03: install.sh shall verify pixi is installed, then run
 
 from __future__ import annotations
 
-import os
 import stat
 from pathlib import Path
 
