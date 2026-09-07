@@ -16,7 +16,7 @@ from champollion_pipeline.utils.lib import DERIVATIVES_FOLDER, find_dataset_fold
 
 # Get the script's directory for reliable path resolution
 _SCRIPT_DIR = dirname(abspath(__file__))
-_DEFAULT_CHAMPOLLION_LOC = abspath(join(_SCRIPT_DIR, '..', '..', 'external', 'champollion_V1'))
+_DEFAULT_CHAMPOLLION_LOC = abspath(join(_SCRIPT_DIR, "..", "..", "external", "champollion_V1"))
 _LOCALIZATION_TEMPLATE = "# @package _global_\ndataset_folder: {dataset_folder}\n"
 
 
@@ -26,31 +26,40 @@ class GenerateChampollionConfig(ScriptBuilder):
     def __init__(self):
         super().__init__(
             script_name="generate_champollion_config",
-            description="Defining and generating Champollion's configuration."
+            description="Defining and generating Champollion's configuration.",
         )
         # Configure arguments using method chaining
-        (self.add_argument("crop_path", help="Absolute path to crops path.", type=str)
-         .add_required_argument("--dataset", "Name of the dataset.")
-         .add_optional_argument("--champollion_loc", "Absolute path to Champollion binaries.",
-                                default=_DEFAULT_CHAMPOLLION_LOC)
-         .add_optional_argument("--output",
-                                "Absolute path to desired output. Default is in Champollion_V1/config/dataset/")
-         .add_optional_argument("--external-config",
-                                "External path to write local.yaml (for read-only containers).",
-                                default=None)
-         .add_flag("--external_crops",
-                   "Use crop_path as-is instead of deriving it from --dataset. "
-                   "Replaces the dataset/derivatives/... segment with the actual crop_path location. "
-                   "Requires --dataset to be set (used for config file naming).")
-         .add_optional_argument("--masks",
-                                "Mask version tag (e.g. 'canonical_25'). "
-                                "Must match the value used when running run_cortical_tiles.",
-                                default="canonical_25")
-         .add_optional_argument("--localization",
-                                "Name of the dataset_localization preset to write "
-                                "(e.g. 'local', 'jean-zay'). Must match the value used in "
-                                "train_champollion.py. Default: 'local'.",
-                                default="local"))
+        (
+            self.add_argument("crop_path", help="Absolute path to crops path.", type=str)
+            .add_required_argument("--dataset", "Name of the dataset.")
+            .add_optional_argument(
+                "--champollion_loc", "Absolute path to Champollion binaries.", default=_DEFAULT_CHAMPOLLION_LOC
+            )
+            .add_optional_argument(
+                "--output", "Absolute path to desired output. Default is in Champollion_V1/config/dataset/"
+            )
+            .add_optional_argument(
+                "--external-config", "External path to write local.yaml (for read-only containers).", default=None
+            )
+            .add_flag(
+                "--external_crops",
+                "Use crop_path as-is instead of deriving it from --dataset. "
+                "Replaces the dataset/derivatives/... segment with the actual crop_path location. "
+                "Requires --dataset to be set (used for config file naming).",
+            )
+            .add_optional_argument(
+                "--masks",
+                "Mask version tag (e.g. 'canonical_25'). Must match the value used when running run_cortical_tiles.",
+                default="canonical_25",
+            )
+            .add_optional_argument(
+                "--localization",
+                "Name of the dataset_localization preset to write "
+                "(e.g. 'local', 'jean-zay'). Must match the value used in "
+                "train_champollion.py. Default: 'local'.",
+                default="local",
+            )
+        )
 
     def _get_crop_size(self, crop_dir: str, side: str) -> tuple[int, int, int] | None:
         """Return (sizeX, sizeY, sizeZ) from .npy shape if present, else from .minf.
@@ -94,13 +103,14 @@ class GenerateChampollionConfig(ScriptBuilder):
                 sx, sy, sz = size
                 side_long = "left" if side == "L" else "right"
                 dataset_name = f"{crop_name.replace('.', '')}_{side_long}"
-                filedata = (ref
-                            .replace("REPLACE_CROP_NAME", crop_name)
-                            .replace("REPLACE_DATASET", dataset_name)
-                            .replace("REPLACE_SIDE", side)
-                            .replace("REPLACE_SIZEX", str(sx))
-                            .replace("REPLACE_SIZEY", str(sy))
-                            .replace("REPLACE_SIZEZ", str(sz)))
+                filedata = (
+                    ref.replace("REPLACE_CROP_NAME", crop_name)
+                    .replace("REPLACE_DATASET", dataset_name)
+                    .replace("REPLACE_SIDE", side)
+                    .replace("REPLACE_SIZEX", str(sx))
+                    .replace("REPLACE_SIZEY", str(sy))
+                    .replace("REPLACE_SIZEZ", str(sz))
+                )
                 result_file = join(dataset_loc, f"{dataset_name}.yaml")
                 with open(result_file, "w") as f:
                     f.write(filedata)
@@ -112,8 +122,7 @@ class GenerateChampollionConfig(ScriptBuilder):
         """Validate input paths."""
         if not exists(self.args.crop_path):
             raise ValueError(
-                f"generate_champollion_config: Please input correct values. "
-                f"{self.args.crop_path} does not exist."
+                f"generate_champollion_config: Please input correct values. {self.args.crop_path} does not exist."
             )
 
     def _write_localization_yaml(self, dest_path: str, dataset_folder: str) -> None:
@@ -151,7 +160,7 @@ class GenerateChampollionConfig(ScriptBuilder):
         dataset_folder = find_dataset_folder(self.args.crop_path, self.args.dataset)
 
         my_lines = []
-        with open(reference_yaml_dest, 'r') as f:
+        with open(reference_yaml_dest, "r") as f:
             for line in f.readlines():
                 if self.args.external_crops:
                     # External crops: derive the full relative path from crop_path
@@ -162,10 +171,7 @@ class GenerateChampollionConfig(ScriptBuilder):
                     my_lines.append(line.replace("TESTXX/crops/2mm", relative_path))
                 else:
                     # Standard: use the known derivatives folder structure including mask version
-                    computed_path = (
-                        f"{self.args.dataset}/derivatives/{DERIVATIVES_FOLDER}"
-                        f"/crops/{self.args.masks}/2mm"
-                    )
+                    computed_path = f"{self.args.dataset}/derivatives/{DERIVATIVES_FOLDER}/crops/{self.args.masks}/2mm"
                     my_lines.append(line.replace("TESTXX/crops/2mm", computed_path))
 
         with open(reference_yaml_dest, "w") as f:

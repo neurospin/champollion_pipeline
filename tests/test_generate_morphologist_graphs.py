@@ -163,7 +163,7 @@ class TestValidatePaths:
         script = GenerateMorphologistGraphs()
         script.parse_args(["/nonexistent/input", "/nonexistent/output"])
 
-        with patch.object(script, 'validate_paths', return_value=False):
+        with patch.object(script, "validate_paths", return_value=False):
             with pytest.raises(ValueError, match="Please input valid paths"):
                 script.run()
 
@@ -171,16 +171,16 @@ class TestValidatePaths:
 class TestRunMethod:
     """Test the run method."""
 
-    @ patch('champollion_pipeline.generate_morphologist_graphs.chdir')
-    @ patch('champollion_pipeline.generate_morphologist_graphs.getcwd', return_value="/original/dir")
+    @patch("champollion_pipeline.generate_morphologist_graphs.chdir")
+    @patch("champollion_pipeline.generate_morphologist_graphs.getcwd", return_value="/original/dir")
     def test_run_changes_directory(self, mock_getcwd, mock_chdir, temp_dir):
         """Test that run changes to input directory."""
         script = GenerateMorphologistGraphs()
         script.parse_args([temp_dir, temp_dir])
 
-        with patch.object(script, 'validate_paths', return_value=True):
-            with patch.object(script, '_get_input_files', return_value=["test.nii.gz"]):
-                with patch.object(script, 'execute_command', return_value=0):
+        with patch.object(script, "validate_paths", return_value=True):
+            with patch.object(script, "_get_input_files", return_value=["test.nii.gz"]):
+                with patch.object(script, "execute_command", return_value=0):
                     script.run()
 
                     # Check that chdir was called to input and back
@@ -198,11 +198,13 @@ class TestRunMethod:
 
         test_files = ["subject1.nii.gz", "subject2.nii.gz"]
 
-        with patch.object(script, 'validate_paths', return_value=True):
-            with patch.object(script, '_get_input_files', return_value=test_files):
-                with patch.object(script, 'execute_command', return_value=0) as mock_exec:
-                    with patch('champollion_pipeline.generate_morphologist_graphs.chdir'):
-                        with patch('champollion_pipeline.generate_morphologist_graphs.getcwd', return_value="/original"):
+        with patch.object(script, "validate_paths", return_value=True):
+            with patch.object(script, "_get_input_files", return_value=test_files):
+                with patch.object(script, "execute_command", return_value=0) as mock_exec:
+                    with patch("champollion_pipeline.generate_morphologist_graphs.chdir"):
+                        with patch(
+                            "champollion_pipeline.generate_morphologist_graphs.getcwd", return_value="/original"
+                        ):
                             script.run()
 
                             # Check the command
@@ -220,26 +222,30 @@ class TestRunMethod:
         script = GenerateMorphologistGraphs()
         script.parse_args([temp_dir, temp_dir])
 
-        with patch.object(script, 'validate_paths', return_value=True):
-            with patch.object(script, '_get_input_files', return_value=["test.nii"]):
-                with patch.object(script, 'execute_command', return_value=0) as mock_exec:
-                    with patch('champollion_pipeline.generate_morphologist_graphs.chdir'):
-                        with patch('champollion_pipeline.generate_morphologist_graphs.getcwd', return_value="/original"):
+        with patch.object(script, "validate_paths", return_value=True):
+            with patch.object(script, "_get_input_files", return_value=["test.nii"]):
+                with patch.object(script, "execute_command", return_value=0) as mock_exec:
+                    with patch("champollion_pipeline.generate_morphologist_graphs.chdir"):
+                        with patch(
+                            "champollion_pipeline.generate_morphologist_graphs.getcwd", return_value="/original"
+                        ):
                             script.run()
 
                             # Check that shell=True was passed
-                            assert mock_exec.call_args[1]['shell'] is True
+                            assert mock_exec.call_args[1]["shell"] is True
 
     def test_run_returns_command_result(self, temp_dir):
         """Test that run returns the result from execute_command."""
         script = GenerateMorphologistGraphs()
         script.parse_args([temp_dir, temp_dir])
 
-        with patch.object(script, 'validate_paths', return_value=True):
-            with patch.object(script, '_get_input_files', return_value=["test.nii"]):
-                with patch.object(script, 'execute_command', return_value=42):
-                    with patch('champollion_pipeline.generate_morphologist_graphs.chdir'):
-                        with patch('champollion_pipeline.generate_morphologist_graphs.getcwd', return_value="/original"):
+        with patch.object(script, "validate_paths", return_value=True):
+            with patch.object(script, "_get_input_files", return_value=["test.nii"]):
+                with patch.object(script, "execute_command", return_value=42):
+                    with patch("champollion_pipeline.generate_morphologist_graphs.chdir"):
+                        with patch(
+                            "champollion_pipeline.generate_morphologist_graphs.getcwd", return_value="/original"
+                        ):
                             result = script.run()
                             assert result == 42
 
@@ -249,11 +255,11 @@ class TestRunMethod:
         script.parse_args([temp_dir, temp_dir])
         original_dir = "/original/dir"
 
-        with patch('champollion_pipeline.generate_morphologist_graphs.getcwd', return_value=original_dir):
-            with patch('champollion_pipeline.generate_morphologist_graphs.chdir') as mock_chdir:
-                with patch.object(script, 'validate_paths', return_value=True):
-                    with patch.object(script, '_get_input_files', return_value=["test.nii"]):
-                        with patch.object(script, 'execute_command', return_value=0):
+        with patch("champollion_pipeline.generate_morphologist_graphs.getcwd", return_value=original_dir):
+            with patch("champollion_pipeline.generate_morphologist_graphs.chdir") as mock_chdir:
+                with patch.object(script, "validate_paths", return_value=True):
+                    with patch.object(script, "_get_input_files", return_value=["test.nii"]):
+                        with patch.object(script, "execute_command", return_value=0):
                             script.run()
 
                             # Verify we returned to original directory
@@ -265,7 +271,7 @@ class TestMainFunction:
 
     def test_main_creates_script_and_runs(self, temp_dir):
         """Test that main creates script and calls build().print_args().run()."""
-        with patch('champollion_pipeline.generate_morphologist_graphs.GenerateMorphologistGraphs') as MockScript:
+        with patch("champollion_pipeline.generate_morphologist_graphs.GenerateMorphologistGraphs") as MockScript:
             mock_instance = MagicMock()
             mock_instance.build.return_value = mock_instance
             mock_instance.print_args.return_value = mock_instance
@@ -274,7 +280,7 @@ class TestMainFunction:
 
             from champollion_pipeline.generate_morphologist_graphs import main
 
-            with patch('sys.argv', ['script', temp_dir, temp_dir]):
+            with patch("sys.argv", ["script", temp_dir, temp_dir]):
                 result = main()
 
                 MockScript.assert_called_once()
@@ -298,7 +304,7 @@ class TestCommandFlags:
 
         script.parse_args([str(input_dir), str(output_dir), "--parallel"])
 
-        with patch.object(script, 'execute_command', return_value=0) as mock_exec:
+        with patch.object(script, "execute_command", return_value=0) as mock_exec:
             script.run()
             cmd = mock_exec.call_args[0][0]
             assert "--swf" in cmd
@@ -314,7 +320,7 @@ class TestCommandFlags:
 
         script.parse_args([str(input_dir), str(output_dir)])
 
-        with patch.object(script, 'execute_command', return_value=0) as mock_exec:
+        with patch.object(script, "execute_command", return_value=0) as mock_exec:
             script.run()
             cmd = mock_exec.call_args[0][0]
             assert "--swf" not in cmd
@@ -330,7 +336,7 @@ class TestCommandFlags:
 
         script.parse_args([str(input_dir), str(output_dir)])
 
-        with patch.object(script, 'execute_command', return_value=0) as mock_exec:
+        with patch.object(script, "execute_command", return_value=0) as mock_exec:
             script.run()
             cmd = mock_exec.call_args[0][0]
             cmd_str = " ".join(cmd) if isinstance(cmd, list) else cmd
@@ -347,7 +353,7 @@ class TestCommandFlags:
 
         script.parse_args([str(input_dir), str(output_dir), "--enable-sulcal-recognition"])
 
-        with patch.object(script, 'execute_command', return_value=0) as mock_exec:
+        with patch.object(script, "execute_command", return_value=0) as mock_exec:
             script.run()
             cmd = mock_exec.call_args[0][0]
             cmd_str = " ".join(cmd) if isinstance(cmd, list) else cmd
@@ -372,7 +378,7 @@ class TestGenerateMorphologistGraphsIntegration:
 
         script.parse_args([str(input_dir), str(output_dir)])
 
-        with patch.object(script, 'execute_command', return_value=0) as mock_exec:
+        with patch.object(script, "execute_command", return_value=0) as mock_exec:
             result = script.run()
 
             assert result == 0
@@ -395,7 +401,7 @@ class TestGenerateMorphologistGraphsSmoke:
     def test_script_has_required_methods(self):
         """Test that script has all required methods."""
         script = GenerateMorphologistGraphs()
-        assert hasattr(script, 'run')
-        assert hasattr(script, '_get_input_files')
+        assert hasattr(script, "run")
+        assert hasattr(script, "_get_input_files")
         assert callable(script.run)
         assert callable(script._get_input_files)

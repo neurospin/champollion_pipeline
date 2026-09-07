@@ -27,9 +27,7 @@ def find_dataset_folder(path: str, dataset_name: str) -> str:
     for i, part in enumerate(parts):
         if part == dataset_name:
             return str(Path(*parts[:i]))
-    raise ValueError(
-        f"Dataset name '{dataset_name}' not found in path: {path}"
-    )
+    raise ValueError(f"Dataset name '{dataset_name}' not found in path: {path}")
 
 
 def are_paths_valid(paths: list[str]) -> bool | None:
@@ -59,8 +57,8 @@ def get_nth_parent_dir(folder: str, n: int) -> str:
 
     # Substracting 3 instead of 1 because of the first and
     # last element being ''
-    if n >= len(folder.split('/')) - 3:
-        return '/' + folder.split('/')[1] + '/'
+    if n >= len(folder.split("/")) - 3:
+        return "/" + folder.split("/")[1] + "/"
     else:
         parent_folder: str = folder
         for i in range(n):

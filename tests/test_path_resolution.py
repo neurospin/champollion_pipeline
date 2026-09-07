@@ -59,18 +59,25 @@ class TestExternalPathResolution:
         expected = EXTERNAL_DIR / "champollion_V1" / "contrastive" / "utils"
 
         script = PutTogetherEmbeddings()
-        script.parse_args([
-            "--embeddings_subpath", "sub/path",
-            "--output_path", temp_dir,
-            "--path_models", temp_dir,
-        ])
+        script.parse_args(
+            [
+                "--embeddings_subpath",
+                "sub/path",
+                "--output_path",
+                temp_dir,
+                "--path_models",
+                temp_dir,
+            ]
+        )
 
-        with patch('champollion_pipeline.put_together_embeddings.makedirs'), \
-                patch.object(script, 'validate_paths', return_value=True), \
-                patch('champollion_pipeline.put_together_embeddings.chdir') as mock_chdir, \
-                patch('champollion_pipeline.put_together_embeddings.getcwd', return_value="/original"), \
-                patch.object(script, 'build_command', return_value=["cmd"]), \
-                patch.object(script, 'execute_command', return_value=0):
+        with (
+            patch("champollion_pipeline.put_together_embeddings.makedirs"),
+            patch.object(script, "validate_paths", return_value=True),
+            patch("champollion_pipeline.put_together_embeddings.chdir") as mock_chdir,
+            patch("champollion_pipeline.put_together_embeddings.getcwd", return_value="/original"),
+            patch.object(script, "build_command", return_value=["cmd"]),
+            patch.object(script, "execute_command", return_value=0),
+        ):
             script.run()
 
         assert call(str(expected)) in mock_chdir.call_args_list
@@ -79,23 +86,26 @@ class TestExternalPathResolution:
         """run_cortical_tiles.run() invokes <root>/external/cortical_tiles/.../generate_sulcal_regions.py."""
         from champollion_pipeline.run_cortical_tiles import RunCorticalTiles
 
-        expected = (
-            EXTERNAL_DIR / "cortical_tiles" / "deep_folding" / "brainvisa"
-            / "generate_sulcal_regions.py"
-        )
+        expected = EXTERNAL_DIR / "cortical_tiles" / "deep_folding" / "brainvisa" / "generate_sulcal_regions.py"
 
         script = RunCorticalTiles()
-        script.parse_args([
-            temp_dir,
-            temp_dir,
-            "--path_to_graph", "graphs",
-            "--path_sk_with_hull", "skeleton",
-        ])
+        script.parse_args(
+            [
+                temp_dir,
+                temp_dir,
+                "--path_to_graph",
+                "graphs",
+                "--path_sk_with_hull",
+                "skeleton",
+            ]
+        )
 
-        with patch('champollion_pipeline.run_cortical_tiles.chdir'), \
-                patch('champollion_pipeline.run_cortical_tiles.getcwd', return_value="/original"), \
-                patch.object(script, 'validate_paths', return_value=True), \
-                patch.object(script, 'execute_command', return_value=0) as mock_exec:
+        with (
+            patch("champollion_pipeline.run_cortical_tiles.chdir"),
+            patch("champollion_pipeline.run_cortical_tiles.getcwd", return_value="/original"),
+            patch.object(script, "validate_paths", return_value=True),
+            patch.object(script, "execute_command", return_value=0) as mock_exec,
+        ):
             script.run()
 
         invoked = [

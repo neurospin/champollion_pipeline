@@ -26,9 +26,7 @@ from champollion_pipeline.utils.lib import CORTICAL_TILES_VERSION
 
 # Add champollion to path for CKA imports
 _SCRIPT_DIR = dirname(abspath(__file__))
-_CHAMPOLLION_DIR = abspath(join(
-    _SCRIPT_DIR, '..', '..', 'external', 'champollion_V1', 'contrastive'
-))
+_CHAMPOLLION_DIR = abspath(join(_SCRIPT_DIR, "..", "..", "external", "champollion_V1", "contrastive"))
 if _CHAMPOLLION_DIR not in sys.path:
     sys.path.insert(0, _CHAMPOLLION_DIR)
 
@@ -64,12 +62,11 @@ class LocalPathStrategy(ModelFetchStrategy):
             return models_path
 
         # If it's an archive file, check cache or extract
-        if any(models_path.endswith(ext) for ext in
-               ['.tar.xz', '.tar.gz', '.tgz', '.gz']):
+        if any(models_path.endswith(ext) for ext in [".tar.xz", ".tar.gz", ".tgz", ".gz"]):
             # Compute cache path based on archive name
             # Extract to a subdirectory named after the archive
             archive_name = Path(models_path).stem
-            if archive_name.endswith('.tar'):
+            if archive_name.endswith(".tar"):
                 archive_name = Path(archive_name).stem
             cached_path = join(extract_to, archive_name)
 
@@ -98,18 +95,18 @@ class LocalPathStrategy(ModelFetchStrategy):
         """Extract archive and return path to extracted content."""
         os.makedirs(extract_to, exist_ok=True)
 
-        if archive_path.endswith(('.tar.xz', '.tar.gz', '.tgz')):
-            with tarfile.open(archive_path, 'r:*') as tar:
+        if archive_path.endswith((".tar.xz", ".tar.gz", ".tgz")):
+            with tarfile.open(archive_path, "r:*") as tar:
                 tar.extractall(path=extract_to)
                 members = tar.getmembers()
                 if members:
                     # Return the extract_to path where contents are
                     print(f"Extracted to: {extract_to}")
                     return extract_to
-        elif archive_path.endswith('.gz'):
+        elif archive_path.endswith(".gz"):
             output_path = join(extract_to, Path(archive_path).stem)
-            with gzip.open(archive_path, 'rb') as f_in:
-                with open(output_path, 'wb') as f_out:
+            with gzip.open(archive_path, "rb") as f_in:
+                with open(output_path, "wb") as f_out:
                     shutil.copyfileobj(f_in, f_out)
             print(f"Extracted to: {output_path}")
             return output_path
@@ -127,26 +124,27 @@ class HuggingFaceStrategy(ModelFetchStrategy):
         """Check if path looks like a Hugging Face repo ID or URL."""
         # Check if it's a huggingface.co URL
         parsed = urlparse(models_path)
-        if parsed.scheme in ['http', 'https']:
-            if 'huggingface.co' in parsed.netloc:
+        if parsed.scheme in ["http", "https"]:
+            if "huggingface.co" in parsed.netloc:
                 return True
             return False
         # HF repo IDs are typically in format: username/repo-name
         # Check if it looks like a repo ID (no file extensions)
-        return ('/' in models_path and
-                not models_path.startswith('/') and
-                not any(models_path.endswith(ext) for ext in
-                        ['.tar.xz', '.tar.gz', '.tgz', '.gz', '.zip']))
+        return (
+            "/" in models_path
+            and not models_path.startswith("/")
+            and not any(models_path.endswith(ext) for ext in [".tar.xz", ".tar.gz", ".tgz", ".gz", ".zip"])
+        )
 
     def _extract_repo_id(self, models_path: str) -> str:
         """Extract repo ID from a Hugging Face URL or return as-is if already a repo ID."""
         parsed = urlparse(models_path)
-        if parsed.scheme in ['http', 'https'] and 'huggingface.co' in parsed.netloc:
+        if parsed.scheme in ["http", "https"] and "huggingface.co" in parsed.netloc:
             # URL format: https://huggingface.co/username/repo-name
             # Path is /username/repo-name, strip leading slash
-            path_parts = parsed.path.strip('/').split('/')
+            path_parts = parsed.path.strip("/").split("/")
             if len(path_parts) >= 2:
-                return '/'.join(path_parts[:2])  # username/repo-name
+                return "/".join(path_parts[:2])  # username/repo-name
             elif len(path_parts) == 1:
                 return path_parts[0]  # Just repo-name for official repos
         return models_path  # Already a repo ID
@@ -162,7 +160,7 @@ class HuggingFaceStrategy(ModelFetchStrategy):
             from huggingface_hub import snapshot_download
 
             # Cache per (repo, subfolder) to avoid collisions across mask versions
-            repo_name = repo_id.split('/')[-1]
+            repo_name = repo_id.split("/")[-1]
             cache_name = f"{repo_name}_{self.subfolder}" if self.subfolder else repo_name
             local_path = join(extract_to, cache_name)
 
@@ -170,26 +168,19 @@ class HuggingFaceStrategy(ModelFetchStrategy):
             # snapshot_download does not accept subfolder; use allow_patterns instead
             allow_patterns = [f"{self.subfolder}/*"] if self.subfolder else None
             downloaded_path = snapshot_download(
-                repo_id=repo_id,
-                local_dir=local_path,
-                allow_patterns=allow_patterns,
-                force_download=no_cache
+                repo_id=repo_id, local_dir=local_path, allow_patterns=allow_patterns, force_download=no_cache
             )
             if self.subfolder:
                 downloaded_path = join(downloaded_path, self.subfolder)
-            print(f"Successfully downloaded from Hugging Face to: "
-                  f"{downloaded_path}")
+            print(f"Successfully downloaded from Hugging Face to: {downloaded_path}")
             return downloaded_path
 
         except ImportError:
             raise ImportError(
-                "huggingface_hub is required for Hugging Face downloads. "
-                "Install it with: pip install huggingface_hub"
+                "huggingface_hub is required for Hugging Face downloads. Install it with: pip install huggingface_hub"
             )
         except Exception as e:
-            raise RuntimeError(
-                f"Failed to download from Hugging Face: {e}"
-            )
+            raise RuntimeError(f"Failed to download from Hugging Face: {e}")
 
 
 class RemoteArchiveStrategy(ModelFetchStrategy):
@@ -198,11 +189,10 @@ class RemoteArchiveStrategy(ModelFetchStrategy):
     def can_handle(self, models_path: str) -> bool:
         """Check if path is a remote URL to an archive."""
         parsed = urlparse(models_path)
-        if parsed.scheme not in ['http', 'https', 'ftp']:
+        if parsed.scheme not in ["http", "https", "ftp"]:
             return False
         # Check if it ends with archive extensions
-        return any(models_path.endswith(ext) for ext in
-                   ['.tar.xz', '.tar.gz', '.tgz', '.gz', '.zip'])
+        return any(models_path.endswith(ext) for ext in [".tar.xz", ".tar.gz", ".tgz", ".gz", ".zip"])
 
     def fetch(self, models_path: str, extract_to: str, no_cache: bool = False) -> str:
         """Download and extract remote archive."""
@@ -211,7 +201,7 @@ class RemoteArchiveStrategy(ModelFetchStrategy):
         # Compute cache path based on archive name
         filename = Path(urlparse(models_path).path).name
         archive_name = Path(filename).stem
-        if archive_name.endswith('.tar'):
+        if archive_name.endswith(".tar"):
             archive_name = Path(archive_name).stem
         cached_path = join(extract_to, archive_name)
 
@@ -236,9 +226,7 @@ class RemoteArchiveStrategy(ModelFetchStrategy):
             print(f"Downloaded to: {local_archive}")
 
             # Extract the archive
-            extracted_path = self._extract_archive(
-                local_archive, extract_to
-            )
+            extracted_path = self._extract_archive(local_archive, extract_to)
 
             # Clean up the archive file
             os.remove(local_archive)
@@ -246,27 +234,25 @@ class RemoteArchiveStrategy(ModelFetchStrategy):
             return extracted_path
 
         except Exception as e:
-            raise RuntimeError(
-                f"Failed to download or extract archive: {e}"
-            )
+            raise RuntimeError(f"Failed to download or extract archive: {e}")
 
     def _extract_archive(self, archive_path: str, extract_to: str) -> str:
         """Extract archive and return path to extracted content."""
         print(f"Extracting {archive_path}...")
 
-        if archive_path.endswith(('.tar.xz', '.tar.gz', '.tgz')):
-            with tarfile.open(archive_path, 'r:*') as tar:
+        if archive_path.endswith((".tar.xz", ".tar.gz", ".tgz")):
+            with tarfile.open(archive_path, "r:*") as tar:
                 tar.extractall(path=extract_to)
                 members = tar.getmembers()
                 if members:
-                    top_dir = members[0].name.split('/')[0]
+                    top_dir = members[0].name.split("/")[0]
                     extracted_path = join(extract_to, top_dir)
                     print(f"Extracted to: {extracted_path}")
                     return extracted_path
-        elif archive_path.endswith('.gz'):
+        elif archive_path.endswith(".gz"):
             output_path = join(extract_to, Path(archive_path).stem)
-            with gzip.open(archive_path, 'rb') as f_in:
-                with open(output_path, 'wb') as f_out:
+            with gzip.open(archive_path, "rb") as f_in:
+                with open(output_path, "wb") as f_out:
                     shutil.copyfileobj(f_in, f_out)
             print(f"Extracted to: {output_path}")
             return output_path
@@ -283,8 +269,7 @@ class InteractiveFallbackStrategy(ModelFetchStrategy):
 
     def fetch(self, models_path: str, extract_to: str, no_cache: bool = False) -> str:
         """Ask user for local archive path (only works in interactive mode)."""
-        print(f"\nCannot automatically retrieve models from: "
-              f"{models_path}")
+        print(f"\nCannot automatically retrieve models from: {models_path}")
 
         # Check if we're in an interactive terminal
         if not sys.stdin.isatty():
@@ -299,19 +284,14 @@ class InteractiveFallbackStrategy(ModelFetchStrategy):
         print("\nPlease provide a local path to the models or archive.")
         response = input("Do you have a local copy? (yes/no): ").strip()
 
-        if response.lower() not in ['yes', 'y']:
+        if response.lower() not in ["yes", "y"]:
             print("Cannot proceed without models. Exiting gracefully.")
             sys.exit(0)
 
-        archive_path = input(
-            "Path to models directory or archive "
-            "(tar.xz, tar.gz, .gz): "
-        ).strip()
+        archive_path = input("Path to models directory or archive (tar.xz, tar.gz, .gz): ").strip()
 
         if not exists(archive_path):
-            raise FileNotFoundError(
-                f"Path not found: {archive_path}"
-            )
+            raise FileNotFoundError(f"Path not found: {archive_path}")
 
         # If it's a directory, use it directly
         if os.path.isdir(archive_path):
@@ -320,7 +300,7 @@ class InteractiveFallbackStrategy(ModelFetchStrategy):
 
         # Check for cached extraction
         archive_name = Path(archive_path).stem
-        if archive_name.endswith('.tar'):
+        if archive_name.endswith(".tar"):
             archive_name = Path(archive_name).stem
         cached_path = join(extract_to, archive_name)
 
@@ -343,19 +323,19 @@ class InteractiveFallbackStrategy(ModelFetchStrategy):
         """Extract archive and return path to extracted content."""
         os.makedirs(extract_to, exist_ok=True)
 
-        if archive_path.endswith(('.tar.xz', '.tar.gz', '.tgz')):
-            with tarfile.open(archive_path, 'r:*') as tar:
+        if archive_path.endswith((".tar.xz", ".tar.gz", ".tgz")):
+            with tarfile.open(archive_path, "r:*") as tar:
                 tar.extractall(path=extract_to)
                 members = tar.getmembers()
                 if members:
-                    top_dir = members[0].name.split('/')[0]
+                    top_dir = members[0].name.split("/")[0]
                     extracted_path = join(extract_to, top_dir)
                     print(f"Extracted to: {extracted_path}")
                     return extracted_path
-        elif archive_path.endswith('.gz'):
+        elif archive_path.endswith(".gz"):
             output_path = join(extract_to, Path(archive_path).stem)
-            with gzip.open(archive_path, 'rb') as f_in:
-                with open(output_path, 'wb') as f_out:
+            with gzip.open(archive_path, "rb") as f_in:
+                with open(output_path, "wb") as f_out:
                     shutil.copyfileobj(f_in, f_out)
             print(f"Extracted to: {output_path}")
             return output_path
@@ -369,127 +349,102 @@ class GenerateEmbeddings(ScriptBuilder):
     def __init__(self):
         super().__init__(
             script_name="generate_embeddings",
-            description=(
-                "Generate embeddings and train classifiers for "
-                "deep learning models."
-            )
+            description=("Generate embeddings and train classifiers for deep learning models."),
         )
         # Configure arguments using method chaining
-        (self.add_argument(
-            "models_path", type=str,
-            help="Path to the directory containing model folders.")
-         .add_argument(
-            "dataset_localization", type=str,
-            help=(
-                "Config key selecting dataset_localization/{key}.yaml inside "
-                "external/champollion_V1/contrastive/configs/. "
-                "Use 'local' for any dataset processed on this machine — "
-                "it maps to the dataset_folder set by generate_champollion_config.py. "
-                "Example: local"
-            ))
-         .add_argument(
-            "datasets_root", type=str,
-            help=(
-                "Absolute path to the dataset root directory "
-                "(e.g. /my/path/to/dataset_name/)."
-            ))
-         .add_argument(
-            "short_name", type=str,
-            help=(
-                "Name of the directory where to store both "
-                "embeddings and aucs."
-            ))
-         .add_argument(
-            "--datasets", type=str, nargs="+",
-            default=["toto"],
-            help="List of dataset names (default: ['toto']).")
-         .add_argument(
-            "--labels", type=str, nargs="+",
-            default=["Sex"],
-            help="List of labels (default: ['Sex']).")
-         .add_optional_argument(
-            "--classifier_name", "Classifier name.",
-            default="svm")
-         .add_flag("--overwrite", "Overwrite existing embeddings.")
-         .add_flag(
-            "--embeddings_only",
-            "Only compute embeddings (skip classifiers).")
-         .add_flag(
-            "--use_best_model",
-            "Use the best model saved during training.")
-         .add_argument(
-            "--subsets", type=str, nargs="+",
-            default=["full"],
-            help="Subsets of data to train on (default: ['full']).")
-         .add_argument(
-            "--epochs", type=str, nargs="+",
-            default=["None"],
-            help="List of epochs to evaluate (default: [None]).")
-         .add_optional_argument(
-            "--config_path",
-            "Path to dataset config directory.",
-            default=None)
-         .add_optional_argument(
-            "--split",
-            "Splitting strategy ('random' or 'custom').",
-            default="random")
-         .add_optional_argument(
-            "--cv",
-            "Number of cross-validation folds.",
-            default=5,
-            type_=int)
-         .add_optional_argument(
-            "--splits_basedir",
-            "Directory for custom splits.", default="")
-         .add_optional_argument(
-            "--idx_region_evaluation",
-            "Index of region to evaluate (multi-head models).",
-            default=None,
-            type_=int)
-         .add_flag("--verbose", "Enable verbose output.")
-         .add_flag("--cpu", "Force CPU usage (disable CUDA).")
-         .add_flag("--profiling", "Enable Python profiling (cProfile).")
-         .add_flag("--run-cka", "Run CKA coherence test after embeddings.")
-         .add_flag("--no-cache", "Force re-extraction of archive (ignore cache).")
-         .add_optional_argument(
-            "--nb_jobs",
-            "Number of CPU workers for DataLoader.",
-            default=None, type_=int)
-         .add_optional_argument(
-            "--cortical_version",
-            "Derivatives folder name to use in config YAML paths "
-            "(e.g. 'cortical_tiles-2027' or 'deep_folding-2025'). "
-            f"Defaults to the current release: cortical_tiles-{CORTICAL_TILES_VERSION}. "
-            "Rewrites the folder in all YAMLs under --config_path before running. "
-            "Use --legacy as a shorthand for deep_folding-2025.",
-            default=f"cortical_tiles-{CORTICAL_TILES_VERSION}")
-         .add_flag(
-            "--legacy",
-            "Rewrite config YAML paths to use deep_folding-2025. "
-            "Shorthand for --cortical_version deep_folding-2025, "
-            "for datasets generated before the cortical_tiles rename.")
-         .add_optional_argument(
-            "--masks-version",
-            "Mask version subfolder to download from the HuggingFace repo "
-            "(e.g. 'canonical_25'). When set, only the matching subfolder is "
-            "downloaded and the local cache is keyed per version. "
-            "Ignored when models_path is a local directory.",
-            default=None)
-         .add_argument(
-            "--regions", type=str, nargs="+", default=None,
-            help=(
-                "Restrict embedding generation to specific region names "
-                "(e.g. SC-sylv_left FIP-FIPPoCinf_right). "
-                "By default all regions found in models_path are processed."
-            )))
+        (
+            self.add_argument("models_path", type=str, help="Path to the directory containing model folders.")
+            .add_argument(
+                "dataset_localization",
+                type=str,
+                help=(
+                    "Config key selecting dataset_localization/{key}.yaml inside "
+                    "external/champollion_V1/contrastive/configs/. "
+                    "Use 'local' for any dataset processed on this machine — "
+                    "it maps to the dataset_folder set by generate_champollion_config.py. "
+                    "Example: local"
+                ),
+            )
+            .add_argument(
+                "datasets_root",
+                type=str,
+                help=("Absolute path to the dataset root directory (e.g. /my/path/to/dataset_name/)."),
+            )
+            .add_argument(
+                "short_name", type=str, help=("Name of the directory where to store both embeddings and aucs.")
+            )
+            .add_argument(
+                "--datasets", type=str, nargs="+", default=["toto"], help="List of dataset names (default: ['toto'])."
+            )
+            .add_argument("--labels", type=str, nargs="+", default=["Sex"], help="List of labels (default: ['Sex']).")
+            .add_optional_argument("--classifier_name", "Classifier name.", default="svm")
+            .add_flag("--overwrite", "Overwrite existing embeddings.")
+            .add_flag("--embeddings_only", "Only compute embeddings (skip classifiers).")
+            .add_flag("--use_best_model", "Use the best model saved during training.")
+            .add_argument(
+                "--subsets",
+                type=str,
+                nargs="+",
+                default=["full"],
+                help="Subsets of data to train on (default: ['full']).",
+            )
+            .add_argument(
+                "--epochs", type=str, nargs="+", default=["None"], help="List of epochs to evaluate (default: [None])."
+            )
+            .add_optional_argument("--config_path", "Path to dataset config directory.", default=None)
+            .add_optional_argument("--split", "Splitting strategy ('random' or 'custom').", default="random")
+            .add_optional_argument("--cv", "Number of cross-validation folds.", default=5, type_=int)
+            .add_optional_argument("--splits_basedir", "Directory for custom splits.", default="")
+            .add_optional_argument(
+                "--idx_region_evaluation", "Index of region to evaluate (multi-head models).", default=None, type_=int
+            )
+            .add_flag("--verbose", "Enable verbose output.")
+            .add_flag("--cpu", "Force CPU usage (disable CUDA).")
+            .add_flag("--profiling", "Enable Python profiling (cProfile).")
+            .add_flag("--run-cka", "Run CKA coherence test after embeddings.")
+            .add_flag("--no-cache", "Force re-extraction of archive (ignore cache).")
+            .add_optional_argument("--nb_jobs", "Number of CPU workers for DataLoader.", default=None, type_=int)
+            .add_optional_argument(
+                "--cortical_version",
+                "Derivatives folder name to use in config YAML paths "
+                "(e.g. 'cortical_tiles-2027' or 'deep_folding-2025'). "
+                f"Defaults to the current release: cortical_tiles-{CORTICAL_TILES_VERSION}. "
+                "Rewrites the folder in all YAMLs under --config_path before running. "
+                "Use --legacy as a shorthand for deep_folding-2025.",
+                default=f"cortical_tiles-{CORTICAL_TILES_VERSION}",
+            )
+            .add_flag(
+                "--legacy",
+                "Rewrite config YAML paths to use deep_folding-2025. "
+                "Shorthand for --cortical_version deep_folding-2025, "
+                "for datasets generated before the cortical_tiles rename.",
+            )
+            .add_optional_argument(
+                "--masks-version",
+                "Mask version subfolder to download from the HuggingFace repo "
+                "(e.g. 'canonical_25'). When set, only the matching subfolder is "
+                "downloaded and the local cache is keyed per version. "
+                "Ignored when models_path is a local directory.",
+                default=None,
+            )
+            .add_argument(
+                "--regions",
+                type=str,
+                nargs="+",
+                default=None,
+                help=(
+                    "Restrict embedding generation to specific region names "
+                    "(e.g. SC-sylv_left FIP-FIPPoCinf_right). "
+                    "By default all regions found in models_path are processed."
+                ),
+            )
+        )
 
     def _make_regions_tmpdir(self, models_path: str) -> str:
         """Return a temp dir containing symlinks to only the requested region subdirs."""
         missing = [r for r in self.args.regions if not os.path.isdir(join(models_path, r))]
         if missing:
-            raise FileNotFoundError(
-                f"Regions not found in {models_path}: {', '.join(missing)}"
-            )
+            raise FileNotFoundError(f"Regions not found in {models_path}: {', '.join(missing)}")
         tmpdir = tempfile.mkdtemp(prefix="champollion_regions_")
         for region in self.args.regions:
             os.symlink(join(models_path, region), join(tmpdir, region))
@@ -497,20 +452,19 @@ class GenerateEmbeddings(ScriptBuilder):
 
     def _get_derivatives_folder(self) -> str:
         """Return the derivatives folder to use, resolving --legacy and --cortical_version."""
-        if getattr(self.args, 'legacy', False):
+        if getattr(self.args, "legacy", False):
             return "deep_folding-2025"
         return self.args.cortical_version
 
     def _patch_config_paths(self, config_path: str, target_folder: str) -> None:
         """Rewrite the derivatives folder in every YAML under config_path in-place."""
         import re
-        pattern = re.compile(r'(derivatives/)([^/\n]+)(/crops(?:/[^/\n]+)*/2mm)')
+
+        pattern = re.compile(r"(derivatives/)([^/\n]+)(/crops(?:/[^/\n]+)*/2mm)")
         patched = 0
         for yaml_file in Path(config_path).rglob("*.yaml"):
             text = yaml_file.read_text()
-            new_text = pattern.sub(
-                lambda m: f"{m.group(1)}{target_folder}{m.group(3)}", text
-            )
+            new_text = pattern.sub(lambda m: f"{m.group(1)}{target_folder}{m.group(3)}", text)
             if new_text != text:
                 yaml_file.write_text(new_text)
                 patched += 1
@@ -536,18 +490,26 @@ class GenerateEmbeddings(ScriptBuilder):
         # Define extraction directory (where to store downloaded/extracted)
         # Use data/{datasets_root}/derivatives/champollion_V1/models_cache
         script_dir = dirname(abspath(__file__))
-        data_dir = join(script_dir, '..', '..', 'data', self.args.datasets_root.lstrip('/'),
-                        'derivatives', 'champollion_V1', 'models_cache')
+        data_dir = join(
+            script_dir,
+            "..",
+            "..",
+            "data",
+            self.args.datasets_root.lstrip("/"),
+            "derivatives",
+            "champollion_V1",
+            "models_cache",
+        )
         extract_to = abspath(data_dir)
         os.makedirs(extract_to, exist_ok=True)
 
         # Get no_cache flag (force re-extraction)
-        no_cache = getattr(self.args, 'no_cache', False)
+        no_cache = getattr(self.args, "no_cache", False)
 
         # Check HuggingFace and URL strategies first with the ORIGINAL path
         # These strategies look for semantic patterns (e.g., "user/repo", URLs)
         # that would be destroyed by path resolution
-        masks_version = getattr(self.args, 'masks_version', None)
+        masks_version = getattr(self.args, "masks_version", None)
         hf_strategy = HuggingFaceStrategy(subfolder=masks_version)
         if hf_strategy.can_handle(models_path):
             try:
@@ -568,7 +530,7 @@ class GenerateEmbeddings(ScriptBuilder):
         # This ensures relative paths like ../../models.tar.xz work
         resolved_path = models_path
         if not urlparse(models_path).scheme:  # Not a URL
-            if not models_path.startswith('/'):  # Relative path
+            if not models_path.startswith("/"):  # Relative path
                 resolved_path = abspath(models_path)
 
         # Try local path strategy with resolved path
@@ -586,9 +548,7 @@ class GenerateEmbeddings(ScriptBuilder):
 
     def _validate_inputs(self):
         if self.args.config_path and not exists(self.args.config_path):
-            raise FileNotFoundError(
-                f"--config_path does not exist: {self.args.config_path}"
-            )
+            raise FileNotFoundError(f"--config_path does not exist: {self.args.config_path}")
 
     def run(self):
         """Execute the embeddings pipeline script."""
@@ -608,14 +568,14 @@ class GenerateEmbeddings(ScriptBuilder):
             profiler.disable()
             # Save profiling results
             stats = pstats.Stats(profiler)
-            stats.sort_stats('cumulative')
-            stats.dump_stats('embeddings_profile.prof')
+            stats.sort_stats("cumulative")
+            stats.dump_stats("embeddings_profile.prof")
             print("\nProfiling results saved to embeddings_profile.prof")
             print("View with: python -m pstats embeddings_profile.prof")
             # Print top 20 functions
             stream = StringIO()
             stats_print = pstats.Stats(profiler, stream=stream)
-            stats_print.sort_stats('cumulative')
+            stats_print.sort_stats("cumulative")
             stats_print.print_stats(20)
             print(stream.getvalue())
 
@@ -656,9 +616,7 @@ class GenerateEmbeddings(ScriptBuilder):
 
         # Get absolute path to champollion_V1/contrastive
         script_dir = dirname(abspath(__file__))
-        champollion_dir = abspath(join(
-            script_dir, '..', '..', 'external', 'champollion_V1', 'contrastive'
-        ))
+        champollion_dir = abspath(join(script_dir, "..", "..", "external", "champollion_V1", "contrastive"))
 
         os.chdir(champollion_dir)
 
@@ -685,18 +643,13 @@ class GenerateEmbeddings(ScriptBuilder):
             "idx_region_evaluation": None,
             "verbose": False,
             "cpu": False,
-            "nb_jobs": None
+            "nb_jobs": None,
         }
 
         cmd = self.build_command(
             script_path="evaluation/embeddings_pipeline.py",
-            required_args=[
-                "models_path",
-                "dataset_localization",
-                "datasets_root",
-                "short_name"
-                ],
-            defaults=defaults
+            required_args=["models_path", "dataset_localization", "datasets_root", "short_name"],
+            defaults=defaults,
         )
 
         try:
@@ -721,7 +674,7 @@ class GenerateEmbeddings(ScriptBuilder):
 
         # CKA compares all embeddings found in models_path
         # Output goes to cka_results inside models_path
-        cka_output = join(self.args.models_path, 'cka_results')
+        cka_output = join(self.args.models_path, "cka_results")
 
         print(f"Models path: {self.args.models_path}")
         print(f"CKA output: {cka_output}")
@@ -729,9 +682,9 @@ class GenerateEmbeddings(ScriptBuilder):
         try:
             test_models_coherence_from_directory(
                 models_dir=self.args.models_path,
-                embedding_filename='full_embeddings.csv',
+                embedding_filename="full_embeddings.csv",
                 output_dir=cka_output,
-                subject_column='Subject'
+                subject_column="Subject",
             )
             print("CKA coherence test completed.")
         except Exception as e:

@@ -26,6 +26,7 @@ def test_gmpy2_has_valid_version():
     Or:  pip install --force-reinstall --no-deps gmpy2==2.2.1
     """
     import gmpy2
+
     assert gmpy2.__version__ is not None, (
         "gmpy2.__version__ is None — a system gmpy2 without pip metadata is "
         "leaking into the pixi environment.\n"
@@ -77,10 +78,7 @@ def test_champollion_utils_importable():
     try:
         from champollion_utils.script_builder import ScriptBuilder  # noqa: F401
     except ImportError as e:
-        pytest.fail(
-            f"champollion_utils is not installed. Run: pixi run install-utils\n"
-            f"Error: {e}"
-        )
+        pytest.fail(f"champollion_utils is not installed. Run: pixi run install-utils\nError: {e}")
 
 
 @pytest.mark.smoke

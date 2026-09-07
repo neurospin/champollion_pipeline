@@ -33,6 +33,7 @@ from champollion_utils.script_builder import ScriptBuilder
 # Parallel workers (must be module-level for joblib pickling)
 # --------------------------------------------------------------------------- #
 
+
 def _get_subject_voxel_counts(sub, brainvisa_dir):
     """Worker: load one graph and return (subject_name, {sulcus: voxel_count}).
 
@@ -46,27 +47,28 @@ def _get_subject_voxel_counts(sub, brainvisa_dir):
         _sys.path.insert(0, brainvisa_dir)
     from soma import aims  # noqa: PLC0415
 
-    matches = _glob.glob(_join(sub['dir'], sub['graph_file']))
+    matches = _glob.glob(_join(sub["dir"], sub["graph_file"]))
     if not matches:
-        return sub['subject'], None
+        return sub["subject"], None
 
     graph = aims.read(matches[0])
     counts: dict = {}
     for vertex in graph.vertices():
-        name = vertex.get('name')
+        name = vertex.get("name")
         if name is None:
             continue
         n = 0
-        for bucket_name in ('aims_ss', 'aims_bottom', 'aims_other'):
+        for bucket_name in ("aims_ss", "aims_bottom", "aims_other"):
             bucket = vertex.get(bucket_name)
             if bucket is not None:
                 n += len(list(bucket[0].keys()))
         counts[name] = counts.get(name, 0) + n
-    return sub['subject'], counts
+    return sub["subject"], counts
 
 
 def _join(*args):
     from os.path import join as _j
+
     return _j(*args)
 
 
@@ -74,10 +76,12 @@ def _join(*args):
 # Mask statistics helper
 # --------------------------------------------------------------------------- #
 
+
 def _mask_stats(mask_dir: str, brainvisa_dir: str) -> dict:
     """Return {relative_path: (max, sum, nonzero)} for all masks in mask_dir."""
     import glob as _g
     import sys as _s
+
     if brainvisa_dir not in _s.path:
         _s.path.insert(0, brainvisa_dir)
     from soma import aims  # noqa: PLC0415
@@ -95,6 +99,7 @@ def _mask_stats(mask_dir: str, brainvisa_dir: str) -> dict:
 # Main script class
 # --------------------------------------------------------------------------- #
 
+
 class CompareDatabases(ScriptBuilder):
     """Compare sulcal labeling between two graph annotation campaigns."""
 
@@ -106,64 +111,46 @@ class CompareDatabases(ScriptBuilder):
                 "two graph annotation campaigns, with optional mask comparison."
             ),
         )
-        (self
-         .add_required_argument(
-             "--labeled_subjects_dir",
-             "Root directory containing subject subdirectories.")
-         .add_required_argument(
-             "--path_to_graph_a",
-             "Relative sub-path for campaign A "
-             "(e.g. t1mri/t1/default_analysis/folds/3.3/base2018_manual).")
-         .add_required_argument(
-             "--path_to_graph_b",
-             "Relative sub-path for campaign B "
-             "(e.g. t1mri/t1/default_analysis/folds/3.3/base2018b_manual).")
-         .add_optional_argument("--label_a", "Name for campaign A.", default="A")
-         .add_optional_argument("--label_b", "Name for campaign B.", default="B")
-         .add_optional_argument(
-             "--side",
-             "Hemisphere side: L, R, or both.",
-             default="both")
-         .add_optional_argument(
-             "--masks_a",
-             "Mask directory for campaign A (e.g. canonical_25/2mm). "
-             "Optional — skipped if not provided.",
-             default=None)
-         .add_optional_argument(
-             "--masks_b",
-             "Mask directory for campaign B. Optional.",
-             default=None)
-         .add_optional_argument(
-             "--output",
-             "Output CSV file path.",
-             default="./db_comparison.csv")
-         .add_optional_argument(
-             "--njobs",
-             "Parallel workers. Default: cpu_count - 2 (max 22).",
-             default=None, type_=int))
+        (
+            self.add_required_argument("--labeled_subjects_dir", "Root directory containing subject subdirectories.")
+            .add_required_argument(
+                "--path_to_graph_a",
+                "Relative sub-path for campaign A (e.g. t1mri/t1/default_analysis/folds/3.3/base2018_manual).",
+            )
+            .add_required_argument(
+                "--path_to_graph_b",
+                "Relative sub-path for campaign B (e.g. t1mri/t1/default_analysis/folds/3.3/base2018b_manual).",
+            )
+            .add_optional_argument("--label_a", "Name for campaign A.", default="A")
+            .add_optional_argument("--label_b", "Name for campaign B.", default="B")
+            .add_optional_argument("--side", "Hemisphere side: L, R, or both.", default="both")
+            .add_optional_argument(
+                "--masks_a",
+                "Mask directory for campaign A (e.g. canonical_25/2mm). Optional — skipped if not provided.",
+                default=None,
+            )
+            .add_optional_argument("--masks_b", "Mask directory for campaign B. Optional.", default=None)
+            .add_optional_argument("--output", "Output CSV file path.", default="./db_comparison.csv")
+            .add_optional_argument(
+                "--njobs", "Parallel workers. Default: cpu_count - 2 (max 22).", default=None, type_=int
+            )
+        )
 
     # ---------------------------------------------------------------------- #
 
-    def _load_database(self, path_to_graph, sides, subjects_dir,
-                       njobs, brainvisa_dir) -> dict:
+    def _load_database(self, path_to_graph, sides, subjects_dir, njobs, brainvisa_dir) -> dict:
         """Return {subject: {sulcus: voxel_count}} for all subjects found."""
         from deep_folding.brainvisa.utils.subjects import get_all_subjects_as_dictionary
         from joblib import Parallel, delayed
 
         all_data: dict = {}
         for side in sides:
-            pattern = (
-                '%(subject)s/' + path_to_graph + '/%(side)s%(subject)s*.arg'
-            )
-            subjects = get_all_subjects_as_dictionary(
-                [subjects_dir], [pattern], side
-            )
-            print(f"    [{side}] {len(subjects)} subjects found, "
-                  f"loading with {njobs} worker(s)…")
+            pattern = "%(subject)s/" + path_to_graph + "/%(side)s%(subject)s*.arg"
+            subjects = get_all_subjects_as_dictionary([subjects_dir], [pattern], side)
+            print(f"    [{side}] {len(subjects)} subjects found, loading with {njobs} worker(s)…")
 
-            results = Parallel(n_jobs=njobs, prefer='processes')(
-                delayed(_get_subject_voxel_counts)(sub, brainvisa_dir)
-                for sub in subjects
+            results = Parallel(n_jobs=njobs, prefer="processes")(
+                delayed(_get_subject_voxel_counts)(sub, brainvisa_dir) for sub in subjects
             )
             n_ok = 0
             for sub_name, counts in results:
@@ -180,10 +167,9 @@ class CompareDatabases(ScriptBuilder):
     def run(self):
         from joblib import cpu_count
 
-        brainvisa_dir = abspath(join(
-            dirname(__file__),
-            '..', 'external', 'cortical_tiles', 'deep_folding', 'brainvisa'
-        ))
+        brainvisa_dir = abspath(
+            join(dirname(__file__), "..", "external", "cortical_tiles", "deep_folding", "brainvisa")
+        )
         if brainvisa_dir not in sys.path:
             sys.path.insert(0, brainvisa_dir)
 
@@ -194,13 +180,13 @@ class CompareDatabases(ScriptBuilder):
         # ── Load both databases ────────────────────────────────────────────
         print(f"\nLoading campaign A ({la}): {self.args.path_to_graph_a}")
         data_a = self._load_database(
-            self.args.path_to_graph_a, sides,
-            self.args.labeled_subjects_dir, njobs, brainvisa_dir)
+            self.args.path_to_graph_a, sides, self.args.labeled_subjects_dir, njobs, brainvisa_dir
+        )
 
         print(f"\nLoading campaign B ({lb}): {self.args.path_to_graph_b}")
         data_b = self._load_database(
-            self.args.path_to_graph_b, sides,
-            self.args.labeled_subjects_dir, njobs, brainvisa_dir)
+            self.args.path_to_graph_b, sides, self.args.labeled_subjects_dir, njobs, brainvisa_dir
+        )
 
         # ── Subject sets ───────────────────────────────────────────────────
         subs_a = set(data_a)
@@ -211,10 +197,7 @@ class CompareDatabases(ScriptBuilder):
         print(f"Subjects in both:        {len(subs_both)}")
 
         # ── Per-sulcus stats ───────────────────────────────────────────────
-        all_sulci = sorted(
-            {s for d in data_a.values() for s in d} |
-            {s for d in data_b.values() for s in d}
-        )
+        all_sulci = sorted({s for d in data_a.values() for s in d} | {s for d in data_b.values() for s in d})
 
         rows = []
         for sulcus in all_sulci:
@@ -228,16 +211,18 @@ class CompareDatabases(ScriptBuilder):
             vpsa = np.mean(counts_a) if counts_a else 0.0
             vpsb = np.mean(counts_b) if counts_b else 0.0
 
-            rows.append({
-                "sulcus": sulcus,
-                f"N_{la}": n_a,
-                f"N_{lb}": n_b,
-                f"pct_{la}": round(pct_a, 1),
-                f"pct_{lb}": round(pct_b, 1),
-                f"vox_per_subject_{la}": round(vpsa, 1),
-                f"vox_per_subject_{lb}": round(vpsb, 1),
-                "vox_ratio_B_over_A": round(vpsb / vpsa, 3) if vpsa > 0 else None,
-            })
+            rows.append(
+                {
+                    "sulcus": sulcus,
+                    f"N_{la}": n_a,
+                    f"N_{lb}": n_b,
+                    f"pct_{la}": round(pct_a, 1),
+                    f"pct_{lb}": round(pct_b, 1),
+                    f"vox_per_subject_{la}": round(vpsa, 1),
+                    f"vox_per_subject_{lb}": round(vpsb, 1),
+                    "vox_ratio_B_over_A": round(vpsb / vpsa, 3) if vpsa > 0 else None,
+                }
+            )
 
         # ── Optional mask stats ────────────────────────────────────────────
         mask_a_stats = {}
@@ -255,18 +240,14 @@ class CompareDatabases(ScriptBuilder):
             for key in all_mask_keys:
                 # key is like "L/OCCIPITAL_left.nii.gz"
                 sulcus_name = os.path.basename(key).replace(".nii.gz", "")
-                mask_lookup.setdefault(sulcus_name, {})[
-                    "mask_max_" + la] = mask_a_stats.get(key, (None,))[0]
-                mask_lookup[sulcus_name][
-                    "mask_max_" + lb] = mask_b_stats.get(key, (None,))[0]
+                mask_lookup.setdefault(sulcus_name, {})["mask_max_" + la] = mask_a_stats.get(key, (None,))[0]
+                mask_lookup[sulcus_name]["mask_max_" + lb] = mask_b_stats.get(key, (None,))[0]
                 n_subs_a_mask = len(subs_a) or 1
                 n_subs_b_mask = len(subs_b) or 1
                 sa = mask_a_stats.get(key)
                 sb = mask_b_stats.get(key)
-                mask_lookup[sulcus_name]["mask_sum_per_sub_" + la] = (
-                    round(sa[1] / n_subs_a_mask, 1) if sa else None)
-                mask_lookup[sulcus_name]["mask_sum_per_sub_" + lb] = (
-                    round(sb[1] / n_subs_b_mask, 1) if sb else None)
+                mask_lookup[sulcus_name]["mask_sum_per_sub_" + la] = round(sa[1] / n_subs_a_mask, 1) if sa else None
+                mask_lookup[sulcus_name]["mask_sum_per_sub_" + lb] = round(sb[1] / n_subs_b_mask, 1) if sb else None
 
             for row in rows:
                 extra = mask_lookup.get(row["sulcus"], {})
@@ -287,17 +268,21 @@ class CompareDatabases(ScriptBuilder):
 
         # ── Print summary (sulci with biggest vox_ratio difference) ────────
         print(f"\nSulci with biggest voxel-density difference ({lb}/{la}):\n")
-        print(f"  {'Sulcus':<45}  {f'N({la})':>7}  {f'N({lb})':>7}  "
-              f"{f'vox/sub({la})':>12}  {f'vox/sub({lb})':>12}  {'ratio':>6}")
+        print(
+            f"  {'Sulcus':<45}  {f'N({la})':>7}  {f'N({lb})':>7}  "
+            f"{f'vox/sub({la})':>12}  {f'vox/sub({lb})':>12}  {'ratio':>6}"
+        )
         print("  " + "-" * 100)
         sortable = [r for r in rows if r.get("vox_ratio_B_over_A") is not None]
         for row in sorted(sortable, key=lambda r: abs(r["vox_ratio_B_over_A"] - 1.0), reverse=True)[:30]:
-            print(f"  {row['sulcus']:<45}  "
-                  f"{row[f'N_{la}']:>7}  "
-                  f"{row[f'N_{lb}']:>7}  "
-                  f"{row[f'vox_per_subject_{la}']:>12.1f}  "
-                  f"{row[f'vox_per_subject_{lb}']:>12.1f}  "
-                  f"{row['vox_ratio_B_over_A']:>6.3f}")
+            print(
+                f"  {row['sulcus']:<45}  "
+                f"{row[f'N_{la}']:>7}  "
+                f"{row[f'N_{lb}']:>7}  "
+                f"{row[f'vox_per_subject_{la}']:>12.1f}  "
+                f"{row[f'vox_per_subject_{lb}']:>12.1f}  "
+                f"{row['vox_ratio_B_over_A']:>6.3f}"
+            )
 
         print(f"\nCSV written to: {output_path}")
         return 0

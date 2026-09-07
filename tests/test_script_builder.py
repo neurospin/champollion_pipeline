@@ -16,10 +16,7 @@ class ConcreteScriptBuilder(ScriptBuilder):
     """Concrete implementation of ScriptBuilder for testing."""
 
     def __init__(self):
-        super().__init__(
-            script_name="test_script",
-            description="Test script"
-        )
+        super().__init__(script_name="test_script", description="Test script")
 
     def run(self):
         """Minimal run implementation."""
@@ -83,16 +80,18 @@ class TestScriptBuilderChaining:
         """Test that build returns self for chaining."""
         script = ConcreteScriptBuilder()
         script.add_argument("input", help="Input path")
-        with patch.object(script.parser, 'parse_args', return_value=MagicMock(input="test")):
+        with patch.object(script.parser, "parse_args", return_value=MagicMock(input="test")):
             result = script.build()
             assert result is script
 
     def test_full_chaining(self):
         """Test complete method chaining."""
         script = ConcreteScriptBuilder()
-        result = (script.add_argument("input", help="Input")
-                  .add_optional_argument("--output", "Output", default="/tmp")
-                  .add_flag("--verbose", "Verbose"))
+        result = (
+            script.add_argument("input", help="Input")
+            .add_optional_argument("--output", "Output", default="/tmp")
+            .add_flag("--verbose", "Verbose")
+        )
         assert result is script
 
 
@@ -155,7 +154,7 @@ class TestScriptBuilderBuild:
         """Test that build parses arguments."""
         script = ConcreteScriptBuilder()
         script.add_argument("input", help="Input path")
-        with patch.object(script, 'parse_args') as mock_parse:
+        with patch.object(script, "parse_args") as mock_parse:
             mock_parse.return_value = MagicMock(input="test")
             script.build()
             mock_parse.assert_called_once()
@@ -164,7 +163,7 @@ class TestScriptBuilderBuild:
         """Test that build sets self.args."""
         script = ConcreteScriptBuilder()
         script.add_argument("input", help="Input path")
-        with patch('sys.argv', ['script', 'test_input']):
+        with patch("sys.argv", ["script", "test_input"]):
             script.build()
             assert script.args is not None
             assert script.args.input == "test_input"
@@ -213,10 +212,7 @@ class TestScriptBuilderBuildCommand:
         script.add_argument("output", help="Output")
         script.parse_args(["test_input", "test_output"])
 
-        cmd = script.build_command(
-            script_path="test_script.py",
-            required_args=["input", "output"]
-        )
+        cmd = script.build_command(script_path="test_script.py", required_args=["input", "output"])
 
         assert sys.executable in cmd
         assert "test_script.py" in cmd
@@ -232,11 +228,7 @@ class TestScriptBuilderBuildCommand:
         script.parse_args(["test_input"])
 
         defaults = {"verbose": False, "output": "/tmp"}
-        cmd = script.build_command(
-            script_path="test_script.py",
-            required_args=["input"],
-            defaults=defaults
-        )
+        cmd = script.build_command(script_path="test_script.py", required_args=["input"], defaults=defaults)
 
         # Default values should not be included
         assert "--verbose" not in " ".join(cmd)
@@ -250,11 +242,7 @@ class TestScriptBuilderBuildCommand:
         script.parse_args(["test_input", "--output", "/custom"])
 
         defaults = {"output": "/tmp"}
-        cmd = script.build_command(
-            script_path="test_script.py",
-            required_args=["input"],
-            defaults=defaults
-        )
+        cmd = script.build_command(script_path="test_script.py", required_args=["input"], defaults=defaults)
 
         assert "--output=/custom" in cmd
 
@@ -266,11 +254,7 @@ class TestScriptBuilderBuildCommand:
         script.parse_args(["test_input", "--verbose"])
 
         defaults = {"verbose": False}
-        cmd = script.build_command(
-            script_path="test_script.py",
-            required_args=["input"],
-            defaults=defaults
-        )
+        cmd = script.build_command(script_path="test_script.py", required_args=["input"], defaults=defaults)
 
         assert "--verbose" in cmd
 
@@ -282,11 +266,7 @@ class TestScriptBuilderBuildCommand:
         script.parse_args(["test_input", "--datasets", "ds1", "ds2", "ds3"])
 
         defaults = {"datasets": ["default"]}
-        cmd = script.build_command(
-            script_path="test_script.py",
-            required_args=["input"],
-            defaults=defaults
-        )
+        cmd = script.build_command(script_path="test_script.py", required_args=["input"], defaults=defaults)
 
         assert "--datasets=ds1" in cmd
         assert "--datasets=ds2" in cmd
@@ -300,7 +280,7 @@ class TestScriptBuilderExecuteCommand:
         """Test successful command execution without shell."""
         script = ConcreteScriptBuilder()
         cmd = ["echo", "test"]
-        with patch('champollion_utils.script_builder.check_call', return_value=0):
+        with patch("champollion_utils.script_builder.check_call", return_value=0):
             result = script.execute_command(cmd, shell=False)
             assert result == 0
 
@@ -308,7 +288,7 @@ class TestScriptBuilderExecuteCommand:
         """Test successful command execution with shell."""
         script = ConcreteScriptBuilder()
         cmd = ["echo", "test"]
-        with patch('champollion_utils.script_builder.run') as mock_run:
+        with patch("champollion_utils.script_builder.run") as mock_run:
             mock_run.return_value = MagicMock(returncode=0)
             result = script.execute_command(cmd, shell=True)
             assert result == 0
@@ -318,16 +298,16 @@ class TestScriptBuilderExecuteCommand:
         """Test command execution failure."""
         script = ConcreteScriptBuilder()
         cmd = ["nonexistent_command"]
-        with patch('champollion_utils.script_builder.check_call', side_effect=Exception("Command failed")):
+        with patch("champollion_utils.script_builder.check_call", side_effect=Exception("Command failed")):
             result = script.execute_command(cmd, shell=False)
             assert result == 1
 
-    @patch('builtins.print')
+    @patch("builtins.print")
     def test_execute_command_prints_command(self, mock_print):
         """Test that execute_command prints the command."""
         script = ConcreteScriptBuilder()
         cmd = ["echo", "test"]
-        with patch('champollion_utils.script_builder.check_call', return_value=0):
+        with patch("champollion_utils.script_builder.check_call", return_value=0):
             script.execute_command(cmd, shell=False)
             assert mock_print.called
 
@@ -340,10 +320,10 @@ class TestScriptBuilderMain:
         script = ConcreteScriptBuilder()
         script.add_argument("input", help="Input")
 
-        with patch.object(script, 'build', return_value=script) as mock_build:
-            with patch.object(script, 'print_args', return_value=script) as mock_print:
-                with patch.object(script, 'run', return_value=0) as mock_run:
-                    with patch('sys.argv', ['script', 'test_input']):
+        with patch.object(script, "build", return_value=script) as mock_build:
+            with patch.object(script, "print_args", return_value=script) as mock_print:
+                with patch.object(script, "run", return_value=0) as mock_run:
+                    with patch("sys.argv", ["script", "test_input"]):
                         result = script.main()
 
                         mock_build.assert_called_once()
@@ -356,10 +336,10 @@ class TestScriptBuilderMain:
         script = ConcreteScriptBuilder()
         script.add_argument("input", help="Input")
 
-        with patch.object(script, 'build', return_value=script):
-            with patch.object(script, 'print_args', return_value=script):
-                with patch.object(script, 'run', return_value=42):
-                    with patch('sys.argv', ['script', 'test_input']):
+        with patch.object(script, "build", return_value=script):
+            with patch.object(script, "print_args", return_value=script):
+                with patch.object(script, "run", return_value=42):
+                    with patch("sys.argv", ["script", "test_input"]):
                         result = script.main()
                         assert result == 42
 

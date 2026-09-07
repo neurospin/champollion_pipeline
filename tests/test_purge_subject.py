@@ -14,11 +14,10 @@ from champollion_pipeline.purge_subject import PurgeSubject
 # Helpers
 # ---------------------------------------------------------------------------
 
+
 def _make_script(derivatives: str, subject: str, dry_run: bool = False) -> PurgeSubject:
     script = PurgeSubject()
-    args = script.parse_args(
-        [derivatives, "--subject", subject] + (["--dry-run"] if dry_run else [])
-    )
+    args = script.parse_args([derivatives, "--subject", subject] + (["--dry-run"] if dry_run else []))
     script.args = args
     return script
 
@@ -45,6 +44,7 @@ def _make_aggregated_array(crops_2mm, region: str, prefix: str, subjects: list[s
 # ---------------------------------------------------------------------------
 # Argument parsing
 # ---------------------------------------------------------------------------
+
 
 class TestArgumentParsing:
     def test_required_args(self, tmp_path):
@@ -73,6 +73,7 @@ class TestArgumentParsing:
 # run() — missing derivatives directory
 # ---------------------------------------------------------------------------
 
+
 class TestRunValidation:
     def test_raises_when_derivatives_missing(self, tmp_path):
         script = _make_script(str(tmp_path / "nonexistent"), "sub-01")
@@ -96,6 +97,7 @@ class TestRunValidation:
 # ---------------------------------------------------------------------------
 # _purge_per_subject_dirs
 # ---------------------------------------------------------------------------
+
 
 class TestPurgePerSubjectDirs:
     def test_removes_subject_subdir(self, tmp_path):
@@ -165,6 +167,7 @@ class TestPurgePerSubjectDirs:
 # _purge_per_subject_crop_files
 # ---------------------------------------------------------------------------
 
+
 class TestPurgePerSubjectCropFiles:
     def test_removes_matching_nii_gz(self, tmp_path):
         crops_2mm = tmp_path / "crops" / "2mm"
@@ -221,6 +224,7 @@ class TestPurgePerSubjectCropFiles:
 # ---------------------------------------------------------------------------
 # _purge_aggregated_arrays
 # ---------------------------------------------------------------------------
+
 
 class TestPurgeAggregatedArrays:
     def test_removes_subject_row_from_npy(self, tmp_path):
@@ -296,6 +300,7 @@ class TestPurgeAggregatedArrays:
 # ---------------------------------------------------------------------------
 # run() — end-to-end
 # ---------------------------------------------------------------------------
+
 
 class TestRunEndToEnd:
     def test_full_purge_removes_all_traces(self, tmp_path):

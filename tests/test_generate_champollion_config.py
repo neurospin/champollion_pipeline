@@ -47,7 +47,7 @@ class TestGenerateChampollionConfigArguments:
     def test_champollion_loc_has_default(self):
         """Test that champollion_loc has a default value."""
         script = GenerateChampollionConfig()
-        with patch('os.getcwd', return_value="/current"):
+        with patch("os.getcwd", return_value="/current"):
             args = script.parse_args(["/path/to/crops", "--dataset", "test"])
             assert args.champollion_loc is not None
 
@@ -60,10 +60,9 @@ class TestGenerateChampollionConfigArguments:
     def test_external_config_can_be_set(self):
         """Test that --external-config can be set."""
         script = GenerateChampollionConfig()
-        args = script.parse_args([
-            "/path/to/crops", "--dataset", "test",
-            "--external-config", "/writable/path/local.yaml"
-        ])
+        args = script.parse_args(
+            ["/path/to/crops", "--dataset", "test", "--external-config", "/writable/path/local.yaml"]
+        )
         assert args.external_config == "/writable/path/local.yaml"
 
     def test_external_crops_default_false(self):
@@ -75,10 +74,7 @@ class TestGenerateChampollionConfigArguments:
     def test_external_crops_can_be_set(self):
         """Test that --external_crops can be set to True."""
         script = GenerateChampollionConfig()
-        args = script.parse_args([
-            "/path/to/crops", "--dataset", "test",
-            "--external_crops"
-        ])
+        args = script.parse_args(["/path/to/crops", "--dataset", "test", "--external_crops"])
         assert args.external_crops is True
 
     def test_localization_defaults_to_local(self):
@@ -90,10 +86,7 @@ class TestGenerateChampollionConfigArguments:
     def test_localization_can_be_set(self):
         """Test that --localization can be set to a custom value."""
         script = GenerateChampollionConfig()
-        args = script.parse_args([
-            "/path/to/crops", "--dataset", "test",
-            "--localization", "jean-zay"
-        ])
+        args = script.parse_args(["/path/to/crops", "--dataset", "test", "--localization", "jean-zay"])
         assert args.localization == "jean-zay"
 
 
@@ -163,12 +156,14 @@ class TestRunMethod:
         script = GenerateChampollionConfig()
         script.parse_args([temp_dir, "--dataset", "test"])
 
-        with patch.object(script, '_validate_inputs') as mock_validate:
-            with patch.object(script, 'execute_command', return_value=0):
-                with patch.object(script, '_write_localization_yaml'):
-                    with patch('champollion_pipeline.generate_champollion_config.find_dataset_folder', return_value="/parent"):
-                        with patch('builtins.open', mock_open(read_data="data: TESTXX")):
-                            with patch('champollion_pipeline.generate_champollion_config.exists', return_value=True):
+        with patch.object(script, "_validate_inputs") as mock_validate:
+            with patch.object(script, "execute_command", return_value=0):
+                with patch.object(script, "_write_localization_yaml"):
+                    with patch(
+                        "champollion_pipeline.generate_champollion_config.find_dataset_folder", return_value="/parent"
+                    ):
+                        with patch("builtins.open", mock_open(read_data="data: TESTXX")):
+                            with patch("champollion_pipeline.generate_champollion_config.exists", return_value=True):
                                 script.run()
                                 mock_validate.assert_called_once()
 
@@ -178,15 +173,16 @@ class TestRunMethod:
         script.parse_args([temp_dir, "--dataset", "test_dataset"])
 
         # exists() must return True for crop_path validation, False for dataset_loc check
-        with patch('champollion_pipeline.generate_champollion_config.exists', side_effect=[True, False]):
-            with patch.object(script, 'execute_command', return_value=0) as mock_exec:
-                with patch.object(script, '_write_localization_yaml'):
-                    with patch('champollion_pipeline.generate_champollion_config.find_dataset_folder', return_value="/parent"):
-                        with patch('builtins.open', mock_open(read_data="data: TESTXX")):
+        with patch("champollion_pipeline.generate_champollion_config.exists", side_effect=[True, False]):
+            with patch.object(script, "execute_command", return_value=0) as mock_exec:
+                with patch.object(script, "_write_localization_yaml"):
+                    with patch(
+                        "champollion_pipeline.generate_champollion_config.find_dataset_folder", return_value="/parent"
+                    ):
+                        with patch("builtins.open", mock_open(read_data="data: TESTXX")):
                             script.run()
 
-                            mkdir_calls = [c for c in mock_exec.call_args_list
-                                           if "mkdir" in str(c)]
+                            mkdir_calls = [c for c in mock_exec.call_args_list if "mkdir" in str(c)]
                             assert len(mkdir_calls) > 0
 
     def test_run_copies_reference_yaml(self, temp_dir):
@@ -194,15 +190,16 @@ class TestRunMethod:
         script = GenerateChampollionConfig()
         script.parse_args([temp_dir, "--dataset", "test_dataset"])
 
-        with patch('champollion_pipeline.generate_champollion_config.exists', return_value=True):
-            with patch.object(script, 'execute_command', return_value=0) as mock_exec:
-                with patch.object(script, '_write_localization_yaml'):
-                    with patch('champollion_pipeline.generate_champollion_config.find_dataset_folder', return_value="/parent"):
-                        with patch('builtins.open', mock_open(read_data="data: TESTXX")):
+        with patch("champollion_pipeline.generate_champollion_config.exists", return_value=True):
+            with patch.object(script, "execute_command", return_value=0) as mock_exec:
+                with patch.object(script, "_write_localization_yaml"):
+                    with patch(
+                        "champollion_pipeline.generate_champollion_config.find_dataset_folder", return_value="/parent"
+                    ):
+                        with patch("builtins.open", mock_open(read_data="data: TESTXX")):
                             script.run()
 
-                            cp_calls = [c for c in mock_exec.call_args_list
-                                        if "cp" in str(c)]
+                            cp_calls = [c for c in mock_exec.call_args_list if "cp" in str(c)]
                             assert len(cp_calls) > 0
 
     def test_run_updates_reference_yaml(self, temp_dir):
@@ -213,18 +210,20 @@ class TestRunMethod:
 
         yaml_content = "crop_dir: ${dataset_folder}/TESTXX/crops/2mm/SC-sylv/mask/Lcrops\n"
 
-        with patch('champollion_pipeline.generate_champollion_config.exists', return_value=True):
-            with patch.object(script, 'execute_command', return_value=0):
-                with patch.object(script, '_write_localization_yaml'):
-                    with patch('champollion_pipeline.generate_champollion_config.find_dataset_folder', return_value="/parent"):
+        with patch("champollion_pipeline.generate_champollion_config.exists", return_value=True):
+            with patch.object(script, "execute_command", return_value=0):
+                with patch.object(script, "_write_localization_yaml"):
+                    with patch(
+                        "champollion_pipeline.generate_champollion_config.find_dataset_folder", return_value="/parent"
+                    ):
                         m = mock_open(read_data=yaml_content)
-                        with patch('builtins.open', m):
+                        with patch("builtins.open", m):
                             script.run()
 
                             write_calls = [c for c in m().writelines.call_args_list]
                             if write_calls:
                                 written_lines = write_calls[0][0][0]
-                                written_content = ''.join(written_lines)
+                                written_content = "".join(written_lines)
                                 assert dataset_name in written_content
                                 assert "canonical_25" in written_content
                                 assert "TESTXX" not in written_content
@@ -234,11 +233,13 @@ class TestRunMethod:
         script = GenerateChampollionConfig()
         script.parse_args([temp_dir, "--dataset", "test"])
 
-        with patch('champollion_pipeline.generate_champollion_config.exists', return_value=True):
-            with patch.object(script, 'execute_command', return_value=0):
-                with patch.object(script, '_write_localization_yaml') as mock_write:
-                    with patch('champollion_pipeline.generate_champollion_config.find_dataset_folder', return_value="/parent"):
-                        with patch('builtins.open', mock_open(read_data="data: TESTXX")):
+        with patch("champollion_pipeline.generate_champollion_config.exists", return_value=True):
+            with patch.object(script, "execute_command", return_value=0):
+                with patch.object(script, "_write_localization_yaml") as mock_write:
+                    with patch(
+                        "champollion_pipeline.generate_champollion_config.find_dataset_folder", return_value="/parent"
+                    ):
+                        with patch("builtins.open", mock_open(read_data="data: TESTXX")):
                             script.run()
                             mock_write.assert_called_once()
 
@@ -247,11 +248,13 @@ class TestRunMethod:
         script = GenerateChampollionConfig()
         script.parse_args([temp_dir, "--dataset", "test", "--localization", "jean-zay"])
 
-        with patch('champollion_pipeline.generate_champollion_config.exists', return_value=True):
-            with patch.object(script, 'execute_command', return_value=0):
-                with patch.object(script, '_write_localization_yaml') as mock_write:
-                    with patch('champollion_pipeline.generate_champollion_config.find_dataset_folder', return_value="/parent"):
-                        with patch('builtins.open', mock_open(read_data="data: TESTXX")):
+        with patch("champollion_pipeline.generate_champollion_config.exists", return_value=True):
+            with patch.object(script, "execute_command", return_value=0):
+                with patch.object(script, "_write_localization_yaml") as mock_write:
+                    with patch(
+                        "champollion_pipeline.generate_champollion_config.find_dataset_folder", return_value="/parent"
+                    ):
+                        with patch("builtins.open", mock_open(read_data="data: TESTXX")):
                             script.run()
                             dest_path = mock_write.call_args[0][0]
                             assert "jean-zay.yaml" in dest_path
@@ -261,11 +264,13 @@ class TestRunMethod:
         script = GenerateChampollionConfig()
         script.parse_args([temp_dir, "--dataset", "test"])
 
-        with patch('champollion_pipeline.generate_champollion_config.exists', return_value=True):
-            with patch.object(script, 'execute_command', return_value=0):
-                with patch.object(script, '_write_localization_yaml'):
-                    with patch('champollion_pipeline.generate_champollion_config.find_dataset_folder', return_value="/parent"):
-                        with patch('builtins.open', mock_open(read_data="data: TESTXX")):
+        with patch("champollion_pipeline.generate_champollion_config.exists", return_value=True):
+            with patch.object(script, "execute_command", return_value=0):
+                with patch.object(script, "_write_localization_yaml"):
+                    with patch(
+                        "champollion_pipeline.generate_champollion_config.find_dataset_folder", return_value="/parent"
+                    ):
+                        with patch("builtins.open", mock_open(read_data="data: TESTXX")):
                             result = script.run()
                             assert result == 0
 
@@ -275,7 +280,7 @@ class TestMainFunction:
 
     def test_main_creates_script_and_runs(self, temp_dir):
         """Test that main creates script and calls build().print_args().run()."""
-        with patch('champollion_pipeline.generate_champollion_config.GenerateChampollionConfig') as MockScript:
+        with patch("champollion_pipeline.generate_champollion_config.GenerateChampollionConfig") as MockScript:
             mock_instance = MagicMock()
             mock_instance.build.return_value = mock_instance
             mock_instance.print_args.return_value = mock_instance
@@ -284,7 +289,7 @@ class TestMainFunction:
 
             from champollion_pipeline.generate_champollion_config import main
 
-            with patch('sys.argv', ['script', temp_dir, '--dataset', 'test']):
+            with patch("sys.argv", ["script", temp_dir, "--dataset", "test"]):
                 result = main()
 
                 MockScript.assert_called_once()
@@ -303,11 +308,13 @@ class TestGenerateChampollionConfigIntegration:
         script = GenerateChampollionConfig()
         script.parse_args([temp_dir, "--dataset", "test_dataset"])
 
-        with patch.object(script, 'execute_command', return_value=0):
-            with patch('champollion_pipeline.generate_champollion_config.exists', return_value=True):
-                with patch('champollion_pipeline.generate_champollion_config.find_dataset_folder', return_value="/parent"):
-                    with patch('builtins.open', mock_open(read_data="data: TESTXX\n")):
-                        with patch.object(script, '_write_localization_yaml'):
+        with patch.object(script, "execute_command", return_value=0):
+            with patch("champollion_pipeline.generate_champollion_config.exists", return_value=True):
+                with patch(
+                    "champollion_pipeline.generate_champollion_config.find_dataset_folder", return_value="/parent"
+                ):
+                    with patch("builtins.open", mock_open(read_data="data: TESTXX\n")):
+                        with patch.object(script, "_write_localization_yaml"):
                             result = script.run()
                             assert result == 0
 
@@ -324,7 +331,7 @@ class TestGenerateChampollionConfigSmoke:
     def test_script_has_required_methods(self):
         """Test that script has all required methods."""
         script = GenerateChampollionConfig()
-        assert hasattr(script, 'run')
-        assert hasattr(script, '_validate_inputs')
-        assert hasattr(script, '_write_localization_yaml')
+        assert hasattr(script, "run")
+        assert hasattr(script, "_validate_inputs")
+        assert hasattr(script, "_write_localization_yaml")
         assert callable(script.run)

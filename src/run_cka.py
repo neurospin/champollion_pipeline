@@ -33,7 +33,6 @@ CKA_MODULE = "contrastive.evaluation.cka_coherence"
 
 
 class RunCKA(ScriptBuilder):
-
     def __init__(self):
         super().__init__(
             script_name="run_cka",
@@ -41,30 +40,30 @@ class RunCKA(ScriptBuilder):
         )
         (
             self.add_required_argument("--path_a", "Path to first embeddings (CSV/PT file or directory).")
-             .add_required_argument("--path_b", "Path to second embeddings (CSV/PT file or directory).")
-             .add_required_argument("--output_dir", "Directory to write CKA results.")
-             .add_optional_argument("--name_a", "Label for the first set of embeddings.", default="A")
-             .add_optional_argument("--name_b", "Label for the second set of embeddings.", default="B")
-             .add_optional_argument(
+            .add_required_argument("--path_b", "Path to second embeddings (CSV/PT file or directory).")
+            .add_required_argument("--output_dir", "Directory to write CKA results.")
+            .add_optional_argument("--name_a", "Label for the first set of embeddings.", default="A")
+            .add_optional_argument("--name_b", "Label for the second set of embeddings.", default="B")
+            .add_optional_argument(
                 "--subpath_a",
                 "Sub-path appended to each region directory under --path_a in nested mode "
                 "(e.g. 'UKBioBank_embeddings_best_model/full_embeddings.csv'). "
                 "Ignored in flat-directory mode.",
                 default="full_embeddings.csv",
             )
-             .add_optional_argument(
+            .add_optional_argument(
                 "--subpath_b",
                 "Sub-path appended to each region directory under --path_b in nested mode "
                 "(e.g. 'ukb40_random_embeddings/full_embeddings.csv'). "
                 "Ignored in flat-directory mode.",
                 default="full_embeddings.csv",
             )
-             .add_optional_argument(
+            .add_optional_argument(
                 "--subject_column",
                 "Subject ID column name in CSV files.",
                 default="ID",
             )
-             .add_optional_argument(
+            .add_optional_argument(
                 "--region",
                 "Run CKA on a single region only (matched by filename stem in flat mode, "
                 "or directory name in nested mode).",
@@ -74,18 +73,22 @@ class RunCKA(ScriptBuilder):
 
     def _cka_cmd(self, file_a: str, file_b: str, out: str) -> list:
         return [
-            sys.executable, "-m", CKA_MODULE,
+            sys.executable,
+            "-m",
+            CKA_MODULE,
             f"{self.args.name_a}:{file_a}",
             f"{self.args.name_b}:{file_b}",
-            "--output-dir", out,
-            "--subject-column", self.args.subject_column,
+            "--output-dir",
+            out,
+            "--subject-column",
+            self.args.subject_column,
         ]
 
     def _run_pairs(self, pairs: list) -> int:
         """Run CKA on a list of (label, file_a, file_b) tuples."""
         found = 0
         for label, file_a, file_b in pairs:
-            print(f"\n{'='*60}\n{label}\n{'='*60}")
+            print(f"\n{'=' * 60}\n{label}\n{'=' * 60}")
             out = join(self.args.output_dir, label)
             rc = self.execute_command(self._cka_cmd(file_a, file_b, out))
             if rc != 0:
@@ -104,9 +107,7 @@ class RunCKA(ScriptBuilder):
                 raise FileNotFoundError(f"--path_a not found: {path_a}")
             if not isfile(path_b):
                 raise FileNotFoundError(f"--path_b not found: {path_b}")
-            return self.execute_command(
-                self._cka_cmd(path_a, path_b, self.args.output_dir)
-            )
+            return self.execute_command(self._cka_cmd(path_a, path_b, self.args.output_dir))
 
         if not isdir(path_a):
             raise NotADirectoryError(f"--path_a must be a directory in directory mode: {path_a}")
@@ -149,20 +150,15 @@ class RunCKA(ScriptBuilder):
                 if self.args.region:
                     common = [n for n in common if self.args.region in n]
                     if not common:
-                        raise ValueError(
-                            f"No CSV matching region '{self.args.region}' found in both directories."
-                        )
-                pairs = [
-                    (name.removesuffix("_embeddings.csv"), csvs_a[name], csvs_b[name])
-                    for name in common
-                ]
+                        raise ValueError(f"No CSV matching region '{self.args.region}' found in both directories.")
+                pairs = [(name.removesuffix("_embeddings.csv"), csvs_a[name], csvs_b[name]) for name in common]
                 missing_b = sorted(set(csvs_a) - set(csvs_b))
                 if missing_b:
                     print(f"[info] {len(missing_b)} file(s) in path_a have no match in path_b (skipped)")
             else:
                 # Fallback: match by the model timestamp ID embedded in the filename
                 # (e.g. "name07-58-00--111"), which is stable across naming conventions.
-                _mid_re = re.compile(r'name\d{2}-\d{2}-\d{2}--\d+')
+                _mid_re = re.compile(r"name\d{2}-\d{2}-\d{2}--\d+")
 
                 def _mid(path):
                     m = _mid_re.search(basename(path))
@@ -174,9 +170,7 @@ class RunCKA(ScriptBuilder):
                 if self.args.region:
                     common_ids = [mid for mid in common_ids if self.args.region in basename(id_to_a[mid])]
                     if not common_ids:
-                        raise ValueError(
-                            f"No CSV matching region '{self.args.region}' found in both directories."
-                        )
+                        raise ValueError(f"No CSV matching region '{self.args.region}' found in both directories.")
                 pairs = [
                     (basename(id_to_a[mid]).removesuffix("_embeddings.csv"), id_to_a[mid], id_to_b[mid])
                     for mid in common_ids

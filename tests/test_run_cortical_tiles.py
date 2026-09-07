@@ -35,12 +35,9 @@ class TestRunCorticalTilesArguments:
     def test_parse_required_arguments(self):
         """Test parsing required arguments."""
         script = RunCorticalTiles()
-        args = script.parse_args([
-            "/input",
-            "/output",
-            "--path_to_graph", "graphs/path",
-            "--path_sk_with_hull", "skeleton/path"
-        ])
+        args = script.parse_args(
+            ["/input", "/output", "--path_to_graph", "graphs/path", "--path_sk_with_hull", "skeleton/path"]
+        )
         assert args.input == "/input"
         assert args.output == "/output"
         assert args.path_to_graph == "graphs/path"
@@ -49,47 +46,51 @@ class TestRunCorticalTilesArguments:
     def test_optional_region_file(self):
         """Test optional region-file argument."""
         script = RunCorticalTiles()
-        args = script.parse_args([
-            "/input",
-            "/output",
-            "--path_to_graph", "graphs/path",
-            "--path_sk_with_hull", "skeleton/path",
-            "--region-file", "/path/to/regions.json"
-        ])
+        args = script.parse_args(
+            [
+                "/input",
+                "/output",
+                "--path_to_graph",
+                "graphs/path",
+                "--path_sk_with_hull",
+                "skeleton/path",
+                "--region-file",
+                "/path/to/regions.json",
+            ]
+        )
         assert args.region_file == "/path/to/regions.json"
 
     def test_optional_sk_qc_path_default(self):
         """Test that sk_qc_path defaults to empty string."""
         script = RunCorticalTiles()
-        args = script.parse_args([
-            "/input",
-            "/output",
-            "--path_to_graph", "graphs/path",
-            "--path_sk_with_hull", "skeleton/path"
-        ])
+        args = script.parse_args(
+            ["/input", "/output", "--path_to_graph", "graphs/path", "--path_sk_with_hull", "skeleton/path"]
+        )
         assert args.sk_qc_path == ""
 
     def test_optional_njobs_default(self):
         """Test that njobs defaults to None."""
         script = RunCorticalTiles()
-        args = script.parse_args([
-            "/input",
-            "/output",
-            "--path_to_graph", "graphs/path",
-            "--path_sk_with_hull", "skeleton/path"
-        ])
+        args = script.parse_args(
+            ["/input", "/output", "--path_to_graph", "graphs/path", "--path_sk_with_hull", "skeleton/path"]
+        )
         assert args.njobs is None
 
     def test_njobs_custom_value(self):
         """Test setting custom njobs value."""
         script = RunCorticalTiles()
-        args = script.parse_args([
-            "/input",
-            "/output",
-            "--path_to_graph", "graphs/path",
-            "--path_sk_with_hull", "skeleton/path",
-            "--njobs", "10"
-        ])
+        args = script.parse_args(
+            [
+                "/input",
+                "/output",
+                "--path_to_graph",
+                "graphs/path",
+                "--path_sk_with_hull",
+                "skeleton/path",
+                "--njobs",
+                "10",
+            ]
+        )
         assert args.njobs == 10
 
     def test_missing_required_arguments(self):
@@ -101,147 +102,128 @@ class TestRunCorticalTilesArguments:
     def test_input_types_default_none(self):
         """Test that input_types defaults to None."""
         script = RunCorticalTiles()
-        args = script.parse_args([
-            "/input", "/output",
-            "--path_to_graph", "graphs",
-            "--path_sk_with_hull", "skeleton"
-        ])
+        args = script.parse_args(["/input", "/output", "--path_to_graph", "graphs", "--path_sk_with_hull", "skeleton"])
         assert args.input_types is None
 
     def test_input_types_can_be_set(self):
         """Test that --input-types accepts multiple values."""
         script = RunCorticalTiles()
-        args = script.parse_args([
-            "/input", "/output",
-            "--path_to_graph", "graphs",
-            "--path_sk_with_hull", "skeleton",
-            "--input-types", "skeleton", "foldlabel", "extremities"
-        ])
+        args = script.parse_args(
+            [
+                "/input",
+                "/output",
+                "--path_to_graph",
+                "graphs",
+                "--path_sk_with_hull",
+                "skeleton",
+                "--input-types",
+                "skeleton",
+                "foldlabel",
+                "extremities",
+            ]
+        )
         assert args.input_types == ["skeleton", "foldlabel", "extremities"]
 
     def test_skip_distbottom_default_false(self):
         """Test that --skip-distbottom defaults to False."""
         script = RunCorticalTiles()
-        args = script.parse_args([
-            "/input", "/output",
-            "--path_to_graph", "graphs",
-            "--path_sk_with_hull", "skeleton"
-        ])
+        args = script.parse_args(["/input", "/output", "--path_to_graph", "graphs", "--path_sk_with_hull", "skeleton"])
         assert args.skip_distbottom is False
 
     def test_skip_distbottom_can_be_set(self):
         """Test that --skip-distbottom can be set to True."""
         script = RunCorticalTiles()
-        args = script.parse_args([
-            "/input", "/output",
-            "--path_to_graph", "graphs",
-            "--path_sk_with_hull", "skeleton",
-            "--skip-distbottom"
-        ])
+        args = script.parse_args(
+            ["/input", "/output", "--path_to_graph", "graphs", "--path_sk_with_hull", "skeleton", "--skip-distbottom"]
+        )
         assert args.skip_distbottom is True
 
 
 class TestNjobsHandling:
     """Test njobs calculation and validation."""
 
-    @ patch('champollion_pipeline.run_cortical_tiles.cpu_count', return_value=24)
+    @patch("champollion_pipeline.run_cortical_tiles.cpu_count", return_value=24)
     def test_njobs_none_uses_default_calculation(self, mock_cpu):
         """Test that njobs=None calculates min(22, cpu_count-2)."""
         script = RunCorticalTiles()
-        script.parse_args([
-            "/input",
-            "/output",
-            "--path_to_graph", "graphs",
-            "--path_sk_with_hull", "skeleton"
-        ])
+        script.parse_args(["/input", "/output", "--path_to_graph", "graphs", "--path_sk_with_hull", "skeleton"])
 
-        with patch.object(script, 'validate_paths', return_value=True):
-            with patch.object(script, 'execute_command', return_value=0):
-                with patch('champollion_pipeline.run_cortical_tiles.chdir'):
-                    with patch('champollion_pipeline.run_cortical_tiles.getcwd', return_value="/original"):
+        with patch.object(script, "validate_paths", return_value=True):
+            with patch.object(script, "execute_command", return_value=0):
+                with patch("champollion_pipeline.run_cortical_tiles.chdir"):
+                    with patch("champollion_pipeline.run_cortical_tiles.getcwd", return_value="/original"):
                         script.run()
 
                         # njobs should be min(22, 24-2) = 22
                         assert script.args.njobs == 22
 
-    @ patch('champollion_pipeline.run_cortical_tiles.cpu_count', return_value=8)
+    @patch("champollion_pipeline.run_cortical_tiles.cpu_count", return_value=8)
     def test_njobs_none_with_low_cpu_count(self, mock_cpu):
         """Test njobs calculation with low CPU count."""
         script = RunCorticalTiles()
-        script.parse_args([
-            "/input",
-            "/output",
-            "--path_to_graph", "graphs",
-            "--path_sk_with_hull", "skeleton"
-        ])
+        script.parse_args(["/input", "/output", "--path_to_graph", "graphs", "--path_sk_with_hull", "skeleton"])
 
-        with patch.object(script, 'validate_paths', return_value=True):
-            with patch.object(script, 'execute_command', return_value=0):
-                with patch('champollion_pipeline.run_cortical_tiles.chdir'):
-                    with patch('champollion_pipeline.run_cortical_tiles.getcwd', return_value="/original"):
+        with patch.object(script, "validate_paths", return_value=True):
+            with patch.object(script, "execute_command", return_value=0):
+                with patch("champollion_pipeline.run_cortical_tiles.chdir"):
+                    with patch("champollion_pipeline.run_cortical_tiles.getcwd", return_value="/original"):
                         script.run()
 
                         # njobs should be min(22, 8-2) = 6
                         assert script.args.njobs == 6
 
-    @ patch('champollion_pipeline.run_cortical_tiles.cpu_count', return_value=8)
-    @patch('builtins.print')
+    @patch("champollion_pipeline.run_cortical_tiles.cpu_count", return_value=8)
+    @patch("builtins.print")
     def test_njobs_exceeds_cpu_count_prints_warning(self, mock_print, mock_cpu):
         """Test that warning is printed when njobs >= cpu_count."""
         script = RunCorticalTiles()
-        script.parse_args([
-            "/input",
-            "/output",
-            "--path_to_graph", "graphs",
-            "--path_sk_with_hull", "skeleton",
-            "--njobs", "10"  # More than cpu_count
-        ])
+        script.parse_args(
+            [
+                "/input",
+                "/output",
+                "--path_to_graph",
+                "graphs",
+                "--path_sk_with_hull",
+                "skeleton",
+                "--njobs",
+                "10",  # More than cpu_count
+            ]
+        )
 
-        with patch.object(script, 'validate_paths', return_value=True):
-            with patch.object(script, 'execute_command', return_value=0):
-                with patch('champollion_pipeline.run_cortical_tiles.chdir'):
-                    with patch('champollion_pipeline.run_cortical_tiles.getcwd', return_value="/original"):
+        with patch.object(script, "validate_paths", return_value=True):
+            with patch.object(script, "execute_command", return_value=0):
+                with patch("champollion_pipeline.run_cortical_tiles.chdir"):
+                    with patch("champollion_pipeline.run_cortical_tiles.getcwd", return_value="/original"):
                         script.run()
 
                         # Check warning was printed
-                        warning_printed = any(
-                            "Warning" in str(call_args)
-                            for call_args in mock_print.call_args_list
-                        )
+                        warning_printed = any("Warning" in str(call_args) for call_args in mock_print.call_args_list)
                         assert warning_printed
 
-    @ patch('champollion_pipeline.run_cortical_tiles.cpu_count', return_value=1)
+    @patch("champollion_pipeline.run_cortical_tiles.cpu_count", return_value=1)
     def test_njobs_minimum_one_with_cpu_count_one(self, mock_cpu):
         """njobs is at least 1 even on a single-core machine (cpu_count=1)."""
         script = RunCorticalTiles()
-        script.parse_args([
-            "/input", "/output",
-            "--path_to_graph", "graphs",
-            "--path_sk_with_hull", "skeleton"
-        ])
+        script.parse_args(["/input", "/output", "--path_to_graph", "graphs", "--path_sk_with_hull", "skeleton"])
 
-        with patch.object(script, 'validate_paths', return_value=True):
-            with patch.object(script, 'execute_command', return_value=0):
-                with patch('champollion_pipeline.run_cortical_tiles.chdir'):
-                    with patch('champollion_pipeline.run_cortical_tiles.getcwd', return_value="/original"):
+        with patch.object(script, "validate_paths", return_value=True):
+            with patch.object(script, "execute_command", return_value=0):
+                with patch("champollion_pipeline.run_cortical_tiles.chdir"):
+                    with patch("champollion_pipeline.run_cortical_tiles.getcwd", return_value="/original"):
                         script.run()
                         # max(1, min(22, 1 - 2)) = max(1, -1) = 1
                         assert script.args.njobs == 1
 
-    @ patch('champollion_pipeline.run_cortical_tiles.cpu_count', return_value=2)
+    @patch("champollion_pipeline.run_cortical_tiles.cpu_count", return_value=2)
     def test_njobs_minimum_one_with_cpu_count_two(self, mock_cpu):
         """njobs is at least 1 on a dual-core machine (cpu_count=2)."""
         script = RunCorticalTiles()
-        script.parse_args([
-            "/input", "/output",
-            "--path_to_graph", "graphs",
-            "--path_sk_with_hull", "skeleton"
-        ])
+        script.parse_args(["/input", "/output", "--path_to_graph", "graphs", "--path_sk_with_hull", "skeleton"])
 
-        with patch.object(script, 'validate_paths', return_value=True):
-            with patch.object(script, 'execute_command', return_value=0):
-                with patch('champollion_pipeline.run_cortical_tiles.chdir'):
-                    with patch('champollion_pipeline.run_cortical_tiles.getcwd', return_value="/original"):
+        with patch.object(script, "validate_paths", return_value=True):
+            with patch.object(script, "execute_command", return_value=0):
+                with patch("champollion_pipeline.run_cortical_tiles.chdir"):
+                    with patch("champollion_pipeline.run_cortical_tiles.getcwd", return_value="/original"):
                         script.run()
                         # max(1, min(22, 2 - 2)) = max(1, 0) = 1
                         assert script.args.njobs == 1
@@ -258,26 +240,27 @@ class TestValidatePaths:
         input_dir.mkdir()
         output_dir.mkdir()
 
-        script.parse_args([
-            str(input_dir),
-            str(output_dir),
-            "--path_to_graph", "graphs",
-            "--path_sk_with_hull", "skeleton"
-        ])
+        script.parse_args(
+            [str(input_dir), str(output_dir), "--path_to_graph", "graphs", "--path_sk_with_hull", "skeleton"]
+        )
 
         assert script.validate_paths([str(input_dir), str(output_dir)]) is True
 
     def test_validate_paths_failure_raises_error(self):
         """Test that invalid paths raise ValueError."""
         script = RunCorticalTiles()
-        script.parse_args([
-            "/nonexistent/input",
-            "/nonexistent/output",
-            "--path_to_graph", "graphs",
-            "--path_sk_with_hull", "skeleton"
-        ])
+        script.parse_args(
+            [
+                "/nonexistent/input",
+                "/nonexistent/output",
+                "--path_to_graph",
+                "graphs",
+                "--path_sk_with_hull",
+                "skeleton",
+            ]
+        )
 
-        with patch.object(script, 'validate_paths', return_value=False):
+        with patch.object(script, "validate_paths", return_value=False):
             with pytest.raises(ValueError, match="Please input valid paths"):
                 script.run()
 
@@ -288,17 +271,14 @@ class TestBuildCommand:
     def test_command_includes_required_parameters(self, temp_dir):
         """Test that command includes all required parameters."""
         script = RunCorticalTiles()
-        script.parse_args([
-            temp_dir,
-            temp_dir,
-            "--path_to_graph", "custom/graph/path",
-            "--path_sk_with_hull", "custom/skeleton/path"
-        ])
+        script.parse_args(
+            [temp_dir, temp_dir, "--path_to_graph", "custom/graph/path", "--path_sk_with_hull", "custom/skeleton/path"]
+        )
 
-        with patch.object(script, 'validate_paths', return_value=True):
-            with patch.object(script, 'execute_command', return_value=0) as mock_exec:
-                with patch('champollion_pipeline.run_cortical_tiles.chdir'):
-                    with patch('champollion_pipeline.run_cortical_tiles.getcwd', return_value="/original"):
+        with patch.object(script, "validate_paths", return_value=True):
+            with patch.object(script, "execute_command", return_value=0) as mock_exec:
+                with patch("champollion_pipeline.run_cortical_tiles.chdir"):
+                    with patch("champollion_pipeline.run_cortical_tiles.getcwd", return_value="/original"):
                         script.run()
 
                         # Check execute_command was called with proper command
@@ -314,17 +294,24 @@ class TestBuildCommand:
     def test_command_includes_input_types_when_set(self, temp_dir):
         """Test that --input-types adds -y flag to command."""
         script = RunCorticalTiles()
-        script.parse_args([
-            temp_dir, temp_dir,
-            "--path_to_graph", "graphs",
-            "--path_sk_with_hull", "skeleton",
-            "--input-types", "skeleton", "foldlabel"
-        ])
+        script.parse_args(
+            [
+                temp_dir,
+                temp_dir,
+                "--path_to_graph",
+                "graphs",
+                "--path_sk_with_hull",
+                "skeleton",
+                "--input-types",
+                "skeleton",
+                "foldlabel",
+            ]
+        )
 
-        with patch.object(script, 'validate_paths', return_value=True):
-            with patch.object(script, 'execute_command', return_value=0) as mock_exec:
-                with patch('champollion_pipeline.run_cortical_tiles.chdir'):
-                    with patch('champollion_pipeline.run_cortical_tiles.getcwd', return_value="/original"):
+        with patch.object(script, "validate_paths", return_value=True):
+            with patch.object(script, "execute_command", return_value=0) as mock_exec:
+                with patch("champollion_pipeline.run_cortical_tiles.chdir"):
+                    with patch("champollion_pipeline.run_cortical_tiles.getcwd", return_value="/original"):
                         script.run()
 
                         cmd = mock_exec.call_args[0][0]
@@ -335,17 +322,23 @@ class TestBuildCommand:
     def test_command_includes_sk_qc_path_when_set(self, temp_dir):
         """Test that --sk_qc_path is included when set."""
         script = RunCorticalTiles()
-        script.parse_args([
-            temp_dir, temp_dir,
-            "--path_to_graph", "graphs",
-            "--path_sk_with_hull", "skeleton",
-            "--sk_qc_path", "/path/to/qc.tsv"
-        ])
+        script.parse_args(
+            [
+                temp_dir,
+                temp_dir,
+                "--path_to_graph",
+                "graphs",
+                "--path_sk_with_hull",
+                "skeleton",
+                "--sk_qc_path",
+                "/path/to/qc.tsv",
+            ]
+        )
 
-        with patch.object(script, 'validate_paths', return_value=True):
-            with patch.object(script, 'execute_command', return_value=0) as mock_exec:
-                with patch('champollion_pipeline.run_cortical_tiles.chdir'):
-                    with patch('champollion_pipeline.run_cortical_tiles.getcwd', return_value="/original"):
+        with patch.object(script, "validate_paths", return_value=True):
+            with patch.object(script, "execute_command", return_value=0) as mock_exec:
+                with patch("champollion_pipeline.run_cortical_tiles.chdir"):
+                    with patch("champollion_pipeline.run_cortical_tiles.getcwd", return_value="/original"):
                         script.run()
 
                         cmd = mock_exec.call_args[0][0]
@@ -367,22 +360,27 @@ class TestSkipDistbottom:
         config_path.write_text(json.dumps(config_data))
 
         script = RunCorticalTiles()
-        script.parse_args([
-            str(input_dir), str(output_dir),
-            "--path_to_graph", "graphs",
-            "--path_sk_with_hull", "skeleton",
-            "--skip-distbottom"
-        ])
+        script.parse_args(
+            [
+                str(input_dir),
+                str(output_dir),
+                "--path_to_graph",
+                "graphs",
+                "--path_sk_with_hull",
+                "skeleton",
+                "--skip-distbottom",
+            ]
+        )
 
-        with patch.object(script, 'validate_paths', return_value=True):
-            with patch.object(script, 'execute_command', return_value=0):
-                with patch('champollion_pipeline.run_cortical_tiles.chdir'):
-                    with patch('champollion_pipeline.run_cortical_tiles.getcwd', return_value="/original"):
+        with patch.object(script, "validate_paths", return_value=True):
+            with patch.object(script, "execute_command", return_value=0):
+                with patch("champollion_pipeline.run_cortical_tiles.chdir"):
+                    with patch("champollion_pipeline.run_cortical_tiles.getcwd", return_value="/original"):
                         script.run()
 
                         # Read back config and check skip_distbottom was set
                         updated_config = json.loads(config_path.read_text())
-                        assert updated_config.get('skip_distbottom') is True
+                        assert updated_config.get("skip_distbottom") is True
 
     def test_no_skip_distbottom_does_not_modify_config(self, temp_dir):
         """Test that without --skip-distbottom, config is unchanged for that key."""
@@ -395,20 +393,25 @@ class TestSkipDistbottom:
         config_path.write_text(json.dumps(config_data))
 
         script = RunCorticalTiles()
-        script.parse_args([
-            str(input_dir), str(output_dir),
-            "--path_to_graph", "graphs",
-            "--path_sk_with_hull", "skeleton",
-        ])
+        script.parse_args(
+            [
+                str(input_dir),
+                str(output_dir),
+                "--path_to_graph",
+                "graphs",
+                "--path_sk_with_hull",
+                "skeleton",
+            ]
+        )
 
-        with patch.object(script, 'validate_paths', return_value=True):
-            with patch.object(script, 'execute_command', return_value=0):
-                with patch('champollion_pipeline.run_cortical_tiles.chdir'):
-                    with patch('champollion_pipeline.run_cortical_tiles.getcwd', return_value="/original"):
+        with patch.object(script, "validate_paths", return_value=True):
+            with patch.object(script, "execute_command", return_value=0):
+                with patch("champollion_pipeline.run_cortical_tiles.chdir"):
+                    with patch("champollion_pipeline.run_cortical_tiles.getcwd", return_value="/original"):
                         script.run()
 
                         updated_config = json.loads(config_path.read_text())
-                        assert 'skip_distbottom' not in updated_config
+                        assert "skip_distbottom" not in updated_config
 
     def test_graphs_dir_set_to_input(self, temp_dir):
         """Test that graphs_dir in config is set to input path."""
@@ -421,20 +424,25 @@ class TestSkipDistbottom:
         config_path.write_text(json.dumps(config_data))
 
         script = RunCorticalTiles()
-        script.parse_args([
-            str(input_dir), str(output_dir),
-            "--path_to_graph", "graphs",
-            "--path_sk_with_hull", "skeleton",
-        ])
+        script.parse_args(
+            [
+                str(input_dir),
+                str(output_dir),
+                "--path_to_graph",
+                "graphs",
+                "--path_sk_with_hull",
+                "skeleton",
+            ]
+        )
 
-        with patch.object(script, 'validate_paths', return_value=True):
-            with patch.object(script, 'execute_command', return_value=0):
-                with patch('champollion_pipeline.run_cortical_tiles.chdir'):
-                    with patch('champollion_pipeline.run_cortical_tiles.getcwd', return_value="/original"):
+        with patch.object(script, "validate_paths", return_value=True):
+            with patch.object(script, "execute_command", return_value=0):
+                with patch("champollion_pipeline.run_cortical_tiles.chdir"):
+                    with patch("champollion_pipeline.run_cortical_tiles.getcwd", return_value="/original"):
                         script.run()
 
                         updated = json.loads(config_path.read_text())
-                        assert updated['graphs_dir'] == str(input_dir.resolve())
+                        assert updated["graphs_dir"] == str(input_dir.resolve())
 
     def test_output_dir_set_from_output_arg(self, temp_dir):
         """Test that output_dir in config is set to output/DERIVATIVES_FOLDER."""
@@ -449,21 +457,26 @@ class TestSkipDistbottom:
         config_path.write_text(json.dumps(config_data))
 
         script = RunCorticalTiles()
-        script.parse_args([
-            temp_dir, str(output_dir),
-            "--path_to_graph", "graphs",
-            "--path_sk_with_hull", "skeleton",
-        ])
+        script.parse_args(
+            [
+                temp_dir,
+                str(output_dir),
+                "--path_to_graph",
+                "graphs",
+                "--path_sk_with_hull",
+                "skeleton",
+            ]
+        )
 
-        with patch.object(script, 'validate_paths', return_value=True):
-            with patch.object(script, 'execute_command', return_value=0):
-                with patch('champollion_pipeline.run_cortical_tiles.chdir'):
-                    with patch('champollion_pipeline.run_cortical_tiles.getcwd', return_value="/original"):
+        with patch.object(script, "validate_paths", return_value=True):
+            with patch.object(script, "execute_command", return_value=0):
+                with patch("champollion_pipeline.run_cortical_tiles.chdir"):
+                    with patch("champollion_pipeline.run_cortical_tiles.getcwd", return_value="/original"):
                         script.run()
 
                         updated = json.loads(config_path.read_text())
                         expected = str(output_dir.resolve() / DERIVATIVES_FOLDER)
-                        assert updated['output_dir'] == expected
+                        assert updated["output_dir"] == expected
 
     def test_existing_skip_distbottom_preserved_when_flag_not_passed(self, temp_dir):
         """Existing skip_distbottom=True in config persists when flag is not passed."""
@@ -476,25 +489,31 @@ class TestSkipDistbottom:
         config_path.write_text(json.dumps(config_data))
 
         script = RunCorticalTiles()
-        script.parse_args([
-            str(input_dir), str(output_dir),
-            "--path_to_graph", "graphs",
-            "--path_sk_with_hull", "skeleton",
-        ])
+        script.parse_args(
+            [
+                str(input_dir),
+                str(output_dir),
+                "--path_to_graph",
+                "graphs",
+                "--path_sk_with_hull",
+                "skeleton",
+            ]
+        )
 
-        with patch.object(script, 'validate_paths', return_value=True):
-            with patch.object(script, 'execute_command', return_value=0):
-                with patch('champollion_pipeline.run_cortical_tiles.chdir'):
-                    with patch('champollion_pipeline.run_cortical_tiles.getcwd', return_value="/original"):
+        with patch.object(script, "validate_paths", return_value=True):
+            with patch.object(script, "execute_command", return_value=0):
+                with patch("champollion_pipeline.run_cortical_tiles.chdir"):
+                    with patch("champollion_pipeline.run_cortical_tiles.getcwd", return_value="/original"):
                         script.run()
 
                         updated = json.loads(config_path.read_text())
                         # Key is preserved from original config
-                        assert updated.get('skip_distbottom') is True
+                        assert updated.get("skip_distbottom") is True
 
     def test_config_with_null_values_overwritten_correctly(self, temp_dir):
         """JSON null (None) for graphs_dir/output_dir is overwritten with correct paths."""
         from champollion_pipeline.utils.lib import DERIVATIVES_FOLDER as DF
+
         input_dir = Path(temp_dir) / "input"
         output_dir = Path(temp_dir) / "output"
         input_dir.mkdir()
@@ -504,21 +523,26 @@ class TestSkipDistbottom:
         config_path.write_text(json.dumps(config_data))
 
         script = RunCorticalTiles()
-        script.parse_args([
-            str(input_dir), str(output_dir),
-            "--path_to_graph", "graphs",
-            "--path_sk_with_hull", "skeleton",
-        ])
+        script.parse_args(
+            [
+                str(input_dir),
+                str(output_dir),
+                "--path_to_graph",
+                "graphs",
+                "--path_sk_with_hull",
+                "skeleton",
+            ]
+        )
 
-        with patch.object(script, 'validate_paths', return_value=True):
-            with patch.object(script, 'execute_command', return_value=0):
-                with patch('champollion_pipeline.run_cortical_tiles.chdir'):
-                    with patch('champollion_pipeline.run_cortical_tiles.getcwd', return_value="/original"):
+        with patch.object(script, "validate_paths", return_value=True):
+            with patch.object(script, "execute_command", return_value=0):
+                with patch("champollion_pipeline.run_cortical_tiles.chdir"):
+                    with patch("champollion_pipeline.run_cortical_tiles.getcwd", return_value="/original"):
                         script.run()
 
                         updated = json.loads(config_path.read_text())
-                        assert updated['graphs_dir'] == str(input_dir.resolve())
-                        assert updated['output_dir'] == str(output_dir.resolve() / DF)
+                        assert updated["graphs_dir"] == str(input_dir.resolve())
+                        assert updated["output_dir"] == str(output_dir.resolve() / DF)
 
 
 class TestGraphPathConfigOverride:
@@ -526,6 +550,7 @@ class TestGraphPathConfigOverride:
 
     def _run_with_config(self, temp_dir, config_data, graph_path, skel_path):
         from pathlib import Path as _Path
+
         input_dir = _Path(temp_dir) / "input"
         output_dir = _Path(temp_dir) / "output"
         input_dir.mkdir()
@@ -533,15 +558,20 @@ class TestGraphPathConfigOverride:
         config_path = output_dir / "pipeline_loop_2mm.json"
         config_path.write_text(json.dumps(config_data))
         script = RunCorticalTiles()
-        script.parse_args([
-            str(input_dir), str(output_dir),
-            "--path_to_graph", graph_path,
-            "--path_sk_with_hull", skel_path,
-        ])
-        with patch.object(script, 'validate_paths', return_value=True):
-            with patch.object(script, 'execute_command', return_value=0):
-                with patch('champollion_pipeline.run_cortical_tiles.chdir'):
-                    with patch('champollion_pipeline.run_cortical_tiles.getcwd', return_value="/original"):
+        script.parse_args(
+            [
+                str(input_dir),
+                str(output_dir),
+                "--path_to_graph",
+                graph_path,
+                "--path_sk_with_hull",
+                skel_path,
+            ]
+        )
+        with patch.object(script, "validate_paths", return_value=True):
+            with patch.object(script, "execute_command", return_value=0):
+                with patch("champollion_pipeline.run_cortical_tiles.chdir"):
+                    with patch("champollion_pipeline.run_cortical_tiles.getcwd", return_value="/original"):
                         script.run()
         return json.loads(config_path.read_text())
 
@@ -553,7 +583,7 @@ class TestGraphPathConfigOverride:
             "t1mri/M12/default_analysis/folds/3.1",
             "t1mri/M12/default_analysis/segmentation",
         )
-        assert updated['path_to_graph'] == "t1mri/M12/default_analysis/folds/3.1"
+        assert updated["path_to_graph"] == "t1mri/M12/default_analysis/folds/3.1"
 
     def test_path_sk_with_hull_written_to_config(self, temp_dir):
         """path_sk_with_hull CLI arg is written into pipeline_loop_2mm.json."""
@@ -563,29 +593,31 @@ class TestGraphPathConfigOverride:
             "t1mri/M12/default_analysis/folds/3.1",
             "t1mri/M12/default_analysis/segmentation",
         )
-        assert updated['path_to_skeleton_with_hull'] == "t1mri/M12/default_analysis/segmentation"
+        assert updated["path_to_skeleton_with_hull"] == "t1mri/M12/default_analysis/segmentation"
 
     def test_path_to_graph_overrides_hardcoded_default(self, temp_dir):
         """CLI arg overrides the old hardcoded default value in the JSON."""
         updated = self._run_with_config(
             temp_dir,
-            {"graphs_dir": "", "output_dir": "",
-             "path_to_graph": "t1mri/default_acquisition/0/folds/3.1"},
+            {"graphs_dir": "", "output_dir": "", "path_to_graph": "t1mri/default_acquisition/0/folds/3.1"},
             "t1mri/M12/custom/folds/3.1",
             "t1mri/M12/custom/segmentation",
         )
-        assert updated['path_to_graph'] == "t1mri/M12/custom/folds/3.1"
+        assert updated["path_to_graph"] == "t1mri/M12/custom/folds/3.1"
 
     def test_path_sk_with_hull_overrides_hardcoded_default(self, temp_dir):
         """CLI arg overrides the old hardcoded skeleton default value in the JSON."""
         updated = self._run_with_config(
             temp_dir,
-            {"graphs_dir": "", "output_dir": "",
-             "path_to_skeleton_with_hull": "t1mri/default_acquisition/0/segmentation"},
+            {
+                "graphs_dir": "",
+                "output_dir": "",
+                "path_to_skeleton_with_hull": "t1mri/default_acquisition/0/segmentation",
+            },
             "t1mri/M12/custom/folds/3.1",
             "t1mri/M12/custom/segmentation",
         )
-        assert updated['path_to_skeleton_with_hull'] == "t1mri/M12/custom/segmentation"
+        assert updated["path_to_skeleton_with_hull"] == "t1mri/M12/custom/segmentation"
 
 
 class TestConfigLocationInvariants:
@@ -600,18 +632,23 @@ class TestConfigLocationInvariants:
         # No pre-existing config: forces the cp branch
 
         script = RunCorticalTiles()
-        script.parse_args([
-            str(input_dir), str(output_dir),
-            "--path_to_graph", "graphs",
-            "--path_sk_with_hull", "skeleton",
-        ])
+        script.parse_args(
+            [
+                str(input_dir),
+                str(output_dir),
+                "--path_to_graph",
+                "graphs",
+                "--path_sk_with_hull",
+                "skeleton",
+            ]
+        )
 
         # First validate_paths call (input/output) returns True;
         # second call (config file check) returns False → triggers cp branch.
-        with patch.object(script, 'validate_paths', side_effect=[True, False]):
-            with patch.object(script, 'execute_command', return_value=0) as mock_exec:
-                with patch('champollion_pipeline.run_cortical_tiles.chdir'):
-                    with patch('champollion_pipeline.run_cortical_tiles.getcwd', return_value="/original"):
+        with patch.object(script, "validate_paths", side_effect=[True, False]):
+            with patch.object(script, "execute_command", return_value=0) as mock_exec:
+                with patch("champollion_pipeline.run_cortical_tiles.chdir"):
+                    with patch("champollion_pipeline.run_cortical_tiles.getcwd", return_value="/original"):
                         script.run()
 
                         cp_cmd = mock_exec.call_args_list[0][0][0]
@@ -630,16 +667,21 @@ class TestConfigLocationInvariants:
         config_path.write_text(json.dumps({"graphs_dir": "", "output_dir": ""}))
 
         script = RunCorticalTiles()
-        script.parse_args([
-            str(input_dir), str(output_dir),
-            "--path_to_graph", "graphs",
-            "--path_sk_with_hull", "skeleton",
-        ])
+        script.parse_args(
+            [
+                str(input_dir),
+                str(output_dir),
+                "--path_to_graph",
+                "graphs",
+                "--path_sk_with_hull",
+                "skeleton",
+            ]
+        )
 
-        with patch.object(script, 'validate_paths', return_value=True):
-            with patch.object(script, 'execute_command', return_value=0) as mock_exec:
-                with patch('champollion_pipeline.run_cortical_tiles.chdir'):
-                    with patch('champollion_pipeline.run_cortical_tiles.getcwd', return_value="/original"):
+        with patch.object(script, "validate_paths", return_value=True):
+            with patch.object(script, "execute_command", return_value=0) as mock_exec:
+                with patch("champollion_pipeline.run_cortical_tiles.chdir"):
+                    with patch("champollion_pipeline.run_cortical_tiles.getcwd", return_value="/original"):
                         script.run()
 
                         final_cmd = mock_exec.call_args_list[-1][0][0]
@@ -655,6 +697,7 @@ class TestHypothesisConfigInvariants:
         """Create fresh input/output dirs, write config in output, run script."""
         import shutil
         import tempfile
+
         tmp = tempfile.mkdtemp()
         try:
             input_dir = Path(tmp) / "input"
@@ -664,15 +707,20 @@ class TestHypothesisConfigInvariants:
             config_path = output_dir / "pipeline_loop_2mm.json"
             config_path.write_text(json.dumps(config_data))
             script = RunCorticalTiles()
-            script.parse_args([
-                str(input_dir), str(output_dir),
-                "--path_to_graph", "g",
-                "--path_sk_with_hull", "s",
-            ])
-            with patch.object(script, 'validate_paths', return_value=True):
-                with patch.object(script, 'execute_command', return_value=0) as mock_exec:
-                    with patch('champollion_pipeline.run_cortical_tiles.chdir'):
-                        with patch('champollion_pipeline.run_cortical_tiles.getcwd', return_value="/orig"):
+            script.parse_args(
+                [
+                    str(input_dir),
+                    str(output_dir),
+                    "--path_to_graph",
+                    "g",
+                    "--path_sk_with_hull",
+                    "s",
+                ]
+            )
+            with patch.object(script, "validate_paths", return_value=True):
+                with patch.object(script, "execute_command", return_value=0) as mock_exec:
+                    with patch("champollion_pipeline.run_cortical_tiles.chdir"):
+                        with patch("champollion_pipeline.run_cortical_tiles.getcwd", return_value="/orig"):
                             script.run()
                             updated = json.loads(config_path.read_text())
                             return updated, input_dir, output_dir, mock_exec
@@ -686,17 +734,19 @@ class TestHypothesisConfigInvariants:
         from hypothesis import strategies as st
 
         json_val = st.one_of(
-            st.none(), st.booleans(), st.integers(-10, 10),
-            st.text(max_size=30), st.just("$local"), st.just(""),
+            st.none(),
+            st.booleans(),
+            st.integers(-10, 10),
+            st.text(max_size=30),
+            st.just("$local"),
+            st.just(""),
         )
 
         @given(initial=json_val)
         @settings(max_examples=50)
         def inner(initial):
-            updated, input_dir, _, _ = self._run_in_temp(
-                {"graphs_dir": initial, "output_dir": ""}
-            )
-            assert updated['graphs_dir'] == str(input_dir.resolve())
+            updated, input_dir, _, _ = self._run_in_temp({"graphs_dir": initial, "output_dir": ""})
+            assert updated["graphs_dir"] == str(input_dir.resolve())
 
         inner()
 
@@ -709,17 +759,19 @@ class TestHypothesisConfigInvariants:
         from champollion_pipeline.utils.lib import DERIVATIVES_FOLDER
 
         json_val = st.one_of(
-            st.none(), st.booleans(), st.integers(-10, 10),
-            st.text(max_size=30), st.just("$local"), st.just(""),
+            st.none(),
+            st.booleans(),
+            st.integers(-10, 10),
+            st.text(max_size=30),
+            st.just("$local"),
+            st.just(""),
         )
 
         @given(initial=json_val)
         @settings(max_examples=50)
         def inner(initial):
-            updated, _, output_dir, _ = self._run_in_temp(
-                {"graphs_dir": "", "output_dir": initial}
-            )
-            assert updated['output_dir'] == str(output_dir.resolve() / DERIVATIVES_FOLDER)
+            updated, _, output_dir, _ = self._run_in_temp({"graphs_dir": "", "output_dir": initial})
+            assert updated["output_dir"] == str(output_dir.resolve() / DERIVATIVES_FOLDER)
 
         inner()
 
@@ -729,21 +781,21 @@ class TestHypothesisConfigInvariants:
         from hypothesis import given, settings
         from hypothesis import strategies as st
 
-        reserved = {'graphs_dir', 'output_dir', 'skip_distbottom'}
-        key_st = st.from_regex(r'[a-z][a-z0-9_]{0,15}', fullmatch=True).filter(
-            lambda k: k not in reserved
-        )
+        reserved = {"graphs_dir", "output_dir", "skip_distbottom"}
+        key_st = st.from_regex(r"[a-z][a-z0-9_]{0,15}", fullmatch=True).filter(lambda k: k not in reserved)
         json_val = st.one_of(
-            st.none(), st.booleans(), st.integers(-10, 10),
-            st.text(max_size=30), st.just("$local"), st.just(""),
+            st.none(),
+            st.booleans(),
+            st.integers(-10, 10),
+            st.text(max_size=30),
+            st.just("$local"),
+            st.just(""),
         )
 
         @given(key=key_st, value=json_val)
         @settings(max_examples=30)
         def inner(key, value):
-            updated, _, _, _ = self._run_in_temp(
-                {"graphs_dir": "", "output_dir": "", key: value}
-            )
+            updated, _, _, _ = self._run_in_temp({"graphs_dir": "", "output_dir": "", key: value})
             assert key in updated
             assert updated[key] == value
 
@@ -758,7 +810,7 @@ class TestHypothesisConfigInvariants:
         from hypothesis import assume, given, settings
         from hypothesis import strategies as st
 
-        path_part = st.from_regex(r'[a-zA-Z0-9_-]{1,15}', fullmatch=True)
+        path_part = st.from_regex(r"[a-zA-Z0-9_-]{1,15}", fullmatch=True)
 
         @given(in_name=path_part, out_name=path_part)
         @settings(max_examples=30)
@@ -770,18 +822,22 @@ class TestHypothesisConfigInvariants:
                 output_dir = Path(tmp) / out_name
                 input_dir.mkdir(exist_ok=True)
                 output_dir.mkdir(exist_ok=True)
-                (output_dir / "pipeline_loop_2mm.json").write_text(
-                    json.dumps({"graphs_dir": "", "output_dir": ""})
-                )
+                (output_dir / "pipeline_loop_2mm.json").write_text(json.dumps({"graphs_dir": "", "output_dir": ""}))
                 script = RunCorticalTiles()
-                script.parse_args([
-                    str(input_dir), str(output_dir),
-                    "--path_to_graph", "g", "--path_sk_with_hull", "s",
-                ])
-                with patch.object(script, 'validate_paths', return_value=True):
-                    with patch.object(script, 'execute_command', return_value=0) as mock_exec:
-                        with patch('champollion_pipeline.run_cortical_tiles.chdir'):
-                            with patch('champollion_pipeline.run_cortical_tiles.getcwd', return_value="/orig"):
+                script.parse_args(
+                    [
+                        str(input_dir),
+                        str(output_dir),
+                        "--path_to_graph",
+                        "g",
+                        "--path_sk_with_hull",
+                        "s",
+                    ]
+                )
+                with patch.object(script, "validate_paths", return_value=True):
+                    with patch.object(script, "execute_command", return_value=0) as mock_exec:
+                        with patch("champollion_pipeline.run_cortical_tiles.chdir"):
+                            with patch("champollion_pipeline.run_cortical_tiles.getcwd", return_value="/orig"):
                                 script.run()
                                 final_cmd = mock_exec.call_args_list[-1][0][0]
                                 d_idx = final_cmd.index("-d")
@@ -795,20 +851,15 @@ class TestHypothesisConfigInvariants:
 class TestRunMethod:
     """Test the run method."""
 
-    @ patch('champollion_pipeline.run_cortical_tiles.chdir')
-    @ patch('champollion_pipeline.run_cortical_tiles.getcwd', return_value="/original")
+    @patch("champollion_pipeline.run_cortical_tiles.chdir")
+    @patch("champollion_pipeline.run_cortical_tiles.getcwd", return_value="/original")
     def test_run_changes_to_script_directory(self, mock_getcwd, mock_chdir, temp_dir):
         """Test that run changes to the cortical_tiles script directory."""
         script = RunCorticalTiles()
-        script.parse_args([
-            temp_dir,
-            temp_dir,
-            "--path_to_graph", "graphs",
-            "--path_sk_with_hull", "skeleton"
-        ])
+        script.parse_args([temp_dir, temp_dir, "--path_to_graph", "graphs", "--path_sk_with_hull", "skeleton"])
 
-        with patch.object(script, 'validate_paths', return_value=True):
-            with patch.object(script, 'execute_command', return_value=0):
+        with patch.object(script, "validate_paths", return_value=True):
+            with patch.object(script, "execute_command", return_value=0):
                 script.run()
 
                 # Check that chdir was called
@@ -819,54 +870,39 @@ class TestRunMethod:
     def test_run_executes_with_shell_false(self, temp_dir):
         """Test that command is executed with shell=False."""
         script = RunCorticalTiles()
-        script.parse_args([
-            temp_dir,
-            temp_dir,
-            "--path_to_graph", "graphs",
-            "--path_sk_with_hull", "skeleton"
-        ])
+        script.parse_args([temp_dir, temp_dir, "--path_to_graph", "graphs", "--path_sk_with_hull", "skeleton"])
 
-        with patch.object(script, 'validate_paths', return_value=True):
-            with patch.object(script, 'execute_command', return_value=0) as mock_exec:
-                with patch('champollion_pipeline.run_cortical_tiles.chdir'):
-                    with patch('champollion_pipeline.run_cortical_tiles.getcwd', return_value="/original"):
+        with patch.object(script, "validate_paths", return_value=True):
+            with patch.object(script, "execute_command", return_value=0) as mock_exec:
+                with patch("champollion_pipeline.run_cortical_tiles.chdir"):
+                    with patch("champollion_pipeline.run_cortical_tiles.getcwd", return_value="/original"):
                         script.run()
 
                         # Check shell=False
-                        assert mock_exec.call_args[1]['shell'] is False
+                        assert mock_exec.call_args[1]["shell"] is False
 
     def test_run_returns_command_result(self, temp_dir):
         """Test that run returns the result from execute_command."""
         script = RunCorticalTiles()
-        script.parse_args([
-            temp_dir,
-            temp_dir,
-            "--path_to_graph", "graphs",
-            "--path_sk_with_hull", "skeleton"
-        ])
+        script.parse_args([temp_dir, temp_dir, "--path_to_graph", "graphs", "--path_sk_with_hull", "skeleton"])
 
-        with patch.object(script, 'validate_paths', return_value=True):
-            with patch.object(script, 'execute_command', return_value=42):
-                with patch('champollion_pipeline.run_cortical_tiles.chdir'):
-                    with patch('champollion_pipeline.run_cortical_tiles.getcwd', return_value="/original"):
+        with patch.object(script, "validate_paths", return_value=True):
+            with patch.object(script, "execute_command", return_value=42):
+                with patch("champollion_pipeline.run_cortical_tiles.chdir"):
+                    with patch("champollion_pipeline.run_cortical_tiles.getcwd", return_value="/original"):
                         result = script.run()
                         assert result == 42
 
-    @patch('builtins.print')
+    @patch("builtins.print")
     def test_run_prints_input_output(self, mock_print, temp_dir):
         """Test that run prints input and output paths."""
         script = RunCorticalTiles()
-        script.parse_args([
-            temp_dir,
-            temp_dir,
-            "--path_to_graph", "graphs",
-            "--path_sk_with_hull", "skeleton"
-        ])
+        script.parse_args([temp_dir, temp_dir, "--path_to_graph", "graphs", "--path_sk_with_hull", "skeleton"])
 
-        with patch.object(script, 'validate_paths', return_value=True):
-            with patch.object(script, 'execute_command', return_value=0):
-                with patch('champollion_pipeline.run_cortical_tiles.chdir'):
-                    with patch('champollion_pipeline.run_cortical_tiles.getcwd', return_value="/original"):
+        with patch.object(script, "validate_paths", return_value=True):
+            with patch.object(script, "execute_command", return_value=0):
+                with patch("champollion_pipeline.run_cortical_tiles.chdir"):
+                    with patch("champollion_pipeline.run_cortical_tiles.getcwd", return_value="/original"):
                         script.run()
 
                         # Check that paths were printed
@@ -880,7 +916,7 @@ class TestMainFunction:
 
     def test_main_creates_script_and_runs(self, temp_dir):
         """Test that main creates script and calls build().print_args().run()."""
-        with patch('champollion_pipeline.run_cortical_tiles.RunCorticalTiles') as MockScript:
+        with patch("champollion_pipeline.run_cortical_tiles.RunCorticalTiles") as MockScript:
             mock_instance = MagicMock()
             mock_instance.build.return_value = mock_instance
             mock_instance.print_args.return_value = mock_instance
@@ -889,13 +925,10 @@ class TestMainFunction:
 
             from champollion_pipeline.run_cortical_tiles import main
 
-            with patch('sys.argv', [
-                'script',
-                temp_dir,
-                temp_dir,
-                '--path_to_graph', 'graphs',
-                '--path_sk_with_hull', 'skeleton'
-            ]):
+            with patch(
+                "sys.argv",
+                ["script", temp_dir, temp_dir, "--path_to_graph", "graphs", "--path_sk_with_hull", "skeleton"],
+            ):
                 result = main()
 
                 MockScript.assert_called_once()
@@ -917,17 +950,22 @@ class TestRunCorticalTilesIntegration:
         input_dir.mkdir()
         output_dir.mkdir()
 
-        script.parse_args([
-            str(input_dir),
-            str(output_dir),
-            "--path_to_graph", "graphs/path",
-            "--path_sk_with_hull", "skeleton/path",
-            "--njobs", "4"
-        ])
+        script.parse_args(
+            [
+                str(input_dir),
+                str(output_dir),
+                "--path_to_graph",
+                "graphs/path",
+                "--path_sk_with_hull",
+                "skeleton/path",
+                "--njobs",
+                "4",
+            ]
+        )
 
-        with patch.object(script, 'execute_command', return_value=0) as mock_exec:
-            with patch('champollion_pipeline.run_cortical_tiles.chdir'):
-                with patch('champollion_pipeline.run_cortical_tiles.getcwd', return_value="/original"):
+        with patch.object(script, "execute_command", return_value=0) as mock_exec:
+            with patch("champollion_pipeline.run_cortical_tiles.chdir"):
+                with patch("champollion_pipeline.run_cortical_tiles.getcwd", return_value="/original"):
                     result = script.run()
 
                     assert result == 0
@@ -947,6 +985,7 @@ class TestGenerateMaskNpys:
         script = RunCorticalTiles()
 
         import numpy as np
+
         fake_arr = np.ones((10, 10, 10, 1))
         mock_vol = MagicMock()
         mock_vol.np = fake_arr
@@ -992,21 +1031,31 @@ class TestGenerateMaskNpys:
         (output_dir / "pipeline_loop_2mm.json").write_text("{}")
 
         script = RunCorticalTiles()
-        script.parse_args([
-            str(input_dir), str(output_dir),
-            "--path_to_graph", "graphs/path",
-            "--path_sk_with_hull", "skel/path",
-        ])
+        script.parse_args(
+            [
+                str(input_dir),
+                str(output_dir),
+                "--path_to_graph",
+                "graphs/path",
+                "--path_sk_with_hull",
+                "skel/path",
+            ]
+        )
 
-        with patch.object(script, 'execute_command', return_value=0):
-            with patch.object(script, '_generate_mask_npys') as mock_gen:
-                with patch('champollion_pipeline.run_cortical_tiles.chdir'):
-                    with patch('champollion_pipeline.run_cortical_tiles.getcwd', return_value="/orig"):
-                        with patch('champollion_pipeline.run_cortical_tiles.exists', return_value=True):
-                            with patch('builtins.open', MagicMock(
-                                return_value=MagicMock(__enter__=MagicMock(
-                                    return_value=MagicMock(read=MagicMock(return_value='{}'))),
-                                    __exit__=MagicMock(return_value=False)))):
+        with patch.object(script, "execute_command", return_value=0):
+            with patch.object(script, "_generate_mask_npys") as mock_gen:
+                with patch("champollion_pipeline.run_cortical_tiles.chdir"):
+                    with patch("champollion_pipeline.run_cortical_tiles.getcwd", return_value="/orig"):
+                        with patch("champollion_pipeline.run_cortical_tiles.exists", return_value=True):
+                            with patch(
+                                "builtins.open",
+                                MagicMock(
+                                    return_value=MagicMock(
+                                        __enter__=MagicMock(return_value=MagicMock(read=MagicMock(return_value="{}"))),
+                                        __exit__=MagicMock(return_value=False),
+                                    )
+                                ),
+                            ):
                                 script.run()
 
         mock_gen.assert_called_once()
@@ -1024,5 +1073,5 @@ class TestRunCorticalTilesSmoke:
     def test_script_has_required_methods(self):
         """Test that script has all required methods."""
         script = RunCorticalTiles()
-        assert hasattr(script, 'run')
+        assert hasattr(script, "run")
         assert callable(script.run)

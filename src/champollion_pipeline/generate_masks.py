@@ -15,26 +15,42 @@ from champollion_utils.script_builder import ScriptBuilder
 
 # Default regions — same 28 as generate_sulcal_regions.py
 _REGIONS_DEFAULT = [
-    "S.C.-sylv.", "S.C.-S.Pe.C.", "S.C.-S.Po.C.",
-    "S.Pe.C.", "S.Po.C.", "S.F.int.-F.C.M.ant.",
-    "S.F.inf.-BROCA-S.Pe.C.inf.", "S.T.s.", "Sc.Cal.-S.Li.",
-    "F.C.M.post.-S.p.C.", "S.T.i.-S.O.T.lat.",
-    "OCCIPITAL", "F.I.P.-F.I.P.Po.C.inf.", "S.F.inter.-S.F.sup.",
-    "S.F.median-S.F.pol.tr.-S.F.sup.", "S.Or.",
-    "S.Or.-S.Olf.", "F.P.O.-S.Cu.-Sc.Cal.",
-    "S.s.P.-S.Pa.int.", "S.T.s.br.",
-    "Lobule_parietal_sup.", "S.F.marginal-S.F.inf.ant.",
-    "F.Coll.-S.Rh.", "S.T.i.-S.T.s.-S.T.pol.",
-    "F.C.L.p.-subsc.-F.C.L.a.-INSULA.", "S.F.int.-S.R.",
-    "S.Call.", "S.Call.-S.s.P.-S.intraCing.",
+    "S.C.-sylv.",
+    "S.C.-S.Pe.C.",
+    "S.C.-S.Po.C.",
+    "S.Pe.C.",
+    "S.Po.C.",
+    "S.F.int.-F.C.M.ant.",
+    "S.F.inf.-BROCA-S.Pe.C.inf.",
+    "S.T.s.",
+    "Sc.Cal.-S.Li.",
+    "F.C.M.post.-S.p.C.",
+    "S.T.i.-S.O.T.lat.",
+    "OCCIPITAL",
+    "F.I.P.-F.I.P.Po.C.inf.",
+    "S.F.inter.-S.F.sup.",
+    "S.F.median-S.F.pol.tr.-S.F.sup.",
+    "S.Or.",
+    "S.Or.-S.Olf.",
+    "F.P.O.-S.Cu.-Sc.Cal.",
+    "S.s.P.-S.Pa.int.",
+    "S.T.s.br.",
+    "Lobule_parietal_sup.",
+    "S.F.marginal-S.F.inf.ant.",
+    "F.Coll.-S.Rh.",
+    "S.T.i.-S.T.s.-S.T.pol.",
+    "F.C.L.p.-subsc.-F.C.L.a.-INSULA.",
+    "S.F.int.-S.R.",
+    "S.Call.",
+    "S.Call.-S.s.P.-S.intraCing.",
 ]
 
 # Canonical return values for runner status results.
 # Always compare against these keys rather than raw strings.
 RETURN_DICTIONARY = {
-    'ok': 'ok',
-    'skipped': 'skipped',
-    'invalid_foldlabel': 'invalid_foldlabel',
+    "ok": "ok",
+    "skipped": "skipped",
+    "invalid_foldlabel": "invalid_foldlabel",
 }
 
 
@@ -45,14 +61,16 @@ def _log_invalid_subject(log_path: str, subject_info: str) -> None:
     The file is created if it does not exist (append mode).
     """
     import datetime as _dt
+
     os.makedirs(os.path.dirname(log_path), exist_ok=True)
-    with open(log_path, 'a') as fh:
+    with open(log_path, "a") as fh:
         fh.write(f"{_dt.datetime.now().isoformat()}\t{subject_info}\n")
 
 
 @dataclass
 class RunConfig:
     """All parameters needed to execute a mask generation run."""
+
     sulci: set
     sides: list
     mask_dir: str
@@ -72,7 +90,7 @@ def get_sulci_for_regions(regions, sides, json_path):
     collects all sulcus sub-keys, strips the side suffix, and returns a
     deduplicated set of bare sulcus names.
     """
-    with open(json_path, 'r') as f:
+    with open(json_path, "r") as f:
         brain_regions = json.load(f)["brain"]
 
     sulci = set()
@@ -90,8 +108,10 @@ def get_sulci_for_regions(regions, sides, json_path):
 # Module-level joblib workers (must be picklable — do NOT nest in classes)
 # --------------------------------------------------------------------------- #
 
-def _compute_one_sulcus(sulcus_full, per_subject_voxels, voxel_size_tuple,
-                        mask_dir, side, brainvisa_dir, public_use=False):
+
+def _compute_one_sulcus(
+    sulcus_full, per_subject_voxels, voxel_size_tuple, mask_dir, side, brainvisa_dir, public_use=False
+):
     """Worker: build one sulcal mask from pre-extracted voxel coords.
 
     Receives only pure-numpy data so it is safe to call from joblib threads
@@ -106,6 +126,7 @@ def _compute_one_sulcus(sulcus_full, per_subject_voxels, voxel_size_tuple,
     from os.path import join as _join  # noqa: PLC0415
 
     import numpy as _np  # noqa: PLC0415
+
     if brainvisa_dir not in _sys.path:
         _sys.path.insert(0, brainvisa_dir)
     from compute_mask import initialize_mask, write_mask  # noqa: PLC0415
@@ -128,9 +149,12 @@ def _compute_one_sulcus(sulcus_full, per_subject_voxels, voxel_size_tuple,
             if len(voxels):
                 dims = arr.shape[:3]
                 valid = (
-                    (voxels[:, 0] >= 0) & (voxels[:, 0] < dims[0]) &
-                    (voxels[:, 1] >= 0) & (voxels[:, 1] < dims[1]) &
-                    (voxels[:, 2] >= 0) & (voxels[:, 2] < dims[2])
+                    (voxels[:, 0] >= 0)
+                    & (voxels[:, 0] < dims[0])
+                    & (voxels[:, 1] >= 0)
+                    & (voxels[:, 1] < dims[1])
+                    & (voxels[:, 2] >= 0)
+                    & (voxels[:, 2] < dims[2])
                 )
                 voxels = voxels[valid]
                 if len(voxels):
@@ -138,18 +162,17 @@ def _compute_one_sulcus(sulcus_full, per_subject_voxels, voxel_size_tuple,
             if not public_use:
                 vol_one = aims.Volume(arr_one)
                 vol_one.copyHeaderFrom(mask.header())
-                vol_one.header()['voxel_size'] = mask.header()['voxel_size']
+                vol_one.header()["voxel_size"] = mask.header()["voxel_size"]
                 aims.write(vol_one, _join(sample_dir, f"{sub_name}.nii.gz"))
             arr += arr_one
 
-        write_mask(mask, _join(mask_dir, side, sulcus_full + '.nii.gz'))
+        write_mask(mask, _join(mask_dir, side, sulcus_full + ".nii.gz"))
     except Exception as e:
         return f"failed: {e}"
-    return RETURN_DICTIONARY['ok']
+    return RETURN_DICTIONARY["ok"]
 
 
-def _load_and_extract_subject(sub, sulci_full_set, voxel_size_tuple,
-                              brainvisa_dir):
+def _load_and_extract_subject(sub, sulci_full_set, voxel_size_tuple, brainvisa_dir):
     """Worker: load one subject graph and extract voxel coords for all sulci.
 
     Returns (sub_name, sub_data) where sub_data is
@@ -164,45 +187,40 @@ def _load_and_extract_subject(sub, sulci_full_set, voxel_size_tuple,
     from os.path import join as _join  # noqa: PLC0415
 
     import numpy as _np  # noqa: PLC0415
+
     if brainvisa_dir not in _sys.path:
         _sys.path.insert(0, brainvisa_dir)
     from soma import aims  # noqa: PLC0415
 
-    matches = _glob.glob(_join(sub['dir'], sub['graph_file'] % sub))
+    matches = _glob.glob(_join(sub["dir"], sub["graph_file"] % sub))
     if not matches:
-        return sub['subject'], None
+        return sub["subject"], None
 
     graph = aims.read(matches[0])
     g_to_icbm = aims.GraphManip.getICBM2009cTemplateTransform(graph)
-    voxel_size_in = graph['voxel_size'][:3]
+    voxel_size_in = graph["voxel_size"][:3]
 
     all_parts: dict = {}
     for vertex in graph.vertices():
-        vname = vertex.get('name')
+        vname = vertex.get("name")
         if vname not in sulci_full_set:
             continue
-        for bucket_name in ('aims_ss', 'aims_bottom', 'aims_other'):
+        for bucket_name in ("aims_ss", "aims_bottom", "aims_other"):
             bucket = vertex.get(bucket_name)
             if bucket is None:
                 continue
-            vr = _np.asarray([
-                g_to_icbm.transform(_np.array(v) * voxel_size_in)
-                for v in bucket[0].keys()
-            ])
+            vr = _np.asarray([g_to_icbm.transform(_np.array(v) * voxel_size_in) for v in bucket[0].keys()])
             if vr.shape[0] == 0:
                 continue
-            all_parts.setdefault(vname, []).append(
-                _np.round(vr / voxel_size_tuple).astype(_np.int32))
-    sub_data = {
-        vname: _np.vstack(parts)
-        for vname, parts in all_parts.items()
-    }
-    return sub['subject'], sub_data
+            all_parts.setdefault(vname, []).append(_np.round(vr / voxel_size_tuple).astype(_np.int32))
+    sub_data = {vname: _np.vstack(parts) for vname, parts in all_parts.items()}
+    return sub["subject"], sub_data
 
 
 # --------------------------------------------------------------------------- #
 # Runner class hierarchy
 # --------------------------------------------------------------------------- #
+
 
 class MaskRunner(ABC):
     """Abstract base class for mask generation strategies.
@@ -216,7 +234,7 @@ class MaskRunner(ABC):
         self.verbose = verbose
 
     @classmethod
-    def create(cls, buffered: bool, njobs, verbose: bool = False) -> 'MaskRunner':
+    def create(cls, buffered: bool, njobs, verbose: bool = False) -> "MaskRunner":
         """Factory: return the correct MaskRunner for the given CLI flags.
 
         +-----------+--------+----------------------------------+
@@ -259,16 +277,18 @@ class SerialRunner(MaskRunner):
             results = {}
             for sulcus in sorted(config.sulci):
                 sulcus_full = complete_sulci_name(sulcus, side)
-                mask_file = join(config.mask_dir, side, sulcus_full + '.nii.gz')
+                mask_file = join(config.mask_dir, side, sulcus_full + ".nii.gz")
                 if not config.force and exists(mask_file):
-                    results[sulcus] = RETURN_DICTIONARY['skipped']
+                    results[sulcus] = RETURN_DICTIONARY["skipped"]
                     continue
                 if self.verbose:
-                    print(f"    [{side}] {sulcus_full}: calling compute_mask "
-                          f"(src_dir={config.labeled_subjects_dir}, "
-                          f"path_to_graph={config.path_to_graph_supervised}, "
-                          f"nb_subjects={config.nb_subjects}, "
-                          f"voxel_size={config.voxel_size})")
+                    print(
+                        f"    [{side}] {sulcus_full}: calling compute_mask "
+                        f"(src_dir={config.labeled_subjects_dir}, "
+                        f"path_to_graph={config.path_to_graph_supervised}, "
+                        f"nb_subjects={config.nb_subjects}, "
+                        f"voxel_size={config.voxel_size})"
+                    )
                 try:
                     _compute_mask(
                         src_dir=config.labeled_subjects_dir,
@@ -280,20 +300,16 @@ class SerialRunner(MaskRunner):
                         number_subjects=config.nb_subjects,
                         out_voxel_size=config.voxel_size,
                     )
-                    results[sulcus] = RETURN_DICTIONARY['ok']
+                    results[sulcus] = RETURN_DICTIONARY["ok"]
                 except Exception as e:
                     cause = e.__cause__ or e
                     if "too many simple surfaces" in str(cause):
-                        log_path = join(config.mask_dir, 'invalid_subjects.log')
-                        _log_invalid_subject(
-                            log_path,
-                            f"[{side}] sulcus={sulcus_full}  graph={e}"
-                        )
-                        print(f"  ⚠ [{side}] {sulcus_full}: invalid foldlabel — "
-                              f"logged to {log_path}")
-                        results[sulcus] = RETURN_DICTIONARY['invalid_foldlabel']
+                        log_path = join(config.mask_dir, "invalid_subjects.log")
+                        _log_invalid_subject(log_path, f"[{side}] sulcus={sulcus_full}  graph={e}")
+                        print(f"  ⚠ [{side}] {sulcus_full}: invalid foldlabel — logged to {log_path}")
+                        results[sulcus] = RETURN_DICTIONARY["invalid_foldlabel"]
                     else:
-                        results[sulcus] = f'failed: {e}'
+                        results[sulcus] = f"failed: {e}"
             yield side, results
 
 
@@ -330,33 +346,30 @@ class BufferedRunner(MaskRunner):
         voxel_size_tuple = (config.voxel_size, config.voxel_size, config.voxel_size)
 
         for side in config.sides:
-            graph_file_pattern = (
-                '%(subject)s/'
-                + config.path_to_graph_supervised
-                + '/%(side)s%(subject)s*.arg'
-            )
+            graph_file_pattern = "%(subject)s/" + config.path_to_graph_supervised + "/%(side)s%(subject)s*.arg"
 
-            subjects = get_all_subjects_as_dictionary(
-                [config.labeled_subjects_dir], [graph_file_pattern], side)
-            subjects = select_subjects_int_if_list_of_dict(
-                subjects, subjects, config.nb_subjects)
+            subjects = get_all_subjects_as_dictionary([config.labeled_subjects_dir], [graph_file_pattern], side)
+            subjects = select_subjects_int_if_list_of_dict(subjects, subjects, config.nb_subjects)
 
             # Determine which sulci need work (skip existing unless --force)
             sulci_to_run = {
                 complete_sulci_name(s, side): s
                 for s in sorted(config.sulci)
-                if config.force or not exists(
-                    join(config.mask_dir, side,
-                         complete_sulci_name(s, side) + '.nii.gz'))
+                if config.force or not exists(join(config.mask_dir, side, complete_sulci_name(s, side) + ".nii.gz"))
             }
             sulci_full_set = set(sulci_to_run)
 
             # ── Phase 1: parallel load + extract per subject ───────────────
-            print(f"  [{side}] Loading and extracting {len(subjects)} subjects "
-                  f"({len(sulci_to_run)} sulci) with {self.njobs} worker(s)…")
-            raw_results = Parallel(n_jobs=self.njobs, prefer='processes')(
+            print(
+                f"  [{side}] Loading and extracting {len(subjects)} subjects "
+                f"({len(sulci_to_run)} sulci) with {self.njobs} worker(s)…"
+            )
+            raw_results = Parallel(n_jobs=self.njobs, prefer="processes")(
                 delayed(_load_and_extract_subject)(
-                    sub, sulci_full_set, voxel_size_tuple, config.brainvisa_dir,
+                    sub,
+                    sulci_full_set,
+                    voxel_size_tuple,
+                    config.brainvisa_dir,
                 )
                 for sub in subjects
             )
@@ -369,52 +382,42 @@ class BufferedRunner(MaskRunner):
                     if self.verbose:
                         n_sulci_loaded = len(sub_data)
                         total_v = sum(len(v) for v in sub_data.values())
-                        print(f"    loaded {sub_name}: "
-                              f"{n_sulci_loaded} sulci, {total_v} voxels")
+                        print(f"    loaded {sub_name}: {n_sulci_loaded} sulci, {total_v} voxels")
             print(f"  [{side}] Load+extract done ({len(per_subject_voxels)} subjects).")
 
             # ── Phase 2: parallel sulcus compute ──────────────────────────
-            print(f"  [{side}] Computing {len(sulci_to_run)} sulci "
-                  f"with {self.njobs} worker(s)…")
+            print(f"  [{side}] Computing {len(sulci_to_run)} sulci with {self.njobs} worker(s)…")
             sorted_sulci_full = sorted(sulci_to_run)
             if self.verbose:
                 for sf in sorted_sulci_full:
-                    n_subs = sum(
-                        1 for d in per_subject_voxels.values() if sf in d)
-                    total_v = sum(
-                        len(d[sf]) for d in per_subject_voxels.values()
-                        if sf in d)
-                    print(f"    {sf}: {n_subs} subjects contributing, "
-                          f"{total_v} voxels total")
+                    n_subs = sum(1 for d in per_subject_voxels.values() if sf in d)
+                    total_v = sum(len(d[sf]) for d in per_subject_voxels.values() if sf in d)
+                    print(f"    {sf}: {n_subs} subjects contributing, {total_v} voxels total")
             try:
-                job_outputs = Parallel(n_jobs=self.njobs, prefer='threads')(
+                job_outputs = Parallel(n_jobs=self.njobs, prefer="threads")(
                     delayed(_compute_one_sulcus)(
-                        sf, per_subject_voxels, voxel_size_tuple,
-                        config.mask_dir, side, config.brainvisa_dir,
+                        sf,
+                        per_subject_voxels,
+                        voxel_size_tuple,
+                        config.mask_dir,
+                        side,
+                        config.brainvisa_dir,
                         config.public_use,
                     )
                     for sf in sorted_sulci_full
                 )
-                run_results = {
-                    sulci_to_run[sf]: r
-                    for sf, r in zip(sorted_sulci_full, job_outputs)
-                }
+                run_results = {sulci_to_run[sf]: r for sf, r in zip(sorted_sulci_full, job_outputs)}
             except Exception as e:
-                run_results = {sulci_to_run[sf]: f"failed: {e}"
-                               for sf in sorted_sulci_full}
+                run_results = {sulci_to_run[sf]: f"failed: {e}" for sf in sorted_sulci_full}
 
             # All sulci default to skipped; overwrite with actual run results
-            results = {s: RETURN_DICTIONARY['skipped'] for s in config.sulci}
+            results = {s: RETURN_DICTIONARY["skipped"] for s in config.sulci}
             results.update(run_results)
 
             # Completeness check
-            missing = [
-                sf for sf in sulci_to_run
-                if not exists(join(config.mask_dir, side, sf + '.nii.gz'))
-            ]
+            missing = [sf for sf in sulci_to_run if not exists(join(config.mask_dir, side, sf + ".nii.gz"))]
             if missing:
-                print(f"  [{side}] WARNING: {len(missing)} mask file(s) missing "
-                      f"after run:")
+                print(f"  [{side}] WARNING: {len(missing)} mask file(s) missing after run:")
                 for sf in missing:
                     print(f"    MISSING: {sf}.nii.gz")
             else:
@@ -427,64 +430,66 @@ class BufferedRunner(MaskRunner):
 # CLI script class
 # --------------------------------------------------------------------------- #
 
+
 class GenerateMasks(ScriptBuilder):
     """Script for generating sulcal mask files from manually labelled graphs."""
 
     def __init__(self):
         super().__init__(
             script_name="generate_masks",
-            description=(
-                "Generate binary sulcal mask files (.nii.gz) in MNI space "
-                "from manually labelled graph data."
-            )
+            description=("Generate binary sulcal mask files (.nii.gz) in MNI space from manually labelled graph data."),
         )
-        (self.add_required_argument(
-             "--labeled_subjects_dir",
-             "Directory containing manually labelled subjects "
-             "(e.g. /neurospin/dico/data/bv_databases/human/manually_labeled/pclean/all).")
-         .add_required_argument(
-             "--path_to_graph_supervised",
-             "Relative sub-path from each subject dir to the graph files "
-             "(e.g. t1mri/t1/default_analysis/folds/3.3/base2026_manual).")
-         .add_required_argument(
-             "--output_dir",
-             "Directory where mask files will be written. "
-             "Output structure: {output_dir}/{voxel_size}/{side}/{sulcus}.nii.gz")
-         .add_argument(
-             "--regions", nargs="+", default=None,
-             help="Sulcal regions to process. Default: all 28 regions.")
-         .add_argument(
-             "--sides", nargs="+", default=["L", "R"],
-             help="Hemisphere sides to process. Default: L R.")
-         .add_optional_argument(
-             "--voxel_size", "Output voxel size in mm.", default=2.0, type_=float)
-         .add_optional_argument(
-             "--nb_subjects",
-             "Number of subjects to use (-1 = all).", default=-1, type_=int)
-         .add_optional_argument(
-             "--masks",
-             "Mask version tag appended before the voxel-size level "
-             "(e.g. 'canonical_25'). If omitted, output_dir is used directly.",
-             default=None)
-         .add_argument(
-             "--buffered", action="store_true", default=False,
-             help="Load all subject graphs into RAM once before processing "
-                  "sulci. Faster when generating many sulci (reduces I/O "
-                  "from N×M to M reads). Requires more memory.")
-         .add_optional_argument(
-             "--njobs",
-             "Parallel workers used in --buffered mode. "
-             "Default: cpu_count - 2 (max 22).",
-             default=None, type_=int)
-         .add_argument(
-             "--force", action="store_true", default=False,
-             help="Force recompute even if the mask file already exists.")
-         .add_flag(
-             "--public_use",
-             "Skip per-subject NIfTI files; write only the aggregated mask.")
-         .add_flag(
-             "--verbose",
-             "Print detailed per-subject and per-sulcus progress logs."))
+        (
+            self.add_required_argument(
+                "--labeled_subjects_dir",
+                "Directory containing manually labelled subjects "
+                "(e.g. /neurospin/dico/data/bv_databases/human/manually_labeled/pclean/all).",
+            )
+            .add_required_argument(
+                "--path_to_graph_supervised",
+                "Relative sub-path from each subject dir to the graph files "
+                "(e.g. t1mri/t1/default_analysis/folds/3.3/base2026_manual).",
+            )
+            .add_required_argument(
+                "--output_dir",
+                "Directory where mask files will be written. "
+                "Output structure: {output_dir}/{voxel_size}/{side}/{sulcus}.nii.gz",
+            )
+            .add_argument(
+                "--regions", nargs="+", default=None, help="Sulcal regions to process. Default: all 28 regions."
+            )
+            .add_argument("--sides", nargs="+", default=["L", "R"], help="Hemisphere sides to process. Default: L R.")
+            .add_optional_argument("--voxel_size", "Output voxel size in mm.", default=2.0, type_=float)
+            .add_optional_argument("--nb_subjects", "Number of subjects to use (-1 = all).", default=-1, type_=int)
+            .add_optional_argument(
+                "--masks",
+                "Mask version tag appended before the voxel-size level "
+                "(e.g. 'canonical_25'). If omitted, output_dir is used directly.",
+                default=None,
+            )
+            .add_argument(
+                "--buffered",
+                action="store_true",
+                default=False,
+                help="Load all subject graphs into RAM once before processing "
+                "sulci. Faster when generating many sulci (reduces I/O "
+                "from N×M to M reads). Requires more memory.",
+            )
+            .add_optional_argument(
+                "--njobs",
+                "Parallel workers used in --buffered mode. Default: cpu_count - 2 (max 22).",
+                default=None,
+                type_=int,
+            )
+            .add_argument(
+                "--force",
+                action="store_true",
+                default=False,
+                help="Force recompute even if the mask file already exists.",
+            )
+            .add_flag("--public_use", "Skip per-subject NIfTI files; write only the aggregated mask.")
+            .add_flag("--verbose", "Print detailed per-subject and per-sulcus progress logs.")
+        )
 
     def run(self):
         """Execute mask generation for all (sulcus × side) combinations."""
@@ -496,19 +501,15 @@ class GenerateMasks(ScriptBuilder):
         regions = self.args.regions if self.args.regions else _REGIONS_DEFAULT
         sides = self.args.sides
 
-        brainvisa_dir = abspath(join(
-            dirname(__file__),
-            '..', 'external', 'cortical_tiles', 'deep_folding', 'brainvisa'
-        ))
+        brainvisa_dir = abspath(
+            join(dirname(__file__), "..", "external", "cortical_tiles", "deep_folding", "brainvisa")
+        )
         if brainvisa_dir not in sys.path:
             sys.path.insert(0, brainvisa_dir)
 
-        json_path = abspath(join(
-            dirname(__file__), '..', 'sulci_regions_champollion_V1.json'
-        ))
+        json_path = abspath(join(dirname(__file__), "..", "sulci_regions_champollion_V1.json"))
         sulci = get_sulci_for_regions(regions, sides, json_path)
-        print(f"generate_masks.py: {len(sulci)} unique sulci from "
-              f"{len(regions)} region(s) × {len(sides)} side(s)")
+        print(f"generate_masks.py: {len(sulci)} unique sulci from {len(regions)} region(s) × {len(sides)} side(s)")
 
         vox_str = f"{int(self.args.voxel_size)}mm"
         mask_dir = (
@@ -520,15 +521,17 @@ class GenerateMasks(ScriptBuilder):
         njobs = None
         if self.args.njobs is not None:
             from deep_folding.brainvisa.utils.parallel import define_njobs  # noqa: PLC0415
+
             njobs = define_njobs(self.args.njobs)
             if not self.args.buffered:
                 print("  Note: --njobs implies --buffered")
 
-        runner = MaskRunner.create(
-            self.args.buffered, njobs, verbose=self.args.verbose)
+        runner = MaskRunner.create(self.args.buffered, njobs, verbose=self.args.verbose)
         mode = (
-            f"parallel buffered ({njobs} workers)" if njobs is not None
-            else "serial buffered" if self.args.buffered
+            f"parallel buffered ({njobs} workers)"
+            if njobs is not None
+            else "serial buffered"
+            if self.args.buffered
             else "serial unbuffered"
         )
         print(f"generate_masks.py: {mode} mode")
@@ -553,13 +556,13 @@ class GenerateMasks(ScriptBuilder):
 
         for side, results in runner(config):
             for sulcus, result in results.items():
-                if result == RETURN_DICTIONARY['skipped']:
+                if result == RETURN_DICTIONARY["skipped"]:
                     print(f"  ✓ [{side}] {sulcus} (already exists, skipping)")
                     n_skipped += 1
-                elif result == RETURN_DICTIONARY['ok']:
+                elif result == RETURN_DICTIONARY["ok"]:
                     print(f"  → [{side}] {sulcus} ok")
                     n_ok += 1
-                elif result == RETURN_DICTIONARY['invalid_foldlabel']:
+                elif result == RETURN_DICTIONARY["invalid_foldlabel"]:
                     print(f"  ⚠ [{side}] {sulcus} (invalid foldlabel — subject logged)")
                     n_invalid += 1
                 else:

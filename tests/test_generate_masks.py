@@ -26,6 +26,7 @@ from champollion_pipeline.generate_masks import (
 # Shared helpers
 # ---------------------------------------------------------------------------
 
+
 class _FakeMask:
     """Minimal Volume-like object supporting numpy array protocol."""
 
@@ -36,7 +37,7 @@ class _FakeMask:
         return self._data
 
     def header(self):
-        return {'voxel_size': [2.0, 2.0, 2.0, 1.0]}
+        return {"voxel_size": [2.0, 2.0, 2.0, 1.0]}
 
     def copyHeaderFrom(self, other):
         pass
@@ -55,18 +56,18 @@ def _mock_aims_env(fake_mask=None):
     mock_compute_mask = MagicMock()
     mock_compute_mask.initialize_mask.return_value = fake_mask
     modules = {
-        'soma': MagicMock(aims=mock_aims),
-        'soma.aims': mock_aims,
-        'compute_mask': mock_compute_mask,
+        "soma": MagicMock(aims=mock_aims),
+        "soma.aims": mock_aims,
+        "compute_mask": mock_compute_mask,
     }
     return modules, mock_aims, mock_compute_mask, fake_mask
 
 
-def _two_subject_voxels(sulcus='S.C._left'):
+def _two_subject_voxels(sulcus="S.C._left"):
     """Per-subject voxel dict with two subjects, distinct voxel positions."""
     return {
-        'sub01': {sulcus: np.array([[10, 20, 30]], dtype=np.int32)},
-        'sub02': {sulcus: np.array([[15, 25, 35]], dtype=np.int32)},
+        "sub01": {sulcus: np.array([[10, 20, 30]], dtype=np.int32)},
+        "sub02": {sulcus: np.array([[15, 25, 35]], dtype=np.int32)},
     }
 
 
@@ -84,7 +85,7 @@ def json_path(tmp_path):
                 "S.C.sylvian._right": ["S.C.sylvian._right"],
             },
             "S.C.-S.Pe.C._left": {
-                "S.C._left": ["S.C._left"],          # overlaps with S.C.-sylv.
+                "S.C._left": ["S.C._left"],  # overlaps with S.C.-sylv.
                 "S.Pe.C.inf._left": ["S.Pe.C.inf._left"],
             },
             "S.C.-S.Pe.C._right": {
@@ -99,7 +100,6 @@ def json_path(tmp_path):
 
 
 class TestGetSulciForRegions:
-
     def test_single_region_single_side(self, json_path):
         """Single region + single side returns correct bare sulcus names."""
         result = get_sulci_for_regions(["S.C.-sylv."], ["L"], json_path)
@@ -119,9 +119,7 @@ class TestGetSulciForRegions:
 
     def test_overlapping_sulci_deduplicated(self, json_path):
         """Sulci shared across regions appear only once."""
-        result = get_sulci_for_regions(
-            ["S.C.-sylv.", "S.C.-S.Pe.C."], ["L"], json_path
-        )
+        result = get_sulci_for_regions(["S.C.-sylv.", "S.C.-S.Pe.C."], ["L"], json_path)
         # S.C. is in both regions — must appear only once
         assert "S.C." in result
         sulci_list = list(result)
@@ -129,9 +127,7 @@ class TestGetSulciForRegions:
 
     def test_two_regions_union(self, json_path):
         """Two regions produce the union of their sulci."""
-        result = get_sulci_for_regions(
-            ["S.C.-sylv.", "S.C.-S.Pe.C."], ["L"], json_path
-        )
+        result = get_sulci_for_regions(["S.C.-sylv.", "S.C.-S.Pe.C."], ["L"], json_path)
         assert result == {"S.C.", "S.C.sylvian.", "S.Pe.C.inf."}
 
     def test_unknown_region_skipped(self, json_path):
@@ -141,9 +137,7 @@ class TestGetSulciForRegions:
 
     def test_mixed_known_unknown_regions(self, json_path):
         """Unknown regions are skipped; known ones still processed."""
-        result = get_sulci_for_regions(
-            ["S.C.-sylv.", "DOES_NOT_EXIST"], ["L"], json_path
-        )
+        result = get_sulci_for_regions(["S.C.-sylv.", "DOES_NOT_EXIST"], ["L"], json_path)
         assert result == {"S.C.", "S.C.sylvian."}
 
     def test_returns_set(self, json_path):
@@ -161,9 +155,9 @@ class TestGetSulciForRegions:
 # _compute_one_sulcus
 # ---------------------------------------------------------------------------
 
-class TestComputeOneSulcus:
 
-    SULCUS = 'S.C._left'
+class TestComputeOneSulcus:
+    SULCUS = "S.C._left"
     VT = (2.0, 2.0, 2.0)
 
     def test_public_use_false_creates_sample_dir(self, tmp_path):
@@ -171,28 +165,43 @@ class TestComputeOneSulcus:
         modules, mock_aims, _, _ = _mock_aims_env()
         with patch.dict(sys.modules, modules):
             _compute_one_sulcus(
-                self.SULCUS, _two_subject_voxels(), self.VT,
-                str(tmp_path), 'L', '/fake_bv', public_use=False,
+                self.SULCUS,
+                _two_subject_voxels(),
+                self.VT,
+                str(tmp_path),
+                "L",
+                "/fake_bv",
+                public_use=False,
             )
-        assert (tmp_path / 'L' / self.SULCUS).is_dir()
+        assert (tmp_path / "L" / self.SULCUS).is_dir()
 
     def test_public_use_true_skips_sample_dir(self, tmp_path):
         """public_use=True: per-subject subdirectory is NOT created."""
         modules, mock_aims, _, _ = _mock_aims_env()
         with patch.dict(sys.modules, modules):
             _compute_one_sulcus(
-                self.SULCUS, _two_subject_voxels(), self.VT,
-                str(tmp_path), 'L', '/fake_bv', public_use=True,
+                self.SULCUS,
+                _two_subject_voxels(),
+                self.VT,
+                str(tmp_path),
+                "L",
+                "/fake_bv",
+                public_use=True,
             )
-        assert not (tmp_path / 'L' / self.SULCUS).is_dir()
+        assert not (tmp_path / "L" / self.SULCUS).is_dir()
 
     def test_public_use_false_calls_aims_write_per_subject(self, tmp_path):
         """public_use=False: aims.write called once per subject."""
         modules, mock_aims, _, _ = _mock_aims_env()
         with patch.dict(sys.modules, modules):
             _compute_one_sulcus(
-                self.SULCUS, _two_subject_voxels(), self.VT,
-                str(tmp_path), 'L', '/fake_bv', public_use=False,
+                self.SULCUS,
+                _two_subject_voxels(),
+                self.VT,
+                str(tmp_path),
+                "L",
+                "/fake_bv",
+                public_use=False,
             )
         assert mock_aims.write.call_count == 2
 
@@ -201,8 +210,13 @@ class TestComputeOneSulcus:
         modules, mock_aims, _, _ = _mock_aims_env()
         with patch.dict(sys.modules, modules):
             _compute_one_sulcus(
-                self.SULCUS, _two_subject_voxels(), self.VT,
-                str(tmp_path), 'L', '/fake_bv', public_use=True,
+                self.SULCUS,
+                _two_subject_voxels(),
+                self.VT,
+                str(tmp_path),
+                "L",
+                "/fake_bv",
+                public_use=True,
             )
         mock_aims.write.assert_not_called()
 
@@ -212,20 +226,29 @@ class TestComputeOneSulcus:
             modules, _, mock_cm, _ = _mock_aims_env()
             with patch.dict(sys.modules, modules):
                 _compute_one_sulcus(
-                    self.SULCUS, _two_subject_voxels(), self.VT,
-                    str(tmp_path / str(flag)), 'L', '/fake_bv',
+                    self.SULCUS,
+                    _two_subject_voxels(),
+                    self.VT,
+                    str(tmp_path / str(flag)),
+                    "L",
+                    "/fake_bv",
                     public_use=flag,
                 )
             mock_cm.write_mask.assert_called_once()
 
     def test_preexisting_side_dir_does_not_raise(self, tmp_path):
         """Pre-existing side directory (EEXIST race) does not cause failure."""
-        (tmp_path / 'L').mkdir()  # simulate another thread already created it
+        (tmp_path / "L").mkdir()  # simulate another thread already created it
         modules, _, _, _ = _mock_aims_env()
         with patch.dict(sys.modules, modules):
             result = _compute_one_sulcus(
-                self.SULCUS, {}, self.VT,
-                str(tmp_path), 'L', '/fake_bv', public_use=False,
+                self.SULCUS,
+                {},
+                self.VT,
+                str(tmp_path),
+                "L",
+                "/fake_bv",
+                public_use=False,
             )
         assert result == "ok"
 
@@ -234,8 +257,12 @@ class TestComputeOneSulcus:
         modules, _, _, _ = _mock_aims_env()
         with patch.dict(sys.modules, modules):
             result = _compute_one_sulcus(
-                self.SULCUS, {}, self.VT,
-                str(tmp_path), 'L', '/fake_bv',
+                self.SULCUS,
+                {},
+                self.VT,
+                str(tmp_path),
+                "L",
+                "/fake_bv",
             )
         assert result == "ok"
 
@@ -245,8 +272,12 @@ class TestComputeOneSulcus:
         mock_cm.initialize_mask.side_effect = RuntimeError("boom")
         with patch.dict(sys.modules, modules):
             result = _compute_one_sulcus(
-                self.SULCUS, {}, self.VT,
-                str(tmp_path), 'L', '/fake_bv',
+                self.SULCUS,
+                {},
+                self.VT,
+                str(tmp_path),
+                "L",
+                "/fake_bv",
             )
         assert result.startswith("failed:")
         assert "boom" in result
@@ -257,8 +288,13 @@ class TestComputeOneSulcus:
         modules, _, _, _ = _mock_aims_env(fake_mask)
         with patch.dict(sys.modules, modules):
             _compute_one_sulcus(
-                self.SULCUS, _two_subject_voxels(), self.VT,
-                str(tmp_path), 'L', '/fake_bv', public_use=True,
+                self.SULCUS,
+                _two_subject_voxels(),
+                self.VT,
+                str(tmp_path),
+                "L",
+                "/fake_bv",
+                public_use=True,
             )
         arr = fake_mask._data
         assert arr[10, 20, 30, 0] == 1  # sub01 voxel
@@ -269,15 +305,15 @@ class TestComputeOneSulcus:
 # _load_and_extract_subject
 # ---------------------------------------------------------------------------
 
-class TestLoadAndExtractSubject:
 
+class TestLoadAndExtractSubject:
     VT = (2.0, 2.0, 2.0)
 
     def _sub(self, path):
         return {
-            'subject': 'sub01',
-            'dir': str(path),
-            'graph_file': '%(subject)s.arg',
+            "subject": "sub01",
+            "dir": str(path),
+            "graph_file": "%(subject)s.arg",
         }
 
     def _mock_graph(self, mock_aims, vertices=()):
@@ -287,71 +323,85 @@ class TestLoadAndExtractSubject:
         mock_aims.read.return_value = mock_graph
         mock_transform = MagicMock()
         mock_transform.transform.side_effect = lambda c: c
-        mock_aims.GraphManip.getICBM2009cTemplateTransform.return_value = (
-            mock_transform)
+        mock_aims.GraphManip.getICBM2009cTemplateTransform.return_value = mock_transform
 
     def test_missing_graph_file_returns_none(self, tmp_path):
         """No matching .arg file → returns (sub_name, None)."""
         modules, _, _, _ = _mock_aims_env()
         with patch.dict(sys.modules, modules):
-            with patch('glob.glob', return_value=[]):
+            with patch("glob.glob", return_value=[]):
                 name, data = _load_and_extract_subject(
-                    self._sub(tmp_path), set(), self.VT, '/fake_bv',
+                    self._sub(tmp_path),
+                    set(),
+                    self.VT,
+                    "/fake_bv",
                 )
-        assert name == 'sub01'
+        assert name == "sub01"
         assert data is None
 
     def test_found_graph_returns_dict(self, tmp_path):
         """Found graph file → returns (sub_name, dict)."""
         modules, mock_aims, _, _ = _mock_aims_env()
         self._mock_graph(mock_aims)
-        graph_path = [str(tmp_path / 'sub01.arg')]
+        graph_path = [str(tmp_path / "sub01.arg")]
         with patch.dict(sys.modules, modules):
-            with patch('glob.glob', return_value=graph_path):
+            with patch("glob.glob", return_value=graph_path):
                 name, data = _load_and_extract_subject(
-                    self._sub(tmp_path), {'S.C._left'}, self.VT, '/fake_bv',
+                    self._sub(tmp_path),
+                    {"S.C._left"},
+                    self.VT,
+                    "/fake_bv",
                 )
-        assert name == 'sub01'
+        assert name == "sub01"
         assert isinstance(data, dict)
 
     def test_only_requested_sulci_in_result(self, tmp_path):
         """Vertices outside sulci_full_set are not included in sub_data."""
+
         def make_vertex(name):
             v = MagicMock()
             mock_bucket = MagicMock()
             mock_bucket.__getitem__ = MagicMock(return_value={(0, 0, 0): None})
+
             def _get(k):
-                if k == 'name':
+                if k == "name":
                     return name
-                if k == 'aims_ss':
+                if k == "aims_ss":
                     return mock_bucket
                 return None
+
             v.get.side_effect = _get
             return v
 
         modules, mock_aims, _, _ = _mock_aims_env()
         self._mock_graph(
             mock_aims,
-            vertices=[make_vertex('S.C._left'), make_vertex('OTHER._left')],
+            vertices=[make_vertex("S.C._left"), make_vertex("OTHER._left")],
         )
-        graph_path = [str(tmp_path / 'sub01.arg')]
+        graph_path = [str(tmp_path / "sub01.arg")]
         with patch.dict(sys.modules, modules):
-            with patch('glob.glob', return_value=graph_path):
+            with patch("glob.glob", return_value=graph_path):
                 _, data = _load_and_extract_subject(
-                    self._sub(tmp_path), {'S.C._left'}, self.VT, '/fake_bv',
+                    self._sub(tmp_path),
+                    {"S.C._left"},
+                    self.VT,
+                    "/fake_bv",
                 )
-        assert 'S.C._left' in data
-        assert 'OTHER._left' not in data
+        assert "S.C._left" in data
+        assert "OTHER._left" not in data
 
     def test_empty_sulci_set_returns_empty_sub_data(self, tmp_path):
         """Empty sulci_full_set → sub_data is an empty dict."""
         modules, mock_aims, _, _ = _mock_aims_env()
         self._mock_graph(mock_aims)
-        graph_path = [str(tmp_path / 'sub01.arg')]
+        graph_path = [str(tmp_path / "sub01.arg")]
         with patch.dict(sys.modules, modules):
-            with patch('glob.glob', return_value=graph_path):
+            with patch("glob.glob", return_value=graph_path):
                 _, data = _load_and_extract_subject(
-                    self._sub(tmp_path), set(), self.VT, '/fake_bv',
+                    self._sub(tmp_path),
+                    set(),
+                    self.VT,
+                    "/fake_bv",
                 )
         assert data == {}
 
@@ -360,17 +410,20 @@ class TestLoadAndExtractSubject:
 # GenerateMasks CLI: --public_use flag
 # ---------------------------------------------------------------------------
 
-class TestPublicUseFlag:
 
+class TestPublicUseFlag:
     def _parse(self, extra_args=()):
         gm = GenerateMasks()
         argv = [
-            'generate_masks',
-            '--labeled_subjects_dir', '/x',
-            '--path_to_graph_supervised', 'p',
-            '--output_dir', '/y',
+            "generate_masks",
+            "--labeled_subjects_dir",
+            "/x",
+            "--path_to_graph_supervised",
+            "p",
+            "--output_dir",
+            "/y",
         ] + list(extra_args)
-        with patch('sys.argv', argv):
+        with patch("sys.argv", argv):
             gm.parse_args()
         return gm
 
@@ -381,7 +434,7 @@ class TestPublicUseFlag:
 
     def test_public_use_flag_sets_true(self):
         """Passing --public_use sets the attribute to True."""
-        gm = self._parse(['--public_use'])
+        gm = self._parse(["--public_use"])
         assert gm.args.public_use is True
 
 
@@ -389,64 +442,80 @@ class TestPublicUseFlag:
 # GenerateMasks CLI: --njobs implies --buffered
 # ---------------------------------------------------------------------------
 
-class TestNjobsAutoBuffered:
 
+class TestNjobsAutoBuffered:
     def _bv_modules(self, njobs=4):
         """sys.modules patch dict covering deep_folding parallel util."""
         mock_parallel = MagicMock()
         mock_parallel.define_njobs.return_value = njobs
         return {
-            'compute_mask': MagicMock(),
-            'deep_folding': MagicMock(),
-            'deep_folding.brainvisa': MagicMock(),
-            'deep_folding.brainvisa.utils': MagicMock(),
-            'deep_folding.brainvisa.utils.parallel': mock_parallel,
+            "compute_mask": MagicMock(),
+            "deep_folding": MagicMock(),
+            "deep_folding.brainvisa": MagicMock(),
+            "deep_folding.brainvisa.utils": MagicMock(),
+            "deep_folding.brainvisa.utils.parallel": mock_parallel,
         }
 
     def test_njobs_prints_auto_buffered_message(self, tmp_path, capsys):
         """--njobs without --buffered prints the auto-enable notice."""
         gm = GenerateMasks()
-        with patch('sys.argv', [
-            'generate_masks',
-            '--labeled_subjects_dir', '/x',
-            '--path_to_graph_supervised', 'p',
-            '--output_dir', str(tmp_path),
-            '--njobs', '4',
-        ]):
+        with patch(
+            "sys.argv",
+            [
+                "generate_masks",
+                "--labeled_subjects_dir",
+                "/x",
+                "--path_to_graph_supervised",
+                "p",
+                "--output_dir",
+                str(tmp_path),
+                "--njobs",
+                "4",
+            ],
+        ):
             gm.parse_args()
 
         mock_runner = MagicMock()
         mock_runner.return_value = iter([])
-        with patch.dict(sys.modules, self._bv_modules(4)), \
-              patch('champollion_pipeline.generate_masks.get_sulci_for_regions',
-                   return_value=set()), \
-              patch('champollion_pipeline.generate_masks.MaskRunner.create', return_value=mock_runner):
+        with (
+            patch.dict(sys.modules, self._bv_modules(4)),
+            patch("champollion_pipeline.generate_masks.get_sulci_for_regions", return_value=set()),
+            patch("champollion_pipeline.generate_masks.MaskRunner.create", return_value=mock_runner),
+        ):
             gm.run()
 
         out = capsys.readouterr().out
-        assert '--njobs implies --buffered' in out
+        assert "--njobs implies --buffered" in out
 
     def test_njobs_without_buffered_uses_buffered_path(self, tmp_path):
         """--njobs alone triggers the buffered runner."""
         gm = GenerateMasks()
-        with patch('sys.argv', [
-            'generate_masks',
-            '--labeled_subjects_dir', '/x',
-            '--path_to_graph_supervised', 'p',
-            '--output_dir', str(tmp_path),
-            '--njobs', '2',
-        ]):
+        with patch(
+            "sys.argv",
+            [
+                "generate_masks",
+                "--labeled_subjects_dir",
+                "/x",
+                "--path_to_graph_supervised",
+                "p",
+                "--output_dir",
+                str(tmp_path),
+                "--njobs",
+                "2",
+            ],
+        ):
             gm.parse_args()
 
         runner_called = []
 
         mock_runner = MagicMock()
-        mock_runner.side_effect = lambda config: (runner_called.append(True) or iter([]))
+        mock_runner.side_effect = lambda config: runner_called.append(True) or iter([])
 
-        with patch.dict(sys.modules, self._bv_modules(2)), \
-              patch('champollion_pipeline.generate_masks.get_sulci_for_regions',
-                   return_value=set()), \
-              patch('champollion_pipeline.generate_masks.MaskRunner.create', return_value=mock_runner):
+        with (
+            patch.dict(sys.modules, self._bv_modules(2)),
+            patch("champollion_pipeline.generate_masks.get_sulci_for_regions", return_value=set()),
+            patch("champollion_pipeline.generate_masks.MaskRunner.create", return_value=mock_runner),
+        ):
             gm.run()
 
         assert runner_called, "buffered runner was not called"
@@ -456,78 +525,95 @@ class TestNjobsAutoBuffered:
 # GenerateMasks: output path uses mm-suffix format
 # ---------------------------------------------------------------------------
 
-class TestVoxStrOutputPath:
 
+class TestVoxStrOutputPath:
     def _bv_modules(self, njobs=1):
         mock_parallel = MagicMock()
         mock_parallel.define_njobs.return_value = njobs
         return {
-            'compute_mask': MagicMock(),
-            'deep_folding': MagicMock(),
-            'deep_folding.brainvisa': MagicMock(),
-            'deep_folding.brainvisa.utils': MagicMock(),
-            'deep_folding.brainvisa.utils.parallel': mock_parallel,
+            "compute_mask": MagicMock(),
+            "deep_folding": MagicMock(),
+            "deep_folding.brainvisa": MagicMock(),
+            "deep_folding.brainvisa.utils": MagicMock(),
+            "deep_folding.brainvisa.utils.parallel": mock_parallel,
         }
 
     def test_vox_str_uses_mm_suffix(self, tmp_path):
         """mask_dir in RunConfig contains '2mm', not '2.0'."""
         gm = GenerateMasks()
-        with patch('sys.argv', [
-            'generate_masks',
-            '--labeled_subjects_dir', '/x',
-            '--path_to_graph_supervised', 'p',
-            '--output_dir', str(tmp_path),
-            '--njobs', '1',
-        ]):
+        with patch(
+            "sys.argv",
+            [
+                "generate_masks",
+                "--labeled_subjects_dir",
+                "/x",
+                "--path_to_graph_supervised",
+                "p",
+                "--output_dir",
+                str(tmp_path),
+                "--njobs",
+                "1",
+            ],
+        ):
             gm.parse_args()
 
         captured = {}
 
         def fake_runner_call(config):
-            captured['mask_dir'] = config.mask_dir
+            captured["mask_dir"] = config.mask_dir
             return iter([])
 
         mock_runner = MagicMock()
         mock_runner.side_effect = fake_runner_call
 
-        with patch.dict(sys.modules, self._bv_modules()), \
-              patch('champollion_pipeline.generate_masks.get_sulci_for_regions',
-                   return_value=set()), \
-              patch('champollion_pipeline.generate_masks.MaskRunner.create', return_value=mock_runner):
+        with (
+            patch.dict(sys.modules, self._bv_modules()),
+            patch("champollion_pipeline.generate_masks.get_sulci_for_regions", return_value=set()),
+            patch("champollion_pipeline.generate_masks.MaskRunner.create", return_value=mock_runner),
+        ):
             gm.run()
 
-        mask_dir = captured.get('mask_dir', '')
-        assert '2mm' in mask_dir
-        assert '2.0' not in mask_dir
+        mask_dir = captured.get("mask_dir", "")
+        assert "2mm" in mask_dir
+        assert "2.0" not in mask_dir
 
     def test_vox_str_with_masks_tag(self, tmp_path):
         """When --masks is set, mask_dir contains tag then mm-suffix."""
         gm = GenerateMasks()
-        with patch('sys.argv', [
-            'generate_masks',
-            '--labeled_subjects_dir', '/x',
-            '--path_to_graph_supervised', 'p',
-            '--output_dir', str(tmp_path),
-            '--masks', 'canonical_25',
-            '--njobs', '1',
-        ]):
+        with patch(
+            "sys.argv",
+            [
+                "generate_masks",
+                "--labeled_subjects_dir",
+                "/x",
+                "--path_to_graph_supervised",
+                "p",
+                "--output_dir",
+                str(tmp_path),
+                "--masks",
+                "canonical_25",
+                "--njobs",
+                "1",
+            ],
+        ):
             gm.parse_args()
 
         captured = {}
 
         def fake_runner_call(config):
-            captured['mask_dir'] = config.mask_dir
+            captured["mask_dir"] = config.mask_dir
             return iter([])
 
         mock_runner = MagicMock()
         mock_runner.side_effect = fake_runner_call
 
-        with patch.dict(sys.modules, self._bv_modules()), \
-              patch('champollion_pipeline.generate_masks.get_sulci_for_regions',
-                   return_value=set()), \
-              patch('champollion_pipeline.generate_masks.MaskRunner.create', return_value=mock_runner):
+        with (
+            patch.dict(sys.modules, self._bv_modules()),
+            patch("champollion_pipeline.generate_masks.get_sulci_for_regions", return_value=set()),
+            patch("champollion_pipeline.generate_masks.MaskRunner.create", return_value=mock_runner),
+        ):
             gm.run()
 
-        mask_dir = captured.get('mask_dir', '')
-        assert 'canonical_25' in mask_dir
-        assert '2mm' in mask_dir
+        mask_dir = captured.get("mask_dir", "")
+        assert "canonical_25" in mask_dir
+        assert "2mm" in mask_dir

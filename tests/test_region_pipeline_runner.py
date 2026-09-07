@@ -11,10 +11,9 @@ import os
 import sys
 from unittest.mock import patch
 
-sys.path.insert(0, os.path.abspath(os.path.join(
-    os.path.dirname(__file__),
-    '../external/cortical_tiles/deep_folding/brainvisa'
-)))
+sys.path.insert(
+    0, os.path.abspath(os.path.join(os.path.dirname(__file__), "../external/cortical_tiles/deep_folding/brainvisa"))
+)
 
 from generate_sulcal_regions import RegionPipelineRunner
 
@@ -47,7 +46,6 @@ RESOLVED_CONFIG = {
 
 
 class TestRegionPipelineRunnerInit:
-
     def test_region_name_set(self):
         runner = RegionPipelineRunner(RESOLVED_CONFIG, "S.C.-sylv.")
         assert runner.config["region_name"] == "S.C.-sylv."
@@ -75,22 +73,18 @@ class TestRegionPipelineRunnerInit:
         assert runner.config["threshold"] == 1
 
     def test_threshold_one_for_insula(self):
-        runner = RegionPipelineRunner(
-            RESOLVED_CONFIG, "F.C.L.p.-subsc.-F.C.L.a.-INSULA.")
+        runner = RegionPipelineRunner(RESOLVED_CONFIG, "F.C.L.p.-subsc.-F.C.L.a.-INSULA.")
         assert runner.config["threshold"] == 1
 
 
 class TestRegionPipelineRunnerRun:
-
     def test_run_with_params_called_once_per_side_input_type(self):
         """run() must call run_with_params exactly sides × input_types times."""
         runner = RegionPipelineRunner(RESOLVED_CONFIG, "S.C.-sylv.")
         sides = ["L", "R"]
         input_types = ["skeleton", "foldlabel"]
 
-        with patch(
-            "generate_sulcal_regions.run_with_params"
-        ) as mock_run:
+        with patch("generate_sulcal_regions.run_with_params") as mock_run:
             runner.run(sides, input_types, njobs=4)
 
         assert mock_run.call_count == len(sides) * len(input_types)
@@ -99,9 +93,7 @@ class TestRegionPipelineRunnerRun:
         """Each run_with_params call receives the right side and input_type."""
         runner = RegionPipelineRunner(RESOLVED_CONFIG, "S.C.-sylv.")
 
-        with patch(
-            "generate_sulcal_regions.run_with_params"
-        ) as mock_run:
+        with patch("generate_sulcal_regions.run_with_params") as mock_run:
             runner.run(["L"], ["skeleton"], njobs=2)
 
         cfg_passed = mock_run.call_args[0][0]
@@ -112,9 +104,7 @@ class TestRegionPipelineRunnerRun:
         """njobs is forwarded to run_with_params."""
         runner = RegionPipelineRunner(RESOLVED_CONFIG, "S.C.-sylv.")
 
-        with patch(
-            "generate_sulcal_regions.run_with_params"
-        ) as mock_run:
+        with patch("generate_sulcal_regions.run_with_params") as mock_run:
             runner.run(["L"], ["skeleton"], njobs=8)
 
         cfg_passed = mock_run.call_args[0][0]
@@ -132,14 +122,10 @@ class TestRegionPipelineRunnerRun:
 
     def test_insula_left_gets_threshold_one(self):
         """F.C.L.p.-subsc.-F.C.L.a.-INSULA. on side L must use threshold=1."""
-        runner = RegionPipelineRunner(
-            RESOLVED_CONFIG, "F.C.L.p.-subsc.-F.C.L.a.-INSULA.")
+        runner = RegionPipelineRunner(RESOLVED_CONFIG, "F.C.L.p.-subsc.-F.C.L.a.-INSULA.")
 
         configs_seen = []
-        with patch(
-            "generate_sulcal_regions.run_with_params",
-            side_effect=lambda cfg: configs_seen.append(dict(cfg))
-        ):
+        with patch("generate_sulcal_regions.run_with_params", side_effect=lambda cfg: configs_seen.append(dict(cfg))):
             runner.run(["L", "R"], ["skeleton"], njobs=2)
 
         left_cfg = next(c for c in configs_seen if c["side"] == "L")
@@ -152,10 +138,7 @@ class TestRegionPipelineRunnerRun:
         runner = RegionPipelineRunner(RESOLVED_CONFIG, "S.C.-sylv.")
         configs_seen = []
 
-        with patch(
-            "generate_sulcal_regions.run_with_params",
-            side_effect=lambda cfg: configs_seen.append(cfg)
-        ):
+        with patch("generate_sulcal_regions.run_with_params", side_effect=lambda cfg: configs_seen.append(cfg)):
             runner.run(["L", "R"], ["skeleton", "foldlabel"], njobs=2)
 
         # All 4 configs must be distinct objects

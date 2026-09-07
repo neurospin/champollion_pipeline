@@ -40,32 +40,32 @@ class UploadModelsToHF(ScriptBuilder):
             script_name="upload_models_to_hf",
             description="Upload trained Champollion models to a HuggingFace repository.",
         )
-        (self.add_argument(
-            "models_dir",
-            help="Local directory containing one subfolder per sulcal region "
-                 "(e.g. SC-sylv_left/, CINGULATE_right/, …).")
-         .add_argument(
-            "repo_id",
-            help="HuggingFace repository ID (e.g. 'neurospin/champollion').")
-         .add_required_argument(
-            "--masks-version",
-            "Mask version tag used as the upload subfolder in the HF repo "
-            "(e.g. 'canonical_25'). Models land at {repo_id}/{masks_version}/.")
-         .add_optional_argument(
-            "--token",
-            "HuggingFace API token. Falls back to the HF_TOKEN env var "
-            "or cached login credentials (run 'huggingface-cli login' once).",
-            default=None)
-         .add_flag(
-            "--private",
-            "Create the repository as private if it does not yet exist."))
+        (
+            self.add_argument(
+                "models_dir",
+                help="Local directory containing one subfolder per sulcal region "
+                "(e.g. SC-sylv_left/, CINGULATE_right/, …).",
+            )
+            .add_argument("repo_id", help="HuggingFace repository ID (e.g. 'neurospin/champollion').")
+            .add_required_argument(
+                "--masks-version",
+                "Mask version tag used as the upload subfolder in the HF repo "
+                "(e.g. 'canonical_25'). Models land at {repo_id}/{masks_version}/.",
+            )
+            .add_optional_argument(
+                "--token",
+                "HuggingFace API token. Falls back to the HF_TOKEN env var "
+                "or cached login credentials (run 'huggingface-cli login' once).",
+                default=None,
+            )
+            .add_flag("--private", "Create the repository as private if it does not yet exist.")
+        )
 
     def run(self) -> int:
         try:
             from huggingface_hub import HfApi
         except ImportError:
-            print("ERROR: huggingface_hub is required. "
-                  "Install with: pip install huggingface_hub")
+            print("ERROR: huggingface_hub is required. Install with: pip install huggingface_hub")
             return 1
 
         models_dir = abspath(self.args.models_dir)

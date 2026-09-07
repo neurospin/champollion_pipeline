@@ -22,10 +22,10 @@ from champollion_utils.script_builder import ScriptBuilder
 
 # Fallback path for ICBM152 meshes (used when BrainVISA resource lookup fails)
 ICBM_MESH_DIR_FALLBACK = (
-    '/neurospin/dico/data/bv_databases/templates/'
-    'morphologist_templates/icbm152/'
-    'mni_icbm152_nlin_asym_09c/t1mri/default_acquisition/'
-    'default_analysis/segmentation/mesh'
+    "/neurospin/dico/data/bv_databases/templates/"
+    "morphologist_templates/icbm152/"
+    "mni_icbm152_nlin_asym_09c/t1mri/default_acquisition/"
+    "default_analysis/segmentation/mesh"
 )
 
 
@@ -74,11 +74,7 @@ def find_sulcal_graphs(morphologist_dir, subject=None, acquisition=None):
     """
     root = osp.join(morphologist_dir, subject) if subject else morphologist_dir
     if subject and not osp.isdir(root):
-        candidates = [
-            m for m in glob.glob(osp.join(morphologist_dir, "**", subject),
-                                 recursive=True)
-            if osp.isdir(m)
-        ]
+        candidates = [m for m in glob.glob(osp.join(morphologist_dir, "**", subject), recursive=True) if osp.isdir(m)]
         if candidates:
             root = candidates[0]
             print(f"  Subject found at: {root}")
@@ -89,8 +85,7 @@ def find_sulcal_graphs(morphologist_dir, subject=None, acquisition=None):
     graphs = glob.glob(pattern, recursive=True)
     graphs = [g for g in graphs if "sulci" in g.lower() or "folds" in g.lower()]
     if acquisition:
-        graphs = [g for g in graphs
-                  if f"/{acquisition}/" in g.replace("\\", "/")]
+        graphs = [g for g in graphs if f"/{acquisition}/" in g.replace("\\", "/")]
     return graphs
 
 
@@ -115,10 +110,7 @@ def find_white_mesh(graph_path):
             candidate = parts.index(anchor)
         except ValueError:
             continue
-        if (anchor == "0"
-                and (candidate < 1
-                     or parts[candidate - 1]
-                     != "default_acquisition")):
+        if anchor == "0" and (candidate < 1 or parts[candidate - 1] != "default_acquisition"):
             continue
         idx = candidate
         break
@@ -167,8 +159,9 @@ def find_completed_regions(crops_dir):
     return result
 
 
-def generate_sulcal_graph_snapshot(graph_path, output_path, size=(800, 600),
-                                   view_quaternion=None, mesh_path=None, a=None):
+def generate_sulcal_graph_snapshot(
+    graph_path, output_path, size=(800, 600), view_quaternion=None, mesh_path=None, a=None
+):
     """Generate a snapshot of a sulcal graph.
 
     Args:
@@ -218,8 +211,7 @@ def generate_sulcal_graph_snapshot(graph_path, output_path, size=(800, 600),
     return output_path
 
 
-def generate_tiles_snapshot(crops_dir, output_path, size=(800, 600), level=1,
-                            champollion_data_root=None):
+def generate_tiles_snapshot(crops_dir, output_path, size=(800, 600), level=1, champollion_data_root=None):
     """Generate snapshots of cortical tiles regions using Anatomist.
 
     Loads region graphs from the Champollion model data, overlays
@@ -261,14 +253,14 @@ def generate_tiles_snapshot(crops_dir, output_path, size=(800, 600), level=1,
         root = config.config().get_champollion_data_root_dir()
     regions_graph_dir = f"{root}/mask/2mm/regions/meshes"
 
-    nom = aims.read(aims.carto.Paths.findResourceFile(
-        'nomenclature/hierarchy/champollion_v1.hie'))
+    nom = aims.read(aims.carto.Paths.findResourceFile("nomenclature/hierarchy/champollion_v1.hie"))
     anom = a.toAObject(nom)
 
     icbm_mesh_dir = aims.carto.Paths.findResourceFile(
-        'disco_templates_hbp_morpho/icbm152/mni_icbm152_nlin_asym_09c/'
-        't1mri/default_acquisition/default_analysis/segmentation/mesh',
-        'disco')
+        "disco_templates_hbp_morpho/icbm152/mni_icbm152_nlin_asym_09c/"
+        "t1mri/default_acquisition/default_analysis/segmentation/mesh",
+        "disco",
+    )
     if icbm_mesh_dir is None:
         icbm_mesh_dir = ICBM_MESH_DIR_FALLBACK
 
@@ -276,10 +268,8 @@ def generate_tiles_snapshot(crops_dir, output_path, size=(800, 600), level=1,
     ext = osp.splitext(output_path)[1] or ".png"
 
     hemispheres = [
-        ("left", "L", (0.5, 0.5, 0.5, 0.5),
-         "mni_icbm152_nlin_asym_09c_Lhemi.gii"),
-        ("right", "R", (0.5, -0.5, -0.5, 0.5),
-         "mni_icbm152_nlin_asym_09c_Rhemi.gii"),
+        ("left", "L", (0.5, 0.5, 0.5, 0.5), "mni_icbm152_nlin_asym_09c_Lhemi.gii"),
+        ("right", "R", (0.5, -0.5, -0.5, 0.5), "mni_icbm152_nlin_asym_09c_Rhemi.gii"),
     ]
 
     snapshots = []
@@ -291,9 +281,7 @@ def generate_tiles_snapshot(crops_dir, output_path, size=(800, 600), level=1,
 
         print(f"  {hemi_name}: {len(region_names)} region(s)")
 
-        graph_path = osp.join(
-            regions_graph_dir, f"{side}regions_model_{level}.arg"
-        )
+        graph_path = osp.join(regions_graph_dir, f"{side}regions_model_{level}.arg")
         if not osp.exists(graph_path):
             print(f"  Region graph not found: {graph_path}")
             continue
@@ -317,10 +305,8 @@ def generate_tiles_snapshot(crops_dir, output_path, size=(800, 600), level=1,
 
         sel_names = " ".join(f"{r}_{hemi_name}" for r in region_names)
         a.execute("LinkWindows", windows=[win], group=group)
-        a.execute("SelectByNomenclature", nomenclature=anom,
-                  names=sel_names, group=group)
-        a.execute("SelectByNomenclature", nomenclature=anom,
-                  names=sel_names, modifiers="toggle", group=group)
+        a.execute("SelectByNomenclature", nomenclature=anom, names=sel_names, group=group)
+        a.execute("SelectByNomenclature", nomenclature=anom, names=sel_names, modifiers="toggle", group=group)
 
         win.camera(view_quaternion=quat)
         win.focusView()
@@ -362,13 +348,14 @@ def discover_umap_pairs(embeddings_dir, reference_data_dir, regions=None):
         if osp.exists(model_path) and osp.exists(coords_path):
             pairs.append((csv_path, model_path, coords_path, region, hemi))
         else:
-            print(f"  UMAP model not found for {region} {hemi} — skipping "
-                  f"(expected {osp.basename(model_path)} in reference_data_dir)")
+            print(
+                f"  UMAP model not found for {region} {hemi} — skipping "
+                f"(expected {osp.basename(model_path)} in reference_data_dir)"
+            )
     return pairs
 
 
-def generate_umap_snapshot(embeddings_dir, reference_data_dir, output_path,
-                           size=(800, 600), regions=None):
+def generate_umap_snapshot(embeddings_dir, reference_data_dir, output_path, size=(800, 600), regions=None):
     """Generate UMAP scatter plots for embedding regions.
 
     Discovers embedding CSV files in ``embeddings_dir`` and generates a UMAP
@@ -390,6 +377,7 @@ def generate_umap_snapshot(embeddings_dir, reference_data_dir, output_path,
     """
     import joblib
     import matplotlib
+
     matplotlib.use("Agg")
     import matplotlib.pyplot as plt
     import pandas as pd
@@ -398,8 +386,7 @@ def generate_umap_snapshot(embeddings_dir, reference_data_dir, output_path,
     ext = osp.splitext(output_path)[1] or ".png"
     snapshots = []
 
-    pairs = discover_umap_pairs(embeddings_dir, reference_data_dir,
-                                regions=regions)
+    pairs = discover_umap_pairs(embeddings_dir, reference_data_dir, regions=regions)
     if not pairs:
         print("  No matching (embedding CSV, UMAP model) pairs found")
         return snapshots
@@ -416,14 +403,23 @@ def generate_umap_snapshot(embeddings_dir, reference_data_dir, output_path,
 
         fig, ax = plt.subplots(figsize=(size[0] / 100, size[1] / 100))
         ax.scatter(
-            ref_coords[:, 0], ref_coords[:, 1],
-            s=1, c="#4a90d9", alpha=0.08,
-            label=f"UKB40 (n={ref_coords.shape[0]:,})", rasterized=True,
+            ref_coords[:, 0],
+            ref_coords[:, 1],
+            s=1,
+            c="#4a90d9",
+            alpha=0.08,
+            label=f"UKB40 (n={ref_coords.shape[0]:,})",
+            rasterized=True,
         )
         ax.scatter(
-            new_coords[:, 0], new_coords[:, 1],
-            s=80, c="#e74c3c", edgecolors="white", linewidths=0.8,
-            zorder=5, label=f"Your subject(s) (n={X_new.shape[0]})",
+            new_coords[:, 0],
+            new_coords[:, 1],
+            s=80,
+            c="#e74c3c",
+            edgecolors="white",
+            linewidths=0.8,
+            zorder=5,
+            label=f"Your subject(s) (n={X_new.shape[0]})",
         )
         ax.set_title(f"{region} \u2014 {hemi}", fontsize=12)
         ax.legend(loc="best", fontsize=9, framealpha=0.9)
@@ -486,36 +482,33 @@ class GenerateSnapshots(ScriptBuilder):
             script_name="generate_snapshots",
             description="Generate visualization snapshots for Champollion pipeline output",
         )
-        (self
-         .add_optional_argument("--morphologist_dir", "Path to Morphologist output directory")
-         .add_optional_argument("--subject",
-                                "Subject folder name to visualize (e.g. sub_0001). "
-                                "When omitted the first subject found is used.")
-         .add_optional_argument("--acquisition",
-                                "Acquisition folder name to use (e.g. wk30, wk40). "
-                                "Required when a subject has multiple segmentations.")
-         .add_optional_argument("--embeddings_dir", "Path to embeddings output directory")
-         .add_optional_argument("--cortical_tiles_dir", "Path to cortical tiles crops directory")
-         .add_argument("--output_dir", type=str, required=True, help="Directory to save snapshot images")
-         .add_optional_argument("--width", "Snapshot width", default=800, type_=int)
-         .add_optional_argument("--height", "Snapshot height", default=600, type_=int)
-         .add_flag("--sulcal-only", "Only generate sulcal graph snapshots")
-         .add_flag("--tiles-only", "Only generate cortical tiles snapshots")
-         .add_flag("--umap-only", "Only generate UMAP scatter plots")
-         .add_optional_argument(
-             "--reference_data_dir",
-             "Path to pre-trained UMAP models and reference coords")
-         .add_optional_argument(
-             "--umap_region",
-             "Comma-separated list of region names to generate UMAP plots for "
-             "(e.g. FColl-SRh,S.Or.). Defaults to all regions with available models.")
-         .add_optional_argument(
-             "--tiles_level",
-             "Region threshold level (0-3)",
-             default=1, type_=int)
-         .add_optional_argument(
-             "--champollion_data_root",
-             "Override path to Champollion data directory"))
+        (
+            self.add_optional_argument("--morphologist_dir", "Path to Morphologist output directory")
+            .add_optional_argument(
+                "--subject",
+                "Subject folder name to visualize (e.g. sub_0001). When omitted the first subject found is used.",
+            )
+            .add_optional_argument(
+                "--acquisition",
+                "Acquisition folder name to use (e.g. wk30, wk40). Required when a subject has multiple segmentations.",
+            )
+            .add_optional_argument("--embeddings_dir", "Path to embeddings output directory")
+            .add_optional_argument("--cortical_tiles_dir", "Path to cortical tiles crops directory")
+            .add_argument("--output_dir", type=str, required=True, help="Directory to save snapshot images")
+            .add_optional_argument("--width", "Snapshot width", default=800, type_=int)
+            .add_optional_argument("--height", "Snapshot height", default=600, type_=int)
+            .add_flag("--sulcal-only", "Only generate sulcal graph snapshots")
+            .add_flag("--tiles-only", "Only generate cortical tiles snapshots")
+            .add_flag("--umap-only", "Only generate UMAP scatter plots")
+            .add_optional_argument("--reference_data_dir", "Path to pre-trained UMAP models and reference coords")
+            .add_optional_argument(
+                "--umap_region",
+                "Comma-separated list of region names to generate UMAP plots for "
+                "(e.g. FColl-SRh,S.Or.). Defaults to all regions with available models.",
+            )
+            .add_optional_argument("--tiles_level", "Region threshold level (0-3)", default=1, type_=int)
+            .add_optional_argument("--champollion_data_root", "Override path to Champollion data directory")
+        )
 
     def run(self) -> int:
         """Run all requested snapshot generation steps."""
@@ -564,8 +557,7 @@ class GenerateSnapshots(ScriptBuilder):
         subject = getattr(self.args, "subject", None)
         acquisition = getattr(self.args, "acquisition", None)
 
-        graphs = find_sulcal_graphs(morphologist_dir, subject=subject,
-                                    acquisition=acquisition)
+        graphs = find_sulcal_graphs(morphologist_dir, subject=subject, acquisition=acquisition)
 
         # Group by hemisphere — keep one graph per side
         by_hemi = {"left": [], "right": []}
@@ -576,8 +568,7 @@ class GenerateSnapshots(ScriptBuilder):
         if not acquisition:
             for hemi, hemi_graphs in by_hemi.items():
                 if len(hemi_graphs) > 1:
-                    subject_dir = (osp.join(morphologist_dir, subject)
-                                   if subject else morphologist_dir)
+                    subject_dir = osp.join(morphologist_dir, subject) if subject else morphologist_dir
                     acqs = list_acquisitions(subject_dir)
                     acq_list = ", ".join(acqs) if acqs else "unknown"
                     print(
@@ -604,7 +595,9 @@ class GenerateSnapshots(ScriptBuilder):
             out = osp.join(self.args.output_dir, f"sulcal_graph{acq_tag}_{hemi}.png")
             try:
                 snap = generate_sulcal_graph_snapshot(
-                    graph_path, out, size,
+                    graph_path,
+                    out,
+                    size,
                     view_quaternion=QUAT[hemi],
                     mesh_path=white_mesh,
                 )
@@ -628,7 +621,9 @@ class GenerateSnapshots(ScriptBuilder):
             out = osp.join(self.args.output_dir, "tiles_masks.png")
             try:
                 snaps = generate_tiles_snapshot(
-                    crops_dir, out, size,
+                    crops_dir,
+                    out,
+                    size,
                     level=self.args.tiles_level,
                     champollion_data_root=self.args.champollion_data_root,
                 )
@@ -668,7 +663,9 @@ class GenerateSnapshots(ScriptBuilder):
             snaps = generate_umap_snapshot(
                 self.args.embeddings_dir,
                 self.args.reference_data_dir,
-                out, size, regions=regions,
+                out,
+                size,
+                regions=regions,
             )
             snapshots.extend(snaps)
         except Exception as e:

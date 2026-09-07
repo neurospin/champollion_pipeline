@@ -16,16 +16,23 @@ class GenerateMorphologistGraphs(ScriptBuilder):
     def __init__(self):
         super().__init__(
             script_name="morphologist_graphs_generator",
-            description="Generating graphs with morphologist from the user raw data."
+            description="Generating graphs with morphologist from the user raw data.",
         )
         # Configure arguments using method chaining
-        (self.add_argument("input", help="Absolute path to the user's raw data.")
-         .add_argument("output", help="Absolute path to the generated graphs from morphologist. "
-                                      "Morphologist will create a $output/derivatives/morphologist-6.0/ "
-                                      "directory for output generations.")
-         .add_flag("--parallel", "Enable parallel processing using Soma-Workflow (--swf).")
-         .add_flag("--enable-sulcal-recognition",
-                   "Enable sulcal recognition (adds 10-20 min/subject, disabled by default for embeddings pipeline)."))
+        (
+            self.add_argument("input", help="Absolute path to the user's raw data.")
+            .add_argument(
+                "output",
+                help="Absolute path to the generated graphs from morphologist. "
+                "Morphologist will create a $output/derivatives/morphologist-6.0/ "
+                "directory for output generations.",
+            )
+            .add_flag("--parallel", "Enable parallel processing using Soma-Workflow (--swf).")
+            .add_flag(
+                "--enable-sulcal-recognition",
+                "Enable sulcal recognition (adds 10-20 min/subject, disabled by default for embeddings pipeline).",
+            )
+        )
 
     def _get_input_files(self):
         """Get list of valid input files."""
@@ -35,8 +42,7 @@ class GenerateMorphologistGraphs(ScriptBuilder):
         input_files = [
             f.strip('"').strip("'")
             for f in listdir(self.args.input)
-            if isfile(join(self.args.input, f))
-            and splitext(basename(f))[1] in LIST_OF_EXTENSIONS
+            if isfile(join(self.args.input, f)) and splitext(basename(f))[1] in LIST_OF_EXTENSIONS
         ]
 
         return input_files
@@ -47,9 +53,7 @@ class GenerateMorphologistGraphs(ScriptBuilder):
 
         # Validate paths
         if not self.validate_paths([self.args.input, self.args.output]):
-            raise ValueError(
-                "generate_morphologist_graphs.py: Please input valid paths."
-            )
+            raise ValueError("generate_morphologist_graphs.py: Please input valid paths.")
 
         input_files = self._get_input_files()
 
@@ -57,14 +61,7 @@ class GenerateMorphologistGraphs(ScriptBuilder):
         chdir(self.args.input)
 
         # Build command
-        cmd = [
-            "morphologist-cli",
-            *input_files,
-            self.args.output,
-            "--",
-            "--of",
-            "morphologist-auto-nonoverlap-1.0"
-        ]
+        cmd = ["morphologist-cli", *input_files, self.args.output, "--", "--of", "morphologist-auto-nonoverlap-1.0"]
 
         # Add parallel processing flag (capsul options come first)
         if self.args.parallel:

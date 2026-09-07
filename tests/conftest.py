@@ -14,7 +14,7 @@ from unittest.mock import MagicMock, patch
 import pytest
 
 # Keep src/ on path for non-package scripts (compare tools, file_indexer, etc.)
-sys.path.insert(0, os.path.abspath(os.path.join(os.path.dirname(__file__), '../src')))
+sys.path.insert(0, os.path.abspath(os.path.join(os.path.dirname(__file__), "../src")))
 
 # Stub all BrainVISA soma subpackages so any module that does top-level
 # "from soma import aims" or "from soma.aimsalgo import ..." can be imported
@@ -22,8 +22,12 @@ sys.path.insert(0, os.path.abspath(os.path.join(os.path.dirname(__file__), '../s
 # because Python's import machinery resolves submodules via sys.modules lookups,
 # not via __getattr__ on the parent mock.
 for _soma_mod in [
-    'soma', 'soma.aims', 'soma.aimsalgo', 'soma.aimsalgo.sulci',
-    'soma.qt_gui', 'soma.qt_gui.qt_backend',
+    "soma",
+    "soma.aims",
+    "soma.aimsalgo",
+    "soma.aimsalgo.sulci",
+    "soma.qt_gui",
+    "soma.qt_gui.qt_backend",
 ]:
     sys.modules.setdefault(_soma_mod, MagicMock())
 
@@ -40,20 +44,20 @@ def temp_dir():
 def mock_file_structure(temp_dir):
     """Create a mock file structure for testing."""
     structure = {
-        'input': Path(temp_dir) / 'input',
-        'output': Path(temp_dir) / 'output',
-        'crops': Path(temp_dir) / 'crops',
-        'graphs': Path(temp_dir) / 'graphs',
-        'models': Path(temp_dir) / 'models',
+        "input": Path(temp_dir) / "input",
+        "output": Path(temp_dir) / "output",
+        "crops": Path(temp_dir) / "crops",
+        "graphs": Path(temp_dir) / "graphs",
+        "models": Path(temp_dir) / "models",
     }
 
     for path in structure.values():
         path.mkdir(parents=True, exist_ok=True)
 
     # Create some mock files
-    (structure['input'] / 'test_file.nii.gz').touch()
-    (structure['input'] / 'test_file2.nii').touch()
-    (structure['crops'] / 'crop1.nii').touch()
+    (structure["input"] / "test_file.nii.gz").touch()
+    (structure["input"] / "test_file2.nii").touch()
+    (structure["crops"] / "crop1.nii").touch()
 
     return structure
 
@@ -61,6 +65,7 @@ def mock_file_structure(temp_dir):
 @pytest.fixture
 def mock_args():
     """Create mock argparse arguments."""
+
     class MockArgs:
         def __init__(self, **kwargs):
             for key, value in kwargs.items():
@@ -72,8 +77,8 @@ def mock_args():
 @pytest.fixture
 def mock_subprocess_success():
     """Mock subprocess calls to return success."""
-    with patch('subprocess.check_call', return_value=0):
-        with patch('subprocess.run') as mock_run:
+    with patch("subprocess.check_call", return_value=0):
+        with patch("subprocess.run") as mock_run:
             mock_run.return_value = MagicMock(returncode=0)
             yield mock_run
 
@@ -81,8 +86,8 @@ def mock_subprocess_success():
 @pytest.fixture
 def mock_subprocess_failure():
     """Mock subprocess calls to return failure."""
-    with patch('subprocess.check_call', side_effect=Exception("Command failed")):
-        with patch('subprocess.run') as mock_run:
+    with patch("subprocess.check_call", side_effect=Exception("Command failed")):
+        with patch("subprocess.run") as mock_run:
             mock_run.return_value = MagicMock(returncode=1)
             yield mock_run
 
@@ -109,16 +114,20 @@ config_key: config_value
 @pytest.fixture
 def mock_validate_paths_success():
     """Mock validate_paths to always return True."""
+
     def mock_validate(paths):
         return True
+
     return mock_validate
 
 
 @pytest.fixture
 def mock_validate_paths_failure():
     """Mock validate_paths to always return False."""
+
     def mock_validate(paths):
         return False
+
     return mock_validate
 
 
@@ -129,10 +138,7 @@ def script_builder_subclass():
 
     class TestScript(ScriptBuilder):
         def __init__(self):
-            super().__init__(
-                script_name="test_script",
-                description="Test script for unit tests"
-            )
+            super().__init__(script_name="test_script", description="Test script for unit tests")
             self.add_argument("input", help="Input path")
             self.add_optional_argument("--output", "Output path", default="/tmp")
 
@@ -163,16 +169,17 @@ def mock_file_list():
 @pytest.fixture
 def mock_cpu_count():
     """Mock CPU count."""
-    with patch('joblib.cpu_count', return_value=8):
+    with patch("joblib.cpu_count", return_value=8):
         yield 8
 
 
 # Helper functions for tests
 
+
 def create_test_file(path, content=""):
     """Create a test file with optional content."""
     Path(path).parent.mkdir(parents=True, exist_ok=True)
-    with open(path, 'w') as f:
+    with open(path, "w") as f:
         f.write(content)
 
 
