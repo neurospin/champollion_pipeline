@@ -1,0 +1,4 @@
+# Internals
+
+```{include} workflow.md
+```
