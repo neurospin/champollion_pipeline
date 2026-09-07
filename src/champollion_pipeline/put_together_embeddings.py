@@ -16,13 +16,18 @@ class PutTogetherEmbeddings(ScriptBuilder):
     def __init__(self):
         super().__init__(
             script_name="put_together_embeddings",
-            description="Put together embeddings of Champollion_V1 in a single folder."
+            description="Put together embeddings of Champollion_V1 in a single folder.",
         )
         # Configure arguments using method chaining
-        (self.add_required_argument("--embeddings_subpath", "Sub-path to embeddings inside model folder.")
-         .add_required_argument("--output_path", "Folder where to put all embeddings.")
-         .add_optional_argument("--path_models", "Path where all models lie.",
-                                default="/neurospin/dico/data/deep_folding/current/models/Champollion_V1_after_ablation"))
+        (
+            self.add_required_argument("--embeddings_subpath", "Sub-path to embeddings inside model folder.")
+            .add_required_argument("--output_path", "Folder where to put all embeddings.")
+            .add_optional_argument(
+                "--path_models",
+                "Path where all models lie.",
+                default="/neurospin/dico/data/deep_folding/current/models/Champollion_V1_after_ablation",
+            )
+        )
 
     def run(self):
         """Execute the put_together_embeddings script."""
@@ -45,20 +50,16 @@ class PutTogetherEmbeddings(ScriptBuilder):
         # Move to champollion's script location
         # Use __file__ to get the script's location, not cwd
         script_dir = dirname(abspath(__file__))
-        champollion_path = abspath(join(
-            script_dir, '..', '..', 'external', 'champollion_V1', 'contrastive', 'utils'
-        ))
+        champollion_path = abspath(join(script_dir, "..", "..", "external", "champollion_V1", "contrastive", "utils"))
         chdir(champollion_path)
 
         # Use build_command to construct the command
-        defaults = {
-            "path_models": "/neurospin/dico/data/deep_folding/current/models/Champollion_V1_after_ablation"
-        }
+        defaults = {"path_models": "/neurospin/dico/data/deep_folding/current/models/Champollion_V1_after_ablation"}
 
         cmd = self.build_command(
             script_path="put_together_embeddings_files.py",
             required_args=["embeddings_subpath", "output_path"],
-            defaults=defaults
+            defaults=defaults,
         )
 
         result = self.execute_command(cmd, shell=False)

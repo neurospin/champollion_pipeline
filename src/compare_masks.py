@@ -72,8 +72,7 @@ def wasserstein_distance(a: np.ndarray, b: np.ndarray) -> float:
         if s_a == 0.0 or s_b == 0.0:
             continue
         positions = np.arange(len(proj_a), dtype=np.float64)
-        d = float(_wasserstein_1d(positions, positions,
-                                  proj_a / s_a, proj_b / s_b))
+        d = float(_wasserstein_1d(positions, positions, proj_a / s_a, proj_b / s_b))
         d_sq += d * d
     return float(np.sqrt(d_sq))
 
@@ -111,32 +110,27 @@ def find_masks(directory: Path) -> dict:
     Uses the relative path as key so side is included and cross-sulcus subject
     filename collisions cannot occur.
     """
-    return {
-        str(p.relative_to(directory)): str(p)
-        for p in sorted(directory.glob("*/*.nii.gz"))
-    }
+    return {str(p.relative_to(directory)): str(p) for p in sorted(directory.glob("*/*.nii.gz"))}
 
 
 def parse_args(argv):
-    parser = argparse.ArgumentParser(
-        description="Compare two sets of sulcal masks and report deviations.")
+    parser = argparse.ArgumentParser(description="Compare two sets of sulcal masks and report deviations.")
     parser.add_argument(
-        "--set_a", required=True,
-        help="Path to the first mask set directory "
-             "(e.g. .../canonical_25/2.0).")
+        "--set_a", required=True, help="Path to the first mask set directory (e.g. .../canonical_25/2.0)."
+    )
+    parser.add_argument("--set_b", required=True, help="Path to the second mask set directory.")
     parser.add_argument(
-        "--set_b", required=True,
-        help="Path to the second mask set directory.")
+        "--output", default="mask_diff_report.json", help="Output JSON file path. Default: mask_diff_report.json."
+    )
     parser.add_argument(
-        "--output", default="mask_diff_report.json",
-        help="Output JSON file path. Default: mask_diff_report.json.")
-    parser.add_argument(
-        "--metric", choices=["wasserstein", "diff", "both"],
+        "--metric",
+        choices=["wasserstein", "diff", "both"],
         default="wasserstein",
-        help="Comparison metric. Default: wasserstein.")
+        help="Comparison metric. Default: wasserstein.",
+    )
     parser.add_argument(
-        "--bucket_step", type=float, default=1.0,
-        help="Bucket width for the summary table (in voxels). Default: 1.")
+        "--bucket_step", type=float, default=1.0, help="Bucket width for the summary table (in voxels). Default: 1."
+    )
     return parser.parse_args(argv)
 
 
@@ -205,15 +199,11 @@ def main(argv=None):
 
     if use_wass:
         report["wasserstein_by_bucket"] = sort_buckets(wass_buckets)
-        report["wasserstein_per_mask"] = dict(
-            sorted(distances.items(), key=lambda kv: -kv[1])
-        )
+        report["wasserstein_per_mask"] = dict(sorted(distances.items(), key=lambda kv: -kv[1]))
 
     if use_diff:
         report["diff_by_bucket"] = sort_buckets(diff_buckets)
-        report["diffs_per_mask"] = dict(
-            sorted(diffs.items(), key=lambda kv: -kv[1]["changed"])
-        )
+        report["diffs_per_mask"] = dict(sorted(diffs.items(), key=lambda kv: -kv[1]["changed"]))
 
     out_path = Path(args.output)
     out_path.parent.mkdir(parents=True, exist_ok=True)

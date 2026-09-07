@@ -43,9 +43,7 @@ class TestDocsFeature:
 
     def test_docs_feature_block_exists(self, pixi_config):
         """A ``[feature.docs]`` block is defined."""
-        assert "docs" in pixi_config.get("feature", {}), (
-            "pixi.toml defines no [feature.docs] block"
-        )
+        assert "docs" in pixi_config.get("feature", {}), "pixi.toml defines no [feature.docs] block"
 
     @pytest.mark.parametrize("dependency", REQUIRED_DOCS_DEPENDENCIES)
     def test_docs_feature_declares_pypi_dependency(self, pixi_config, dependency):
@@ -53,8 +51,7 @@ class TestDocsFeature:
         docs_feature = pixi_config.get("feature", {}).get("docs", {})
         pypi_dependencies = docs_feature.get("pypi-dependencies", {})
         assert dependency in pypi_dependencies, (
-            f"[feature.docs.pypi-dependencies] is missing {dependency!r}; "
-            f"found {sorted(pypi_dependencies)}"
+            f"[feature.docs.pypi-dependencies] is missing {dependency!r}; found {sorted(pypi_dependencies)}"
         )
 
     @pytest.mark.parametrize("task_name", REQUIRED_DOCS_TASKS)
@@ -62,29 +59,23 @@ class TestDocsFeature:
         """Each documentation task is defined under ``[feature.docs.tasks]``."""
         docs_feature = pixi_config.get("feature", {}).get("docs", {})
         tasks = docs_feature.get("tasks", {})
-        assert task_name in tasks, (
-            f"[feature.docs.tasks] is missing {task_name!r}; found {sorted(tasks)}"
-        )
+        assert task_name in tasks, f"[feature.docs.tasks] is missing {task_name!r}; found {sorted(tasks)}"
 
     def test_docs_environment_exists(self, pixi_config):
         """``[environments]`` declares a ``docs`` environment."""
         environments = pixi_config.get("environments", {})
-        assert "docs" in environments, (
-            f"[environments] defines no 'docs' key; found {sorted(environments)}"
-        )
+        assert "docs" in environments, f"[environments] defines no 'docs' key; found {sorted(environments)}"
 
     def test_docs_environment_sets_no_default_feature(self, pixi_config):
         """The ``docs`` environment is isolated via ``no-default-feature = true``."""
         docs_environment = pixi_config.get("environments", {}).get("docs", {})
         assert docs_environment.get("no-default-feature") is True, (
-            "environments.docs must set no-default-feature = true; "
-            f"got {docs_environment!r}"
+            f"environments.docs must set no-default-feature = true; got {docs_environment!r}"
         )
 
     def test_docs_environment_includes_docs_feature(self, pixi_config):
         """The ``docs`` environment is built from the ``docs`` feature."""
         docs_environment = pixi_config.get("environments", {}).get("docs", {})
         assert "docs" in docs_environment.get("features", []), (
-            "environments.docs must list 'docs' in its features; "
-            f"got {docs_environment!r}"
+            f"environments.docs must list 'docs' in its features; got {docs_environment!r}"
         )

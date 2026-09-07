@@ -36,10 +36,7 @@ from champollion_utils.script_builder import ScriptBuilder
 # Re-use the model-discovery helpers from champollion_V1 utils
 sys.path.insert(
     0,
-    osp.abspath(
-        osp.join(osp.dirname(__file__), "..", "external",
-                 "champollion_V1", "contrastive", "utils")
-    ),
+    osp.abspath(osp.join(osp.dirname(__file__), "..", "external", "champollion_V1", "contrastive", "utils")),
 )
 from put_together_embeddings_files import get_model_paths  # noqa: E402
 
@@ -135,14 +132,12 @@ def generate_umap_reference(
         coords_out = osp.join(output_dir, f"umap_{region}_{hemi}_coords.npy")
 
         if not overwrite and osp.exists(model_out) and osp.exists(coords_out):
-            print(f"  [{i}/{total}] {region} {hemi} — already exists, skipping "
-                  f"(use --overwrite to regenerate)")
+            print(f"  [{i}/{total}] {region} {hemi} — already exists, skipping (use --overwrite to regenerate)")
             generated.append((region, hemi))
             continue
 
         X_ref = np.vstack(arrays)
-        print(f"  [{i}/{total}] {region} {hemi} — fitting UMAP on "
-              f"{X_ref.shape[0]:,} points ({X_ref.shape[1]} dims)...")
+        print(f"  [{i}/{total}] {region} {hemi} — fitting UMAP on {X_ref.shape[0]:,} points ({X_ref.shape[1]} dims)...")
 
         reducer = umap_lib.UMAP(
             n_neighbors=n_neighbors,
@@ -170,41 +165,33 @@ class GenerateUmapReference(ScriptBuilder):
                 "for all ROIs in the Champollion_V1 models directory."
             ),
         )
-        (self
-         .add_required_argument(
-             "--models_dir",
-             "Path to Champollion_V1 pre-trained models directory "
-             "(e.g. Champollion_V1_after_ablation/).")
-         .add_required_argument(
-             "--reference_subpath",
-             "Subpath within each model directory to the reference-population "
-             "embeddings CSV (e.g. ukb40_random_embeddings/full_embeddings.csv).")
-         .add_optional_argument(
-             "--output_dir",
-             "Directory where .pkl and _coords.npy files are written.",
-             default="reference_data/")
-         .add_optional_argument(
-             "--n_neighbors",
-             "UMAP n_neighbors parameter.",
-             default=15, type_=int)
-         .add_optional_argument(
-             "--min_dist",
-             "UMAP min_dist parameter.",
-             default=0.1, type_=float)
-         .add_optional_argument(
-             "--random_state",
-             "Random seed for reproducibility.",
-             default=42, type_=int)
-         .add_flag(
-             "--overwrite",
-             "Re-generate artefacts even if output files already exist."))
+        (
+            self.add_required_argument(
+                "--models_dir",
+                "Path to Champollion_V1 pre-trained models directory (e.g. Champollion_V1_after_ablation/).",
+            )
+            .add_required_argument(
+                "--reference_subpath",
+                "Subpath within each model directory to the reference-population "
+                "embeddings CSV (e.g. ukb40_random_embeddings/full_embeddings.csv).",
+            )
+            .add_optional_argument(
+                "--output_dir", "Directory where .pkl and _coords.npy files are written.", default="reference_data/"
+            )
+            .add_optional_argument("--n_neighbors", "UMAP n_neighbors parameter.", default=15, type_=int)
+            .add_optional_argument("--min_dist", "UMAP min_dist parameter.", default=0.1, type_=float)
+            .add_optional_argument("--random_state", "Random seed for reproducibility.", default=42, type_=int)
+            .add_flag("--overwrite", "Re-generate artefacts even if output files already exist.")
+        )
 
     def run(self) -> int:
         print(f"Models directory : {self.args.models_dir}")
         print(f"Reference subpath: {self.args.reference_subpath}")
         print(f"Output directory : {self.args.output_dir}")
-        print(f"UMAP params      : n_neighbors={self.args.n_neighbors}, "
-              f"min_dist={self.args.min_dist}, random_state={self.args.random_state}")
+        print(
+            f"UMAP params      : n_neighbors={self.args.n_neighbors}, "
+            f"min_dist={self.args.min_dist}, random_state={self.args.random_state}"
+        )
         if self.args.overwrite:
             print("Overwrite mode   : ON")
         print()

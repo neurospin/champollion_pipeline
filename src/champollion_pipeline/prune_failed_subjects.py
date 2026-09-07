@@ -66,7 +66,7 @@ class PruneFailedSubjects(ScriptBuilder):
         qc_file["participant_id"] = qc_file["participant_id"].astype(str)
         passing = qc_file[qc_file["qc"] != 0]["participant_id"].tolist()
         return set(passing)
-    
+
     def _read_non_passing_subjects(self, qc_path: str) -> set:
         """Return set of subject IDs with qc != 0."""
         sep = "\t" if qc_path.endswith(".tsv") else ","
@@ -86,9 +86,7 @@ class PruneFailedSubjects(ScriptBuilder):
 
         crops_2mm = join(derivatives_dir, "crops", "2mm")
         if not exists(crops_2mm):
-            raise ValueError(
-                f"crops/2mm directory not found: {crops_2mm}"
-            )
+            raise ValueError(f"crops/2mm directory not found: {crops_2mm}")
 
         all_subjects = self._discover_subjects(crops_2mm)
         passing_subjects = self._read_passing_subjects(self.args.qc)
@@ -104,8 +102,18 @@ class PruneFailedSubjects(ScriptBuilder):
         for root, _dirs, files in os.walk(derivatives_dir):
             for fname in files:
                 stem = fname
-                for ext in (".nii.gz", ".nii", ".gz", ".csv", ".json", ".trm",
-                            ".nii.gz.minf", ".nii.minf", ".gz.minf", ".trm.minf"):
+                for ext in (
+                    ".nii.gz",
+                    ".nii",
+                    ".gz",
+                    ".csv",
+                    ".json",
+                    ".trm",
+                    ".nii.gz.minf",
+                    ".nii.minf",
+                    ".gz.minf",
+                    ".trm.minf",
+                ):
                     if stem.endswith(ext):
                         stem = stem[: -len(ext)]
                         break

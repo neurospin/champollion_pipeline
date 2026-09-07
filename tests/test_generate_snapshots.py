@@ -203,20 +203,33 @@ class TestGenerateSnapshotsInit:
     def test_parse_all_args(self, temp_dir):
         """Test parsing all arguments."""
         script = GenerateSnapshots()
-        args = script.parse_args([
-            "--output_dir", temp_dir,
-            "--morphologist_dir", "/morpho",
-            "--subject", "sub_0001",
-            "--acquisition", "wk30",
-            "--embeddings_dir", "/emb",
-            "--cortical_tiles_dir", "/tiles",
-            "--width", "1024",
-            "--height", "768",
-            "--sulcal-only",
-            "--tiles_level", "2",
-            "--reference_data_dir", "/ref",
-            "--umap_region", "FColl-SRh,S.Or.",
-        ])
+        args = script.parse_args(
+            [
+                "--output_dir",
+                temp_dir,
+                "--morphologist_dir",
+                "/morpho",
+                "--subject",
+                "sub_0001",
+                "--acquisition",
+                "wk30",
+                "--embeddings_dir",
+                "/emb",
+                "--cortical_tiles_dir",
+                "/tiles",
+                "--width",
+                "1024",
+                "--height",
+                "768",
+                "--sulcal-only",
+                "--tiles_level",
+                "2",
+                "--reference_data_dir",
+                "/ref",
+                "--umap_region",
+                "FColl-SRh,S.Or.",
+            ]
+        )
         assert args.output_dir == temp_dir
         assert args.morphologist_dir == "/morpho"
         assert args.subject == "sub_0001"
@@ -277,9 +290,7 @@ class TestGenerateSnapshotsRun:
 class TestOnlyFlagLogic:
     """Test the --*-only flag logic without running the full main()."""
 
-    def _compute_flags(
-        self, sulcal_only=False, tiles_only=False, umap_only=False
-    ):
+    def _compute_flags(self, sulcal_only=False, tiles_only=False, umap_only=False):
         """Helper to compute run_sulcal, run_tiles, run_umap from flags."""
         only_flags = (sulcal_only, tiles_only, umap_only)
         run_sulcal = not any(only_flags) or sulcal_only
@@ -341,7 +352,6 @@ class TestDiscoverUmapPairs:
         assert region == "FColl-SRh"
         assert hemi == "left"
 
-
     def test_skips_csv_without_model(self, temp_dir):
         """Test that a CSV without a matching model is skipped."""
         emb_dir = Path(temp_dir) / "embeddings"
@@ -367,8 +377,7 @@ class TestDiscoverUmapPairs:
             (ref_dir / f"umap_{region}_left.pkl").touch()
             (ref_dir / f"umap_{region}_left_coords.npy").touch()
 
-        result = discover_umap_pairs(str(emb_dir), str(ref_dir),
-                                     regions=["FColl-SRh"])
+        result = discover_umap_pairs(str(emb_dir), str(ref_dir), regions=["FColl-SRh"])
         assert len(result) == 1
         assert result[0][3] == "FColl-SRh"
 
@@ -390,17 +399,21 @@ class TestMainFunction:
 
     def test_output_dir_is_required(self):
         """Test that --output_dir is required."""
-        with patch('sys.argv', ['generate_snapshots.py']):
+        with patch("sys.argv", ["generate_snapshots.py"]):
             with pytest.raises(SystemExit):
                 main()
 
     def test_main_creates_output_dir(self, temp_dir):
         """Test that main creates the output directory."""
         output_dir = os.path.join(temp_dir, "snapshots_output")
-        with patch('sys.argv', [
-            'generate_snapshots.py',
-            '--output_dir', output_dir,
-        ]):
+        with patch(
+            "sys.argv",
+            [
+                "generate_snapshots.py",
+                "--output_dir",
+                output_dir,
+            ],
+        ):
             result = main()
             assert result == 0
             assert os.path.isdir(output_dir)
@@ -408,10 +421,14 @@ class TestMainFunction:
     def test_main_writes_manifest(self, temp_dir):
         """Test that main writes a snapshots_manifest.json."""
         output_dir = os.path.join(temp_dir, "snapshots_output")
-        with patch('sys.argv', [
-            'generate_snapshots.py',
-            '--output_dir', output_dir,
-        ]):
+        with patch(
+            "sys.argv",
+            [
+                "generate_snapshots.py",
+                "--output_dir",
+                output_dir,
+            ],
+        ):
             main()
             manifest = os.path.join(output_dir, "snapshots_manifest.json")
             assert os.path.exists(manifest)
@@ -422,33 +439,45 @@ class TestMainFunction:
     def test_sulcal_only_does_not_run_tiles_or_umap(self, temp_dir):
         """Test that --sulcal-only skips tiles and umap."""
         output_dir = os.path.join(temp_dir, "out")
-        with patch('sys.argv', [
-            'generate_snapshots.py',
-            '--output_dir', output_dir,
-            '--sulcal-only',
-        ]):
+        with patch(
+            "sys.argv",
+            [
+                "generate_snapshots.py",
+                "--output_dir",
+                output_dir,
+                "--sulcal-only",
+            ],
+        ):
             result = main()
             assert result == 0
 
     def test_tiles_only_does_not_run_sulcal_or_umap(self, temp_dir):
         """Test that --tiles-only skips sulcal and umap."""
         output_dir = os.path.join(temp_dir, "out")
-        with patch('sys.argv', [
-            'generate_snapshots.py',
-            '--output_dir', output_dir,
-            '--tiles-only',
-        ]):
+        with patch(
+            "sys.argv",
+            [
+                "generate_snapshots.py",
+                "--output_dir",
+                output_dir,
+                "--tiles-only",
+            ],
+        ):
             result = main()
             assert result == 0
 
     def test_umap_only_does_not_run_sulcal_or_tiles(self, temp_dir):
         """Test that --umap-only skips sulcal and tiles."""
         output_dir = os.path.join(temp_dir, "out")
-        with patch('sys.argv', [
-            'generate_snapshots.py',
-            '--output_dir', output_dir,
-            '--umap-only',
-        ]):
+        with patch(
+            "sys.argv",
+            [
+                "generate_snapshots.py",
+                "--output_dir",
+                output_dir,
+                "--umap-only",
+            ],
+        ):
             result = main()
             assert result == 0
 
@@ -456,13 +485,15 @@ class TestMainFunction:
         """Test that main() follows the ScriptBuilder pattern."""
         output_dir = os.path.join(temp_dir, "out")
         stub = GenerateSnapshots.__new__(GenerateSnapshots)
-        with patch('sys.argv', [
-            'generate_snapshots.py',
-            '--output_dir', output_dir,
-        ]):
-            with patch.object(
-                GenerateSnapshots, 'build', return_value=stub
-            ) as mock_build:
+        with patch(
+            "sys.argv",
+            [
+                "generate_snapshots.py",
+                "--output_dir",
+                output_dir,
+            ],
+        ):
+            with patch.object(GenerateSnapshots, "build", return_value=stub) as mock_build:
                 stub.print_args = lambda: stub
                 stub.run = lambda: 0
                 result = main()

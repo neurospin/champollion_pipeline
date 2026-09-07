@@ -39,34 +39,43 @@ class RunCorticalTiles(ScriptBuilder):
     def __init__(self):
         super().__init__(
             script_name="run_cortical_tiles",
-            description="Generating sulcal regions with cortical_tiles from Morphologist's graphs."
+            description="Generating sulcal regions with cortical_tiles from Morphologist's graphs.",
         )
         # Configure arguments using method chaining
-        (self.add_argument("input", help="Absolute path to the directory containing subject folders "
-                                        "(e.g., morphologist's output subjects directory).")
-         .add_argument("output", help="Absolute path to the generated sulcal regions from cortical_tiles.")
-         .add_optional_argument("--region-file", "Absolute path to the user's sulcal region's configuration file.")
-         .add_required_argument(
-             "--path_to_graph",
-             "Contains the sub-path that, for each subject, permits getting the sulcal graphs.")
-         .add_required_argument("--path_sk_with_hull", "Contains the sub-path where to get the skeleton with hull.")
-         .add_optional_argument("--sk_qc_path", "The path to the QC file if it exists.", default="")
-         .add_optional_argument("--njobs", "Number of CPU cores allowed to use.", default=None, type_=int)
-         .add_argument("--input-types", nargs="+", default=None,
-                       help="Input types to generate (e.g. skeleton foldlabel extremities). "
-                            "Default: all types.")
-         .add_flag("--skip-distbottom",
-                   "Skip distbottom generation (unused during inference).")
-         .add_argument("--regions", nargs="+", default=None,
-                       help="Restrict processing to these sulcal regions "
-                            "(space-separated). Default: all 28 regions.")
-         .add_optional_argument(
-             "--masks",
-             "Mask version tag (e.g. 'canonical_25'). Overrides "
-             "masks_version in the pipeline JSON config.",
-             default=None)
-         .add_flag("--overwrite",
-                   "Re-generate crops even if they already exist for this mask version."))
+        (
+            self.add_argument(
+                "input",
+                help="Absolute path to the directory containing subject folders "
+                "(e.g., morphologist's output subjects directory).",
+            )
+            .add_argument("output", help="Absolute path to the generated sulcal regions from cortical_tiles.")
+            .add_optional_argument("--region-file", "Absolute path to the user's sulcal region's configuration file.")
+            .add_required_argument(
+                "--path_to_graph", "Contains the sub-path that, for each subject, permits getting the sulcal graphs."
+            )
+            .add_required_argument("--path_sk_with_hull", "Contains the sub-path where to get the skeleton with hull.")
+            .add_optional_argument("--sk_qc_path", "The path to the QC file if it exists.", default="")
+            .add_optional_argument("--njobs", "Number of CPU cores allowed to use.", default=None, type_=int)
+            .add_argument(
+                "--input-types",
+                nargs="+",
+                default=None,
+                help="Input types to generate (e.g. skeleton foldlabel extremities). Default: all types.",
+            )
+            .add_flag("--skip-distbottom", "Skip distbottom generation (unused during inference).")
+            .add_argument(
+                "--regions",
+                nargs="+",
+                default=None,
+                help="Restrict processing to these sulcal regions (space-separated). Default: all 28 regions.",
+            )
+            .add_optional_argument(
+                "--masks",
+                "Mask version tag (e.g. 'canonical_25'). Overrides masks_version in the pipeline JSON config.",
+                default=None,
+            )
+            .add_flag("--overwrite", "Re-generate crops even if they already exist for this mask version.")
+        )
 
     def _preflight_check(self, output_abs: str, config_path: str) -> bool:
         """Check for existing crops and migrate legacy flat structure if needed.
@@ -97,9 +106,7 @@ class RunCorticalTiles(ScriptBuilder):
                         "to remove both and regenerate."
                     )
                     return False
-                print(
-                    f"--overwrite: removing legacy crops/{vox_str}/ and existing crops/{old_version}/{vox_str}/..."
-                )
+                print(f"--overwrite: removing legacy crops/{vox_str}/ and existing crops/{old_version}/{vox_str}/...")
                 shutil.rmtree(legacy_crops)
                 shutil.rmtree(target)
 
@@ -158,38 +165,31 @@ class RunCorticalTiles(ScriptBuilder):
         # and we pass output as -d so the config is never inside the subjects directory
         # (which would cause generate_skeletons.py to list it as a subject).
         if not self.validate_paths([config_file_path]):
-            source_config = abspath(join(
-                dirname(__file__), '..', 'pipeline_loop_2mm.json'
-            ))
-            self.execute_command(
-                ["cp", source_config, config_file_path],
-                shell=False
-            )
+            source_config = abspath(join(dirname(__file__), "..", "pipeline_loop_2mm.json"))
+            self.execute_command(["cp", source_config, config_file_path], shell=False)
 
         # Set graphs_dir and output_dir in the pipeline JSON config.
         # generate_sulcal_regions.py derives both from path_dataset (-d arg)
         # when they are "$local". Since -d is now the subjects dir (not the
         # dataset root), we set them explicitly so outputs land in the right place.
         if exists(config_file_path):
-            with open(config_file_path, 'r') as f:
+            with open(config_file_path, "r") as f:
                 config = json.load(f)
-            config['graphs_dir'] = input_abs
-            config['output_dir'] = join(
-                abspath(self.args.output), DERIVATIVES_FOLDER
-            )
-            config['path_to_graph'] = self.args.path_to_graph
-            config['path_to_skeleton_with_hull'] = self.args.path_sk_with_hull
-            config['masks_version'] = self.args.masks if self.args.masks else 'canonical_25'
-            config['skel_qc_path'] = self.args.sk_qc_path if self.args.sk_qc_path else ""
-            with open(config_file_path, 'w') as f:
+            config["graphs_dir"] = input_abs
+            config["output_dir"] = join(abspath(self.args.output), DERIVATIVES_FOLDER)
+            config["path_to_graph"] = self.args.path_to_graph
+            config["path_to_skeleton_with_hull"] = self.args.path_sk_with_hull
+            config["masks_version"] = self.args.masks if self.args.masks else "canonical_25"
+            config["skel_qc_path"] = self.args.sk_qc_path if self.args.sk_qc_path else ""
+            with open(config_file_path, "w") as f:
                 json.dump(config, f, indent=3)
 
         # Set skip_distbottom in pipeline JSON if requested
         if self.args.skip_distbottom and exists(config_file_path):
-            with open(config_file_path, 'r') as f:
+            with open(config_file_path, "r") as f:
                 config = json.load(f)
-            config['skip_distbottom'] = True
-            with open(config_file_path, 'w') as f:
+            config["skip_distbottom"] = True
+            with open(config_file_path, "w") as f:
                 json.dump(config, f, indent=3)
 
         # Prepare njobs
@@ -204,10 +204,18 @@ class RunCorticalTiles(ScriptBuilder):
 
         # Build command to run cortical_tiles script directly
         # Get absolute paths
-        script_path = abspath(join(
-            dirname(__file__),
-            '..', '..', 'external', 'cortical_tiles', 'deep_folding', 'brainvisa', 'generate_sulcal_regions.py'
-        ))
+        script_path = abspath(
+            join(
+                dirname(__file__),
+                "..",
+                "..",
+                "external",
+                "cortical_tiles",
+                "deep_folding",
+                "brainvisa",
+                "generate_sulcal_regions.py",
+            )
+        )
 
         # Get the directory where the script lives so we can run from there
         script_dir = dirname(script_path)
@@ -216,10 +224,14 @@ class RunCorticalTiles(ScriptBuilder):
         cmd = [
             sys.executable,
             script_path,
-            "-d", abspath(self.args.output),
-            "--path_to_graph", self.args.path_to_graph,
-            "--path_sk_with_hull", self.args.path_sk_with_hull,
-            "--njobs", str(self.args.njobs)
+            "-d",
+            abspath(self.args.output),
+            "--path_to_graph",
+            self.args.path_to_graph,
+            "--path_sk_with_hull",
+            self.args.path_sk_with_hull,
+            "--njobs",
+            str(self.args.njobs),
         ]
 
         # # Add optional arguments if provided

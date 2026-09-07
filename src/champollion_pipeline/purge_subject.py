@@ -26,14 +26,15 @@ class PurgeSubject(ScriptBuilder):
             script_name="purge_subject",
             description="Remove all cortical_tiles derivatives for a single subject.",
         )
-        (self.add_argument(
-            "derivatives",
-            help="Path to the cortical_tiles derivatives directory "
-                 "(e.g. data/mydata/derivatives/cortical_tiles-2026/).")
-         .add_required_argument(
-            "--subject",
-            "Subject ID to remove (e.g. sub-123456).")
-         .add_flag("--dry-run", "Print what would be deleted without deleting."))
+        (
+            self.add_argument(
+                "derivatives",
+                help="Path to the cortical_tiles derivatives directory "
+                "(e.g. data/mydata/derivatives/cortical_tiles-2026/).",
+            )
+            .add_required_argument("--subject", "Subject ID to remove (e.g. sub-123456).")
+            .add_flag("--dry-run", "Print what would be deleted without deleting.")
+        )
 
     def _log(self, msg):
         prefix = "[dry-run] " if self.args.dry_run else ""
@@ -104,10 +105,7 @@ class PurgeSubject(ScriptBuilder):
 
                     found_in_any = True
                     idx = subjects_df.index[mask].tolist()
-                    self._log(
-                        f"Filter row(s) {idx} from array: {npy_path.name} "
-                        f"(region {region_dir.name})"
-                    )
+                    self._log(f"Filter row(s) {idx} from array: {npy_path.name} (region {region_dir.name})")
 
                     if not self.args.dry_run:
                         arr = np.load(str(npy_path), allow_pickle=True)
