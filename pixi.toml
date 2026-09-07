@@ -24,6 +24,7 @@ hypothesis = ">=6.0"
 scipy = ">=1.10"
 numpy = ">=1.24"
 joblib = ">=1.3"
+rich = ">=13.0"
 
 # ── BrainVISA feature (morphologist graphs + snapshots) ──────────────────────
 [feature.brainvisa.dependencies]
@@ -137,6 +138,7 @@ docs-serve = "python -m http.server 8080 --directory docs/_build/html"
 [environments]
 default        = { features = ["brainvisa", "cortical-tiles", "embeddings"] }
 embeddings     = { features = ["embeddings"], no-default-feature = true, solve-group = "embeddings" }
+training       = { features = ["embeddings"], no-default-feature = true, solve-group = "embeddings" }
 cortical-tiles = { features = ["brainvisa", "cortical-tiles"], no-default-feature = true, solve-group = "cortical-tiles" }
 brainvisa      = { features = ["brainvisa"], no-default-feature = true, solve-group = "brainvisa" }
 docs           = { features = ["docs"], no-default-feature = true, solve-group = "docs" }
@@ -209,3 +211,4 @@ test-specific = "pytest"
 generate-masks = "python3 src/generate_masks.py"
 check-labeling = "python3 src/check_labeling.py"
 compare-databases = "python3 src/compare_databases.py"
+setup = "python scripts/setup_wizard.py"
