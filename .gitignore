@@ -37,3 +37,6 @@ things_tried_to_fix_compare.md
 # Data and model outputs (never commit subject data)
 data/
 reference_data/
+
+# Sphinx build output
+docs/_build/
