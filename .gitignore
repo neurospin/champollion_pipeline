@@ -38,5 +38,10 @@ things_tried_to_fix_compare.md
 data/
 reference_data/
 
+# Training artifacts — upload to HuggingFace, never commit
+scripts/staging/
+*.pt
+*.ckpt
+
 # Sphinx build output
 docs/_build/
