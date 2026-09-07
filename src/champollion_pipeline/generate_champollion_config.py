@@ -16,7 +16,7 @@ from champollion_pipeline.utils.lib import DERIVATIVES_FOLDER, find_dataset_fold
 
 # Get the script's directory for reliable path resolution
 _SCRIPT_DIR = dirname(abspath(__file__))
-_DEFAULT_CHAMPOLLION_LOC = abspath(join(_SCRIPT_DIR, '..', 'external', 'champollion_V1'))
+_DEFAULT_CHAMPOLLION_LOC = abspath(join(_SCRIPT_DIR, '..', '..', 'external', 'champollion_V1'))
 _LOCALIZATION_TEMPLATE = "# @package _global_\ndataset_folder: {dataset_folder}\n"
 
 
@@ -145,7 +145,7 @@ class GenerateChampollionConfig(ScriptBuilder):
 
         # Always copy reference.yaml from template so re-runs regenerate cleanly
         reference_yaml_dest = join(dataset_loc, "reference.yaml")
-        reference_yaml_src = join(dirname(_SCRIPT_DIR), "reference.yaml")
+        reference_yaml_src = join(dirname(dirname(_SCRIPT_DIR)), "reference.yaml")
         self.execute_command(["cp", reference_yaml_src, dataset_loc], shell=False)
 
         dataset_folder = find_dataset_folder(self.args.crop_path, self.args.dataset)
