@@ -206,7 +206,7 @@ class RunCorticalTiles(ScriptBuilder):
         # Get absolute paths
         script_path = abspath(join(
             dirname(__file__),
-            '..', 'external', 'cortical_tiles', 'deep_folding', 'brainvisa', 'generate_sulcal_regions.py'
+            '..', '..', 'external', 'cortical_tiles', 'deep_folding', 'brainvisa', 'generate_sulcal_regions.py'
         ))
 
         # Get the directory where the script lives so we can run from there

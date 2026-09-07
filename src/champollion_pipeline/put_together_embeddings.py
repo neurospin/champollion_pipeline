@@ -46,7 +46,7 @@ class PutTogetherEmbeddings(ScriptBuilder):
         # Use __file__ to get the script's location, not cwd
         script_dir = dirname(abspath(__file__))
         champollion_path = abspath(join(
-            script_dir, '..', 'external', 'champollion_V1', 'contrastive', 'utils'
+            script_dir, '..', '..', 'external', 'champollion_V1', 'contrastive', 'utils'
         ))
         chdir(champollion_path)
 
