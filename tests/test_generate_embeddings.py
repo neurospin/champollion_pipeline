@@ -560,6 +560,49 @@ class TestHuggingFaceStrategy:
             assert 'subfolder' not in mock_dl.call_args[1], \
                 f"subfolder kwarg must never be passed (subfolder={subfolder!r})"
 
+    def test_fetch_with_subfolder_returns_path_including_subfolder(self, tmp_path):
+        """REQ-HF-01: with a non-empty subfolder, fetch() returns snapshot_root/subfolder."""
+        snapshot_root = str(tmp_path / "fake_root")
+        strategy = self._make_strategy(subfolder="canonical_25")
+        with patch('huggingface_hub.snapshot_download', return_value=snapshot_root):
+            resolved = strategy.fetch("neurospin/Champollion_V1", str(tmp_path))
+        assert resolved == os.path.join(snapshot_root, "canonical_25")
+
+    def test_fetch_without_subfolder_returns_snapshot_root_unchanged(self, tmp_path):
+        """REQ-HF-01: with no subfolder, fetch() returns the snapshot root unchanged."""
+        snapshot_root = str(tmp_path / "fake_root")
+        strategy = self._make_strategy(subfolder=None)
+        with patch('huggingface_hub.snapshot_download', return_value=snapshot_root):
+            resolved = strategy.fetch("neurospin/Champollion_V1", str(tmp_path))
+        assert resolved == snapshot_root
+
+
+@pytest.mark.unit
+class TestUseBestModelDefault:
+    """REQ-BESTMODEL-01 — use_best_model defaults to True in the pipeline defaults."""
+
+    def _capture_defaults(self, temp_dir):
+        """Run the script with build_command mocked and return the defaults dict it received."""
+        script = GenerateEmbeddings()
+        script.parse_args([temp_dir, "loc", temp_dir, "test"])
+
+        with patch('os.chdir'):
+            with patch('os.getcwd', return_value="/original"):
+                with patch.object(script, 'build_command', return_value=["cmd"]) as mock_build:
+                    with patch.object(script, 'execute_command', return_value=0):
+                        script.run()
+        return mock_build.call_args[1]['defaults']
+
+    def test_use_best_model_defaults_to_true(self, temp_dir):
+        """The defaults handed to embeddings_pipeline.py set use_best_model to True."""
+        defaults = self._capture_defaults(temp_dir)
+        assert defaults["use_best_model"] is True
+
+    def test_use_best_model_present_in_defaults(self, temp_dir):
+        """use_best_model is always supplied as a default, never left unset."""
+        defaults = self._capture_defaults(temp_dir)
+        assert "use_best_model" in defaults
+
 
 @pytest.mark.unit
 class TestPixiTaskPaths:

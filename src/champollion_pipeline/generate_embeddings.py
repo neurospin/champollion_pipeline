@@ -175,6 +175,8 @@ class HuggingFaceStrategy(ModelFetchStrategy):
                 allow_patterns=allow_patterns,
                 force_download=no_cache
             )
+            if self.subfolder:
+                downloaded_path = join(downloaded_path, self.subfolder)
             print(f"Successfully downloaded from Hugging Face to: "
                   f"{downloaded_path}")
             return downloaded_path
@@ -534,7 +536,7 @@ class GenerateEmbeddings(ScriptBuilder):
         # Define extraction directory (where to store downloaded/extracted)
         # Use data/{datasets_root}/derivatives/champollion_V1/models_cache
         script_dir = dirname(abspath(__file__))
-        data_dir = join(script_dir, '..', '..', 'data', self.args.datasets_root,
+        data_dir = join(script_dir, '..', '..', 'data', self.args.datasets_root.lstrip('/'),
                         'derivatives', 'champollion_V1', 'models_cache')
         extract_to = abspath(data_dir)
         os.makedirs(extract_to, exist_ok=True)
@@ -673,7 +675,7 @@ class GenerateEmbeddings(ScriptBuilder):
             "classifier_name": "svm",
             "overwrite": False,
             "embeddings_only": False,
-            "use_best_model": False,
+            "use_best_model": True,
             "subsets": ["full"],
             "epochs": ["None"],
             "config_path": None,
