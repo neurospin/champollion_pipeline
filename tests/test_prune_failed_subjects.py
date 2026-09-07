@@ -8,12 +8,13 @@ from pathlib import Path
 
 import pytest
 
-from champollion_pipeline.utils.lib import DERIVATIVES_FOLDER
 from champollion_pipeline.prune_failed_subjects import PruneFailedSubjects
+from champollion_pipeline.utils.lib import DERIVATIVES_FOLDER
 
 # ---------------------------------------------------------------------------
 # Helpers
 # ---------------------------------------------------------------------------
+
 
 def _make_crops(base: Path, regions: list[str], subjects: list[str]) -> None:
     """Create fake crop files under crops/2mm/{region}/{subject}.nii.gz."""
@@ -48,6 +49,7 @@ def _make_script_with_args(tmp_path: Path, qc_path: Path, dry_run: bool = False)
 # Argument parsing
 # ---------------------------------------------------------------------------
 
+
 class TestArgumentParsing:
     def test_required_output_and_qc(self, tmp_path):
         script = PruneFailedSubjects()
@@ -74,6 +76,7 @@ class TestArgumentParsing:
 # ---------------------------------------------------------------------------
 # _discover_subjects
 # ---------------------------------------------------------------------------
+
 
 class TestDiscoverSubjects:
     def test_discovers_subjects_from_nii_gz(self, tmp_path):
@@ -134,6 +137,7 @@ class TestDiscoverSubjects:
 # _read_passing_subjects
 # ---------------------------------------------------------------------------
 
+
 class TestReadPassingSubjects:
     def test_reads_tsv_and_returns_passing(self, tmp_path):
         qc = _make_qc_tsv(tmp_path / "qc.tsv", [("sub-01", 1), ("sub-02", 0), ("sub-03", 1)])
@@ -171,6 +175,7 @@ class TestReadPassingSubjects:
 # ---------------------------------------------------------------------------
 # run() — integration-level (real filesystem, no subprocess)
 # ---------------------------------------------------------------------------
+
 
 class TestRun:
     def test_raises_when_derivatives_dir_missing(self, tmp_path):
