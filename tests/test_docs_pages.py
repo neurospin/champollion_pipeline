@@ -174,3 +174,21 @@ class TestDocsStrictBuild:
             f"{API_HTML} does not mention 'champollion_pipeline'; autodoc produced no output\n"
             f"--- stdout ---\n{strict_build_result.stdout}"
         )
+
+
+# TASK-011
+@pytest.mark.smoke
+class TestSetupInToctree:
+    """REQ-WIZARD-05: setup page appears before installation in User Guide toctree."""
+
+    def test_setup_page_in_toctree(self):
+        index_content = (DOCS_DIR / "index.md").read_text()
+        assert "setup" in index_content, "setup not found in docs/index.md"
+
+    def test_setup_before_installation_in_toctree(self):
+        index_content = (DOCS_DIR / "index.md").read_text()
+        setup_pos = index_content.find("setup")
+        install_pos = index_content.find("installation")
+        assert setup_pos != -1, "setup not found in index.md"
+        assert install_pos != -1, "installation not found in index.md"
+        assert setup_pos < install_pos, f"setup ({setup_pos}) must appear before installation ({install_pos})"
