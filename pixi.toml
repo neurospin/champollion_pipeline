@@ -142,8 +142,8 @@ install-all = { depends-on = ["init-submodules", "install-cortical-tiles", "inst
 update-pipeline = "git fetch && git checkout -- pixi.lock && git merge --no-edit -X theirs FETCH_HEAD"
 
 update-submodules = """
-  git submodule update --init --remote --rebase external/champollion_V1 && \
-  git submodule update --init --remote --rebase external/cortical_tiles
+  git submodule update --init --remote --force external/champollion_V1 && \
+  git submodule update --init --remote --force external/cortical_tiles
 """
 
 update-utils = """
