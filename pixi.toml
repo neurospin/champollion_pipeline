@@ -109,7 +109,7 @@ install-utils = """
 install-embeddings = { depends-on = ["install-champollion", "install-pipeline", "install-utils"] }
 update = """
   git fetch && git checkout -- pixi.lock && git merge --no-edit -X theirs FETCH_HEAD && \
-  git submodule update --init --remote --rebase external/champollion_V1 && \
+  git submodule update --init --remote --force external/champollion_V1 && \
   (cd ../champollion_utils && git pull origin master) || echo 'WARNING: champollion_utils update failed' && \
   pip install -e external/champollion_V1 --no-deps --no-build-isolation && \
   pip install -e ../champollion_utils --no-deps --no-build-isolation && \
