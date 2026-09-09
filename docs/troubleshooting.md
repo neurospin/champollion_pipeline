@@ -19,6 +19,30 @@ pixi run update-pipeline   # pulls latest code and pixi.lock from origin
 pixi run install-embeddings
 ```
 
+## Morphologist crash: `RuntimeError: the parameter input is not readable or does not exist`
+
+This happens when filenames contain BIDS entities (`_acq-`, `_run-`, `_ses-`, etc.) and you call `morphologist-cli` directly. `morphologist-cli` auto-detects the BIDS format from the filename, silently overrides the `--if morphologist-auto-nonoverlap-1.0` flag, switches to `--if morphologist-bids-2.0`, and then tries to reconstruct file paths using a BIDS directory layout that may not match your actual data location.
+
+**Use the champollion wrapper instead of raw `morphologist-cli`:**
+
+```bash
+champollion-morphologist <input_dir> <output_dir>
+# or via pixi:
+pixi run morphologist <input_dir> <output_dir>
+```
+
+The wrapper passes both `--if` and `--of` explicitly, preventing the format override.
+
+**If you must call `morphologist-cli` directly**, pass both flags explicitly:
+
+```bash
+morphologist-cli <files...> <output_dir> -- \
+    --if morphologist-auto-nonoverlap-1.0 \
+    --of morphologist-auto-nonoverlap-1.0
+```
+
+**Alternative**: rename your NIfTI files to remove BIDS entities before processing (e.g. `sub-001_T1w.nii.gz` instead of `sub-001_acq-iso08_T1w.nii.gz`).
+
 ## `pixi run update-submodules` fails with a rebase conflict
 
 If a submodule has local commits that conflict with the remote tip, the update aborts. These submodules are upstream dependencies — local commits inside them are not expected. Run:

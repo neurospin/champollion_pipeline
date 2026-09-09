@@ -61,7 +61,17 @@ class GenerateMorphologistGraphs(ScriptBuilder):
         chdir(self.args.input)
 
         # Build command
-        cmd = ["morphologist-cli", *input_files, self.args.output, "--", "--of", "morphologist-auto-nonoverlap-1.0"]
+        # Explicitly set both --if and --of to prevent morphologist-cli from auto-detecting
+        # BIDS format when filenames contain BIDS entities (_acq-, _run-, etc.) and silently
+        # overriding the input format to morphologist-bids-2.0.
+        cmd = [
+            "morphologist-cli",
+            *input_files,
+            self.args.output,
+            "--",
+            "--if", "morphologist-auto-nonoverlap-1.0",
+            "--of", "morphologist-auto-nonoverlap-1.0",
+        ]
 
         # Add parallel processing flag (capsul options come first)
         if self.args.parallel:
