@@ -118,6 +118,12 @@ class TestDocsConfBuild:
         if shutil.which("pixi") is None:
             pytest.skip("pixi is not on PATH; cannot reach the docs environment")
 
+        # pixi < 0.77.0 cannot parse the platforms table syntax introduced in PR#7
+        pixi_ver_str = subprocess.run(["pixi", "--version"], capture_output=True, text=True).stdout.strip()
+        pixi_ver_tuple = tuple(int(x) for x in pixi_ver_str.split()[-1].split(".") if x.isdigit())
+        if pixi_ver_tuple < (0, 77, 0):
+            pytest.skip(f"{pixi_ver_str} < 0.77.0: platforms table syntax not supported")
+
         if BUILD_DIR.exists():
             shutil.rmtree(BUILD_DIR)
 
