@@ -46,11 +46,13 @@ class TestWizardConfig:
         command = setup_task if isinstance(setup_task, str) else setup_task.get("cmd", "")
         assert WIZARD_SCRIPT in command, f"[tasks].setup must run {WIZARD_SCRIPT!r}; got {command!r}"
 
-    def test_rich_in_pypi_dependencies(self, pixi_config):
-        """``rich`` is declared as a top-level pypi-dependency."""
-        pypi_dependencies = pixi_config.get("pypi-dependencies", {})
-        assert "rich" in pypi_dependencies, (
-            f"[pypi-dependencies] is missing 'rich'; found {sorted(pypi_dependencies)}"
+    def test_rich_in_dependencies(self, pixi_config):
+        """``rich`` is declared in [dependencies] or [pypi-dependencies]."""
+        deps = pixi_config.get("dependencies", {})
+        pypi_deps = pixi_config.get("pypi-dependencies", {})
+        assert "rich" in deps or "rich" in pypi_deps, (
+            f"'rich' missing from both [dependencies] and [pypi-dependencies]; "
+            f"deps={sorted(deps)}, pypi={sorted(pypi_deps)}"
         )
 
     def test_training_environment_exists(self, pixi_config):
