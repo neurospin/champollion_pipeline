@@ -24,9 +24,9 @@ jobs:
           submodules: recursive
 
       - name: Install Pixi
-        uses: prefix-dev/setup-pixi@v0.9.4
+        uses: prefix-dev/setup-pixi@v0.10.1
         with:
-          pixi-version: v0.63.2
+          pixi-version: v0.77.0
           manifest-path: pixi.toml
           cache: true
           locked: true
@@ -34,7 +34,7 @@ jobs:
           auth-token: ${{ secrets.PREFIX_DEV_TOKEN }}
 
       - name: Install dependencies
-        run: pixi run install-all
+        run: pixi run --environment default install-all
 
       - name: Ruff lint (auto-fix)
         run: pixi run lint-fix
