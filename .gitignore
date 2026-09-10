@@ -45,3 +45,16 @@ scripts/staging/
 
 # Sphinx build output
 docs/_build/
+
+# ELM task ledger (local repo, no remote)
+elm/
+
+# Claude Code session state
+.claude/
+
+# SLURM job scripts (cluster-local, not tracked)
+slurm/
+scripts/slurm/
+
+# Install diagnostic reports
+install_report_*.txt
