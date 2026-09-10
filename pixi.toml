@@ -155,7 +155,13 @@ install-utils = """
 
 setup-data = "mkdir -p ../data"
 
-install-all = { depends-on = ["init-submodules", "install-cortical-tiles", "install-champollion", "install-utils", "setup-data", "test-smoke"] }
+install-pipeline = "pip install -e . --no-deps --no-build-isolation"
+install-champollion = "pip install -e external/champollion_V1 --no-deps --no-build-isolation"
+check-install = "python scripts/install_health.py"
+check-install-fix = "python scripts/install_health.py --fix"
+pre-update = "python scripts/install_health.py --pre-update"
+
+install-all = { depends-on = ["init-submodules", "install-cortical-tiles", "install-champollion", "install-pipeline", "install-utils", "setup-data", "test-smoke", "check-install"] }
 
 update-pipeline = "git fetch && git checkout -- pixi.lock && git merge --no-edit -X theirs FETCH_HEAD"
 

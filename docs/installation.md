@@ -49,6 +49,24 @@ SKLEARN_ALLOW_DEPRECATED_SKLEARN_PACKAGE_INSTALL=True \
     pip install -e external/cortical_tiles --no-deps --no-build-isolation
 ```
 
+## Diagnosing install problems
+
+Run the health check at any time — no pixi env required:
+
+```bash
+pixi run check-install          # report current state
+pixi run check-install-fix      # auto-fix stale editable installs
+pixi run pre-update             # preview remote changes before pulling
+```
+
+Or with bare Python (useful when pixi itself fails):
+
+```bash
+python3 scripts/install_health.py --report
+```
+
+The script checks every editable install, every submodule, and prints a `CHAMPOLLION INSTALL REPORT` you can paste into a support ticket.
+
 ## Uninstallation
 
 ```bash
