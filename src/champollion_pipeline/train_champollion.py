@@ -12,7 +12,7 @@ from os.path import abspath, dirname, exists, join
 from champollion_utils.script_builder import ScriptBuilder
 
 _SCRIPT_DIR = dirname(abspath(__file__))
-_CONTRASTIVE_DIR = abspath(join(_SCRIPT_DIR, "..", "..", "external", "champollion_V1", "contrastive"))
+_CONTRASTIVE_DIR = abspath(join(_SCRIPT_DIR, "..", "..", "external", "champollion_V1", "champollion"))
 
 
 class TrainChampollion(ScriptBuilder):

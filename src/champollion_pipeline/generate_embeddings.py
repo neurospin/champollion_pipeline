@@ -26,11 +26,11 @@ from champollion_pipeline.utils.lib import CORTICAL_TILES_VERSION
 
 # Add champollion to path for CKA imports
 _SCRIPT_DIR = dirname(abspath(__file__))
-_CHAMPOLLION_DIR = abspath(join(_SCRIPT_DIR, "..", "..", "external", "champollion_V1", "contrastive"))
+_CHAMPOLLION_DIR = abspath(join(_SCRIPT_DIR, "..", "..", "external", "champollion_V1"))
 if _CHAMPOLLION_DIR not in sys.path:
     sys.path.insert(0, _CHAMPOLLION_DIR)
 
-from contrastive.evaluation.cka_coherence import test_models_coherence_from_directory  # noqa: E402
+from champollion.evaluation.cka_coherence import test_models_coherence_from_directory  # noqa: E402
 
 
 class ModelFetchStrategy(ABC):
@@ -359,7 +359,7 @@ class GenerateEmbeddings(ScriptBuilder):
                 type=str,
                 help=(
                     "Config key selecting dataset_localization/{key}.yaml inside "
-                    "external/champollion_V1/contrastive/configs/. "
+                    "external/champollion_V1/champollion/configs/. "
                     "Use 'local' for any dataset processed on this machine — "
                     "it maps to the dataset_folder set by generate_champollion_config.py. "
                     "Example: local"
@@ -614,9 +614,9 @@ class GenerateEmbeddings(ScriptBuilder):
             tmpdir = self._make_regions_tmpdir(self.args.models_path)
             self.args.models_path = tmpdir
 
-        # Get absolute path to champollion_V1/contrastive
+        # Get absolute path to champollion_V1/champollion
         script_dir = dirname(abspath(__file__))
-        champollion_dir = abspath(join(script_dir, "..", "..", "external", "champollion_V1", "contrastive"))
+        champollion_dir = abspath(join(script_dir, "..", "..", "external", "champollion_V1", "champollion"))
 
         os.chdir(champollion_dir)
 

@@ -50,13 +50,13 @@ class TestExternalPathResolution:
         """train_champollion._CONTRASTIVE_DIR -> <root>/external/champollion_V1/contrastive."""
         from champollion_pipeline.train_champollion import _CONTRASTIVE_DIR
 
-        assert Path(_CONTRASTIVE_DIR) == EXTERNAL_DIR / "champollion_V1" / "contrastive"
+        assert Path(_CONTRASTIVE_DIR) == EXTERNAL_DIR / "champollion_V1" / "champollion"
 
     def test_put_together_embeddings_chdirs_into_repo_root_external(self, temp_dir):
         """put_together_embeddings.run() chdirs into <root>/external/champollion_V1/contrastive/utils."""
         from champollion_pipeline.put_together_embeddings import PutTogetherEmbeddings
 
-        expected = EXTERNAL_DIR / "champollion_V1" / "contrastive" / "utils"
+        expected = EXTERNAL_DIR / "champollion_V1" / "champollion" / "utils"
 
         script = PutTogetherEmbeddings()
         script.parse_args(
