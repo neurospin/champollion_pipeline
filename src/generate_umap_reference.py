@@ -36,7 +36,7 @@ from champollion_utils.script_builder import ScriptBuilder
 # Re-use the model-discovery helpers from champollion_V1 utils
 sys.path.insert(
     0,
-    osp.abspath(osp.join(osp.dirname(__file__), "..", "external", "champollion_V1", "contrastive", "utils")),
+    osp.abspath(osp.join(osp.dirname(__file__), "..", "external", "champollion_V1", "champollion", "utils")),
 )
 from put_together_embeddings_files import get_model_paths  # noqa: E402
 

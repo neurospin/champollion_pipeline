@@ -29,7 +29,7 @@ from os.path import basename, isdir, isfile, join
 
 from champollion_utils.script_builder import ScriptBuilder
 
-CKA_MODULE = "contrastive.evaluation.cka_coherence"
+CKA_MODULE = "champollion.evaluation.cka_coherence"
 
 
 class RunCKA(ScriptBuilder):
