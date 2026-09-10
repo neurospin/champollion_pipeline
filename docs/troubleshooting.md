@@ -1,5 +1,17 @@
 # Troubleshooting
 
+## Diagnosing installation problems
+
+Before investigating specific errors, run the install health check — it inspects every editable install and submodule and prints a structured report:
+
+```bash
+pixi run check-install          # inspect current state
+pixi run check-install-fix      # auto-fix stale editable installs
+python3 scripts/install_health.py --report   # works even when pixi env is broken
+```
+
+The `--report` flag saves a `CHAMPOLLION INSTALL REPORT` file you can send as a support ticket.
+
 ## `ModuleNotFoundError: No module named 'champollion_pipeline'`
 
 The Python package is installed by `pixi run install-all` (first-time setup) or `pixi run install-embeddings` (embeddings env only). If you reinstalled Pixi, changed environments, or ran `pixi run uninstall`, run the install step again before any pipeline task:

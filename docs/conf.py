@@ -26,7 +26,7 @@ myst_enable_extensions = ["colon_fence", "deflist"]
 
 source_suffix = {".md": "markdown", ".rst": "restructuredtext"}
 
-exclude_patterns = ["_build", "Thumbs.db", ".DS_Store", "workflow.md"]
+exclude_patterns = ["_build", "Thumbs.db", ".DS_Store"]
 
 autodoc_mock_imports = [
     "champollion_utils",
