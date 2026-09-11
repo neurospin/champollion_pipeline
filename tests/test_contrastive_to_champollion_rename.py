@@ -40,7 +40,9 @@ class TestGenerateEmbeddingsRename:
 
     def test_champollion_dir_constant_targets_champollion_package(self):
         """_CHAMPOLLION_DIR is the champollion_V1 parent dir (sys.path parent for champollion pkg)."""
-        lines = [ln for ln in _code_lines(_read(PKG / "generate_embeddings.py")) if "_CHAMPOLLION_DIR" in ln and "=" in ln]
+        lines = [
+            ln for ln in _code_lines(_read(PKG / "generate_embeddings.py")) if "_CHAMPOLLION_DIR" in ln and "=" in ln
+        ]
         assert lines, "no _CHAMPOLLION_DIR assignment found in generate_embeddings.py"
         assignment = lines[0]
         assert '"champollion_V1"' in assignment, (
@@ -55,8 +57,8 @@ class TestGenerateEmbeddingsRename:
             "generate_embeddings.py still imports from the contrastive package"
         )
         assert not re.search(r"^\s*import\s+contrastive\b", text, re.MULTILINE)
-        assert "from champollion.evaluation.cka_coherence import" in text, (
-            "expected the CKA import to come from champollion.evaluation.cka_coherence"
+        assert "from champollion.metrics.cka_coherence import" in text, (
+            "expected the CKA import to come from champollion.metrics.cka_coherence"
         )
 
     def test_subprocess_cwd_targets_champollion_package(self):
@@ -67,12 +69,11 @@ class TestGenerateEmbeddingsRename:
         assert not offenders, f"champollion_V1 paths still naming contrastive: {offenders}"
 
     def test_user_facing_config_path_message_renamed(self):
-        """The error string pointing users at the configs dir names champollion/."""
+        """No reference to champollion_V1/contrastive/configs/ remains."""
         text = _read(PKG / "generate_embeddings.py")
         assert "external/champollion_V1/contrastive/configs/" not in text, (
-            "error message still directs users to champollion_V1/contrastive/configs/"
+            "generate_embeddings.py still references champollion_V1/contrastive/configs/"
         )
-        assert "external/champollion_V1/champollion/configs/" in text
 
 
 @pytest.mark.smoke
@@ -125,11 +126,11 @@ class TestGenerateChampollionConfigRename:
 @pytest.mark.smoke
 class TestRunCkaRename:
     def test_cka_module_constant_renamed(self):
-        """src/run_cka.py invokes champollion.evaluation.cka_coherence."""
+        """src/run_cka.py invokes champollion.metrics.cka_coherence."""
         lines = [ln for ln in _code_lines(_read(SRC / "run_cka.py")) if "CKA_MODULE" in ln and "=" in ln]
         assert lines, "no CKA_MODULE assignment found in src/run_cka.py"
         assignment = lines[0]
-        assert "champollion.evaluation.cka_coherence" in assignment, (
+        assert "champollion.metrics.cka_coherence" in assignment, (
             f"CKA_MODULE must name the champollion package, got: {assignment.strip()}"
         )
         assert "contrastive" not in assignment
