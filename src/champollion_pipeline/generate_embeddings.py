@@ -1,9 +1,8 @@
 #!/usr/bin/env python3
 # -*- coding: utf-8 -*-
 """
-Wrapper script to generate embeddings and train classifiers.
-This script manages user inputs and calls embeddings_pipeline.py
-using subprocess.
+Wrapper script to generate sulcal embeddings per region.
+Calls champollion/evaluate.py for each region in models_path.
 """
 
 import cProfile
@@ -30,7 +29,7 @@ _CHAMPOLLION_DIR = abspath(join(_SCRIPT_DIR, "..", "..", "external", "champollio
 if _CHAMPOLLION_DIR not in sys.path:
     sys.path.insert(0, _CHAMPOLLION_DIR)
 
-from champollion.evaluation.cka_coherence import test_models_coherence_from_directory  # noqa: E402
+from champollion.metrics.cka_coherence import test_models_coherence_from_directory  # noqa: E402
 
 
 class ModelFetchStrategy(ABC):
@@ -344,88 +343,48 @@ class InteractiveFallbackStrategy(ModelFetchStrategy):
 
 
 class GenerateEmbeddings(ScriptBuilder):
-    """Script for generating embeddings and training classifiers."""
+    """Script for generating sulcal embeddings per region via champollion/evaluate.py."""
 
     def __init__(self):
         super().__init__(
             script_name="generate_embeddings",
-            description=("Generate embeddings and train classifiers for deep learning models."),
+            description="Generate sulcal embeddings per region using champollion/evaluate.py.",
         )
-        # Configure arguments using method chaining
         (
-            self.add_argument("models_path", type=str, help="Path to the directory containing model folders.")
-            .add_argument(
-                "dataset_localization",
-                type=str,
-                help=(
-                    "Config key selecting dataset_localization/{key}.yaml inside "
-                    "external/champollion_V1/champollion/configs/. "
-                    "Use 'local' for any dataset processed on this machine — "
-                    "it maps to the dataset_folder set by generate_champollion_config.py. "
-                    "Example: local"
-                ),
+            self.add_argument(
+                "models_path", type=str, help="Path to the directory containing per-region model folders."
             )
             .add_argument(
                 "datasets_root",
                 type=str,
-                help=("Absolute path to the dataset root directory (e.g. /my/path/to/dataset_name/)."),
+                help="Absolute path to the dataset root directory (e.g. /my/path/to/DATASET/).",
             )
-            .add_argument(
-                "short_name", type=str, help=("Name of the directory where to store both embeddings and aucs.")
-            )
-            .add_argument(
-                "--datasets", type=str, nargs="+", default=["toto"], help="List of dataset names (default: ['toto'])."
-            )
-            .add_argument("--labels", type=str, nargs="+", default=["Sex"], help="List of labels (default: ['Sex']).")
-            .add_optional_argument("--classifier_name", "Classifier name.", default="svm")
-            .add_flag("--overwrite", "Overwrite existing embeddings.")
-            .add_flag("--embeddings_only", "Only compute embeddings (skip classifiers).")
-            .add_flag("--use_best_model", "Use the best model saved during training.")
-            .add_argument(
-                "--subsets",
-                type=str,
-                nargs="+",
-                default=["full"],
-                help="Subsets of data to train on (default: ['full']).",
-            )
-            .add_argument(
-                "--epochs", type=str, nargs="+", default=["None"], help="List of epochs to evaluate (default: [None])."
-            )
-            .add_optional_argument("--config_path", "Path to dataset config directory.", default=None)
-            .add_optional_argument("--split", "Splitting strategy ('random' or 'custom').", default="random")
-            .add_optional_argument("--cv", "Number of cross-validation folds.", default=5, type_=int)
-            .add_optional_argument("--splits_basedir", "Directory for custom splits.", default="")
-            .add_optional_argument(
-                "--idx_region_evaluation", "Index of region to evaluate (multi-head models).", default=None, type_=int
-            )
-            .add_flag("--verbose", "Enable verbose output.")
+            .add_flag("--overwrite", "Recompute embeddings that already exist on disk.")
             .add_flag("--cpu", "Force CPU usage (disable CUDA).")
             .add_flag("--profiling", "Enable Python profiling (cProfile).")
             .add_flag("--run-cka", "Run CKA coherence test after embeddings.")
             .add_flag("--no-cache", "Force re-extraction of archive (ignore cache).")
-            .add_optional_argument("--nb_jobs", "Number of CPU workers for DataLoader.", default=None, type_=int)
             .add_optional_argument(
                 "--cortical_version",
-                "Derivatives folder name to use in config YAML paths "
-                "(e.g. 'cortical_tiles-2027' or 'deep_folding-2025'). "
-                f"Defaults to the current release: cortical_tiles-{CORTICAL_TILES_VERSION}. "
-                "Rewrites the folder in all YAMLs under --config_path before running. "
-                "Use --legacy as a shorthand for deep_folding-2025.",
+                f"Derivatives folder name (e.g. 'cortical_tiles-2027'). "
+                f"Defaults to cortical_tiles-{CORTICAL_TILES_VERSION}.",
                 default=f"cortical_tiles-{CORTICAL_TILES_VERSION}",
             )
             .add_flag(
                 "--legacy",
-                "Rewrite config YAML paths to use deep_folding-2025. "
-                "Shorthand for --cortical_version deep_folding-2025, "
-                "for datasets generated before the cortical_tiles rename.",
+                "Use deep_folding-2025 as the derivatives folder. "
+                "Shorthand for --cortical_version deep_folding-2025.",
             )
             .add_optional_argument(
                 "--masks-version",
-                "Mask version subfolder to download from the HuggingFace repo "
-                "(e.g. 'canonical_25'). When set, only the matching subfolder is "
-                "downloaded and the local cache is keyed per version. "
+                "Mask version subfolder to download from HuggingFace (e.g. 'canonical_25'). "
                 "Ignored when models_path is a local directory.",
                 default=None,
+            )
+            .add_optional_argument(
+                "--masks",
+                "Cortical tiles mask version used as crops subdirectory (e.g. 'canonical_25').",
+                default="canonical_25",
             )
             .add_argument(
                 "--regions",
@@ -434,9 +393,21 @@ class GenerateEmbeddings(ScriptBuilder):
                 default=None,
                 help=(
                     "Restrict embedding generation to specific region names "
-                    "(e.g. SC-sylv_left FIP-FIPPoCinf_right). "
+                    "(e.g. SCsylv_left FIPFIPPoCinf_right). "
                     "By default all regions found in models_path are processed."
                 ),
+            )
+            .add_optional_argument(
+                "--output",
+                "Output base directory override. Defaults to "
+                "{parent_of_datasets_root}/{dataset_name}embeddings/.",
+                default=None,
+            )
+            .add_optional_argument(
+                "--subjects",
+                "Path to subjects CSV file with a 'Subject' column. "
+                "Defaults to {datasets_root}/participants.tsv.",
+                default=None,
             )
         )
 
@@ -547,8 +518,7 @@ class GenerateEmbeddings(ScriptBuilder):
         return fallback_strategy.fetch(resolved_path, extract_to, no_cache)
 
     def _validate_inputs(self):
-        if self.args.config_path and not exists(self.args.config_path):
-            raise FileNotFoundError(f"--config_path does not exist: {self.args.config_path}")
+        pass
 
     def run(self):
         """Execute the embeddings pipeline script."""
@@ -603,85 +573,129 @@ class GenerateEmbeddings(ScriptBuilder):
                 os.environ["CUDA_VISIBLE_DEVICES"] = original_cuda_visible_devices
 
     def _run_pipeline(self, local_dir):
-        """Internal method to run the pipeline (called within try/finally)."""
-        # Fetch models if they don't exist
+        """Run embeddings generation using champollion/evaluate.py per region."""
         original_models_path = self.args.models_path
         self.args.models_path = self.fetch_models(original_models_path)
 
-        # If --regions is set, work from a temp dir of symlinks to the selected regions
         tmpdir = None
         if self.args.regions:
             tmpdir = self._make_regions_tmpdir(self.args.models_path)
             self.args.models_path = tmpdir
 
-        # Get absolute path to champollion_V1/champollion
         script_dir = dirname(abspath(__file__))
-        champollion_dir = abspath(join(script_dir, "..", "..", "external", "champollion_V1", "champollion"))
+        evaluate_script = abspath(join(
+            script_dir, "..", "..", "external", "champollion_V1", "champollion", "evaluate.py"
+        ))
 
-        os.chdir(champollion_dir)
-
-        # Patch config YAML paths if a non-default derivatives folder is requested
-        target_folder = self._get_derivatives_folder()
-        default_folder = f"cortical_tiles-{CORTICAL_TILES_VERSION}"
-        if self.args.config_path and target_folder != default_folder:
-            self._patch_config_paths(self.args.config_path, target_folder)
-
-        # Use build_command to construct the command
-        defaults = {
-            "datasets": ["toto"],
-            "labels": ["Sex"],
-            "classifier_name": "svm",
-            "overwrite": False,
-            "embeddings_only": False,
-            "use_best_model": True,
-            "subsets": ["full"],
-            "epochs": ["None"],
-            "config_path": None,
-            "split": "random",
-            "cv": 5,
-            "splits_basedir": "",
-            "idx_region_evaluation": None,
-            "verbose": False,
-            "cpu": False,
-            "nb_jobs": None,
-        }
-
-        cmd = self.build_command(
-            script_path="evaluation/embeddings_pipeline.py",
-            required_args=["models_path", "dataset_localization", "datasets_root", "short_name"],
-            defaults=defaults,
+        datasets_root = self.args.datasets_root.rstrip("/")
+        output_base = self.args.output or join(
+            os.path.dirname(datasets_root), os.path.basename(datasets_root) + "embeddings"
         )
 
+        target_folder = self._get_derivatives_folder()
+        masks = getattr(self.args, "masks", "canonical_25")
+        crops_2mm_dir = join(datasets_root, "derivatives", target_folder, "crops", masks, "2mm")
+
+        subjects_path = self.args.subjects or self._find_subjects_file(datasets_root)
+
         try:
-            result = self.execute_command(cmd, shell=False)
+            result = self._run_per_region(evaluate_script, crops_2mm_dir, subjects_path, output_base)
         finally:
             if tmpdir:
                 shutil.rmtree(tmpdir)
+            self.args.models_path = original_models_path
 
-        # Run CKA coherence test only if explicitly requested
         if self.args.run_cka:
-            self._run_cka_test()
-
-        os.chdir(local_dir)
+            self._run_cka_test(output_base)
 
         return result
 
-    def _run_cka_test(self):
-        """Run CKA coherence test comparing embeddings across all models."""
+    def _find_subjects_file(self, datasets_root: str) -> str:
+        """Return path to participants file in datasets_root."""
+        for fname in ("participants.tsv", "participants.csv"):
+            path = join(datasets_root, fname)
+            if exists(path):
+                return path
+        raise FileNotFoundError(
+            f"No participants file found in {datasets_root}. "
+            "Pass --subjects to specify the path explicitly."
+        )
+
+    def _find_crop_dir(self, crops_2mm_dir: str, region_model_name: str) -> str:
+        """Map a model region name back to its crop directory name.
+
+        Model dirs have dots stripped: crop 'SC-sylv.' → model 'SCsylv_left'.
+        Search for a crop dir where dirname.replace('.', '') matches the base name.
+        """
+        base = region_model_name
+        if base.endswith("_left"):
+            base = base[:-5]
+        elif base.endswith("_right"):
+            base = base[:-6]
+
+        if exists(crops_2mm_dir):
+            for dname in os.listdir(crops_2mm_dir):
+                if os.path.isdir(join(crops_2mm_dir, dname)):
+                    if dname.replace(".", "") == base:
+                        return dname
+        return base
+
+    def _run_per_region(
+        self, evaluate_script: str, crops_2mm_dir: str, subjects_path: str, output_base: str
+    ) -> int:
+        """Invoke champollion/evaluate.py for each region in models_path."""
+        models_path = self.args.models_path
+        try:
+            region_dirs = sorted([
+                d for d in os.listdir(models_path)
+                if os.path.isdir(join(models_path, d))
+            ])
+        except FileNotFoundError as exc:
+            raise ValueError(f"Models path not found: {models_path}") from exc
+
+        if not region_dirs:
+            raise ValueError(f"No region subdirectories found in {models_path}")
+
+        print(f"\nGenerating embeddings for {len(region_dirs)} regions → {output_base}")
+
+        last_result = 0
+        for region in region_dirs:
+            model_path = join(models_path, region)
+            side = "L" if region.endswith("_left") else "R"
+            crop_name = self._find_crop_dir(crops_2mm_dir, region)
+            skels_path = join(crops_2mm_dir, crop_name, "mask", f"{side}skeleton.npy")
+            saving_path = join(output_base, region, "full_embeddings.csv")
+
+            if exists(saving_path) and not getattr(self.args, "overwrite", False):
+                print(f"  [SKIP] {region} — already exists (--overwrite to recompute)")
+                continue
+
+            os.makedirs(os.path.dirname(saving_path), exist_ok=True)
+
+            cmd = [sys.executable, evaluate_script,
+                   "-m", model_path,
+                   "-sk", skels_path,
+                   "-i", subjects_path,
+                   "-s", saving_path]
+
+            print(f"\n[Region {region}]")
+            last_result = self.execute_command(cmd, shell=False)
+
+        return last_result
+
+    def _run_cka_test(self, output_base: str) -> None:
+        """Run CKA coherence test on the generated embeddings."""
         print("\n" + "=" * 60)
         print("Running CKA Coherence Test")
         print("=" * 60)
 
-        # CKA compares all embeddings found in models_path
-        # Output goes to cka_results inside models_path
-        cka_output = join(self.args.models_path, "cka_results")
-
-        print(f"Models path: {self.args.models_path}")
+        cka_output = join(output_base, "cka_results")
+        print(f"Embeddings dir: {output_base}")
         print(f"CKA output: {cka_output}")
 
         try:
             test_models_coherence_from_directory(
-                models_dir=self.args.models_path,
+                models_dir=output_base,
                 embedding_filename="full_embeddings.csv",
                 output_dir=cka_output,
                 subject_column="Subject",
