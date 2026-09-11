@@ -1,72 +1,59 @@
 #!/usr/bin/env python3
 # -*- coding: utf-8 -*-
 """
-Script to put together embeddings of Champollion_V1 in a single folder.
+Script to collect per-region full_embeddings.csv files into a single output folder.
 """
 
-from os import chdir, getcwd, makedirs
-from os.path import abspath, dirname, join
+import os
+import shutil
+from os.path import exists, join
 
 from champollion_utils.script_builder import ScriptBuilder
 
 
 class PutTogetherEmbeddings(ScriptBuilder):
-    """Script for combining embeddings from multiple models."""
+    """Collect per-region embeddings from {dataset}embeddings/ into a single folder."""
 
     def __init__(self):
         super().__init__(
             script_name="put_together_embeddings",
-            description="Put together embeddings of Champollion_V1 in a single folder.",
+            description="Collect per-region embeddings into a single output folder.",
         )
-        # Configure arguments using method chaining
         (
-            self.add_required_argument("--embeddings_subpath", "Sub-path to embeddings inside model folder.")
-            .add_required_argument("--output_path", "Folder where to put all embeddings.")
-            .add_optional_argument(
-                "--path_models",
-                "Path where all models lie.",
-                default="/neurospin/dico/data/deep_folding/current/models/Champollion_V1_after_ablation",
-            )
+            self.add_argument(
+                "embeddings_source",
+                type=str,
+                help="Path to the {dataset}embeddings/ directory produced by generate_embeddings.",
+            ).add_required_argument("--output_path", "Folder where collected embeddings will be written.")
         )
 
     def run(self):
-        """Execute the put_together_embeddings script."""
-        print(f"put_together_embeddings.py/embeddings_subpath: {self.args.embeddings_subpath}")
-        print(f"put_together_embeddings.py/path_models: {self.args.path_models}")
-        print(f"put_together_embeddings.py/output_path: {self.args.output_path}")
+        """Copy {region}/full_embeddings.csv → {output_path}/{region}_embeddings.csv for all regions."""
+        source = self.args.embeddings_source
+        output_path = self.args.output_path
 
-        # Create output directory
-        makedirs(self.args.output_path, exist_ok=True)
+        print(f"put_together_embeddings/embeddings_source: {source}")
+        print(f"put_together_embeddings/output_path: {output_path}")
 
-        # Validate paths
-        if not self.validate_paths([self.args.output_path, self.args.path_models]):
-            raise ValueError(
-                f"put_together_embeddings.py: Please input valid paths. "
-                f"Given paths: {self.args.output_path}, {self.args.path_models}"
-            )
+        os.makedirs(output_path, exist_ok=True)
 
-        local_dir = getcwd()
+        copied = 0
+        for region in sorted(os.listdir(source)):
+            region_dir = join(source, region)
+            if not os.path.isdir(region_dir):
+                continue
+            src_csv = join(region_dir, "full_embeddings.csv")
+            if not exists(src_csv):
+                print(f"  [skip] {region}: no full_embeddings.csv")
+                continue
+            dst_csv = join(output_path, f"{region}_embeddings.csv")
+            shutil.copyfile(src_csv, dst_csv)
+            copied += 1
 
-        # Move to champollion's script location
-        # Use __file__ to get the script's location, not cwd
-        script_dir = dirname(abspath(__file__))
-        champollion_path = abspath(join(script_dir, "..", "..", "external", "champollion_V1", "champollion", "utils"))
-        chdir(champollion_path)
-
-        # Use build_command to construct the command
-        defaults = {"path_models": "/neurospin/dico/data/deep_folding/current/models/Champollion_V1_after_ablation"}
-
-        cmd = self.build_command(
-            script_path="put_together_embeddings_files.py",
-            required_args=["embeddings_subpath", "output_path"],
-            defaults=defaults,
-        )
-
-        result = self.execute_command(cmd, shell=False)
-
-        chdir(local_dir)
-
-        return result
+        print(f"{copied} embeddings copied to {output_path}")
+        if copied == 0:
+            print(f"WARNING: no embeddings found in {source}")
+        return 0
 
 
 def main():
