@@ -78,15 +78,10 @@ class TestGenerateEmbeddingsRename:
 
 @pytest.mark.smoke
 class TestPutTogetherEmbeddingsRename:
-    def test_sys_path_append_targets_champollion_utils(self):
-        """put_together_embeddings.py appends champollion_V1/champollion/utils."""
-        lines = [ln for ln in _code_lines(_read(PKG / "put_together_embeddings.py")) if "champollion_V1" in ln]
-        assert lines, "no champollion_V1 path found in put_together_embeddings.py"
-        joined = "\n".join(lines)
-        assert '"champollion_V1", "champollion", "utils"' in joined, (
-            f"expected champollion_V1/champollion/utils, got: {joined.strip()}"
-        )
-        assert "contrastive" not in joined
+    def test_no_contrastive_reference(self):
+        """put_together_embeddings.py contains no contrastive references."""
+        text = _read(PKG / "put_together_embeddings.py")
+        assert "contrastive" not in text, "put_together_embeddings.py still references contrastive"
 
 
 @pytest.mark.smoke

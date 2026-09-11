@@ -11,7 +11,7 @@ Each test below pins down one of the five affected call sites.
 """
 
 from pathlib import Path
-from unittest.mock import call, patch
+from unittest.mock import patch
 
 import pytest
 
@@ -52,35 +52,22 @@ class TestExternalPathResolution:
 
         assert Path(_CONTRASTIVE_DIR) == EXTERNAL_DIR / "champollion_V1" / "champollion"
 
-    def test_put_together_embeddings_chdirs_into_repo_root_external(self, temp_dir):
-        """put_together_embeddings.run() chdirs into <root>/external/champollion_V1/contrastive/utils."""
+    def test_put_together_embeddings_copies_csvs_to_output(self, tmp_path):
+        """put_together_embeddings.run() copies per-region CSVs to output_path."""
         from champollion_pipeline.put_together_embeddings import PutTogetherEmbeddings
 
-        expected = EXTERNAL_DIR / "champollion_V1" / "champollion" / "utils"
+        source = tmp_path / "mydata_embeddings"
+        source.mkdir()
+        region_dir = source / "SC-sylv_left"
+        region_dir.mkdir()
+        (region_dir / "full_embeddings.csv").write_text("subject,emb\nS01,0.1")
 
+        output = tmp_path / "combined"
         script = PutTogetherEmbeddings()
-        script.parse_args(
-            [
-                "--embeddings_subpath",
-                "sub/path",
-                "--output_path",
-                temp_dir,
-                "--path_models",
-                temp_dir,
-            ]
-        )
+        script.parse_args([str(source), "--output_path", str(output)])
+        script.run()
 
-        with (
-            patch("champollion_pipeline.put_together_embeddings.makedirs"),
-            patch.object(script, "validate_paths", return_value=True),
-            patch("champollion_pipeline.put_together_embeddings.chdir") as mock_chdir,
-            patch("champollion_pipeline.put_together_embeddings.getcwd", return_value="/original"),
-            patch.object(script, "build_command", return_value=["cmd"]),
-            patch.object(script, "execute_command", return_value=0),
-        ):
-            script.run()
-
-        assert call(str(expected)) in mock_chdir.call_args_list
+        assert (output / "SC-sylv_left_embeddings.csv").exists()
 
     def test_run_cortical_tiles_invokes_repo_root_external_script(self, temp_dir):
         """run_cortical_tiles.run() invokes <root>/external/cortical_tiles/.../generate_sulcal_regions.py."""
