@@ -158,6 +158,13 @@ class HuggingFaceStrategy(ModelFetchStrategy):
                 print(f"  mask version subfolder: {self.subfolder}")
             from huggingface_hub import snapshot_download
 
+            # Ensure system CA bundle is used when the env's certifi bundle is incomplete
+            # (e.g. behind a corporate proxy with a custom root CA).
+            if not os.environ.get("SSL_CERT_FILE") and not os.environ.get("REQUESTS_CA_BUNDLE"):
+                _sys_ca = "/etc/ssl/certs/ca-certificates.crt"
+                if os.path.exists(_sys_ca):
+                    os.environ["SSL_CERT_FILE"] = _sys_ca
+
             # Cache per (repo, subfolder) to avoid collisions across mask versions
             repo_name = repo_id.split("/")[-1]
             cache_name = f"{repo_name}_{self.subfolder}" if self.subfolder else repo_name
