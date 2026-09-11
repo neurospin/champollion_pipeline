@@ -17,12 +17,14 @@ extensions = [
     "sphinx.ext.viewcode",
     "sphinx.ext.intersphinx",
     "sphinx_autodoc_typehints",
+    "sphinxcontrib.mermaid",
 ]
 
 html_theme = "furo"
 html_static_path = ["_static"]
 
 myst_enable_extensions = ["colon_fence", "deflist"]
+myst_fence_as_directive = {"mermaid"}
 
 source_suffix = {".md": "markdown", ".rst": "restructuredtext"}
 
