@@ -30,7 +30,7 @@ exclude_patterns = ["_build", "Thumbs.db", ".DS_Store", "workflow.md"]
 
 autodoc_mock_imports = [
     "champollion_utils",
-    "contrastive",
+    "champollion",
     "soma",
     "numpy",
     "pandas",
