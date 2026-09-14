@@ -28,44 +28,15 @@ class TestGenerateEmbeddingsArguments:
     def test_parse_required_arguments(self):
         """Test parsing required positional arguments."""
         script = GenerateEmbeddings()
-        args = script.parse_args(["/models", "local", "/datasets", "test_run"])
+        args = script.parse_args(["/models", "/datasets"])
         assert args.models_path == "/models"
-        assert args.dataset_localization == "local"
         assert args.datasets_root == "/datasets"
-        assert args.short_name == "test_run"
-
-    def test_datasets_default(self):
-        """Test that datasets has default value."""
-        script = GenerateEmbeddings()
-        args = script.parse_args(["/m", "loc", "/d", "name"])
-        assert args.datasets == ["toto"]
-
-    def test_labels_default(self):
-        """Test that labels has default value."""
-        script = GenerateEmbeddings()
-        args = script.parse_args(["/m", "loc", "/d", "name"])
-        assert args.labels == ["Sex"]
-
-    def test_classifier_name_default(self):
-        """Test that classifier_name has default value."""
-        script = GenerateEmbeddings()
-        args = script.parse_args(["/m", "loc", "/d", "name"])
-        assert args.classifier_name == "svm"
-
-    def test_cv_default(self):
-        """Test that cv has default value."""
-        script = GenerateEmbeddings()
-        args = script.parse_args(["/m", "loc", "/d", "name"])
-        assert args.cv == 5
 
     def test_flags_default_to_false(self):
         """Test that boolean flags default to False."""
         script = GenerateEmbeddings()
-        args = script.parse_args(["/m", "loc", "/d", "name"])
+        args = script.parse_args(["/m", "/d"])
         assert args.overwrite is False
-        assert args.embeddings_only is False
-        assert args.use_best_model is False
-        assert args.verbose is False
         assert args.cpu is False
         assert args.profiling is False
         assert args.run_cka is False
@@ -77,13 +48,8 @@ class TestGenerateEmbeddingsArguments:
         args = script.parse_args(
             [
                 "/m",
-                "loc",
                 "/d",
-                "name",
                 "--overwrite",
-                "--embeddings_only",
-                "--use_best_model",
-                "--verbose",
                 "--cpu",
                 "--profiling",
                 "--run-cka",
@@ -91,173 +57,136 @@ class TestGenerateEmbeddingsArguments:
             ]
         )
         assert args.overwrite is True
-        assert args.embeddings_only is True
-        assert args.use_best_model is True
-        assert args.verbose is True
         assert args.cpu is True
         assert args.profiling is True
         assert args.run_cka is True
         assert args.no_cache is True
 
-    def test_nb_jobs_default_none(self):
-        """Test that nb_jobs defaults to None."""
+
+class TestPerRegionInvocation:
+    """Test per-region evaluate.py invocation."""
+
+    def test_run_per_region_calls_execute_for_each_region(self, tmp_path):
+        """_run_per_region calls execute_command once per region directory."""
+        models_dir = tmp_path / "models"
+        models_dir.mkdir()
+        (models_dir / "SC-sylv_left").mkdir()
+        (models_dir / "SC-sylv_right").mkdir()
+
         script = GenerateEmbeddings()
-        args = script.parse_args(["/m", "loc", "/d", "name"])
-        assert args.nb_jobs is None
+        script.args = script.parse_args([str(models_dir), str(tmp_path)])
 
-    def test_nb_jobs_can_be_set(self):
-        """Test that --nb_jobs can be set."""
+        executed_cmds = []
+
+        def fake_execute(cmd, **kwargs):
+            executed_cmds.append(cmd)
+            return 0
+
+        with patch.object(script, "execute_command", side_effect=fake_execute):
+            script._run_per_region(
+                evaluate_script="/eval.py",
+                crops_2mm_dir=str(tmp_path / "crops"),
+                subjects_path=str(tmp_path / "participants.tsv"),
+                output_base=str(tmp_path / "out"),
+            )
+
+        assert len(executed_cmds) == 2
+
+    def test_run_per_region_skips_existing_output_without_overwrite(self, tmp_path):
+        """_run_per_region skips a region when output CSV already exists."""
+        models_dir = tmp_path / "models"
+        models_dir.mkdir()
+        (models_dir / "SC-sylv_left").mkdir()
+        out = tmp_path / "out" / "SC-sylv_left"
+        out.mkdir(parents=True)
+        (out / "full_embeddings.csv").write_text("existing")
+
         script = GenerateEmbeddings()
-        args = script.parse_args(["/m", "loc", "/d", "name", "--nb_jobs", "8"])
-        assert args.nb_jobs == 8
+        script.args = script.parse_args([str(models_dir), str(tmp_path)])
 
-    def test_list_arguments(self):
-        """Test list arguments with multiple values."""
+        executed = []
+        with patch.object(script, "execute_command", side_effect=lambda c, **k: executed.append(c) or 0):
+            script._run_per_region(
+                evaluate_script="/eval.py",
+                crops_2mm_dir=str(tmp_path / "crops"),
+                subjects_path=str(tmp_path / "participants.tsv"),
+                output_base=str(tmp_path / "out"),
+            )
+
+        assert len(executed) == 0
+
+    def test_run_per_region_runs_when_overwrite_set(self, tmp_path):
+        """_run_per_region runs even when output exists if --overwrite is set."""
+        models_dir = tmp_path / "models"
+        models_dir.mkdir()
+        (models_dir / "SC-sylv_left").mkdir()
+        out = tmp_path / "out" / "SC-sylv_left"
+        out.mkdir(parents=True)
+        (out / "full_embeddings.csv").write_text("existing")
+
         script = GenerateEmbeddings()
-        args = script.parse_args(
-            [
-                "/m",
-                "loc",
-                "/d",
-                "name",
-                "--datasets",
-                "ds1",
-                "ds2",
-                "ds3",
-                "--labels",
-                "Age",
-                "Gender",
-                "--subsets",
-                "train",
-                "test",
-                "--epochs",
-                "10",
-                "20",
-                "30",
-            ]
-        )
-        assert args.datasets == ["ds1", "ds2", "ds3"]
-        assert args.labels == ["Age", "Gender"]
-        assert args.subsets == ["train", "test"]
-        assert args.epochs == ["10", "20", "30"]
+        script.args = script.parse_args([str(models_dir), str(tmp_path), "--overwrite"])
 
+        executed = []
+        with patch.object(script, "execute_command", side_effect=lambda c, **k: executed.append(c) or 0):
+            script._run_per_region(
+                evaluate_script="/eval.py",
+                crops_2mm_dir=str(tmp_path / "crops"),
+                subjects_path=str(tmp_path / "participants.tsv"),
+                output_base=str(tmp_path / "out"),
+            )
 
-class TestBuildCommand:
-    """Test build_command usage."""
-
-    def test_build_command_called_with_correct_args(self, temp_dir):
-        """Test that build_command is called correctly."""
-        script = GenerateEmbeddings()
-        script.parse_args([temp_dir, "loc", temp_dir, "test"])
-
-        with patch("os.chdir"):
-            with patch("os.getcwd", return_value="/original"):
-                with patch.object(script, "build_command", return_value=["python", "script.py"]) as mock_build:
-                    with patch.object(script, "execute_command", return_value=0):
-                        script.run()
-
-                        mock_build.assert_called_once()
-                        call_kwargs = mock_build.call_args[1]
-
-                        assert call_kwargs["script_path"] == "evaluation/embeddings_pipeline.py"
-                        assert set(call_kwargs["required_args"]) == {
-                            "models_path",
-                            "dataset_localization",
-                            "datasets_root",
-                            "short_name",
-                        }
-                        assert "defaults" in call_kwargs
+        assert len(executed) == 1
 
 
 class TestRunMethod:
     """Test the run method."""
 
-    def test_run_changes_to_champollion_directory(self, temp_dir):
-        """Test that run changes to champollion directory."""
+    def test_run_calls_run_per_region(self, tmp_path):
+        """run() delegates to _run_per_region."""
+        (tmp_path / "SC-sylv_left").mkdir()
+
         script = GenerateEmbeddings()
-        script.parse_args([temp_dir, "loc", temp_dir, "test"])
+        script.parse_args([str(tmp_path), str(tmp_path)])
 
-        with patch("os.chdir") as mock_chdir:
-            with patch("os.getcwd", return_value="/original"):
-                with patch.object(script, "build_command", return_value=["cmd"]):
-                    with patch.object(script, "execute_command", return_value=0):
-                        script.run()
+        with patch.object(script, "fetch_models", return_value=str(tmp_path)):
+            with patch.object(script, "_run_per_region", return_value=0) as mock_per:
+                with patch.object(script, "_find_subjects_file", return_value=str(tmp_path / "participants.tsv")):
+                    script.run()
+        mock_per.assert_called_once()
 
-                        # Should change to champollion and back
-                        assert any("champollion" in str(call) for call in mock_chdir.call_args_list)
+    def test_run_returns_result(self, tmp_path):
+        """run() returns the value from _run_per_region."""
+        (tmp_path / "SC-sylv_left").mkdir()
 
-    def test_run_executes_command_without_shell(self, temp_dir):
-        """Test that command is executed with shell=False."""
         script = GenerateEmbeddings()
-        script.parse_args([temp_dir, "loc", temp_dir, "test"])
+        script.parse_args([str(tmp_path), str(tmp_path)])
 
-        with patch("os.chdir"):
-            with patch("os.getcwd", return_value="/original"):
-                with patch.object(script, "build_command", return_value=["cmd"]):
-                    with patch.object(script, "execute_command", return_value=0) as mock_exec:
-                        script.run()
-
-                        assert mock_exec.call_args[1]["shell"] is False
-
-    def test_run_returns_result(self, temp_dir):
-        """Test that run returns command result."""
-        script = GenerateEmbeddings()
-        script.parse_args([temp_dir, "loc", temp_dir, "test"])
-
-        with patch("os.chdir"):
-            with patch("os.getcwd", return_value="/original"):
-                with patch.object(script, "build_command", return_value=["cmd"]):
-                    with patch.object(script, "execute_command", return_value=99):
-                        result = script.run()
-                        assert result == 99
-
-    def test_run_restores_directory(self, temp_dir):
-        """Test that original directory is restored."""
-        script = GenerateEmbeddings()
-        script.parse_args([temp_dir, "loc", temp_dir, "test"])
-        original = "/original/dir"
-
-        with patch("os.getcwd", return_value=original):
-            with patch("os.chdir") as mock_chdir:
-                with patch.object(script, "build_command", return_value=["cmd"]):
-                    with patch.object(script, "execute_command", return_value=0):
-                        script.run()
-
-                        from unittest.mock import call
-
-                        assert call(original) in mock_chdir.call_args_list
+        with patch.object(script, "fetch_models", return_value=str(tmp_path)):
+            with patch.object(script, "_run_per_region", return_value=99):
+                with patch.object(script, "_find_subjects_file", return_value=str(tmp_path / "p.tsv")):
+                    result = script.run()
+        assert result == 99
 
 
 @pytest.mark.integration
 class TestGenerateEmbeddingsIntegration:
     """Integration tests."""
 
-    def test_full_workflow(self, temp_dir):
+    def test_full_workflow(self, tmp_path):
         """Test complete workflow."""
-        script = GenerateEmbeddings()
-        script.parse_args(
-            [
-                temp_dir,
-                "local",
-                temp_dir,
-                "test_embeddings",
-                "--datasets",
-                "ds1",
-                "ds2",
-                "--labels",
-                "Age",
-                "Sex",
-                "--overwrite",
-            ]
-        )
+        (tmp_path / "SC-sylv_left").mkdir()
 
-        with patch.object(script, "execute_command", return_value=0) as mock_exec:
-            with patch("os.chdir"):
-                with patch("os.getcwd", return_value="/original"):
+        script = GenerateEmbeddings()
+        script.parse_args([str(tmp_path), str(tmp_path), "--overwrite"])
+
+        with patch.object(script, "fetch_models", return_value=str(tmp_path)):
+            with patch.object(script, "_run_per_region", return_value=0) as mock_run:
+                with patch.object(script, "_find_subjects_file", return_value=str(tmp_path / "participants.tsv")):
                     result = script.run()
 
-                    assert result == 0
-                    mock_exec.assert_called_once()
+        assert result == 0
+        mock_run.assert_called_once()
 
 
 class TestCorticalVersionFlags:
@@ -267,39 +196,39 @@ class TestCorticalVersionFlags:
         from champollion_pipeline.utils.lib import CORTICAL_TILES_VERSION
 
         script = GenerateEmbeddings()
-        args = script.parse_args(["/m", "loc", "/d", "name"])
+        args = script.parse_args(["/m", "/d"])
         assert args.cortical_version == f"cortical_tiles-{CORTICAL_TILES_VERSION}"
 
     def test_cortical_version_can_be_overridden(self):
         script = GenerateEmbeddings()
-        args = script.parse_args(["/m", "loc", "/d", "name", "--cortical_version", "deep_folding-2025"])
+        args = script.parse_args(["/m", "/d", "--cortical_version", "deep_folding-2025"])
         assert args.cortical_version == "deep_folding-2025"
 
     def test_legacy_flag_defaults_false(self):
         script = GenerateEmbeddings()
-        args = script.parse_args(["/m", "loc", "/d", "name"])
+        args = script.parse_args(["/m", "/d"])
         assert args.legacy is False
 
     def test_legacy_flag_can_be_set(self):
         script = GenerateEmbeddings()
-        args = script.parse_args(["/m", "loc", "/d", "name", "--legacy"])
+        args = script.parse_args(["/m", "/d", "--legacy"])
         assert args.legacy is True
 
     def test_get_derivatives_folder_returns_cortical_version_by_default(self):
         from champollion_pipeline.utils.lib import CORTICAL_TILES_VERSION
 
         script = GenerateEmbeddings()
-        script.args = script.parse_args(["/m", "loc", "/d", "name"])
+        script.args = script.parse_args(["/m", "/d"])
         assert script._get_derivatives_folder() == f"cortical_tiles-{CORTICAL_TILES_VERSION}"
 
     def test_get_derivatives_folder_legacy_overrides(self):
         script = GenerateEmbeddings()
-        script.args = script.parse_args(["/m", "loc", "/d", "name", "--legacy"])
+        script.args = script.parse_args(["/m", "/d", "--legacy"])
         assert script._get_derivatives_folder() == "deep_folding-2025"
 
     def test_get_derivatives_folder_cortical_version_overrides(self):
         script = GenerateEmbeddings()
-        script.args = script.parse_args(["/m", "loc", "/d", "name", "--cortical_version", "cortical_tiles-2027"])
+        script.args = script.parse_args(["/m", "/d", "--cortical_version", "cortical_tiles-2027"])
         assert script._get_derivatives_folder() == "cortical_tiles-2027"
 
     def test_patch_config_paths_rewrites_derivatives_folder(self, tmp_path):
@@ -357,18 +286,18 @@ class TestRegionsFilter:
 
     def test_regions_default_none(self):
         script = GenerateEmbeddings()
-        args = script.parse_args(["/m", "loc", "/d", "name"])
+        args = script.parse_args(["/m", "/d"])
         assert args.regions is None
 
     def test_regions_single(self):
         script = GenerateEmbeddings()
-        args = script.parse_args(["/m", "loc", "/d", "name", "--regions", "SC-sylv_left"])
+        args = script.parse_args(["/m", "/d", "--regions", "SC-sylv_left"])
         assert args.regions == ["SC-sylv_left"]
 
     def test_regions_multiple(self):
         script = GenerateEmbeddings()
         args = script.parse_args(
-            ["/m", "loc", "/d", "name", "--regions", "SC-sylv_left", "SC-sylv_right", "FIP-FIPPoCinf_left"]
+            ["/m", "/d", "--regions", "SC-sylv_left", "SC-sylv_right", "FIP-FIPPoCinf_left"]
         )
         assert args.regions == ["SC-sylv_left", "SC-sylv_right", "FIP-FIPPoCinf_left"]
 
@@ -379,7 +308,7 @@ class TestRegionsFilter:
 
         script = GenerateEmbeddings()
         script.args = script.parse_args(
-            [str(tmp_path), "loc", "/d", "name", "--regions", "SC-sylv_left", "SC-sylv_right"]
+            [str(tmp_path), "/d", "--regions", "SC-sylv_left", "SC-sylv_right"]
         )
 
         tmpdir = script._make_regions_tmpdir(str(tmp_path))
@@ -398,7 +327,7 @@ class TestRegionsFilter:
 
         script = GenerateEmbeddings()
         script.args = script.parse_args(
-            [str(tmp_path), "loc", "/d", "name", "--regions", "SC-sylv_left", "nonexistent_region"]
+            [str(tmp_path), "/d", "--regions", "SC-sylv_left", "nonexistent_region"]
         )
 
         with pytest.raises(FileNotFoundError, match="nonexistent_region"):
@@ -409,24 +338,21 @@ class TestRegionsFilter:
         (tmp_path / "SC-sylv_right").mkdir()
 
         script = GenerateEmbeddings()
-        script.parse_args([str(tmp_path), "loc", str(tmp_path), "name", "--regions", "SC-sylv_left"])
+        script.parse_args([str(tmp_path), str(tmp_path), "--regions", "SC-sylv_left"])
 
-        # Capture tmpdir state during execute_command, before cleanup
+        # Capture models_path seen by _run_per_region
         snapshot = {}
 
-        def fake_execute(cmd, **kwargs):
-            path = script.args.models_path
-            snapshot["path"] = path
-            snapshot["entries"] = sorted(os.listdir(path))
-            snapshot["is_symlink"] = os.path.islink(os.path.join(path, "SC-sylv_left"))
+        def fake_per_region(evaluate_script, crops_2mm_dir, subjects_path, output_base):
+            snapshot["path"] = script.args.models_path
+            snapshot["entries"] = sorted(os.listdir(script.args.models_path))
+            snapshot["is_symlink"] = os.path.islink(os.path.join(script.args.models_path, "SC-sylv_left"))
             return 0
 
-        with patch("os.chdir"):
-            with patch("os.getcwd", return_value="/original"):
-                with patch.object(script, "fetch_models", return_value=str(tmp_path)):
-                    with patch.object(script, "build_command", return_value=["cmd"]):
-                        with patch.object(script, "execute_command", side_effect=fake_execute):
-                            script.run()
+        with patch.object(script, "fetch_models", return_value=str(tmp_path)):
+            with patch.object(script, "_run_per_region", side_effect=fake_per_region):
+                with patch.object(script, "_find_subjects_file", return_value=str(tmp_path / "p.tsv")):
+                    script.run()
 
         assert snapshot["path"] != str(tmp_path), "should use a tmpdir, not the original path"
         assert snapshot["entries"] == ["SC-sylv_left"], "only requested region should appear"
@@ -437,7 +363,7 @@ class TestRegionsFilter:
         (tmp_path / "SC-sylv_left").mkdir()
 
         script = GenerateEmbeddings()
-        script.parse_args([str(tmp_path), "loc", str(tmp_path), "name", "--regions", "SC-sylv_left"])
+        script.parse_args([str(tmp_path), str(tmp_path), "--regions", "SC-sylv_left"])
 
         created_tmpdirs = []
 
@@ -448,29 +374,26 @@ class TestRegionsFilter:
             created_tmpdirs.append(d)
             return d
 
-        with patch("os.chdir"):
-            with patch("os.getcwd", return_value="/original"):
-                with patch.object(script, "fetch_models", return_value=str(tmp_path)):
-                    with patch.object(script, "_make_regions_tmpdir", side_effect=tracking_make):
-                        with patch.object(script, "build_command", return_value=["cmd"]):
-                            with patch.object(script, "execute_command", side_effect=RuntimeError("boom")):
-                                with pytest.raises(RuntimeError):
-                                    script.run()
+        with patch.object(script, "fetch_models", return_value=str(tmp_path)):
+            with patch.object(script, "_make_regions_tmpdir", side_effect=tracking_make):
+                with patch.object(script, "_run_per_region", side_effect=RuntimeError("boom")):
+                    with patch.object(script, "_find_subjects_file", return_value=str(tmp_path / "p.tsv")):
+                        with pytest.raises(RuntimeError):
+                            script.run()
 
         assert len(created_tmpdirs) == 1
         assert not os.path.exists(created_tmpdirs[0]), "tmpdir must be cleaned up even on error"
 
     def test_run_pipeline_no_tmpdir_without_regions(self, temp_dir):
         script = GenerateEmbeddings()
-        script.parse_args([temp_dir, "loc", temp_dir, "name"])
+        script.parse_args([temp_dir, temp_dir])
 
-        with patch("os.chdir"):
-            with patch("os.getcwd", return_value="/original"):
-                with patch.object(script, "build_command", return_value=["cmd"]):
-                    with patch.object(script, "execute_command", return_value=0):
-                        with patch.object(script, "_make_regions_tmpdir") as mock_make:
-                            script.run()
-                            mock_make.assert_not_called()
+        with patch.object(script, "fetch_models", return_value=temp_dir):
+            with patch.object(script, "_run_per_region", return_value=0):
+                with patch.object(script, "_find_subjects_file", return_value=temp_dir + "/p.tsv"):
+                    with patch.object(script, "_make_regions_tmpdir") as mock_make:
+                        script.run()
+                        mock_make.assert_not_called()
 
 
 class TestProfiling:
@@ -478,7 +401,7 @@ class TestProfiling:
 
     def test_run_dispatches_to_profiling_when_flag_set(self, temp_dir):
         script = GenerateEmbeddings()
-        script.parse_args([temp_dir, "loc", temp_dir, "name", "--profiling"])
+        script.parse_args([temp_dir, temp_dir, "--profiling"])
 
         with patch.object(script, "_validate_inputs"):
             with patch.object(script, "_run_with_profiling", return_value=0) as mock_prof:
@@ -487,7 +410,7 @@ class TestProfiling:
 
     def test_run_dispatches_to_normal_without_profiling_flag(self, temp_dir):
         script = GenerateEmbeddings()
-        script.parse_args([temp_dir, "loc", temp_dir, "name"])
+        script.parse_args([temp_dir, temp_dir])
 
         with patch.object(script, "_validate_inputs"):
             with patch.object(script, "_run_normal", return_value=0) as mock_normal:
@@ -496,7 +419,7 @@ class TestProfiling:
 
     def test_run_with_profiling_calls_run_normal(self, temp_dir):
         script = GenerateEmbeddings()
-        script.parse_args([temp_dir, "loc", temp_dir, "name", "--profiling"])
+        script.parse_args([temp_dir, temp_dir, "--profiling"])
 
         with patch("champollion_pipeline.generate_embeddings.cProfile.Profile"):
             with patch("champollion_pipeline.generate_embeddings.pstats.Stats", return_value=MagicMock()):
@@ -507,7 +430,7 @@ class TestProfiling:
 
     def test_run_with_profiling_dumps_profile_file(self, temp_dir):
         script = GenerateEmbeddings()
-        script.parse_args([temp_dir, "loc", temp_dir, "name", "--profiling"])
+        script.parse_args([temp_dir, temp_dir, "--profiling"])
 
         mock_stats = MagicMock()
 
@@ -519,7 +442,7 @@ class TestProfiling:
 
     def test_run_with_profiling_dumps_on_error(self, temp_dir):
         script = GenerateEmbeddings()
-        script.parse_args([temp_dir, "loc", temp_dir, "name", "--profiling"])
+        script.parse_args([temp_dir, temp_dir, "--profiling"])
 
         mock_stats = MagicMock()
 
@@ -594,33 +517,6 @@ class TestHuggingFaceStrategy:
         with patch("huggingface_hub.snapshot_download", return_value=snapshot_root):
             resolved = strategy.fetch("neurospin/Champollion_V1", str(tmp_path))
         assert resolved == snapshot_root
-
-
-@pytest.mark.unit
-class TestUseBestModelDefault:
-    """REQ-BESTMODEL-01 — use_best_model defaults to True in the pipeline defaults."""
-
-    def _capture_defaults(self, temp_dir):
-        """Run the script with build_command mocked and return the defaults dict it received."""
-        script = GenerateEmbeddings()
-        script.parse_args([temp_dir, "loc", temp_dir, "test"])
-
-        with patch("os.chdir"):
-            with patch("os.getcwd", return_value="/original"):
-                with patch.object(script, "build_command", return_value=["cmd"]) as mock_build:
-                    with patch.object(script, "execute_command", return_value=0):
-                        script.run()
-        return mock_build.call_args[1]["defaults"]
-
-    def test_use_best_model_defaults_to_true(self, temp_dir):
-        """The defaults handed to embeddings_pipeline.py set use_best_model to True."""
-        defaults = self._capture_defaults(temp_dir)
-        assert defaults["use_best_model"] is True
-
-    def test_use_best_model_present_in_defaults(self, temp_dir):
-        """use_best_model is always supplied as a default, never left unset."""
-        defaults = self._capture_defaults(temp_dir)
-        assert "use_best_model" in defaults
 
 
 @pytest.mark.unit
