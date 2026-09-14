@@ -146,7 +146,7 @@ class GenerateChampollionConfig(ScriptBuilder):
         if self.args.output:
             dataset_loc = join(abspath(self.args.output), "dataset", self.args.dataset)
         else:
-            dataset_loc = join(champollion_loc, "contrastive", "configs", "dataset", self.args.dataset)
+            dataset_loc = join(champollion_loc, "champollion", "configs", "dataset", self.args.dataset)
 
         # Create dataset directory if it doesn't exist
         if not exists(dataset_loc):
@@ -186,7 +186,7 @@ class GenerateChampollionConfig(ScriptBuilder):
 
         # Write the dataset_localization YAML for the requested environment.
         localization_name = f"{self.args.localization}.yaml"
-        builtin_yaml = join(champollion_loc, "contrastive", "configs", "dataset_localization", localization_name)
+        builtin_yaml = join(champollion_loc, "champollion", "configs", "dataset_localization", localization_name)
 
         if self.args.external_config:
             external_yaml = abspath(self.args.external_config)
