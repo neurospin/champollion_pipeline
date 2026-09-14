@@ -19,6 +19,7 @@ from os.path import abspath, dirname, exists, join
 from pathlib import Path
 from urllib.parse import urlparse
 
+import torch
 from champollion_utils.script_builder import ScriptBuilder
 
 from champollion_pipeline.utils.lib import CORTICAL_TILES_VERSION
@@ -647,6 +648,26 @@ class GenerateEmbeddings(ScriptBuilder):
                         return dname
         return base
 
+    def _ensure_ckpt(self, model_path: str) -> None:
+        """Wrap best_model_weights.pt into a Lightning .ckpt if no .ckpt already exists.
+
+        evaluate.py globs for logs/lightning_logs/version_0/checkpoints/*.ckpt.
+        HF models ship logs/best_model_weights.pt instead, so we convert on first use.
+        Idempotent: skips conversion if a .ckpt is already present.
+        """
+        ckpt_dir = Path(model_path) / "logs" / "lightning_logs" / "version_0" / "checkpoints"
+        if list(ckpt_dir.glob("*.ckpt")):
+            return
+        pt_path = Path(model_path) / "logs" / "best_model_weights.pt"
+        if not pt_path.exists():
+            return
+        ckpt_dir.mkdir(parents=True, exist_ok=True)
+        state_dict = torch.load(str(pt_path), map_location="cpu")
+        ckpt = {"state_dict": state_dict, "epoch": 0, "global_step": 0}
+        ckpt_path = ckpt_dir / "best_model.ckpt"
+        torch.save(ckpt, str(ckpt_path))
+        print(f"  Converted {pt_path} → {ckpt_path}")
+
     def _run_per_region(
         self, evaluate_script: str, crops_2mm_dir: str, subjects_path: str, output_base: str
     ) -> int:
@@ -677,6 +698,7 @@ class GenerateEmbeddings(ScriptBuilder):
                 print(f"  [SKIP] {region} — already exists (--overwrite to recompute)")
                 continue
 
+            self._ensure_ckpt(model_path)
             os.makedirs(os.path.dirname(saving_path), exist_ok=True)
 
             cmd = [sys.executable, evaluate_script,
