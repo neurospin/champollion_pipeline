@@ -13,10 +13,10 @@ All assertions read source text — no runtime execution (avoids triggering real
 from __future__ import annotations
 
 import re
-import tomllib
 from pathlib import Path
 
 import pytest
+import tomllib
 
 PROJECT_ROOT = Path(__file__).resolve().parents[1]
 INSTALL_HEALTH = PROJECT_ROOT / "scripts" / "install_health.py"
