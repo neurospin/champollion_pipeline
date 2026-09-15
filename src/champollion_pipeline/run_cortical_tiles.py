@@ -211,7 +211,7 @@ class RunCorticalTiles(ScriptBuilder):
                 "..",
                 "external",
                 "cortical_tiles",
-                "deep_folding",
+                "cortical_tiles",
                 "brainvisa",
                 "generate_sulcal_regions.py",
             )

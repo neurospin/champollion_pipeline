@@ -445,15 +445,15 @@ class TestPublicUseFlag:
 
 class TestNjobsAutoBuffered:
     def _bv_modules(self, njobs=4):
-        """sys.modules patch dict covering deep_folding parallel util."""
+        """sys.modules patch dict covering cortical_tiles parallel util."""
         mock_parallel = MagicMock()
         mock_parallel.define_njobs.return_value = njobs
         return {
             "compute_mask": MagicMock(),
-            "deep_folding": MagicMock(),
-            "deep_folding.brainvisa": MagicMock(),
-            "deep_folding.brainvisa.utils": MagicMock(),
-            "deep_folding.brainvisa.utils.parallel": mock_parallel,
+            "cortical_tiles": MagicMock(),
+            "cortical_tiles.brainvisa": MagicMock(),
+            "cortical_tiles.brainvisa.utils": MagicMock(),
+            "cortical_tiles.brainvisa.utils.parallel": mock_parallel,
         }
 
     def test_njobs_prints_auto_buffered_message(self, tmp_path, capsys):
@@ -532,10 +532,10 @@ class TestVoxStrOutputPath:
         mock_parallel.define_njobs.return_value = njobs
         return {
             "compute_mask": MagicMock(),
-            "deep_folding": MagicMock(),
-            "deep_folding.brainvisa": MagicMock(),
-            "deep_folding.brainvisa.utils": MagicMock(),
-            "deep_folding.brainvisa.utils.parallel": mock_parallel,
+            "cortical_tiles": MagicMock(),
+            "cortical_tiles.brainvisa": MagicMock(),
+            "cortical_tiles.brainvisa.utils": MagicMock(),
+            "cortical_tiles.brainvisa.utils.parallel": mock_parallel,
         }
 
     def test_vox_str_uses_mm_suffix(self, tmp_path):

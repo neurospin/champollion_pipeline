@@ -73,7 +73,7 @@ class TestExternalPathResolution:
         """run_cortical_tiles.run() invokes <root>/external/cortical_tiles/.../generate_sulcal_regions.py."""
         from champollion_pipeline.run_cortical_tiles import RunCorticalTiles
 
-        expected = EXTERNAL_DIR / "cortical_tiles" / "deep_folding" / "brainvisa" / "generate_sulcal_regions.py"
+        expected = EXTERNAL_DIR / "cortical_tiles" / "cortical_tiles" / "brainvisa" / "generate_sulcal_regions.py"
 
         script = RunCorticalTiles()
         script.parse_args(

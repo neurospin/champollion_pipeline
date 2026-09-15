@@ -37,7 +37,7 @@ autodoc_mock_imports = [
     "numpy",
     "pandas",
     "joblib",
-    "deep_folding",
+    "cortical_tiles",
     "anatomist",
     "huggingface_hub",
     "torch",
