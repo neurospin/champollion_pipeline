@@ -662,7 +662,11 @@ class GenerateEmbeddings(ScriptBuilder):
         if not pt_path.exists():
             return
         ckpt_dir.mkdir(parents=True, exist_ok=True)
-        state_dict = torch.load(str(pt_path), map_location="cpu")
+        loaded = torch.load(str(pt_path), map_location="cpu")
+        if isinstance(loaded, dict) and "state_dict" in loaded:
+            state_dict = loaded["state_dict"]
+        else:
+            state_dict = loaded
         ckpt = {"state_dict": state_dict, "epoch": 0, "global_step": 0}
         ckpt_path = ckpt_dir / "best_model.ckpt"
         torch.save(ckpt, str(ckpt_path))
@@ -692,6 +696,8 @@ class GenerateEmbeddings(ScriptBuilder):
             except OSError:
                 continue
             for child in children:
+                if child.startswith("."):
+                    continue
                 child_path = join(current, child)
                 if not os.path.isdir(child_path):
                     continue

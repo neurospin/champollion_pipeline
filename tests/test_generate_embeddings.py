@@ -203,6 +203,30 @@ class TestModelDiscovery:
 
         assert model_args == {os.path.realpath(str(real))}
 
+    @pytest.mark.unit
+    def test_discovery_skips_dot_directory_subtree(self, tmp_path):
+        """REQ-MODELDISCOVERY-02 — a dot-directory and its whole subtree are skipped.
+
+        The Hugging Face Hub download-staging cache
+        (`<models_path>/.cache/huggingface/download/<mask_version>/<REGION>/`)
+        mirrors the real model tree, `logs/` marker included, but holds only
+        `.pt.metadata` bookkeeping files. Matching it yields stale duplicates
+        that later blow up in evaluate.py.
+        """
+        models_dir = tmp_path / "models_cache"
+        real = self._make_model(models_dir / "canonical_corrected_26_1" / "FCMpost-SpC_left")
+        mirror = self._make_model(
+            models_dir / ".cache" / "huggingface" / "download" / "canonical_corrected_26_1" / "FCMpost-SpC_left"
+        )
+        (mirror / "logs" / "best_model_weights.pt.metadata").write_text("{}\n")
+
+        script = GenerateEmbeddings()
+        script.args = script.parse_args([str(models_dir), str(tmp_path)])
+
+        found = script._find_region_model_dirs(str(models_dir))
+
+        assert found == [str(real)]
+
 
 class TestRunMethod:
     """Test the run method."""
@@ -603,3 +627,78 @@ class TestPixiTaskPaths:
         for task_name, rel_path in self.PIXI_TASKS:
             script = repo_root / rel_path
             assert script.exists(), f"pixi task '{task_name}' points to '{rel_path}' which does not exist"
+
+
+@pytest.mark.unit
+class TestEnsureCkptShape:
+    """REQ-CKPTSHAPE-01 — `_ensure_ckpt` must not double-wrap an already-wrapped `.pt`.
+
+    Real `logs/best_model_weights.pt` files ship as Lightning-style
+    `{"state_dict": {...<backbones.0.encoder.*> weights...}}` dicts. Wrapping one
+    again yields `{"state_dict": {"state_dict": {...}}}`, so
+    `external/champollion_V1/champollion/evaluate.py`'s prefix filter over
+    `checkpoint["state_dict"]` sees only the literal key `"state_dict"` and
+    `model.load_state_dict({})` raises `RuntimeError: Missing key(s)`.
+    """
+
+    ENCODER_KEYS = (
+        "backbones.0.encoder.layer1.0.weight",
+        "backbones.0.encoder.layer1.0.bias",
+    )
+
+    @staticmethod
+    def _make_model_dir(tmp_path, payload):
+        """Write `logs/best_model_weights.pt` holding `payload`; return the model dir."""
+        import torch
+
+        model_dir = tmp_path / "canonical_corrected_26_1" / "SsP-SPaint_left"
+        (model_dir / "logs").mkdir(parents=True)
+        torch.save(payload, str(model_dir / "logs" / "best_model_weights.pt"))
+        return model_dir
+
+    @staticmethod
+    def _load_converted_ckpt(model_dir):
+        """Load the `.ckpt` `_ensure_ckpt` was expected to produce."""
+        import torch
+
+        ckpt_path = model_dir / "logs" / "lightning_logs" / "version_0" / "checkpoints" / "best_model.ckpt"
+        assert ckpt_path.exists(), f"_ensure_ckpt produced no checkpoint at {ckpt_path}"
+        return torch.load(str(ckpt_path), map_location="cpu", weights_only=False)
+
+    def _weights(self):
+        import torch
+
+        return {key: torch.zeros(2) for key in self.ENCODER_KEYS}
+
+    def test_already_wrapped_pt_is_not_wrapped_again(self, tmp_path):
+        """A `{"state_dict": ...}`-shaped `.pt` converts to a ckpt with no nested wrap."""
+        model_dir = self._make_model_dir(tmp_path, {"state_dict": self._weights()})
+
+        script = GenerateEmbeddings()
+        script._ensure_ckpt(str(model_dir))
+
+        ckpt = self._load_converted_ckpt(model_dir)
+        assert "state_dict" not in ckpt["state_dict"], (
+            "ckpt['state_dict'] is itself wrapped in another 'state_dict' key; "
+            "evaluate.py's prefix filter will match nothing"
+        )
+
+    def test_already_wrapped_pt_keeps_encoder_keys_at_top_level(self, tmp_path):
+        """The converted ckpt exposes the real `backbones.0.encoder.*` keys directly."""
+        model_dir = self._make_model_dir(tmp_path, {"state_dict": self._weights()})
+
+        script = GenerateEmbeddings()
+        script._ensure_ckpt(str(model_dir))
+
+        ckpt = self._load_converted_ckpt(model_dir)
+        assert set(ckpt["state_dict"]) == set(self.ENCODER_KEYS)
+
+    def test_bare_state_dict_pt_is_still_wrapped_once(self, tmp_path):
+        """A `.pt` holding bare weights (no `state_dict` key) is still wrapped exactly once."""
+        model_dir = self._make_model_dir(tmp_path, self._weights())
+
+        script = GenerateEmbeddings()
+        script._ensure_ckpt(str(model_dir))
+
+        ckpt = self._load_converted_ckpt(model_dir)
+        assert set(ckpt["state_dict"]) == set(self.ENCODER_KEYS)
