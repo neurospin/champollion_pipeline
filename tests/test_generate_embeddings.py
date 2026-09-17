@@ -70,8 +70,8 @@ class TestPerRegionInvocation:
         """_run_per_region calls execute_command once per region directory."""
         models_dir = tmp_path / "models"
         models_dir.mkdir()
-        (models_dir / "SC-sylv_left").mkdir()
-        (models_dir / "SC-sylv_right").mkdir()
+        (models_dir / "SC-sylv_left" / "logs").mkdir(parents=True)
+        (models_dir / "SC-sylv_right" / "logs").mkdir(parents=True)
 
         script = GenerateEmbeddings()
         script.args = script.parse_args([str(models_dir), str(tmp_path)])
@@ -96,7 +96,7 @@ class TestPerRegionInvocation:
         """_run_per_region skips a region when output CSV already exists."""
         models_dir = tmp_path / "models"
         models_dir.mkdir()
-        (models_dir / "SC-sylv_left").mkdir()
+        (models_dir / "SC-sylv_left" / "logs").mkdir(parents=True)
         out = tmp_path / "out" / "SC-sylv_left"
         out.mkdir(parents=True)
         (out / "full_embeddings.csv").write_text("existing")
@@ -119,7 +119,7 @@ class TestPerRegionInvocation:
         """_run_per_region runs even when output exists if --overwrite is set."""
         models_dir = tmp_path / "models"
         models_dir.mkdir()
-        (models_dir / "SC-sylv_left").mkdir()
+        (models_dir / "SC-sylv_left" / "logs").mkdir(parents=True)
         out = tmp_path / "out" / "SC-sylv_left"
         out.mkdir(parents=True)
         (out / "full_embeddings.csv").write_text("existing")
@@ -137,6 +137,71 @@ class TestPerRegionInvocation:
             )
 
         assert len(executed) == 1
+
+
+@pytest.mark.unit
+class TestModelDiscovery:
+    """REQ-MODELDISCOVERY-01 — a directory is a region model iff it holds `logs/`.
+
+    Real model folds on disk look like
+    `<models_path>/<mask_version>/<REGION>_<side>/logs/best_model_weights.pt`
+    (plus `.hydra/config.yaml`), so discovery must recurse to any depth and
+    select only directories carrying the `logs/` marker.
+    """
+
+    @staticmethod
+    def _make_model(path):
+        """Create a directory shaped like a real Champollion model fold."""
+        (path / "logs").mkdir(parents=True)
+        (path / ".hydra").mkdir(parents=True)
+        (path / ".hydra" / "config.yaml").write_text("model: {}\n")
+        return path
+
+    @staticmethod
+    def _collect_model_args(script, tmp_path):
+        """Run _run_per_region with execute_command stubbed; return the `-m` values."""
+        executed = []
+
+        def fake_execute(cmd, **kwargs):
+            executed.append(cmd)
+            return 0
+
+        with patch.object(script, "execute_command", side_effect=fake_execute):
+            script._run_per_region(
+                evaluate_script="/eval.py",
+                crops_2mm_dir=str(tmp_path / "crops"),
+                subjects_path=str(tmp_path / "participants.tsv"),
+                output_base=str(tmp_path / "out"),
+            )
+
+        return {os.path.realpath(cmd[cmd.index("-m") + 1]) for cmd in executed}
+
+    def test_discovery_descends_into_mask_version_parent_directory(self, tmp_path):
+        """Nested per-region model folds under a mask-version parent are each run."""
+        models_dir = tmp_path / "models_cache"
+        parent = models_dir / "canonical_corrected_26_1"
+        left = self._make_model(parent / "FCLp-subsc-FCLa-INSULA_left")
+        right = self._make_model(parent / "FCLp-subsc-FCLa-INSULA_right")
+
+        script = GenerateEmbeddings()
+        script.args = script.parse_args([str(models_dir), str(tmp_path)])
+
+        model_args = self._collect_model_args(script, tmp_path)
+
+        assert model_args == {os.path.realpath(str(left)), os.path.realpath(str(right))}
+
+    def test_discovery_ignores_directory_without_logs_marker(self, tmp_path):
+        """A stray `.cache/` leftover carries no `logs/`, so it is not a region."""
+        models_dir = tmp_path / "models_cache"
+        (models_dir / ".cache" / "huggingface").mkdir(parents=True)
+        real = self._make_model(models_dir / "FCMpost-SpC_left")
+
+        script = GenerateEmbeddings()
+        script.args = script.parse_args([str(models_dir), str(tmp_path)])
+
+        model_args = self._collect_model_args(script, tmp_path)
+
+        assert model_args == {os.path.realpath(str(real))}
 
 
 class TestRunMethod:
