@@ -668,27 +668,54 @@ class GenerateEmbeddings(ScriptBuilder):
         torch.save(ckpt, str(ckpt_path))
         print(f"  Converted {pt_path} → {ckpt_path}")
 
+    def _find_region_model_dirs(self, models_path: str) -> list[str]:
+        """Return every directory, at any depth under models_path, that directly
+        contains a logs/ subdirectory. A matched directory's own subtree is not
+        searched further. models_path itself is never returned. Symlinks are not
+        resolved when reporting a match, but realpath is used to guard against
+        cycles. Sorted lexicographically.
+        """
+        if not os.path.isdir(models_path):
+            raise ValueError(f"Models path not found: {models_path}")
+
+        found: list[str] = []
+        visited_real: set[str] = set()
+        stack = [models_path]
+        while stack:
+            current = stack.pop()
+            real_current = os.path.realpath(current)
+            if real_current in visited_real:
+                continue
+            visited_real.add(real_current)
+            try:
+                children = sorted(os.listdir(current))
+            except OSError:
+                continue
+            for child in children:
+                child_path = join(current, child)
+                if not os.path.isdir(child_path):
+                    continue
+                if os.path.isdir(join(child_path, "logs")):
+                    found.append(child_path)
+                else:
+                    stack.append(child_path)
+        return sorted(found)
+
     def _run_per_region(
         self, evaluate_script: str, crops_2mm_dir: str, subjects_path: str, output_base: str
     ) -> int:
         """Invoke champollion/evaluate.py for each region in models_path."""
         models_path = self.args.models_path
-        try:
-            region_dirs = sorted([
-                d for d in os.listdir(models_path)
-                if os.path.isdir(join(models_path, d))
-            ])
-        except FileNotFoundError as exc:
-            raise ValueError(f"Models path not found: {models_path}") from exc
+        region_dirs = self._find_region_model_dirs(models_path)
 
         if not region_dirs:
-            raise ValueError(f"No region subdirectories found in {models_path}")
+            raise ValueError(f"No region model directories (containing logs/) found under {models_path}")
 
         print(f"\nGenerating embeddings for {len(region_dirs)} regions → {output_base}")
 
         last_result = 0
-        for region in region_dirs:
-            model_path = join(models_path, region)
+        for model_path in region_dirs:
+            region = os.path.basename(model_path)
             side = "L" if region.endswith("_left") else "R"
             crop_name = self._find_crop_dir(crops_2mm_dir, region)
             skels_path = join(crops_2mm_dir, crop_name, "mask", f"{side}skeleton.npy")
