@@ -165,7 +165,7 @@ class RunCorticalTiles(ScriptBuilder):
         # and we pass output as -d so the config is never inside the subjects directory
         # (which would cause generate_skeletons.py to list it as a subject).
         if not self.validate_paths([config_file_path]):
-            source_config = abspath(join(dirname(__file__), "..", "pipeline_loop_2mm.json"))
+            source_config = abspath(join(dirname(__file__), "..", "..", "pipeline_loop_2mm.json"))
             self.execute_command(["cp", source_config, config_file_path], shell=False)
 
         # Set graphs_dir and output_dir in the pipeline JSON config.
@@ -211,7 +211,7 @@ class RunCorticalTiles(ScriptBuilder):
                 "..",
                 "external",
                 "cortical_tiles",
-                "deep_folding",
+                "cortical_tiles",
                 "brainvisa",
                 "generate_sulcal_regions.py",
             )

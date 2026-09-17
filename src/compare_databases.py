@@ -140,7 +140,7 @@ class CompareDatabases(ScriptBuilder):
 
     def _load_database(self, path_to_graph, sides, subjects_dir, njobs, brainvisa_dir) -> dict:
         """Return {subject: {sulcus: voxel_count}} for all subjects found."""
-        from deep_folding.brainvisa.utils.subjects import get_all_subjects_as_dictionary
+        from cortical_tiles.brainvisa.utils.subjects import get_all_subjects_as_dictionary
         from joblib import Parallel, delayed
 
         all_data: dict = {}
@@ -168,7 +168,7 @@ class CompareDatabases(ScriptBuilder):
         from joblib import cpu_count
 
         brainvisa_dir = abspath(
-            join(dirname(__file__), "..", "external", "cortical_tiles", "deep_folding", "brainvisa")
+            join(dirname(__file__), "..", "external", "cortical_tiles", "cortical_tiles", "brainvisa")
         )
         if brainvisa_dir not in sys.path:
             sys.path.insert(0, brainvisa_dir)

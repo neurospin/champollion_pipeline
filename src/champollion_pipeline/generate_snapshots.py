@@ -236,7 +236,7 @@ def generate_tiles_snapshot(crops_dir, output_path, size=(800, 600), level=1, ch
         List of generated snapshot file paths
     """
     import anatomist.headless as ana
-    from deep_folding import config
+    from cortical_tiles import config
     from soma import aims
 
     a = ana.Anatomist()
