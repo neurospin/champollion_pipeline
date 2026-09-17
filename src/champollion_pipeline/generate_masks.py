@@ -269,7 +269,7 @@ class SerialRunner(MaskRunner):
         if config.brainvisa_dir not in sys.path:
             sys.path.insert(0, config.brainvisa_dir)
         from compute_mask import compute_mask as _compute_mask  # noqa: PLC0415
-        from deep_folding.brainvisa.utils.sulcus import (  # noqa: PLC0415
+        from cortical_tiles.brainvisa.utils.sulcus import (  # noqa: PLC0415
             complete_sulci_name,
         )
 
@@ -334,11 +334,11 @@ class BufferedRunner(MaskRunner):
         self.njobs = njobs
 
     def __call__(self, config: RunConfig):
-        from deep_folding.brainvisa.utils.subjects import (  # noqa: PLC0415
+        from cortical_tiles.brainvisa.utils.subjects import (  # noqa: PLC0415
             get_all_subjects_as_dictionary,
             select_subjects_int_if_list_of_dict,
         )
-        from deep_folding.brainvisa.utils.sulcus import (  # noqa: PLC0415
+        from cortical_tiles.brainvisa.utils.sulcus import (  # noqa: PLC0415
             complete_sulci_name,
         )
         from joblib import Parallel, delayed  # noqa: PLC0415
@@ -502,12 +502,12 @@ class GenerateMasks(ScriptBuilder):
         sides = self.args.sides
 
         brainvisa_dir = abspath(
-            join(dirname(__file__), "..", "external", "cortical_tiles", "deep_folding", "brainvisa")
+            join(dirname(__file__), "..", "..", "external", "cortical_tiles", "cortical_tiles", "brainvisa")
         )
         if brainvisa_dir not in sys.path:
             sys.path.insert(0, brainvisa_dir)
 
-        json_path = abspath(join(dirname(__file__), "..", "sulci_regions_champollion_V1.json"))
+        json_path = abspath(join(dirname(__file__), "..", "..", "sulci_regions_champollion_V1.json"))
         sulci = get_sulci_for_regions(regions, sides, json_path)
         print(f"generate_masks.py: {len(sulci)} unique sulci from {len(regions)} region(s) × {len(sides)} side(s)")
 
@@ -520,7 +520,7 @@ class GenerateMasks(ScriptBuilder):
 
         njobs = None
         if self.args.njobs is not None:
-            from deep_folding.brainvisa.utils.parallel import define_njobs  # noqa: PLC0415
+            from cortical_tiles.brainvisa.utils.parallel import define_njobs  # noqa: PLC0415
 
             njobs = define_njobs(self.args.njobs)
             if not self.args.buffered:
