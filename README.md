@@ -430,10 +430,32 @@ champollion_pipeline/
 │       ├── generate_embeddings.py
 │       ├── put_together_embeddings.py
 │       ├── generate_snapshots.py
-│       └── train_champollion.py
+│       ├── train_champollion.py
+│       ├── generate_masks.py
+│       ├── prune_failed_subjects.py
+│       └── purge_subject.py
 ├── data/                       # Created by install-all; not committed
 └── pixi.toml
 ```
+
+### Console scripts
+
+Installing the package provides these entry points, declared in
+`pyproject.toml`'s `[project.scripts]`:
+
+| Command | Module | Purpose |
+|---|---|---|
+| `champollion-morphologist` | `generate_morphologist_graphs.py` | Step 1 — run Morphologist over raw T1 MRI to produce sulcal graphs |
+| `champollion-cortical-tiles` | `run_cortical_tiles.py` | Step 2 — extract sulcal region crops from Morphologist graphs |
+| `champollion-config` | `generate_champollion_config.py` | Step 3 — write the Champollion YAML dataset configuration |
+| `champollion-embeddings` | `generate_embeddings.py` | Step 4 — compute per-region embeddings from a pre-trained model |
+| `champollion-combine` | `put_together_embeddings.py` | Step 5 — collect the per-region CSVs into one output directory |
+| `champollion-snapshots` | `generate_snapshots.py` | Step 6 — render UMAP visualization snapshots |
+| `champollion-train` | `train_champollion.py` | Optional — train a `champollion_V1` encoder for one sulcal region |
+| `champollion-prune` | `prune_failed_subjects.py` | Maintenance — delete cortical_tiles outputs for QC-failing subjects |
+| `champollion-purge` | `purge_subject.py` | Maintenance — delete all cortical_tiles derivatives for one subject |
+
+`generate_masks.py` also ships in the package but declares no console script.
 
 ## Testing
 
