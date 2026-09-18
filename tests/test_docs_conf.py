@@ -103,6 +103,40 @@ class TestDocsConfDeclaration:
 
 
 @pytest.mark.smoke
+class TestDocsConfMockImports:
+    """REQ-DOCS-07: autodoc_mock_imports names the renamed cortical_tiles package.
+
+    The ``docs`` pixi environment is ``no-default-feature = true``, so the
+    ``external/cortical_tiles`` submodule is never installed there and autodoc
+    depends entirely on this mock list. The submodule renamed its internal
+    package from ``deep_folding`` to ``cortical_tiles`` upstream (the same
+    rename fixed in ``src/`` under REQ-IMPORT-01), leaving this entry stale.
+
+    Asserted against the declared configuration only: REQ-DOCS-02 owns the
+    end-to-end ``sphinx-build`` check, so these two assertions stay independent
+    of the docs environment being reachable.
+    """
+
+    def test_cortical_tiles_is_mocked(self, conf_namespace):
+        """``autodoc_mock_imports`` lists the current package name."""
+        mocks = conf_namespace.get("autodoc_mock_imports", [])
+        assert "cortical_tiles" in mocks, (
+            f"conf.py does not mock 'cortical_tiles', so autodoc raises "
+            f"ModuleNotFoundError for it in the docs environment; found "
+            f"{sorted(mocks)}{_missing_suffix(conf_namespace)}"
+        )
+
+    def test_stale_deep_folding_entry_is_absent(self, conf_namespace):
+        """The pre-rename package name is no longer listed."""
+        mocks = conf_namespace.get("autodoc_mock_imports", [])
+        assert "deep_folding" not in mocks, (
+            f"conf.py still mocks 'deep_folding'; external/cortical_tiles renamed "
+            f"that package to 'cortical_tiles' upstream, so the entry mocks a "
+            f"module nothing imports{_missing_suffix(conf_namespace)}"
+        )
+
+
+@pytest.mark.smoke
 class TestDocsConfBuild:
     """REQ-DOCS-02: the configuration actually drives a clean Sphinx build."""
 
