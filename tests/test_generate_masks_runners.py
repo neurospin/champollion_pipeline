@@ -42,13 +42,13 @@ def complete_sulci_name(sulcus, side):
 
 def deep_folding_modules(**extra):
     """sys.modules entries for the deep_folding sub-packages used by runners."""
-    sulcus_mod = types.ModuleType("deep_folding.brainvisa.utils.sulcus")
+    sulcus_mod = types.ModuleType("cortical_tiles.brainvisa.utils.sulcus")
     sulcus_mod.complete_sulci_name = complete_sulci_name
     modules = {
-        "deep_folding": MagicMock(),
-        "deep_folding.brainvisa": MagicMock(),
-        "deep_folding.brainvisa.utils": MagicMock(),
-        "deep_folding.brainvisa.utils.sulcus": sulcus_mod,
+        "cortical_tiles": MagicMock(),
+        "cortical_tiles.brainvisa": MagicMock(),
+        "cortical_tiles.brainvisa.utils": MagicMock(),
+        "cortical_tiles.brainvisa.utils.sulcus": sulcus_mod,
     }
     modules.update(extra)
     return modules
@@ -260,7 +260,7 @@ class TestBufferedRunner:
     @pytest.fixture
     def subjects_modules(self):
         """deep_folding modules exposing the subject-selection helpers."""
-        subjects_mod = types.ModuleType("deep_folding.brainvisa.utils.subjects")
+        subjects_mod = types.ModuleType("cortical_tiles.brainvisa.utils.subjects")
         subjects_mod.get_all_subjects_as_dictionary = lambda dirs, patterns, side: [
             {"subject": "sub01", "dir": dirs[0], "graph_file": patterns[0], "side": side},
             {"subject": "sub02", "dir": dirs[0], "graph_file": patterns[0], "side": side},
@@ -268,7 +268,7 @@ class TestBufferedRunner:
         subjects_mod.select_subjects_int_if_list_of_dict = lambda subs, _all, nb: (
             subs if nb == -1 else subs[:nb]
         )
-        return deep_folding_modules(**{"deep_folding.brainvisa.utils.subjects": subjects_mod})
+        return deep_folding_modules(**{"cortical_tiles.brainvisa.utils.subjects": subjects_mod})
 
     def _patch_workers(self, monkeypatch, load=None, compute=None, mask_dir=None):
         """Replace the two module-level joblib workers with in-process fakes."""
