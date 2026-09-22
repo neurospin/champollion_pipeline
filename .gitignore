@@ -61,3 +61,6 @@ install_report_*.txt
 
 # CodeGraph index
 .codegraph/
+
+# Analysis output CSVs (e.g. run_cka.py results), not source
+scripts/*.csv
