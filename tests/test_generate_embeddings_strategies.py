@@ -615,12 +615,12 @@ class TestRunPerRegion:
         models = tmp_path / "models"
         models.mkdir()
         script = make_script([str(models), "/d"])
-        with pytest.raises(ValueError, match="No region subdirectories found"):
+        with pytest.raises(ValueError, match="No region model directories"):
             script._run_per_region("evaluate.py", str(tmp_path), "subjects.tsv", str(tmp_path))
 
     def test_existing_embeddings_are_skipped(self, tmp_path, capsys):
         models = tmp_path / "models"
-        (models / "SOr_left").mkdir(parents=True)
+        (models / "SOr_left" / "logs").mkdir(parents=True)
         out = tmp_path / "out"
         (out / "SOr_left").mkdir(parents=True)
         (out / "SOr_left" / "full_embeddings.csv").touch()
@@ -632,7 +632,7 @@ class TestRunPerRegion:
 
     def test_overwrite_recomputes_existing_embeddings(self, tmp_path):
         models = tmp_path / "models"
-        (models / "SOr_left").mkdir(parents=True)
+        (models / "SOr_left" / "logs").mkdir(parents=True)
         out = tmp_path / "out"
         (out / "SOr_left").mkdir(parents=True)
         (out / "SOr_left" / "full_embeddings.csv").touch()
@@ -645,7 +645,7 @@ class TestRunPerRegion:
 
     def test_command_uses_left_skeleton_for_left_region(self, tmp_path):
         models = tmp_path / "models"
-        (models / "SOr_left").mkdir(parents=True)
+        (models / "SOr_left" / "logs").mkdir(parents=True)
         crops = tmp_path / "crops"
         (crops / "S.Or.").mkdir(parents=True)
 
@@ -660,7 +660,7 @@ class TestRunPerRegion:
 
     def test_command_uses_right_skeleton_for_right_region(self, tmp_path):
         models = tmp_path / "models"
-        (models / "SOr_right").mkdir(parents=True)
+        (models / "SOr_right" / "logs").mkdir(parents=True)
 
         script = make_script([str(models), "/d"])
         calls = []
@@ -670,7 +670,7 @@ class TestRunPerRegion:
 
     def test_returns_last_command_result(self, tmp_path):
         models = tmp_path / "models"
-        (models / "SOr_left").mkdir(parents=True)
+        (models / "SOr_left" / "logs").mkdir(parents=True)
         script = make_script([str(models), "/d"])
         script.execute_command = lambda cmd, shell=False: 3
         result = script._run_per_region(

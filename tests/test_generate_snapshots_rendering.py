@@ -304,14 +304,14 @@ class TestGenerateTilesSnapshot:
 
         config_mod = MagicMock()
         config_mod.config.return_value.get_champollion_data_root_dir.return_value = str(data_root)
-        deep_folding = MagicMock()
-        deep_folding.config = config_mod
+        cortical_tiles = MagicMock()
+        cortical_tiles.config = config_mod
 
         modules = anatomist_modules(a)
         modules.update(
             {
-                "deep_folding": deep_folding,
-                "deep_folding.config": config_mod,
+                "cortical_tiles": cortical_tiles,
+                "cortical_tiles.config": config_mod,
                 "soma": MagicMock(aims=aims),
                 "soma.aims": aims,
             }
@@ -352,13 +352,13 @@ class TestGenerateTilesSnapshot:
             )
         assert snaps == [str(tmp_path / "tiles_left.png")]
 
-    def test_data_root_falls_back_to_deep_folding_config(self, tmp_path, env):
+    def test_data_root_falls_back_to_cortical_tiles_config(self, tmp_path, env):
         modules, _, data_root, _ = env
         crops = self._crops(tmp_path)
         with patch.dict(sys.modules, modules):
             snaps = generate_tiles_snapshot(str(crops), str(tmp_path / "tiles.png"))
         assert len(snaps) == 2
-        modules["deep_folding.config"].config.assert_called()
+        modules["cortical_tiles.config"].config.assert_called()
 
     def test_missing_region_graph_is_reported_and_skipped(self, tmp_path, env, capsys):
         modules, _, data_root, _ = env

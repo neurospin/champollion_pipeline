@@ -531,13 +531,13 @@ class TestCompareNiftiMasks:
 @pytest.fixture
 def stub_deep_folding(monkeypatch):
     def _install(subjects):
-        subjects_mod = types.ModuleType("deep_folding.brainvisa.utils.subjects")
+        subjects_mod = types.ModuleType("cortical_tiles.brainvisa.utils.subjects")
         subjects_mod.get_all_subjects_as_dictionary = MagicMock(return_value=subjects)
         for name, mod in [
-            ("deep_folding", types.ModuleType("deep_folding")),
-            ("deep_folding.brainvisa", types.ModuleType("deep_folding.brainvisa")),
-            ("deep_folding.brainvisa.utils", types.ModuleType("deep_folding.brainvisa.utils")),
-            ("deep_folding.brainvisa.utils.subjects", subjects_mod),
+            ("cortical_tiles", types.ModuleType("cortical_tiles")),
+            ("cortical_tiles.brainvisa", types.ModuleType("cortical_tiles.brainvisa")),
+            ("cortical_tiles.brainvisa.utils", types.ModuleType("cortical_tiles.brainvisa.utils")),
+            ("cortical_tiles.brainvisa.utils.subjects", subjects_mod),
         ]:
             monkeypatch.setitem(sys.modules, name, mod)
         return subjects_mod
