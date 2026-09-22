@@ -26,6 +26,7 @@ from os.path import abspath, dirname, exists, isdir, join
 
 import numpy as np
 from champollion_utils.script_builder import ScriptBuilder
+from cortical_tiles.brainvisa import add_left_and_right_volumes, remove_ventricle
 from joblib import cpu_count
 from soma import aims
 
@@ -262,6 +263,34 @@ class RunCorticalTiles(ScriptBuilder):
         chdir(current_dir)
 
         self._generate_mask_npys(output_abs)
+
+        # Whole-brain volume: fuse L+R skeletons, then strip the ventricle
+        # from the fused volume. Runs unconditionally, alongside the
+        # per-region crops above -- fuse first, since remove_ventricle(F)
+        # reads from the exact <input_abs>/F/ tree add_left_and_right_volumes
+        # just wrote.
+        add_left_and_right_volumes.add_left_and_right_volumes(
+            src_dir=input_abs,
+            parallel=True,
+            # Its own -1 default breaks on the string-only revalidation in
+            # cortical_tiles.brainvisa.utils.subjects.get_number_subjects();
+            # pass "all" explicitly to route around that upstream quirk
+            # (external/ -- not ours to fix).
+            number_subjects="all",
+        )
+        remove_ventricle.remove_ventricle(
+            side="F",
+            src_dir=input_abs,
+            morpho_dir=input_abs,
+            path_to_graph=self.args.path_to_graph,
+            # add_left_and_right_volumes' default output_filename
+            # ("resampled_skeleton") does not match remove_ventricle's
+            # default src_filename ("skeleton_generated_") -- pass it
+            # explicitly so remove_ventricle reads what was just fused.
+            src_filename="resampled_skeleton",
+            parallel=True,
+            output_dir=join(output_abs, DERIVATIVES_FOLDER, "whole_brain"),
+        )
 
         return result
 

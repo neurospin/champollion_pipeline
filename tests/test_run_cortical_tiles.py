@@ -13,6 +13,23 @@ import pytest
 from champollion_pipeline.run_cortical_tiles import RunCorticalTiles
 
 
+@pytest.fixture(autouse=True)
+def _stub_whole_brain_functions(monkeypatch):
+    """Prevent the real whole-brain submodule calls from running in tests that
+    don't care about them (REQ-WHOLEBRAIN-01 runs unconditionally in run()).
+    TestWholeBrainGeneration patches these itself, taking precedence within
+    its own `with patch(...)` blocks.
+    """
+    monkeypatch.setattr(
+        "champollion_pipeline.run_cortical_tiles.add_left_and_right_volumes.add_left_and_right_volumes",
+        MagicMock(),
+    )
+    monkeypatch.setattr(
+        "champollion_pipeline.run_cortical_tiles.remove_ventricle.remove_ventricle",
+        MagicMock(),
+    )
+
+
 class TestRunCorticalTilesInit:
     """Test initialization of RunCorticalTiles."""
 
@@ -1059,6 +1076,145 @@ class TestGenerateMaskNpys:
                                 script.run()
 
         mock_gen.assert_called_once()
+
+
+class TestWholeBrainGeneration:
+    """Tests for REQ-WHOLEBRAIN-01: unconditional whole-brain volume generation.
+
+    ``run()`` must, on every invocation (no flag gating), additionally call
+    ``add_left_and_right_volumes`` then ``remove_ventricle`` from the
+    ``cortical_tiles`` submodule after the existing per-region crop step,
+    without disturbing that existing crop step.
+    """
+
+    def _run(self, temp_dir, extra_args=None):
+        input_dir = Path(temp_dir) / "input"
+        output_dir = Path(temp_dir) / "output"
+        input_dir.mkdir()
+        output_dir.mkdir()
+
+        script = RunCorticalTiles()
+        args = [
+            str(input_dir),
+            str(output_dir),
+            "--path_to_graph",
+            "graphs/path",
+            "--path_sk_with_hull",
+            "skeleton/path",
+        ] + (extra_args or [])
+        script.parse_args(args)
+
+        with (
+            patch.object(script, "validate_paths", return_value=True),
+            patch.object(script, "execute_command", return_value=0) as mock_exec,
+            patch.object(script, "_generate_mask_npys") as mock_gen_npys,
+            patch("champollion_pipeline.run_cortical_tiles.chdir"),
+            patch("champollion_pipeline.run_cortical_tiles.getcwd", return_value="/original"),
+            patch(
+                "champollion_pipeline.run_cortical_tiles.add_left_and_right_volumes.add_left_and_right_volumes"
+            ) as mock_add,
+            patch("champollion_pipeline.run_cortical_tiles.remove_ventricle.remove_ventricle") as mock_remove,
+        ):
+            script.run()
+
+        return script, input_dir, output_dir, mock_exec, mock_gen_npys, mock_add, mock_remove
+
+    def test_whole_brain_functions_called_unconditionally(self, temp_dir):
+        """add_left_and_right_volumes and remove_ventricle both run with no flag needed."""
+        _, _, _, _, _, mock_add, mock_remove = self._run(temp_dir)
+
+        mock_add.assert_called_once()
+        mock_remove.assert_called_once()
+
+    def test_add_left_and_right_volumes_called_with_morphologist_input_dir(self, temp_dir):
+        """add_left_and_right_volumes receives src_dir=<morphologist input dir>, parallel=True."""
+        _, input_dir, _, _, _, mock_add, _ = self._run(temp_dir)
+
+        _, kwargs = mock_add.call_args
+        assert kwargs["src_dir"] == str(input_dir.resolve())
+        assert kwargs["parallel"] is True
+
+    def test_remove_ventricle_called_with_side_f_and_path_to_graph(self, temp_dir):
+        """remove_ventricle receives side='F', src_dir=morpho_dir=<input dir>, path_to_graph, parallel=True."""
+        script, input_dir, _, _, _, _, mock_remove = self._run(temp_dir)
+
+        _, kwargs = mock_remove.call_args
+        assert kwargs["side"] == "F"
+        assert kwargs["src_dir"] == str(input_dir.resolve())
+        assert kwargs["morpho_dir"] == str(input_dir.resolve())
+        assert kwargs["path_to_graph"] == script.args.path_to_graph
+        assert kwargs["parallel"] is True
+
+    def test_add_left_and_right_volumes_called_before_remove_ventricle(self, temp_dir):
+        """Fusion must happen before ventricle removal reads the fused F/ directory."""
+        call_order = []
+
+        # Re-implement _run inline to track call order via side_effect.
+        import tempfile
+
+        tmp = tempfile.mkdtemp()
+        try:
+            input_dir_path = Path(tmp) / "input"
+            output_dir_path = Path(tmp) / "output"
+            input_dir_path.mkdir()
+            output_dir_path.mkdir()
+
+            script = RunCorticalTiles()
+            script.parse_args(
+                [
+                    str(input_dir_path),
+                    str(output_dir_path),
+                    "--path_to_graph",
+                    "graphs/path",
+                    "--path_sk_with_hull",
+                    "skeleton/path",
+                ]
+            )
+
+            with (
+                patch.object(script, "validate_paths", return_value=True),
+                patch.object(script, "execute_command", return_value=0),
+                patch.object(script, "_generate_mask_npys"),
+                patch("champollion_pipeline.run_cortical_tiles.chdir"),
+                patch("champollion_pipeline.run_cortical_tiles.getcwd", return_value="/original"),
+                patch(
+                    "champollion_pipeline.run_cortical_tiles.add_left_and_right_volumes.add_left_and_right_volumes",
+                    side_effect=lambda **kw: call_order.append("add_left_and_right_volumes"),
+                ),
+                patch(
+                    "champollion_pipeline.run_cortical_tiles.remove_ventricle.remove_ventricle",
+                    side_effect=lambda **kw: call_order.append("remove_ventricle"),
+                ),
+            ):
+                script.run()
+        finally:
+            import shutil
+
+            shutil.rmtree(tmp, ignore_errors=True)
+
+        assert call_order == ["add_left_and_right_volumes", "remove_ventricle"]
+
+    def test_crop_subprocess_still_runs_alongside_whole_brain_step(self, temp_dir):
+        """The existing generate_sulcal_regions.py crop subprocess is unaffected."""
+        _, _, _, mock_exec, _, _, _ = self._run(temp_dir)
+
+        crop_calls = [
+            c for c in mock_exec.call_args_list if any("generate_sulcal_regions.py" in str(arg) for arg in c[0][0])
+        ]
+        assert len(crop_calls) == 1
+
+    def test_generate_mask_npys_still_runs_for_crop_step(self, temp_dir):
+        """_generate_mask_npys (crop-mask-specific) is untouched by the whole-brain addition."""
+        _, _, _, _, mock_gen_npys, _, _ = self._run(temp_dir)
+
+        mock_gen_npys.assert_called_once()
+
+    def test_whole_brain_step_runs_regardless_of_crop_only_args(self, temp_dir):
+        """Crop-only args (e.g. --skip-distbottom) don't gate or alter the whole-brain step."""
+        _, _, _, _, _, mock_add, mock_remove = self._run(temp_dir, extra_args=["--skip-distbottom"])
+
+        mock_add.assert_called_once()
+        mock_remove.assert_called_once()
 
 
 @pytest.mark.smoke
