@@ -92,6 +92,10 @@ class TestExternalPathResolution:
             patch("champollion_pipeline.run_cortical_tiles.getcwd", return_value="/original"),
             patch.object(script, "validate_paths", return_value=True),
             patch.object(script, "execute_command", return_value=0) as mock_exec,
+            # Not this test's concern (REQ-WHOLEBRAIN-01) -- avoid running
+            # the real submodule calls against an empty fixture dir.
+            patch("champollion_pipeline.run_cortical_tiles.add_left_and_right_volumes.add_left_and_right_volumes"),
+            patch("champollion_pipeline.run_cortical_tiles.remove_ventricle.remove_ventricle"),
         ):
             script.run()
 
