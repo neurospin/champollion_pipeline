@@ -20,6 +20,19 @@ if ! command -v pixi &>/dev/null; then
 fi
 
 cd "$SCRIPT_DIR"
+
+# Resolve the conda environment first: the wizard itself runs inside it and
+# needs rich, so 'pixi run setup' cannot be the first command.
 pixi install -e default
-pixi run install-all
-pixi run check-install
+
+if [ -t 0 ]; then
+    # Interactive terminal: let the wizard ask the three questions and run the
+    # commands that match the answers (REQ-WIZARD-03).
+    pixi run setup
+else
+    # No TTY (CI, docker build, piped installer): the wizard cannot prompt, so
+    # fall back to the full default installation. 'install-all' ends with
+    # 'check-install', which reports the resulting health status.
+    echo "No interactive terminal detected — running the full default installation."
+    pixi run install-all
+fi
