@@ -58,3 +58,6 @@ scripts/slurm/
 
 # Install diagnostic reports
 install_report_*.txt
+
+# CodeGraph index
+.codegraph/
