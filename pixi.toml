@@ -3,10 +3,7 @@ name = "champollion"
 version = "0.2.32"
 description = "Champollion pipeline with cortical_tiles, champollion_utils, and testing infrastructure"
 channels = ["https://brainvisa.info/neuro-forge", "conda-forge"]
-platforms = [
-  # The CUDA platforms are listed first, so they win platform selection on a machine with a CUDA driver.
-  { name = "linux-64-cuda", platform = "linux-64", cuda = "13.2" },
-  { name = "linux-64u", platform = "linux-64" }]
+platforms = ["linux-64"]
 
 # ── Shared base (dev tools, always present in default env) ───────────────────
 [dependencies]
@@ -122,6 +119,11 @@ generate-umap-reference = "python3 src/generate_umap_reference.py"
 train = "python3 src/champollion_pipeline/train_champollion.py"
 
 # ── Docs feature (Sphinx documentation toolchain) ────────────────────────────
+# conda-forge only: this feature has no brainvisa-channel deps, and that
+# channel intermittently TLS-fails on some networks. Don't inherit it here.
+[feature.docs]
+channels = ["conda-forge"]
+
 [feature.docs.dependencies]
 python = ">=3.8"
 
