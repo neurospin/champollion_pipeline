@@ -83,16 +83,21 @@ def test_champollion_utils_importable():
 
 @pytest.mark.smoke
 def test_cortical_tiles_importable():
-    """deep_folding (cortical_tiles submodule) must be installed.
+    """cortical_tiles (the external/cortical_tiles submodule) must be installed.
+
+    Upstream renamed its top-level package ``deep_folding`` -> ``cortical_tiles``
+    in merge ``a194dc1``; importing the old name now always fails, so this check
+    must use the current one to stay a test of the installation rather than of
+    the rename.
 
     Fails when the cortical_tiles submodule was not initialised or its
     pip editable install was not run ('pixi run install-cortical-tiles').
     """
     try:
-        import deep_folding  # noqa: F401
+        import cortical_tiles  # noqa: F401
     except ImportError as e:
         pytest.fail(
-            f"deep_folding (cortical_tiles) is not installed.\n"
+            f"cortical_tiles is not installed.\n"
             f"Run: pixi run install-cortical-tiles\n"
             f"Or:  pixi run install-all\n"
             f"Error: {e}"
