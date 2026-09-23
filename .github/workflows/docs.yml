@@ -40,7 +40,7 @@ jobs:
       - name: Build Sphinx docs
         run: pixi run -e docs docs-build
 
-      - uses: actions/upload-pages-artifact@v3
+      - uses: actions/upload-pages-artifact@v5
         with:
           path: docs/_build/html
 
