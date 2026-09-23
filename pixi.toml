@@ -3,7 +3,13 @@ name = "champollion"
 version = "0.2.32"
 description = "Champollion pipeline with cortical_tiles, champollion_utils, and testing infrastructure"
 channels = ["https://brainvisa.info/neuro-forge", "conda-forge"]
-platforms = ["linux-64"]
+platforms = [
+  # The CUDA platform is listed first, so it wins platform selection on a
+  # machine with a CUDA driver. Floor is 12.0 (not one person's exact
+  # driver version) for portability across machines/drivers.
+  { name = "linux-64-cuda", platform = "linux-64", cuda = "12.0" },
+  "linux-64",
+]
 
 # ── Shared base (dev tools, always present in default env) ───────────────────
 [dependencies]
@@ -120,6 +126,9 @@ train = "python3 src/champollion_pipeline/train_champollion.py"
 # channel intermittently TLS-fails on some networks. Don't inherit it here.
 [feature.docs]
 channels = ["conda-forge"]
+# No CUDA-relevant deps here -- solve against exactly one platform,
+# not the intersection with the CUDA-named workspace platform above.
+platforms = ["linux-64"]
 
 [feature.docs.dependencies]
 python = ">=3.8"
