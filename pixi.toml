@@ -88,10 +88,7 @@ toolz = ">=0.12"
 odfpy = ">=1.4"
 python-kaleido = ">=0.2"
 huggingface_hub = ">=0.20.0"
-# torchinfo = ">=1.4"  # should replace torchsummary
-
-[feature.embeddings.pypi-dependencies]
-torch-summary = ">=1.4"  # FIXME replace with torchinfo (conda)
+torchinfo = ">=1.4"
 
 [feature.embeddings.activation]
 # env = { LD_LIBRARY_PATH = "$CONDA_PREFIX/lib:$CONDA_PREFIX/lib/python3.11/site-packages/torch/lib:${LD_LIBRARY_PATH:-}" }
