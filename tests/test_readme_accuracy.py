@@ -1,6 +1,6 @@
 #!/usr/bin/env python3
 # -*- coding: utf-8 -*-
-"""README accuracy guards for REQ-DOCS-05 and REQ-DOCS-06.
+"""README accuracy guards for REQ-DOCS-05, REQ-DOCS-06, and REQ-DOCS-09.
 
 Joël asked (FEEDBACK-JOEL-G1) for ``README.md`` to reflect the pipeline's
 current architecture and naming. Two independent, mechanically checkable
@@ -12,6 +12,12 @@ claims come out of that:
 * **REQ-DOCS-06** — the ``champollion-*`` console scripts declared in
   ``pyproject.toml``'s ``[project.scripts]`` are the pipeline's public command
   names, so every one of them must be named in the README.
+
+Julien separately flagged (FEEDBACK-JULIEN-G1) that the README's "Project
+website" link is dead (404) while the paper is under journal editorial
+review, so an editor may click through from GitHub right now:
+
+* **REQ-DOCS-09** — README.md must not contain the dead project-website URL.
 
 Both artifacts are read as plain text: no import of the package, no Sphinx
 build, no network, and no checked-out ``external/`` submodule is required.
@@ -95,4 +101,16 @@ class TestConsoleScriptNames:
         """Each ``[project.scripts]`` key occurs verbatim somewhere in the README."""
         assert script in _read(README), (
             f"{script} is declared in pyproject.toml's [project.scripts] but is never named in README.md"
+        )
+
+
+@pytest.mark.smoke
+class TestProjectWebsiteLink:
+    """REQ-DOCS-09: the README does not link to the dead project website."""
+
+    def test_readme_does_not_contain_dead_project_website_url(self):
+        """``neurospin.fr/champollion_pipeline`` (404) must not appear in the README."""
+        assert "neurospin.fr/champollion_pipeline" not in _read(README), (
+            "README.md still contains the dead project-website URL "
+            "'https://www.neurospin.fr/champollion_pipeline' (404)"
         )

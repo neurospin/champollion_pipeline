@@ -9,8 +9,6 @@
 
 Cortical sulci — the folds of the brain surface — vary in shape across individuals and are linked to cognitive function, development, and neurological conditions. The **Champollion pipeline** turns T1 MRI scans into compact, comparable representations of sulcal morphology using self-supervised contrastive learning. It processes MRIs through the [BrainVISA/Morphologist](https://brainvisa.info) toolchain to extract sulcal graphs, uses *cortical_tiles* to crop standardized 3D patches around 28 sulcal regions per hemisphere, and then runs pre-trained Champollion encoders to produce 32-dimensional embeddings per region. These embeddings can be projected onto pre-trained UMAP reference maps for visualization and compared across cohorts. The pipeline is designed for researchers who want to apply Champollion to their own neuroimaging datasets without retraining.
 
-> **Project website:** [https://www.neurospin.fr/champollion_pipeline](https://www.neurospin.fr/champollion_pipeline)
-
 > **Try it online:** A [live demo is available on Hugging Face Spaces](https://huggingface.co/spaces/neurospin/Champollion_demo). It runs on 2 CPU cores and is suited for quick testing with a single subject. For batch processing or production use, install this pipeline locally where it can leverage all available CPUs and GPUs.
 
 ## Quick start
