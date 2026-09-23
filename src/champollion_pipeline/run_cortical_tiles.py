@@ -267,10 +267,22 @@ class RunCorticalTiles(ScriptBuilder):
         # Whole-brain volume: fuse L+R skeletons, then strip the ventricle
         # from the fused volume. Runs unconditionally, alongside the
         # per-region crops above -- fuse first, since remove_ventricle(F)
-        # reads from the exact <input_abs>/F/ tree add_left_and_right_volumes
-        # just wrote.
+        # reads from the exact <skeleton_src_dir>/F/ tree
+        # add_left_and_right_volumes just wrote.
+        #
+        # src_dir must point at the actual L/R resampled skeletons that
+        # generate_sulcal_regions.py (the crop subprocess above) writes to
+        # {output}/cortical_tiles-{YEAR}/skeletons/{voxel_size}/{L,R}/ --
+        # NOT input_abs (the Morphologist graphs directory, which has no
+        # L/ or R/ subdirs and is read-only). morpho_dir stays input_abs:
+        # remove_ventricle needs it separately to locate the labelled
+        # graphs used to strip the ventricle.
+        requested_cfg = CorticalTilesConfigFactory.from_args(self.args)
+        vox_str = f"{int(requested_cfg.out_voxel_size)}mm"
+        skeleton_src_dir = join(output_abs, DERIVATIVES_FOLDER, "skeletons", vox_str)
+
         add_left_and_right_volumes.add_left_and_right_volumes(
-            src_dir=input_abs,
+            src_dir=skeleton_src_dir,
             parallel=True,
             # Its own -1 default breaks on the string-only revalidation in
             # cortical_tiles.brainvisa.utils.subjects.get_number_subjects();
@@ -280,7 +292,7 @@ class RunCorticalTiles(ScriptBuilder):
         )
         remove_ventricle.remove_ventricle(
             side="F",
-            src_dir=input_abs,
+            src_dir=skeleton_src_dir,
             morpho_dir=input_abs,
             path_to_graph=self.args.path_to_graph,
             # add_left_and_right_volumes' default output_filename
