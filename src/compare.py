@@ -56,7 +56,6 @@ except ImportError:
 # Shared NIfTI mask helpers
 # --------------------------------------------------------------------------- #
 
-
 def load_mask_vol(path: str) -> np.ndarray:
     """Read a NIfTI mask with PyAIMS and return a 3-D float64 array (x, y, z).
 
@@ -140,7 +139,8 @@ def visualise_mask_diffs(diffs: dict, masks_a: dict, masks_b: dict) -> None:
         return
 
     top5 = sorted(changed.items(), key=lambda kv: -kv[1]["changed"])[:5]
-    print(f"\nOpening Anatomist for {len(changed)} changed mask(s) (showing up to 5 most changed)…")
+    print(f"\nOpening Anatomist for {len(changed)} changed mask(s) "
+          f"(showing up to 5 most changed)…")
 
     tmp_files: list = []
     entries: list = []
@@ -161,7 +161,8 @@ def visualise_mask_diffs(diffs: dict, masks_a: dict, masks_b: dict) -> None:
         tmp.close()
         aims.write(vol_xor, tmp.name)
         tmp_files.append(tmp.name)
-        entries.append({"path_a": path_a, "path_b": path_b, "path_xor": tmp.name, "name": name})
+        entries.append({"path_a": path_a, "path_b": path_b, "path_xor": tmp.name,
+                        "name": name})
 
     _VIEWER = """\
 import json, sys
@@ -220,40 +221,37 @@ def save_xor_vol(ref_path: str, a: np.ndarray, b: np.ndarray, out_path: str) -> 
 # Database-mode module-level workers (must be picklable for joblib)
 # --------------------------------------------------------------------------- #
 
-
 def _get_subject_voxel_counts(sub, brainvisa_dir):
     """Worker: load one graph and return (subject_name, {sulcus: voxel_count})."""
     import glob as _glob
     import sys as _sys
-
     if brainvisa_dir not in _sys.path:
         _sys.path.insert(0, brainvisa_dir)
     from soma import aims  # noqa: PLC0415
 
-    matches = _glob.glob(join(sub["dir"], sub["graph_file"]))
+    matches = _glob.glob(join(sub['dir'], sub['graph_file']))
     if not matches:
-        return sub["subject"], None
+        return sub['subject'], None
 
     graph = aims.read(matches[0])
     counts: dict = {}
     for vertex in graph.vertices():
-        name = vertex.get("name")
+        name = vertex.get('name')
         if name is None:
             continue
         n = 0
-        for bucket_name in ("aims_ss", "aims_bottom", "aims_other"):
+        for bucket_name in ('aims_ss', 'aims_bottom', 'aims_other'):
             bucket = vertex.get(bucket_name)
             if bucket is not None:
                 n += len(list(bucket[0].keys()))
         counts[name] = counts.get(name, 0) + n
-    return sub["subject"], counts
+    return sub['subject'], counts
 
 
 def _mask_stats(mask_dir: str, brainvisa_dir: str) -> dict:
     """Return {relative_path: (max, sum, nonzero)} for all masks in mask_dir."""
     import glob as _g
     import sys as _s
-
     if brainvisa_dir not in _s.path:
         _s.path.insert(0, brainvisa_dir)
     from soma import aims  # noqa: PLC0415
@@ -270,7 +268,6 @@ def _mask_stats(mask_dir: str, brainvisa_dir: str) -> dict:
 # Unified script class
 # --------------------------------------------------------------------------- #
 
-
 class Compare(ScriptBuilder):
     """Unified comparison tool for sulcal masks, cortical tiles, and databases."""
 
@@ -280,40 +277,36 @@ class Compare(ScriptBuilder):
             description="Compare sulcal masks, cortical_tiles outputs, or graph databases.",
         )
         subparsers = self.parser.add_subparsers(
-            dest="mode", required=True, metavar="MODE", description="Choose a comparison mode."
-        )
+            dest="mode", required=True, metavar="MODE",
+            description="Choose a comparison mode.")
 
         # ── Shared parent for mask-comparison arguments ────────────────────
         mask_parent = argparse.ArgumentParser(add_help=False)
-        mask_parent.add_argument("--set_a", required=True, help="Path to the first set directory.")
-        mask_parent.add_argument("--set_b", required=True, help="Path to the second set directory.")
         mask_parent.add_argument(
-            "--output", default="comparison_report.json", help="Output JSON file path. Default: comparison_report.json."
-        )
+            "--set_a", required=True,
+            help="Path to the first set directory.")
         mask_parent.add_argument(
-            "--metric",
-            choices=["wasserstein", "diff", "both"],
-            default="diff",
-            help="Comparison metric. Default: diff.",
-        )
+            "--set_b", required=True,
+            help="Path to the second set directory.")
         mask_parent.add_argument(
-            "--bucket_step", type=float, default=1.0, help="Bucket width for the summary table (in voxels). Default: 1."
-        )
+            "--output", default="comparison_report.json",
+            help="Output JSON file path. Default: comparison_report.json.")
         mask_parent.add_argument(
-            "--xor_dir",
-            default=None,
+            "--metric", choices=["wasserstein", "diff", "both"], default="diff",
+            help="Comparison metric. Default: diff.")
+        mask_parent.add_argument(
+            "--bucket_step", type=float, default=1.0,
+            help="Bucket width for the summary table (in voxels). Default: 1.")
+        mask_parent.add_argument(
+            "--xor_dir", default=None,
             help="Optional output directory for per-mask XOR NIfTI images "
-            "(1 = voxel differs, 0 = same). Files are written with the "
-            "same relative path as the input masks.",
-        )
+                 "(1 = voxel differs, 0 = same). Files are written with the "
+                 "same relative path as the input masks.")
         mask_parent.add_argument(
-            "--visualisation",
-            action="store_true",
-            default=False,
+            "--visualisation", action="store_true", default=False,
             help="Open an interactive Anatomist session showing all changed "
-            "mask triplets (set_a=grey, set_b=violet, XOR=white) fused "
-            "in Axial/Sagittal/Coronal views. Requires Anatomist.",
-        )
+                 "mask triplets (set_a=grey, set_b=violet, XOR=white) fused "
+                 "in Axial/Sagittal/Coronal views. Requires Anatomist.")
 
         # ── masks subcommand ───────────────────────────────────────────────
         subparsers.add_parser(
@@ -331,10 +324,8 @@ class Compare(ScriptBuilder):
             formatter_class=argparse.ArgumentDefaultsHelpFormatter,
         )
         tiles_p.add_argument(
-            "--pattern",
-            default="*mask_skeleton.nii.gz",
-            help="Glob pattern for mask files inside each region's mask/ folder.",
-        )
+            "--pattern", default="*mask_skeleton.nii.gz",
+            help="Glob pattern for mask files inside each region's mask/ folder.")
 
         # ── databases subcommand ───────────────────────────────────────────
         db_p = subparsers.add_parser(
@@ -343,21 +334,32 @@ class Compare(ScriptBuilder):
             formatter_class=argparse.ArgumentDefaultsHelpFormatter,
         )
         db_p.add_argument(
-            "--labeled_subjects_dir", required=True, help="Root directory containing subject subdirectories."
-        )
+            "--labeled_subjects_dir", required=True,
+            help="Root directory containing subject subdirectories.")
         db_p.add_argument(
-            "--path_to_graph_a",
-            required=True,
-            help="Relative sub-path for campaign A (e.g. t1mri/t1/default_analysis/folds/3.3/base2018_manual).",
-        )
-        db_p.add_argument("--path_to_graph_b", required=True, help="Relative sub-path for campaign B.")
+            "--path_to_graph_a", required=True,
+            help="Relative sub-path for campaign A "
+                 "(e.g. t1mri/t1/default_analysis/folds/3.3/base2018_manual).")
+        db_p.add_argument(
+            "--path_to_graph_b", required=True,
+            help="Relative sub-path for campaign B.")
         db_p.add_argument("--label_a", default="A", help="Name for campaign A.")
         db_p.add_argument("--label_b", default="B", help="Name for campaign B.")
-        db_p.add_argument("--side", default="both", help="Hemisphere side: L, R, or both.")
-        db_p.add_argument("--masks_a", default=None, help="Mask directory for campaign A. Optional.")
-        db_p.add_argument("--masks_b", default=None, help="Mask directory for campaign B. Optional.")
-        db_p.add_argument("--output", default="db_comparison.csv", help="Output CSV file path.")
-        db_p.add_argument("--njobs", type=int, default=None, help="Parallel workers. Default: cpu_count - 2 (max 22).")
+        db_p.add_argument(
+            "--side", default="both",
+            help="Hemisphere side: L, R, or both.")
+        db_p.add_argument(
+            "--masks_a", default=None,
+            help="Mask directory for campaign A. Optional.")
+        db_p.add_argument(
+            "--masks_b", default=None,
+            help="Mask directory for campaign B. Optional.")
+        db_p.add_argument(
+            "--output", default="db_comparison.csv",
+            help="Output CSV file path.")
+        db_p.add_argument(
+            "--njobs", type=int, default=None,
+            help="Parallel workers. Default: cpu_count - 2 (max 22).")
 
     # ---------------------------------------------------------------------- #
     # Dispatch
@@ -378,7 +380,10 @@ class Compare(ScriptBuilder):
     # ---------------------------------------------------------------------- #
 
     def _find_masks(self, directory: Path, glob_pattern: str) -> dict:
-        return {str(p.relative_to(directory)): str(p.resolve()) for p in sorted(directory.glob(glob_pattern))}
+        return {
+            str(p.relative_to(directory)): str(p.resolve())
+            for p in sorted(directory.glob(glob_pattern))
+        }
 
     def _run_masks(self) -> int:
         return self._compare_nifti_masks("*/*.nii.gz")
@@ -420,7 +425,8 @@ class Compare(ScriptBuilder):
             arr_b = load_mask_vol(masks_b[name])
 
             if arr_a.shape != arr_b.shape:
-                print(f"WARNING: shape mismatch for {name}: {arr_a.shape} vs {arr_b.shape}, skipping.")
+                print(f"WARNING: shape mismatch for {name}: "
+                      f"{arr_a.shape} vs {arr_b.shape}, skipping.")
                 continue
 
             if use_wass:
@@ -453,11 +459,13 @@ class Compare(ScriptBuilder):
 
         if use_wass:
             report["wasserstein_by_bucket"] = sort_buckets(wass_buckets)
-            report["wasserstein_per_mask"] = dict(sorted(distances.items(), key=lambda kv: -kv[1]))
+            report["wasserstein_per_mask"] = dict(
+                sorted(distances.items(), key=lambda kv: -kv[1]))
 
         if use_diff:
             report["diff_by_bucket"] = sort_buckets(diff_buckets)
-            report["diffs_per_mask"] = dict(sorted(diffs.items(), key=lambda kv: -kv[1]["changed"]))
+            report["diffs_per_mask"] = dict(
+                sorted(diffs.items(), key=lambda kv: -kv[1]["changed"]))
 
         if self.args.xor_dir:
             report["xor_dir"] = str(self.args.xor_dir)
@@ -484,11 +492,10 @@ class Compare(ScriptBuilder):
 
         if self.args.visualisation:
             # Use diff counts if available, otherwise synthesise from wasserstein results
-            vis_diffs = (
-                diffs
-                if use_diff
-                else {n: {"changed": 1, "added": 0, "removed": 0} for n in distances if distances[n] > 0}
-            )
+            vis_diffs = diffs if use_diff else {
+                n: {"changed": 1, "added": 0, "removed": 0}
+                for n in distances if distances[n] > 0
+            }
             visualise_mask_diffs(vis_diffs, masks_a, masks_b)
 
         return 0
@@ -497,18 +504,21 @@ class Compare(ScriptBuilder):
     # Database comparison mode
     # ---------------------------------------------------------------------- #
 
-    def _load_database(self, path_to_graph, sides, subjects_dir, njobs, brainvisa_dir) -> dict:
-        from cortical_tiles.brainvisa.utils.subjects import get_all_subjects_as_dictionary
+    def _load_database(self, path_to_graph, sides, subjects_dir,
+                       njobs, brainvisa_dir) -> dict:
+        from deep_folding.brainvisa.utils.subjects import get_all_subjects_as_dictionary
         from joblib import Parallel, delayed
 
         all_data: dict = {}
         for side in sides:
-            pattern = "%(subject)s/" + path_to_graph + "/%(side)s%(subject)s*.arg"
+            pattern = '%(subject)s/' + path_to_graph + '/%(side)s%(subject)s*.arg'
             subjects = get_all_subjects_as_dictionary([subjects_dir], [pattern], side)
-            print(f"    [{side}] {len(subjects)} subjects found, loading with {njobs} worker(s)…")
+            print(f"    [{side}] {len(subjects)} subjects found, "
+                  f"loading with {njobs} worker(s)…")
 
-            results = Parallel(n_jobs=njobs, prefer="processes")(
-                delayed(_get_subject_voxel_counts)(sub, brainvisa_dir) for sub in subjects
+            results = Parallel(n_jobs=njobs, prefer='processes')(
+                delayed(_get_subject_voxel_counts)(sub, brainvisa_dir)
+                for sub in subjects
             )
             n_ok = 0
             for sub_name, counts in results:
@@ -523,9 +533,10 @@ class Compare(ScriptBuilder):
     def _run_databases(self) -> int:
         from joblib import cpu_count
 
-        brainvisa_dir = abspath(
-            join(dirname(__file__), "..", "external", "cortical_tiles", "cortical_tiles", "brainvisa")
-        )
+        brainvisa_dir = abspath(join(
+            dirname(__file__), '..', 'external', 'cortical_tiles',
+            'deep_folding', 'brainvisa'
+        ))
         if brainvisa_dir not in sys.path:
             sys.path.insert(0, brainvisa_dir)
 
@@ -535,20 +546,23 @@ class Compare(ScriptBuilder):
 
         print(f"\nLoading campaign A ({la}): {self.args.path_to_graph_a}")
         data_a = self._load_database(
-            self.args.path_to_graph_a, sides, self.args.labeled_subjects_dir, njobs, brainvisa_dir
-        )
+            self.args.path_to_graph_a, sides,
+            self.args.labeled_subjects_dir, njobs, brainvisa_dir)
 
         print(f"\nLoading campaign B ({lb}): {self.args.path_to_graph_b}")
         data_b = self._load_database(
-            self.args.path_to_graph_b, sides, self.args.labeled_subjects_dir, njobs, brainvisa_dir
-        )
+            self.args.path_to_graph_b, sides,
+            self.args.labeled_subjects_dir, njobs, brainvisa_dir)
 
         subs_a, subs_b = set(data_a), set(data_b)
         print(f"\nSubjects in {la} only:  {len(subs_a - subs_b)}")
         print(f"Subjects in {lb} only:  {len(subs_b - subs_a)}")
         print(f"Subjects in both:        {len(subs_a & subs_b)}")
 
-        all_sulci = sorted({s for d in data_a.values() for s in d} | {s for d in data_b.values() for s in d})
+        all_sulci = sorted(
+            {s for d in data_a.values() for s in d} |
+            {s for d in data_b.values() for s in d}
+        )
 
         rows = []
         for sulcus in all_sulci:
@@ -559,18 +573,14 @@ class Compare(ScriptBuilder):
             pct_b = 100.0 * n_b / len(subs_b) if subs_b else 0
             vpsa = np.mean(counts_a) if counts_a else 0.0
             vpsb = np.mean(counts_b) if counts_b else 0.0
-            rows.append(
-                {
-                    "sulcus": sulcus,
-                    f"N_{la}": n_a,
-                    f"N_{lb}": n_b,
-                    f"pct_{la}": round(pct_a, 1),
-                    f"pct_{lb}": round(pct_b, 1),
-                    f"vox_per_subject_{la}": round(vpsa, 1),
-                    f"vox_per_subject_{lb}": round(vpsb, 1),
-                    "vox_ratio_B_over_A": round(vpsb / vpsa, 3) if vpsa > 0 else None,
-                }
-            )
+            rows.append({
+                "sulcus": sulcus,
+                f"N_{la}": n_a, f"N_{lb}": n_b,
+                f"pct_{la}": round(pct_a, 1), f"pct_{lb}": round(pct_b, 1),
+                f"vox_per_subject_{la}": round(vpsa, 1),
+                f"vox_per_subject_{lb}": round(vpsb, 1),
+                "vox_ratio_B_over_A": round(vpsb / vpsa, 3) if vpsa > 0 else None,
+            })
 
         # Optional mask stats
         mask_a_stats, mask_b_stats = {}, {}
@@ -589,14 +599,12 @@ class Compare(ScriptBuilder):
                 sa, sb = mask_a_stats.get(key), mask_b_stats.get(key)
                 n_sa = len(subs_a) or 1
                 n_sb = len(subs_b) or 1
-                mask_lookup.setdefault(sulcus_name, {}).update(
-                    {
-                        f"mask_max_{la}": sa[0] if sa else None,
-                        f"mask_max_{lb}": sb[0] if sb else None,
-                        f"mask_sum_per_sub_{la}": round(sa[1] / n_sa, 1) if sa else None,
-                        f"mask_sum_per_sub_{lb}": round(sb[1] / n_sb, 1) if sb else None,
-                    }
-                )
+                mask_lookup.setdefault(sulcus_name, {}).update({
+                    f"mask_max_{la}": sa[0] if sa else None,
+                    f"mask_max_{lb}": sb[0] if sb else None,
+                    f"mask_sum_per_sub_{la}": round(sa[1] / n_sa, 1) if sa else None,
+                    f"mask_sum_per_sub_{lb}": round(sb[1] / n_sb, 1) if sb else None,
+                })
             for row in rows:
                 row.update(mask_lookup.get(row["sulcus"], {}))
 
@@ -609,20 +617,18 @@ class Compare(ScriptBuilder):
                 writer.writerows(rows)
 
         print(f"\nSulci with biggest voxel-density difference ({lb}/{la}):\n")
-        print(
-            f"  {'Sulcus':<45}  {f'N({la})':>7}  {f'N({lb})':>7}  "
-            f"{f'vox/sub({la})':>12}  {f'vox/sub({lb})':>12}  {'ratio':>6}"
-        )
+        print(f"  {'Sulcus':<45}  {f'N({la})':>7}  {f'N({lb})':>7}  "
+              f"{f'vox/sub({la})':>12}  {f'vox/sub({lb})':>12}  {'ratio':>6}")
         print("  " + "-" * 100)
         sortable = [r for r in rows if r.get("vox_ratio_B_over_A") is not None]
-        for row in sorted(sortable, key=lambda r: abs(r["vox_ratio_B_over_A"] - 1.0), reverse=True)[:30]:
-            print(
-                f"  {row['sulcus']:<45}  "
-                f"{row[f'N_{la}']:>7}  {row[f'N_{lb}']:>7}  "
-                f"{row[f'vox_per_subject_{la}']:>12.1f}  "
-                f"{row[f'vox_per_subject_{lb}']:>12.1f}  "
-                f"{row['vox_ratio_B_over_A']:>6.3f}"
-            )
+        for row in sorted(sortable,
+                          key=lambda r: abs(r["vox_ratio_B_over_A"] - 1.0),
+                          reverse=True)[:30]:
+            print(f"  {row['sulcus']:<45}  "
+                  f"{row[f'N_{la}']:>7}  {row[f'N_{lb}']:>7}  "
+                  f"{row[f'vox_per_subject_{la}']:>12.1f}  "
+                  f"{row[f'vox_per_subject_{lb}']:>12.1f}  "
+                  f"{row['vox_ratio_B_over_A']:>6.3f}")
 
         print(f"\nCSV written to: {output_path}")
         return 0
@@ -630,7 +636,7 @@ class Compare(ScriptBuilder):
 
 def main():
     script = Compare()
-    return script.build().print_args().run()
+    return script.main()
 
 
 if __name__ == "__main__":
