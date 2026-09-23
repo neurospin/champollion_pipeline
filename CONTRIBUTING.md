@@ -56,7 +56,6 @@ pixi run check-install
 
 ## Commit conventions
 
-- **No AI attribution.** Commit messages must not include any AI attribution (no `Co-Authored-By` AI lines, no "Generated with ..." lines, no Anthropic/Claude.ai mentions anywhere in the message).
 - **One logical change per commit.** Refactoring, documentation, and features are separate commits — don't bundle unrelated changes into one commit.
 - **Imperative mood.** Write commit messages as commands: "Add mask version override", not "Added mask version override".
 
