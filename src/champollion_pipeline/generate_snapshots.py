@@ -230,7 +230,7 @@ def generate_tiles_snapshot(crops_dir, output_path, size=(800, 600), level=1, ch
         level: Region threshold level (0-3, default 1)
         champollion_data_root: Override path to Champollion data
             directory (containing mask/2mm/regions/meshes/).
-            If None, uses deep_folding config default.
+            If None, uses cortical_tiles config default.
 
     Returns:
         List of generated snapshot file paths
