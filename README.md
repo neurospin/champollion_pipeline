@@ -13,50 +13,48 @@ Cortical sulci — the folds of the brain surface — vary in shape across indiv
 
 ## Quick start
 
-The pipeline runs in 6 steps. Here is the minimal happy path — replace placeholders '/data/myproject' with your actual paths:
+Here is the minimal happy path to generate embeddings from a pre-trained model — replace placeholders '/data/myproject' with your actual paths:
 
 ```bash
 # 1. Generate Morphologist sulcal graphs (requires BrainVISA — skip if you already have .arg files)
 #    # This takes as inputs the list of T1 MRI (here: sub-001.nii.gz sub-002.nii.gz)
 #    # and outputs the morphologist graphs into the folder /data/myproject/derivatives/morphologist-6.0/subjects
-morphologist-cli sub-001.nii.gz sub-002.nii.gz /data/myproject/ \
+pixi run champollion-morphologist sub-001.nii.gz sub-002.nii.gz /data/myproject/ \
     -- --of morphologist-auto-nonoverlap-1.0 --if morphologist-auto-nonoverlap-1.0
 
 # 2. Extract sulcal regions
 #    # Input:  morphologist subjects directory (read-only, never written to)
-#    # Output: /data/myproject/derivatives/cortical_tiles-2026/crops/2mm/
+#    # Output: /data/myproject/derivatives/cortical_tiles-2026/crops/canonical_25/2mm/
 pixi run champollion-cortical-tiles \
     /data/myproject/derivatives/morphologist-6.0/subjects \  # morphologist output dir
-    /data/myproject/derivatives/                              # derivatives root (crops land here)
+    /data/myproject/derivatives/ \                            # derivatives root (crops land here)
+    --path_to_graph "t1mri/default_acquisition/*/folds/3.1" \      # required: glob pattern to .arg graph files
+    --path_sk_with_hull "t1mri/default_acquisition/default_analysis/segmentation"  # required: skeleton directory
 
-# 3. Generate Champollion configuration
+# 3. Generate Champollion configuration (optional — only needed for training, skip for inference)
 #    # Links your crop paths to the Champollion model config
 pixi run champollion-config \
-    /data/myproject/derivatives/cortical_tiles-2026/crops/2mm \  # path to 2mm crops (step 2 output)
+    /data/myproject/derivatives/cortical_tiles-2026/crops/canonical_25/2mm \  # path to 2mm crops (step 2 output)
     --dataset myproject \                                          # dataset name used throughout the pipeline
     --output /data/myproject/derivatives/champollion_V1/configs   # where to write YAML config files
 
 # 4. Generate embeddings (downloads pre-trained models from Hugging Face)
 pixi run champollion-embeddings \
     neurospin/Champollion_V1 \      # model source: HF repo ID, local path, or archive
-    local \                          # localization preset (matches local.yaml written in step 3)
-    myproject \                      # dataset name (must match --dataset from step 3)
-    my_run \                         # label for this run (used to name output CSV files)
-    --embeddings_only \              # skip classifier training, compute embeddings only
-    --config_path /data/myproject/derivatives/champollion_V1/configs/dataset/myproject  # step 3 output
+    /data/myproject/ \               # dataset root (parent of derivatives/)
+    --masks canonical_25            # crops mask version (must match step 2)
 
 # 5. Combine embeddings
-#    # Collects 56 per-region CSVs into a single output directory
+#    # Collects the per-region CSVs from {dataset}embeddings/ into a single output directory
 pixi run champollion-combine \
-    --path_models /data/myproject/derivatives/champollion_V1/models_cache/Champollion_V1/ \  # models cache dir (step 4)
-    --embeddings_subpath my_run_random_embeddings/full_embeddings.csv \  # {run_label}_{split}_embeddings/full_embeddings.csv
+    /data/myprojectembeddings \  # {dataset}embeddings/ dir written by step 4
     --output_path /data/myproject/derivatives/champollion_V1/embeddings/ # destination for combined CSVs
 
 # 6. Generate visualization snapshots
 pixi run champollion-snapshots \
     --embeddings_dir /data/myproject/derivatives/champollion_V1/embeddings/ \  # step 5 output
-    --reference_data_dir reference_data/ \                                      # pre-trained UMAP models (in repo)
-    --output_dir /data/myproject/derivatives/champollion_V1/snapshots/          # where to write images
+    --reference_data_dir /data/myproject/reference_data/ \                     # pre-trained UMAP models (not shipped, see below)
+    --output_dir /data/myproject/derivatives/champollion_V1/snapshots/         # where to write images
 ```
 
 The sections below explain each step in detail.
@@ -114,10 +112,12 @@ see [migration_manual.md](migration_manual.md) for symptoms and fixes.
 
 > **Skip this step** if you already have Morphologist sulcal graph files (`.arg` format) for your subjects.
 
-Morphologist is a tool from the [BrainVISA](https://brainvisa.info) neuroimaging suite that segments T1 MRI images and produces a graph representation of each subject's sulcal folds. It runs in its own BrainVISA environment, not through Pixi.
+Morphologist is a tool from the [BrainVISA](https://brainvisa.info) neuroimaging suite that segments T1 MRI images and produces a graph representation of each subject's sulcal folds. It runs inside Pixi's `brainvisa` feature (part of the default environment).
+
+Use the `champollion-morphologist` wrapper rather than calling `morphologist-cli` directly — it always sets `--if`/`--of` explicitly to avoid BIDS filenames being auto-detected as a different input format:
 
 ```bash
-morphologist-cli sub-001.nii.gz sub-002.nii.gz /data/myproject/ \
+pixi run champollion-morphologist sub-001.nii.gz sub-002.nii.gz /data/myproject/ \
     -- --of morphologist-auto-nonoverlap-1.0 --if morphologist-auto-nonoverlap-1.0
 ```
 
@@ -136,7 +136,7 @@ soma_workflow_gui   # Set max CPUs under "Computing resources"
 Then add `--swf`:
 
 ```bash
-morphologist-cli sub-001.nii.gz ... /data/myproject/ \
+pixi run champollion-morphologist sub-001.nii.gz ... /data/myproject/ \
     -- --of morphologist-auto-nonoverlap-1.0 --if morphologist-auto-nonoverlap-1.0 --swf
 ```
 
@@ -149,28 +149,21 @@ Extract standardized 3D patches around 28 sulcal regions per hemisphere using *c
 ```bash
 pixi run champollion-cortical-tiles \
     /data/myproject/derivatives/morphologist-6.0/subjects \  # morphologist subjects dir (read-only)
-    /data/myproject/derivatives/                              # derivatives root; crops land at {root}/cortical_tiles-2026/crops/2mm/
+    /data/myproject/derivatives/ \                            # derivatives root; crops land at {root}/cortical_tiles-2026/crops/{masks_version}/2mm/
+    --path_to_graph "t1mri/default_acquisition/*/folds/3.1" \
+    --path_sk_with_hull "t1mri/default_acquisition/default_analysis/segmentation"
 ```
 
 - **First argument** — directory containing one folder per subject (Morphologist's `subjects/` output). This path may be read-only (e.g. a shared NFS database); the script never writes to it.
-- **Second argument** — derivatives parent directory. Crops are written to `{output}/cortical_tiles-2026/crops/2mm/`.
+- **Second argument** — derivatives parent directory. Crops are written to `{output}/cortical_tiles-2026/crops/{masks_version}/2mm/` (`{masks_version}` defaults to `canonical_25`, see [Mask versions](#mask-versions)).
+- **`--path_to_graph` / `--path_sk_with_hull`** — required; there is no default, since the sub-path under a subject's Morphologist output depends on your acquisition/analysis naming.
 
-If your Morphologist graphs are stored under a non-default sub-path, override it:
-
-```bash
-pixi run champollion-cortical-tiles \
-    /data/myproject/derivatives/morphologist-6.0/subjects \
-    /data/myproject/derivatives/ \
-    --path_to_graph "t1mri/default_acquisition/*/folds/3.1" \      # glob pattern to .arg graph files
-    --path_sk_with_hull "t1mri/default_acquisition/default_analysis/segmentation"  # skeleton directory
-```
-
-The `--path_to_graph` option supports wildcards (`*`) for variable path segments.
+`--path_to_graph` supports wildcards (`*`) for variable path segments (e.g. an acquisition or analysis label that differs per subject).
 
 **Verify** that 28 sulcal region folders were created:
 
 ```bash
-ls /data/myproject/derivatives/cortical_tiles-2026/crops/2mm
+ls /data/myproject/derivatives/cortical_tiles-2026/crops/canonical_25/2mm
 ```
 
 ### QC File
@@ -201,9 +194,11 @@ Pass `--masks canonical_25` (or another version) to override the default.
 
 | Option | Description |
 |--------|-------------|
+| `--path_to_graph` | **Required.** Glob pattern to `.arg` graph files, relative to the subjects dir. |
+| `--path_sk_with_hull` | **Required.** Skeleton-with-hull sub-path, relative to the subjects dir. |
 | `--sk_qc_path` | Path to QC TSV file |
 | `--njobs` | Number of CPU cores (default: auto) |
-| `--region-file` | Custom sulcal region configuration file |
+| `--region-file` | Accepted but currently has no effect (dead code upstream) — do not rely on it. |
 | `--input-types` | Input types to generate (e.g. `skeleton foldlabel extremities`). Default: all. |
 | `--skip-distbottom` | Skip distbottom generation (saves time; not needed for inference) |
 | `--masks` | Mask version tag |
@@ -215,16 +210,18 @@ Pass `--masks canonical_25` (or another version) to override the default.
 
 ## 4. Generate Champollion Configuration
 
+> **Only needed for training** a new encoder. `champollion-embeddings` (next step) reads crop paths directly from `models_path`/`datasets_root` and never reads these YAML files — skip this step if you're only generating embeddings from a pre-trained model.
+
 Create the YAML configuration files that link your dataset's crop paths to the Champollion model:
 
 ```bash
 pixi run champollion-config \
-    /data/myproject/derivatives/cortical_tiles-2026/crops/2mm \  # path to 2mm crops (step 2 output)
+    /data/myproject/derivatives/cortical_tiles-2026/crops/canonical_25/2mm \  # path to 2mm crops (step 2 output)
     --dataset myproject \                                          # dataset name used in YAML and paths
     --output /data/myproject/derivatives/champollion_V1/configs   # config root; YAMLs land at {output}/dataset/{dataset}/
 ```
 
-This writes region YAML files to `configs/dataset/myproject/` and sets `dataset_folder` in `dataset_localization/local.yaml` so the model knows where your data lives. Pass the same `--output` path as `--config_path` in the next step (plus `/dataset/myproject`).
+This writes region YAML files to `configs/dataset/myproject/` and sets `dataset_folder` in `dataset_localization/local.yaml` so the model knows where your data lives. This config directory is consumed by `champollion-train` (see [Console scripts](#console-scripts)), not by `champollion-embeddings`.
 
 ### Non-standard derivatives layout
 
@@ -266,23 +263,20 @@ pixi run champollion-config \
 
 ## 5. Generate Embeddings
 
-Run the pre-trained Champollion encoders across all 56 model folds (28 regions × 2 hemispheres). Models are downloaded automatically from Hugging Face on first run and cached locally.
+Run the pre-trained Champollion encoders across every region fold found under `models_path` (28 regions × 2 hemispheres for the default model set). Models are downloaded automatically from Hugging Face on first run and cached locally.
 
 ```bash
 pixi run champollion-embeddings \
-    neurospin/Champollion_V1 \  # model source: HF repo ID, local path, or archive
-    local \                      # localization preset (matches local.yaml written in step 3)
-    myproject \                  # dataset name (must match --dataset from step 3)
-    my_run \                     # run label used to name output CSV files
-    --embeddings_only \          # skip classifier training, compute embeddings only
-    --config_path /data/myproject/derivatives/champollion_V1/configs/dataset/myproject  # step 3 output
+    neurospin/Champollion_V1 \      # model source: HF repo ID, local path, or archive
+    /data/myproject/ \               # dataset root (parent of derivatives/); subjects list defaults to {datasets_root}/participants.tsv
+    --masks canonical_25            # crops mask version (must match step 2)
 ```
 
-Each of the 56 folds writes a `full_embeddings.csv` (one row per subject, columns = embedding dimensions) under:
+Each region fold writes a `full_embeddings.csv` (one row per subject, columns = embedding dimensions) under:
 ```
-models_cache/Champollion_V1/{region}/
-    my_run_random_embeddings/full_embeddings.csv
+{parent_of_datasets_root}/{dataset_name}embeddings/{region}/full_embeddings.csv
 ```
+Override this location with `--output`.
 
 To re-run on an existing dataset, add `--overwrite`.
 
@@ -304,18 +298,18 @@ When using Hugging Face, models are cached in `data/{dataset}/derivatives/champo
 
 | Option | Description |
 |--------|-------------|
-| `--config_path` | Path to dataset config directory (generated in step 4) |
-| `--embeddings_only` | Only compute embeddings (skip classifier training) |
+| `--masks-version` | Mask version subfolder to download from Hugging Face (e.g. `canonical_25`). Ignored when `models_path` is a local directory. |
+| `--masks` | Cortical tiles mask version used as the crops subdirectory (default: `canonical_25`) |
+| `--regions` | Restrict to specific region names (space-separated). Default: all regions found in `models_path`. |
+| `--output` | Output base directory override. Default: `{parent_of_datasets_root}/{dataset_name}embeddings/`. |
+| `--subjects` | Path to subjects CSV with a `Subject` column. Default: `{datasets_root}/participants.tsv`. |
 | `--cpu` | Force CPU usage (disable CUDA) |
-| `--overwrite` | Overwrite existing embeddings |
-| `--no-cache` | Force re-extraction of archive |
+| `--overwrite` | Recompute embeddings that already exist on disk |
+| `--no-cache` | Force re-extraction of the archive (ignore cache) |
 | `--run-cka` | Run CKA coherence test after embeddings |
-| `--split` | Splitting strategy: `random` or `custom` (default: `random`) |
-| `--nb_jobs` | Number of CPU workers for the DataLoader |
-| `--cortical_version` | Override the cortical tiles folder name (e.g. `cortical_tiles-2025`) |
-| `--legacy` | Rewrite config YAML paths to use `deep_folding-2025` (for older datasets) |
-| `--labels` | Labels for classifiers (default: `['Sex']`) |
-| `--classifier_name` | Classifier type (default: `svm`) |
+| `--cortical_version` | Override the cortical tiles derivatives folder name (default: `cortical_tiles-2026`) |
+| `--legacy` | Shorthand for `--cortical_version deep_folding-2025` (for older datasets) |
+| `--profiling` | Enable Python profiling (cProfile) |
 
 </details>
 
@@ -323,18 +317,17 @@ When using Hugging Face, models are cached in `data/{dataset}/derivatives/champo
 
 ## 6. Combine Embeddings
 
-Collect the 56 per-region embedding CSVs into a single output directory:
+Collect the per-region embedding CSVs into a single output directory:
 
 ```bash
 pixi run champollion-combine \
-    --path_models /data/myproject/derivatives/champollion_V1/models_cache/Champollion_V1/ \  # models cache dir (step 4 output)
-    --embeddings_subpath my_run_random_embeddings/full_embeddings.csv \  # {run_label}_{split}_embeddings/full_embeddings.csv
-    --output_path /data/myproject/derivatives/champollion_V1/embeddings/  # destination for the 56 combined CSVs
+    /data/myprojectembeddings \  # {dataset}embeddings/ dir written by step 5
+    --output_path /data/myproject/derivatives/champollion_V1/embeddings/  # destination for the combined CSVs
 ```
 
-`--embeddings_subpath` is `{short_name}_{split}_embeddings/full_embeddings.csv`, using the `my_run` label and `random` split from step 5.
+This copies each region's `full_embeddings.csv` to `{output_path}/{region}_embeddings.csv`.
 
-**Verify** 56 CSV files were created:
+**Verify** the CSV files were created (one per region):
 
 ```bash
 ls /data/myproject/derivatives/champollion_V1/embeddings/*.csv | wc -l
@@ -348,8 +341,8 @@ Generate visualizations: sulcal graph meshes, cortical tile masks, and UMAP scat
 
 ```bash
 pixi run champollion-snapshots \
-    --embeddings_dir /data/myproject/derivatives/champollion_V1/embeddings/ \  # step 5 output (56 CSVs)
-    --reference_data_dir reference_data/ \                                      # pre-trained UMAP models (in repo)
+    --embeddings_dir /data/myproject/derivatives/champollion_V1/embeddings/ \  # step 6 output
+    --reference_data_dir /data/myproject/reference_data/ \                     # pre-trained UMAP models (not shipped — see below)
     --output_dir /data/myproject/derivatives/champollion_V1/snapshots/          # where to write images
 ```
 
@@ -358,9 +351,9 @@ Add `--morphologist_dir` and `--cortical_tiles_dir` to also generate mesh and ma
 ```bash
 pixi run champollion-snapshots \
     --morphologist_dir /data/myproject/derivatives/morphologist-6.0/ \          # for sulcal graph mesh snapshots
-    --cortical_tiles_dir /data/myproject/derivatives/cortical_tiles-2026/crops/2mm/ \  # for tile mask snapshots
+    --cortical_tiles_dir /data/myproject/derivatives/cortical_tiles-2026/crops/canonical_25/2mm/ \  # for tile mask snapshots
     --embeddings_dir /data/myproject/derivatives/champollion_V1/embeddings/ \
-    --reference_data_dir reference_data/ \
+    --reference_data_dir /data/myproject/reference_data/ \
     --output_dir /data/myproject/derivatives/champollion_V1/snapshots/
 ```
 
@@ -368,14 +361,14 @@ Use `--sulcal-only`, `--tiles-only`, or `--umap-only` to generate only one snaps
 
 ### UMAP Visualization
 
-UMAP scatter plots project each subject's sulcal embeddings onto pre-trained 2D maps (one per region and hemisphere). Each plot shows a reference cloud of embeddings from a large pre-trained cohort, with the new subject highlighted. Pre-trained UMAP artifacts are stored in `reference_data/` and contain no subject identifiers.
+UMAP scatter plots project each subject's sulcal embeddings onto pre-trained 2D maps (one per region and hemisphere). Each plot shows a reference cloud of embeddings from a large pre-trained cohort, with the new subject highlighted. `--reference_data_dir` points at a directory of pre-trained UMAP artifacts (`umap_{region}_{hemi}.pkl` / `_coords.npy`) that contain no subject identifiers; this directory is **not shipped in the repository** (it's gitignored) — obtain it separately and pass its path explicitly.
 
 By default all regions with an available embedding CSV and a pre-trained model are plotted. Restrict to specific regions with `--umap_region`:
 
 ```bash
 pixi run champollion-snapshots \
     --embeddings_dir /path/to/embeddings/ \
-    --reference_data_dir reference_data/ \
+    --reference_data_dir /path/to/reference_data/ \
     --output_dir /path/to/snapshots/ \
     --umap-only --umap_region FColl-SRh  # restrict to a single region
 ```
@@ -399,9 +392,9 @@ pixi run champollion-snapshots \
 | `--morphologist_dir` | Path to Morphologist output (for sulcal graph snapshots) |
 | `--subject` | Subject folder name (default: first subject found) |
 | `--acquisition` | Acquisition label when a subject has multiple segmentations |
-| `--cortical_tiles_dir` | Path to crops/2mm/ (for tiles mask snapshots) |
+| `--cortical_tiles_dir` | Path to `crops/{masks_version}/2mm/` (for tiles mask snapshots) |
 | `--embeddings_dir` | Path to combined embeddings (for UMAP scatter plots) |
-| `--reference_data_dir` | Path to pre-trained UMAP models and reference coordinates |
+| `--reference_data_dir` | Path to pre-trained UMAP models and reference coordinates (not shipped in the repo, gitignored — obtain separately) |
 | `--umap_region` | Comma-separated region name(s) to plot |
 | `--output_dir` | Directory to save snapshot images |
 | `--sulcal-only` / `--tiles-only` / `--umap-only` | Generate only one snapshot type |
@@ -419,7 +412,7 @@ champollion_pipeline/
 ├── external/
 │   ├── champollion_V1/         # Self-supervised encoder submodule (contrastive learning)
 │   └── cortical_tiles/         # Sulcal region crop extraction submodule
-├── reference_data/             # Pre-trained UMAP models and anonymous reference coordinates
+├── reference_data/             # NOT shipped (gitignored) — pre-trained UMAP models go here, obtained separately
 ├── src/
 │   └── champollion_pipeline/   # Installable Python package (entry points: champollion-*)
 │       ├── generate_morphologist_graphs.py
