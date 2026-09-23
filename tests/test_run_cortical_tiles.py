@@ -1079,12 +1079,17 @@ class TestGenerateMaskNpys:
 
 
 class TestWholeBrainGeneration:
-    """Tests for REQ-WHOLEBRAIN-01: unconditional whole-brain volume generation.
+    """Tests for REQ-WHOLEBRAIN-01/-02: unconditional whole-brain volume
+    generation, reading skeletons from their real location.
 
     ``run()`` must, on every invocation (no flag gating), additionally call
     ``add_left_and_right_volumes`` then ``remove_ventricle`` from the
     ``cortical_tiles`` submodule after the existing per-region crop step,
-    without disturbing that existing crop step.
+    without disturbing that existing crop step. Both calls must read the
+    L/R resampled skeletons from
+    ``{output}/cortical_tiles-{YEAR}/skeletons/2mm/`` (where
+    ``generate_sulcal_regions.py`` actually writes them), not from the
+    Morphologist input directory.
     """
 
     def _run(self, temp_dir, extra_args=None):
@@ -1126,24 +1131,45 @@ class TestWholeBrainGeneration:
         mock_add.assert_called_once()
         mock_remove.assert_called_once()
 
-    def test_add_left_and_right_volumes_called_with_morphologist_input_dir(self, temp_dir):
-        """add_left_and_right_volumes receives src_dir=<morphologist input dir>, parallel=True."""
-        _, input_dir, _, _, _, mock_add, _ = self._run(temp_dir)
+    def test_add_left_and_right_volumes_called_with_skeleton_dir(self, temp_dir):
+        """add_left_and_right_volumes receives src_dir=<output>/cortical_tiles-YEAR/skeletons/2mm, parallel=True.
+
+        NOT the Morphologist input dir -- that directory has no L/ or R/
+        subdirs and is read-only (REQ-WHOLEBRAIN-02).
+        """
+        _, _, output_dir, _, _, mock_add, _ = self._run(temp_dir)
 
         _, kwargs = mock_add.call_args
-        assert kwargs["src_dir"] == str(input_dir.resolve())
+        expected_skeleton_dir = str(output_dir.resolve() / "cortical_tiles-2026" / "skeletons" / "2mm")
+        assert kwargs["src_dir"] == expected_skeleton_dir
         assert kwargs["parallel"] is True
 
     def test_remove_ventricle_called_with_side_f_and_path_to_graph(self, temp_dir):
-        """remove_ventricle receives side='F', src_dir=morpho_dir=<input dir>, path_to_graph, parallel=True."""
-        script, input_dir, _, _, _, _, mock_remove = self._run(temp_dir)
+        """remove_ventricle receives side='F', src_dir=<skeleton dir>, morpho_dir=<input dir>, path_to_graph.
+
+        src_dir and morpho_dir are intentionally different: src_dir is where
+        the L/R resampled skeletons (and the fused F/ output written by
+        add_left_and_right_volumes) actually live, while morpho_dir is the
+        Morphologist directory holding the labelled graphs used to strip the
+        ventricle (REQ-WHOLEBRAIN-02).
+        """
+        script, input_dir, output_dir, _, _, _, mock_remove = self._run(temp_dir)
 
         _, kwargs = mock_remove.call_args
+        expected_skeleton_dir = str(output_dir.resolve() / "cortical_tiles-2026" / "skeletons" / "2mm")
         assert kwargs["side"] == "F"
-        assert kwargs["src_dir"] == str(input_dir.resolve())
+        assert kwargs["src_dir"] == expected_skeleton_dir
         assert kwargs["morpho_dir"] == str(input_dir.resolve())
         assert kwargs["path_to_graph"] == script.args.path_to_graph
         assert kwargs["parallel"] is True
+
+    def test_add_and_remove_ventricle_use_the_same_skeleton_src_dir(self, temp_dir):
+        """The fused F/ tree add_left_and_right_volumes writes must be exactly
+        what remove_ventricle(side='F') reads back -- both calls must agree
+        on src_dir (REQ-WHOLEBRAIN-02)."""
+        _, _, _, _, _, mock_add, mock_remove = self._run(temp_dir)
+
+        assert mock_add.call_args.kwargs["src_dir"] == mock_remove.call_args.kwargs["src_dir"]
 
     def test_add_left_and_right_volumes_called_before_remove_ventricle(self, temp_dir):
         """Fusion must happen before ventricle removal reads the fused F/ directory."""
