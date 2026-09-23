@@ -5,6 +5,7 @@ Unit tests for generate_embeddings.py
 """
 
 import os
+import re
 from unittest.mock import MagicMock, patch
 
 import pytest
@@ -610,23 +611,58 @@ class TestHuggingFaceStrategy:
 
 @pytest.mark.unit
 class TestPixiTaskPaths:
-    """Verify pixi task script paths resolve to existing files after relocation."""
+    """REQ-PIXITASKS-01 — every pixi task invoking a `python3 src/...` script
+    must point at a file that actually exists.
 
-    PIXI_TASKS = [
-        ("champollion-config", "src/champollion_pipeline/generate_champollion_config.py"),
-        ("embeddings", "src/champollion_pipeline/generate_embeddings.py"),
-        ("combine", "src/champollion_pipeline/put_together_embeddings.py"),
-        ("train", "src/champollion_pipeline/train_champollion.py"),
-        ("generate-umap-reference", "src/generate_umap_reference.py"),
-    ]
+    Rather than hardcoding a handful of known task names (which silently stops
+    covering a task the moment it's renamed or a new one is added), this walks
+    the whole parsed ``pixi.toml`` — top-level ``[tasks]`` and every
+    ``[feature.<name>.tasks]`` table — and extracts every ``python3 src/...``
+    invocation automatically.
+    """
+
+    @staticmethod
+    def _task_command(task):
+        """Return a task's shell command, whether it is a string or a table."""
+        if isinstance(task, str):
+            return task
+        if isinstance(task, dict):
+            return task.get("cmd", "")
+        raise TypeError(f"unexpected pixi task type: {type(task)!r}")
+
+    @classmethod
+    def _iter_task_commands(cls, pixi_config):
+        """Yield (location, task_name, command) for every task in pixi.toml."""
+        for task_name, task in pixi_config.get("tasks", {}).items():
+            yield "[tasks]", task_name, cls._task_command(task)
+        for feature_name, feature in pixi_config.get("feature", {}).items():
+            for task_name, task in feature.get("tasks", {}).items():
+                yield f"[feature.{feature_name}.tasks]", task_name, cls._task_command(task)
+
+    @classmethod
+    def _iter_src_script_paths(cls, pixi_config):
+        """Yield (location, task_name, rel_path) for every `python3 src/...py` invocation."""
+        pattern = re.compile(r"python3\s+(src/\S+\.py)")
+        for location, task_name, command in cls._iter_task_commands(pixi_config):
+            for rel_path in pattern.findall(command):
+                yield location, task_name, rel_path
 
     def test_all_pixi_task_scripts_exist(self):
         import pathlib
+        import tomllib
 
         repo_root = pathlib.Path(__file__).parent.parent
-        for task_name, rel_path in self.PIXI_TASKS:
+        with (repo_root / "pixi.toml").open("rb") as handle:
+            pixi_config = tomllib.load(handle)
+
+        checked = 0
+        for location, task_name, rel_path in self._iter_src_script_paths(pixi_config):
+            checked += 1
             script = repo_root / rel_path
-            assert script.exists(), f"pixi task '{task_name}' points to '{rel_path}' which does not exist"
+            assert script.exists(), (
+                f"pixi task '{task_name}' under {location} points to '{rel_path}' which does not exist"
+            )
+        assert checked >= 5, "expected to find at least the known python3 src/... pixi tasks; parsing regressed"
 
 
 @pytest.mark.unit
