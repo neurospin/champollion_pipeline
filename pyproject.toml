@@ -18,6 +18,12 @@ dependencies = [
     "umap-learn>=0.5",
 ]
 
+[project.optional-dependencies]
+embeddings = [
+    "torch",
+    "pandas>=1.5",
+]
+
 [project.urls]
 Repository = "https://github.com/neurospin/champollion_pipeline"
 
