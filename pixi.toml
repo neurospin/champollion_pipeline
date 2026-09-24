@@ -64,6 +64,10 @@ purge-subject = "python3 src/champollion_pipeline/purge_subject.py"
 python = ">=3.8"
 pip = ">=25.3,<26"
 setuptools = ">=65.0,<81"
+# Build backend for `install-utils` (champollion_utils is hatchling-built).
+# Needed here because no-default-feature envs don't inherit [dependencies].
+hatchling = ">=1.18"
+editables = ">=0.3"
 # pytorch-cuda = { channel = "pytorch", version = "12.4.*" }
 # torchvision = { channel = "pytorch", version = ">=0.15" }
 datasets = ">=2.16.0,<4.5"
