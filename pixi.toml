@@ -13,7 +13,7 @@ platforms = [
 
 # ── Shared base (dev tools, always present in default env) ───────────────────
 [dependencies]
-python = ">=3.8"
+python = ">=3.10"
 pip = ">=25.3,<26"
 setuptools = ">=65.0,<81"
 pytest = ">=7.0"
@@ -61,7 +61,7 @@ purge-subject = "python3 src/champollion_pipeline/purge_subject.py"
 
 # ── Embeddings feature (inference + training) ─────────────────────────────────
 [feature.embeddings.dependencies]
-python = ">=3.8"
+python = ">=3.10"
 pip = ">=25.3,<26"
 setuptools = ">=65.0,<81"
 # Build backend for `install-utils` (champollion_utils is hatchling-built).
@@ -135,7 +135,7 @@ channels = ["conda-forge"]
 platforms = ["linux-64"]
 
 [feature.docs.dependencies]
-python = ">=3.8"
+python = ">=3.10"
 
 [feature.docs.pypi-dependencies]
 sphinx = ">=7.0,<9"

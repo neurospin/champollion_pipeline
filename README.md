@@ -1,6 +1,6 @@
 # Champollion Pipeline
 
-[![Python](https://img.shields.io/badge/python-%E2%89%A53.8-blue?logo=python&logoColor=white)](https://www.python.org/)
+[![Python](https://img.shields.io/badge/python-%E2%89%A53.10-blue?logo=python&logoColor=white)](https://www.python.org/)
 [![PyTorch](https://img.shields.io/badge/PyTorch-framework-EE4C2C?logo=pytorch&logoColor=white)](https://pytorch.org/)
 [![Pixi](https://img.shields.io/badge/pixi-package%20manager-yellow?logo=prefix&logoColor=white)](https://pixi.sh/)
 [![License: CeCILL-B](https://img.shields.io/badge/license-CeCILL--B-blue)](https://cecill.info/licences/Licence_CeCILL-B_V1-en.html)
@@ -497,7 +497,7 @@ This resets each submodule to the remote tip, discarding any local commits insid
 
 All dependencies are managed through `pixi.toml`. Core requirements:
 
-- Python ≥ 3.8
+- Python ≥ 3.10
 - PyTorch
 - BrainVISA / Morphologist (for step 2 only — see [brainvisa.info](https://brainvisa.info))
 - huggingface-hub
