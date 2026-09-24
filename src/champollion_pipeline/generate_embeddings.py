@@ -13,6 +13,7 @@ import shutil
 import sys
 import tarfile
 import tempfile
+import warnings
 from abc import ABC, abstractmethod
 from io import StringIO
 from os.path import abspath, dirname, exists, join
@@ -413,8 +414,8 @@ class GenerateEmbeddings(ScriptBuilder):
             )
             .add_optional_argument(
                 "--subjects",
-                "Path to subjects CSV file with a 'Subject' column. "
-                "Defaults to {datasets_root}/participants.tsv.",
+                "Deprecated and ignored. Each region's subjects file is read from "
+                "{crops}/<crop>/mask/{L|R}skeleton_subject.csv next to its skeleton.",
                 default=None,
             )
         )
@@ -604,10 +605,16 @@ class GenerateEmbeddings(ScriptBuilder):
         masks = getattr(self.args, "masks", "canonical_25")
         crops_2mm_dir = join(datasets_root, "derivatives", target_folder, "crops", masks, "2mm")
 
-        subjects_path = self.args.subjects or self._find_subjects_file(datasets_root)
+        if self.args.subjects:
+            warnings.warn(
+                "--subjects is deprecated and ignored: each region uses the "
+                "{side}skeleton_subject.csv next to its {side}skeleton.npy.",
+                FutureWarning,
+                stacklevel=2,
+            )
 
         try:
-            result = self._run_per_region(evaluate_script, crops_2mm_dir, subjects_path, output_base)
+            result = self._run_per_region(evaluate_script, crops_2mm_dir, output_base)
         finally:
             if tmpdir:
                 shutil.rmtree(tmpdir)
@@ -617,17 +624,6 @@ class GenerateEmbeddings(ScriptBuilder):
             self._run_cka_test(output_base)
 
         return result
-
-    def _find_subjects_file(self, datasets_root: str) -> str:
-        """Return path to participants file in datasets_root."""
-        for fname in ("participants.tsv", "participants.csv"):
-            path = join(datasets_root, fname)
-            if exists(path):
-                return path
-        raise FileNotFoundError(
-            f"No participants file found in {datasets_root}. "
-            "Pass --subjects to specify the path explicitly."
-        )
 
     def _find_crop_dir(self, crops_2mm_dir: str, region_model_name: str) -> str:
         """Map a model region name back to its crop directory name.
@@ -708,7 +704,7 @@ class GenerateEmbeddings(ScriptBuilder):
         return sorted(found)
 
     def _run_per_region(
-        self, evaluate_script: str, crops_2mm_dir: str, subjects_path: str, output_base: str
+        self, evaluate_script: str, crops_2mm_dir: str, output_base: str
     ) -> int:
         """Invoke champollion/evaluate.py for each region in models_path."""
         models_path = self.args.models_path
@@ -724,7 +720,9 @@ class GenerateEmbeddings(ScriptBuilder):
             region = os.path.basename(model_path)
             side = "L" if region.endswith("_left") else "R"
             crop_name = self._find_crop_dir(crops_2mm_dir, region)
-            skels_path = join(crops_2mm_dir, crop_name, "mask", f"{side}skeleton.npy")
+            mask_dir = join(crops_2mm_dir, crop_name, "mask")
+            skels_path = join(mask_dir, f"{side}skeleton.npy")
+            subjects_path = join(mask_dir, f"{side}skeleton_subject.csv")
             saving_path = join(output_base, region, "full_embeddings.csv")
 
             if exists(saving_path) and not getattr(self.args, "overwrite", False):
