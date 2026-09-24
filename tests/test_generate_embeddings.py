@@ -87,7 +87,6 @@ class TestPerRegionInvocation:
             script._run_per_region(
                 evaluate_script="/eval.py",
                 crops_2mm_dir=str(tmp_path / "crops"),
-                subjects_path=str(tmp_path / "participants.tsv"),
                 output_base=str(tmp_path / "out"),
             )
 
@@ -110,7 +109,6 @@ class TestPerRegionInvocation:
             script._run_per_region(
                 evaluate_script="/eval.py",
                 crops_2mm_dir=str(tmp_path / "crops"),
-                subjects_path=str(tmp_path / "participants.tsv"),
                 output_base=str(tmp_path / "out"),
             )
 
@@ -133,7 +131,6 @@ class TestPerRegionInvocation:
             script._run_per_region(
                 evaluate_script="/eval.py",
                 crops_2mm_dir=str(tmp_path / "crops"),
-                subjects_path=str(tmp_path / "participants.tsv"),
                 output_base=str(tmp_path / "out"),
             )
 
@@ -171,7 +168,6 @@ class TestModelDiscovery:
             script._run_per_region(
                 evaluate_script="/eval.py",
                 crops_2mm_dir=str(tmp_path / "crops"),
-                subjects_path=str(tmp_path / "participants.tsv"),
                 output_base=str(tmp_path / "out"),
             )
 
@@ -241,8 +237,7 @@ class TestRunMethod:
 
         with patch.object(script, "fetch_models", return_value=str(tmp_path)):
             with patch.object(script, "_run_per_region", return_value=0) as mock_per:
-                with patch.object(script, "_find_subjects_file", return_value=str(tmp_path / "participants.tsv")):
-                    script.run()
+                script.run()
         mock_per.assert_called_once()
 
     def test_run_returns_result(self, tmp_path):
@@ -254,8 +249,7 @@ class TestRunMethod:
 
         with patch.object(script, "fetch_models", return_value=str(tmp_path)):
             with patch.object(script, "_run_per_region", return_value=99):
-                with patch.object(script, "_find_subjects_file", return_value=str(tmp_path / "p.tsv")):
-                    result = script.run()
+                result = script.run()
         assert result == 99
 
 
@@ -272,8 +266,7 @@ class TestGenerateEmbeddingsIntegration:
 
         with patch.object(script, "fetch_models", return_value=str(tmp_path)):
             with patch.object(script, "_run_per_region", return_value=0) as mock_run:
-                with patch.object(script, "_find_subjects_file", return_value=str(tmp_path / "participants.tsv")):
-                    result = script.run()
+                result = script.run()
 
         assert result == 0
         mock_run.assert_called_once()
@@ -433,7 +426,7 @@ class TestRegionsFilter:
         # Capture models_path seen by _run_per_region
         snapshot = {}
 
-        def fake_per_region(evaluate_script, crops_2mm_dir, subjects_path, output_base):
+        def fake_per_region(evaluate_script, crops_2mm_dir, output_base):
             snapshot["path"] = script.args.models_path
             snapshot["entries"] = sorted(os.listdir(script.args.models_path))
             snapshot["is_symlink"] = os.path.islink(os.path.join(script.args.models_path, "SC-sylv_left"))
@@ -441,8 +434,7 @@ class TestRegionsFilter:
 
         with patch.object(script, "fetch_models", return_value=str(tmp_path)):
             with patch.object(script, "_run_per_region", side_effect=fake_per_region):
-                with patch.object(script, "_find_subjects_file", return_value=str(tmp_path / "p.tsv")):
-                    script.run()
+                script.run()
 
         assert snapshot["path"] != str(tmp_path), "should use a tmpdir, not the original path"
         assert snapshot["entries"] == ["SC-sylv_left"], "only requested region should appear"
@@ -467,9 +459,8 @@ class TestRegionsFilter:
         with patch.object(script, "fetch_models", return_value=str(tmp_path)):
             with patch.object(script, "_make_regions_tmpdir", side_effect=tracking_make):
                 with patch.object(script, "_run_per_region", side_effect=RuntimeError("boom")):
-                    with patch.object(script, "_find_subjects_file", return_value=str(tmp_path / "p.tsv")):
-                        with pytest.raises(RuntimeError):
-                            script.run()
+                    with pytest.raises(RuntimeError):
+                        script.run()
 
         assert len(created_tmpdirs) == 1
         assert not os.path.exists(created_tmpdirs[0]), "tmpdir must be cleaned up even on error"
@@ -480,10 +471,9 @@ class TestRegionsFilter:
 
         with patch.object(script, "fetch_models", return_value=temp_dir):
             with patch.object(script, "_run_per_region", return_value=0):
-                with patch.object(script, "_find_subjects_file", return_value=temp_dir + "/p.tsv"):
-                    with patch.object(script, "_make_regions_tmpdir") as mock_make:
-                        script.run()
-                        mock_make.assert_not_called()
+                with patch.object(script, "_make_regions_tmpdir") as mock_make:
+                    script.run()
+                    mock_make.assert_not_called()
 
 
 class TestProfiling:
@@ -649,6 +639,7 @@ class TestPixiTaskPaths:
 
     def test_all_pixi_task_scripts_exist(self):
         import pathlib
+
         import tomllib
 
         repo_root = pathlib.Path(__file__).parent.parent
@@ -738,3 +729,71 @@ class TestEnsureCkptShape:
 
         ckpt = self._load_converted_ckpt(model_dir)
         assert set(ckpt["state_dict"]) == set(self.ENCODER_KEYS)
+
+
+@pytest.mark.unit
+class TestPerRegionSubjectsFile:
+    """REQ-EMBEDLABEL-01 — each region's `-i` is that region's own crop subjects CSV.
+
+    cortical_tiles' `save_data.py::save_to_numpy` writes `{side}skeleton.npy` and a
+    co-located `{side}skeleton_subject.csv` (comma-separated, column `Subject`) from
+    the same subject list, so only that CSV is guaranteed to match the skeleton
+    array's row order and membership. A dataset-root BIDS `participants.tsv`
+    (tab-separated, column `participant_id`) makes `evaluate.py` raise
+    `KeyError: 'Subject'` and, even if readable, carries no per-region row order.
+
+    Driven through `run()` (only `fetch_models` and `execute_command` stubbed) so
+    the test does not depend on `_run_per_region`'s signature.
+    """
+
+    CROP_NAME = "S.C.-sylv."
+    MODEL_NAMES = ("SC-sylv_left", "SC-sylv_right")
+
+    def _run_and_collect_cmds(self, tmp_path):
+        """Build a realistic dataset/crops/models tree, run, return {region: cmd}."""
+        datasets_root = tmp_path / "DATASET"
+        datasets_root.mkdir()
+        # Decoy: a real-shaped BIDS participants file at the dataset root.
+        (datasets_root / "participants.tsv").write_text("participant_id\tqc\nsub-01\t1\nsub-02\t1\n")
+
+        models_dir = tmp_path / "models"
+        for name in self.MODEL_NAMES:
+            (models_dir / name / "logs").mkdir(parents=True)
+
+        script = GenerateEmbeddings()
+        script.parse_args([str(models_dir), str(datasets_root), "--output", str(tmp_path / "out")])
+
+        crops_2mm_dir = (
+            datasets_root / "derivatives" / script._get_derivatives_folder() / "crops" / script.args.masks / "2mm"
+        )
+        mask_dir = crops_2mm_dir / self.CROP_NAME / "mask"
+        mask_dir.mkdir(parents=True)
+        for side in ("L", "R"):
+            (mask_dir / f"{side}skeleton.npy").touch()
+            (mask_dir / f"{side}skeleton_subject.csv").write_text("Subject\nsub-02\nsub-01\n")
+
+        executed = []
+
+        def fake_execute(cmd, **kwargs):
+            executed.append(cmd)
+            return 0
+
+        with patch.object(script, "fetch_models", return_value=str(models_dir)):
+            with patch.object(script, "execute_command", side_effect=fake_execute):
+                script.run()
+
+        cmds = {os.path.basename(cmd[cmd.index("-m") + 1]): cmd for cmd in executed}
+        assert set(cmds) == set(self.MODEL_NAMES), f"expected one evaluate.py call per region, got {sorted(cmds)}"
+        return cmds, mask_dir
+
+    def test_left_region_receives_its_own_lskeleton_subject_csv(self, tmp_path):
+        """A `_left` region's `-i` is `{crops_2mm_dir}/{crop_name}/mask/Lskeleton_subject.csv`."""
+        cmds, mask_dir = self._run_and_collect_cmds(tmp_path)
+        cmd = cmds["SC-sylv_left"]
+        assert cmd[cmd.index("-i") + 1] == str(mask_dir / "Lskeleton_subject.csv")
+
+    def test_right_region_receives_its_own_rskeleton_subject_csv(self, tmp_path):
+        """A `_right` region's `-i` is `{crops_2mm_dir}/{crop_name}/mask/Rskeleton_subject.csv`."""
+        cmds, mask_dir = self._run_and_collect_cmds(tmp_path)
+        cmd = cmds["SC-sylv_right"]
+        assert cmd[cmd.index("-i") + 1] == str(mask_dir / "Rskeleton_subject.csv")

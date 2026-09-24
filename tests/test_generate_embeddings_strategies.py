@@ -512,25 +512,6 @@ class TestRunNormalCudaHandling:
         assert "CUDA_VISIBLE_DEVICES" not in os.environ
 
 
-class TestFindSubjectsFile:
-    """Test _find_subjects_file."""
-
-    def test_finds_participants_tsv(self, tmp_path):
-        (tmp_path / "participants.tsv").touch()
-        script = make_script(["/m", str(tmp_path)])
-        assert script._find_subjects_file(str(tmp_path)) == str(tmp_path / "participants.tsv")
-
-    def test_falls_back_to_participants_csv(self, tmp_path):
-        (tmp_path / "participants.csv").touch()
-        script = make_script(["/m", str(tmp_path)])
-        assert script._find_subjects_file(str(tmp_path)) == str(tmp_path / "participants.csv")
-
-    def test_raises_when_no_participants_file(self, tmp_path):
-        script = make_script(["/m", str(tmp_path)])
-        with pytest.raises(FileNotFoundError, match="No participants file found"):
-            script._find_subjects_file(str(tmp_path))
-
-
 class TestFindCropDir:
     """Test _find_crop_dir."""
 
@@ -609,14 +590,14 @@ class TestRunPerRegion:
         script = make_script([str(tmp_path / "nope"), "/d"])
         script.args.models_path = str(tmp_path / "nope")
         with pytest.raises(ValueError, match="Models path not found"):
-            script._run_per_region("evaluate.py", str(tmp_path), "subjects.tsv", str(tmp_path))
+            script._run_per_region("evaluate.py", str(tmp_path), str(tmp_path))
 
     def test_empty_models_path_raises_value_error(self, tmp_path):
         models = tmp_path / "models"
         models.mkdir()
         script = make_script([str(models), "/d"])
         with pytest.raises(ValueError, match="No region model directories"):
-            script._run_per_region("evaluate.py", str(tmp_path), "subjects.tsv", str(tmp_path))
+            script._run_per_region("evaluate.py", str(tmp_path), str(tmp_path))
 
     def test_existing_embeddings_are_skipped(self, tmp_path, capsys):
         models = tmp_path / "models"
@@ -627,7 +608,7 @@ class TestRunPerRegion:
 
         script = make_script([str(models), "/d"])
         script.execute_command = lambda cmd, shell=False: pytest.fail("must not run evaluate.py")
-        script._run_per_region("evaluate.py", str(tmp_path), "subjects.tsv", str(out))
+        script._run_per_region("evaluate.py", str(tmp_path), str(out))
         assert "[SKIP] SOr_left" in capsys.readouterr().out
 
     def test_overwrite_recomputes_existing_embeddings(self, tmp_path):
@@ -640,7 +621,7 @@ class TestRunPerRegion:
         script = make_script([str(models), "/d", "--overwrite"])
         calls = []
         script.execute_command = lambda cmd, shell=False: calls.append(cmd) or 0
-        script._run_per_region("evaluate.py", str(tmp_path), "subjects.tsv", str(out))
+        script._run_per_region("evaluate.py", str(tmp_path), str(out))
         assert len(calls) == 1
 
     def test_command_uses_left_skeleton_for_left_region(self, tmp_path):
@@ -652,11 +633,11 @@ class TestRunPerRegion:
         script = make_script([str(models), "/d"])
         calls = []
         script.execute_command = lambda cmd, shell=False: calls.append(cmd) or 0
-        script._run_per_region("evaluate.py", str(crops), "subjects.tsv", str(tmp_path / "out"))
+        script._run_per_region("evaluate.py", str(crops), str(tmp_path / "out"))
         cmd = calls[0]
         assert cmd[1] == "evaluate.py"
         assert cmd[cmd.index("-sk") + 1].endswith("S.Or./mask/Lskeleton.npy")
-        assert cmd[cmd.index("-i") + 1] == "subjects.tsv"
+        assert cmd[cmd.index("-i") + 1].endswith("S.Or./mask/Lskeleton_subject.csv")
 
     def test_command_uses_right_skeleton_for_right_region(self, tmp_path):
         models = tmp_path / "models"
@@ -665,8 +646,10 @@ class TestRunPerRegion:
         script = make_script([str(models), "/d"])
         calls = []
         script.execute_command = lambda cmd, shell=False: calls.append(cmd) or 0
-        script._run_per_region("evaluate.py", str(tmp_path), "subjects.tsv", str(tmp_path / "out"))
-        assert calls[0][calls[0].index("-sk") + 1].endswith("Rskeleton.npy")
+        script._run_per_region("evaluate.py", str(tmp_path), str(tmp_path / "out"))
+        cmd = calls[0]
+        assert cmd[cmd.index("-sk") + 1].endswith("Rskeleton.npy")
+        assert cmd[cmd.index("-i") + 1].endswith("Rskeleton_subject.csv")
 
     def test_returns_last_command_result(self, tmp_path):
         models = tmp_path / "models"
@@ -674,7 +657,7 @@ class TestRunPerRegion:
         script = make_script([str(models), "/d"])
         script.execute_command = lambda cmd, shell=False: 3
         result = script._run_per_region(
-            "evaluate.py", str(tmp_path), "subjects.tsv", str(tmp_path / "out")
+            "evaluate.py", str(tmp_path), str(tmp_path / "out")
         )
         assert result == 3
 
@@ -713,7 +696,6 @@ class TestRunPipelineCkaHook:
     def _prepare(self, script, tmp_path):
         script.fetch_models = lambda path: str(tmp_path / "models")
         script._run_per_region = lambda *args, **kwargs: 0
-        script._find_subjects_file = lambda root: "subjects.tsv"
 
     def test_cka_not_run_by_default(self, tmp_path):
         script = make_script(["/m", str(tmp_path)])
