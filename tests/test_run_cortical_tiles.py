@@ -1171,6 +1171,21 @@ class TestWholeBrainGeneration:
 
         assert mock_add.call_args.kwargs["src_dir"] == mock_remove.call_args.kwargs["src_dir"]
 
+    def test_remove_ventricle_called_with_transform_dir(self, temp_dir):
+        """remove_ventricle receives transform_dir=<output>/cortical_tiles-YEAR/transforms (REQ-WHOLEBRAIN-03).
+
+        That is where generate_sulcal_regions.py (via
+        generate_ICBM2009c_transforms) writes the per-subject L/R
+        ``{side}transform_to_ICBM2009c_{subject}.trm`` files. Without it,
+        remove_ventricle(side='F') applies native-grid ventricle indices to
+        the resampled 2mm skeleton instead of the REQ-FULLBRAIN-05
+        resampled-grid mapping.
+        """
+        _, _, output_dir, _, _, _, mock_remove = self._run(temp_dir)
+
+        expected_transform_dir = str(output_dir.resolve() / "cortical_tiles-2026" / "transforms")
+        assert mock_remove.call_args.kwargs.get("transform_dir") == expected_transform_dir
+
     def test_add_left_and_right_volumes_called_before_remove_ventricle(self, temp_dir):
         """Fusion must happen before ventricle removal reads the fused F/ directory."""
         call_order = []
