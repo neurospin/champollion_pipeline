@@ -302,6 +302,7 @@ class RunCorticalTiles(ScriptBuilder):
             src_filename="resampled_skeleton",
             parallel=True,
             output_dir=join(output_abs, DERIVATIVES_FOLDER, "whole_brain"),
+            transform_dir=join(output_abs, DERIVATIVES_FOLDER, "transforms"),
         )
 
         return result
