@@ -270,11 +270,15 @@ class RunCorticalTiles(ScriptBuilder):
         result = self.execute_command(cmd, shell=False)
         chdir(current_dir)
 
+        if result != 0:
+            return result
+
         self._generate_mask_npys(output_abs)
 
         # Whole-brain volume: fuse L+R skeletons, then strip the ventricle
-        # from the fused volume. Runs unconditionally, alongside the
-        # per-region crops above -- fuse first, since remove_ventricle(F)
+        # from the fused volume. Runs only after a successful crop (see the
+        # guard above), alongside the per-region crops above -- fuse first,
+        # since remove_ventricle(F)
         # reads from the exact <skeleton_src_dir>/F/ tree
         # add_left_and_right_volumes just wrote.
         #
