@@ -1282,6 +1282,90 @@ class TestWholeBrainGeneration:
         mock_remove.assert_called_once()
 
 
+class TestCropFailureStopsDownstreamSteps:
+    """Tests for REQ-WHOLEBRAIN-04: a failed crop subprocess stops run().
+
+    ``ScriptBuilder.execute_command`` swallows subprocess exceptions and
+    returns 1 (or the shell return code) instead of raising. When the
+    generate_sulcal_regions.py crop call reports failure, run() must return
+    that value without going on to ``_generate_mask_npys`` or the whole-brain
+    fusion (``add_left_and_right_volumes`` / ``remove_ventricle``) -- otherwise
+    fusion runs on incomplete L/R data (e.g. a left-only whole-brain volume
+    when the right hemisphere's skeletons were never generated).
+    """
+
+    def _run(self, temp_dir, crop_return_code):
+        input_dir = Path(temp_dir) / "input"
+        output_dir = Path(temp_dir) / "output"
+        input_dir.mkdir()
+        output_dir.mkdir()
+
+        script = RunCorticalTiles()
+        script.parse_args(
+            [
+                str(input_dir),
+                str(output_dir),
+                "--path_to_graph",
+                "graphs/path",
+                "--path_sk_with_hull",
+                "skeleton/path",
+            ]
+        )
+
+        with (
+            patch.object(script, "validate_paths", return_value=True),
+            patch.object(script, "execute_command", return_value=crop_return_code) as mock_exec,
+            patch.object(script, "_generate_mask_npys") as mock_gen_npys,
+            patch("champollion_pipeline.run_cortical_tiles.chdir"),
+            patch("champollion_pipeline.run_cortical_tiles.getcwd", return_value="/original"),
+            patch(
+                "champollion_pipeline.run_cortical_tiles.add_left_and_right_volumes.add_left_and_right_volumes"
+            ) as mock_add,
+            patch("champollion_pipeline.run_cortical_tiles.remove_ventricle.remove_ventricle") as mock_remove,
+        ):
+            result = script.run()
+
+        return result, mock_exec, mock_gen_npys, mock_add, mock_remove
+
+    @pytest.mark.parametrize("crop_return_code", [1, 2])
+    def test_crop_failure_skips_generate_mask_npys(self, temp_dir, crop_return_code):
+        """Non-zero crop return code: _generate_mask_npys is not called."""
+        _, _, mock_gen_npys, _, _ = self._run(temp_dir, crop_return_code)
+
+        mock_gen_npys.assert_not_called()
+
+    @pytest.mark.parametrize("crop_return_code", [1, 2])
+    def test_crop_failure_skips_add_left_and_right_volumes(self, temp_dir, crop_return_code):
+        """Non-zero crop return code: L+R whole-brain fusion is not called."""
+        _, _, _, mock_add, _ = self._run(temp_dir, crop_return_code)
+
+        mock_add.assert_not_called()
+
+    @pytest.mark.parametrize("crop_return_code", [1, 2])
+    def test_crop_failure_skips_remove_ventricle(self, temp_dir, crop_return_code):
+        """Non-zero crop return code: whole-brain ventricle removal is not called."""
+        _, _, _, _, mock_remove = self._run(temp_dir, crop_return_code)
+
+        mock_remove.assert_not_called()
+
+    @pytest.mark.parametrize("crop_return_code", [1, 2])
+    def test_crop_failure_returns_crop_return_code(self, temp_dir, crop_return_code):
+        """Non-zero crop return code is returned by run() unchanged (becomes the process exit code via main())."""
+        result, mock_exec, _, _, _ = self._run(temp_dir, crop_return_code)
+
+        mock_exec.assert_called_once()
+        assert result == crop_return_code
+
+    def test_crop_success_still_runs_all_downstream_steps(self, temp_dir):
+        """Regression guard: zero crop return code still runs mask npys, fusion and ventricle removal, returns 0."""
+        result, _, mock_gen_npys, mock_add, mock_remove = self._run(temp_dir, 0)
+
+        mock_gen_npys.assert_called_once()
+        mock_add.assert_called_once()
+        mock_remove.assert_called_once()
+        assert result == 0
+
+
 @pytest.mark.smoke
 class TestRunCorticalTilesSmoke:
     """Smoke tests for basic functionality."""
