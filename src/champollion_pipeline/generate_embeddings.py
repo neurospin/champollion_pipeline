@@ -436,6 +436,13 @@ class GenerateEmbeddings(ScriptBuilder):
             return "deep_folding-2025"
         return self.args.cortical_version
 
+    def _get_crops_2mm_dir(self, datasets_root: str) -> str:
+        """Return the 2mm crops directory, resolving --legacy and --masks."""
+        derivatives = join(datasets_root, "derivatives", self._get_derivatives_folder())
+        if getattr(self.args, "legacy", False):
+            return join(derivatives, "crops", "2mm")
+        return join(derivatives, "crops", self.args.masks, "2mm")
+
     def _patch_config_paths(self, config_path: str, target_folder: str) -> None:
         """Rewrite the derivatives folder in every YAML under config_path in-place."""
         import re
@@ -601,9 +608,7 @@ class GenerateEmbeddings(ScriptBuilder):
             os.path.dirname(datasets_root), os.path.basename(datasets_root) + "embeddings"
         )
 
-        target_folder = self._get_derivatives_folder()
-        masks = getattr(self.args, "masks", "canonical_25")
-        crops_2mm_dir = join(datasets_root, "derivatives", target_folder, "crops", masks, "2mm")
+        crops_2mm_dir = self._get_crops_2mm_dir(datasets_root)
 
         if self.args.subjects:
             warnings.warn(
