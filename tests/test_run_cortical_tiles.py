@@ -1186,6 +1186,30 @@ class TestWholeBrainGeneration:
         expected_transform_dir = str(output_dir.resolve() / "cortical_tiles-2026" / "transforms")
         assert mock_remove.call_args.kwargs.get("transform_dir") == expected_transform_dir
 
+    def test_remove_ventricle_called_with_default_labelling_session(self, temp_dir):
+        """Without --labelling_session, remove_ventricle receives labelling_session='deepcnn_session_auto'
+        (REQ-LABELSESSION-01).
+
+        Same value as cortical_tiles.brainvisa.remove_ventricle._LABELLING_SESSION_DEFAULT,
+        so existing runs keep their current behaviour -- but it must be passed
+        explicitly, not left to the submodule's own default.
+        """
+        _, _, _, _, _, _, mock_remove = self._run(temp_dir)
+
+        assert mock_remove.call_args.kwargs.get("labelling_session") == "deepcnn_session_auto"
+
+    def test_remove_ventricle_called_with_cli_labelling_session(self, temp_dir):
+        """--labelling_session <S> is forwarded as remove_ventricle(labelling_session=<S>) (REQ-LABELSESSION-01).
+
+        Real datasets (e.g. DEMO01) hold their labelled graphs under session
+        '0_auto'; without this override remove_ventricle looks for
+        'deepcnn_session_auto' graphs, hits FileNotFoundError per subject, and
+        its broad exception handling silently produces no whole-brain output.
+        """
+        _, _, _, _, _, _, mock_remove = self._run(temp_dir, extra_args=["--labelling_session", "0_auto"])
+
+        assert mock_remove.call_args.kwargs.get("labelling_session") == "0_auto"
+
     def test_add_left_and_right_volumes_called_before_remove_ventricle(self, temp_dir):
         """Fusion must happen before ventricle removal reads the fused F/ directory."""
         call_order = []
