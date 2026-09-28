@@ -11,6 +11,7 @@ from unittest.mock import MagicMock, patch
 import pytest
 
 from champollion_pipeline.generate_embeddings import GenerateEmbeddings, HuggingFaceStrategy
+from champollion_pipeline.utils.lib import CORTICAL_TILES_VERSION
 
 
 class TestGenerateEmbeddingsInit:
@@ -251,6 +252,40 @@ class TestRunMethod:
             with patch.object(script, "_run_per_region", return_value=99):
                 result = script.run()
         assert result == 99
+
+
+class TestLegacyCropsPath:
+    """REQ-LEGACYPATH-01: --legacy reads crops from the flat deep_folding-2025/crops/2mm layout."""
+
+    def _captured_crops_dir(self, tmp_path, extra_args):
+        """Run run() with _run_per_region stubbed; return the crops_2mm_dir it received."""
+        models_dir = tmp_path / "models"
+        models_dir.mkdir()
+        datasets_root = tmp_path / "dataset"
+        datasets_root.mkdir()
+
+        script = GenerateEmbeddings()
+        script.parse_args([str(models_dir), str(datasets_root), *extra_args])
+
+        with patch.object(script, "fetch_models", return_value=str(models_dir)):
+            with patch.object(script, "_run_per_region", return_value=0) as mock_per:
+                script.run()
+        mock_per.assert_called_once()
+        return mock_per.call_args.args[1], str(datasets_root)
+
+    def test_legacy_crops_dir_has_no_mask_version_segment(self, tmp_path):
+        crops_dir, root = self._captured_crops_dir(tmp_path, ["--legacy"])
+        assert crops_dir == os.path.join(root, "derivatives", "deep_folding-2025", "crops", "2mm")
+
+    def test_legacy_crops_dir_ignores_explicit_masks_option(self, tmp_path):
+        crops_dir, root = self._captured_crops_dir(tmp_path, ["--legacy", "--masks", "canonical_25"])
+        assert crops_dir == os.path.join(root, "derivatives", "deep_folding-2025", "crops", "2mm")
+
+    def test_non_legacy_crops_dir_keeps_mask_version_segment(self, tmp_path):
+        crops_dir, root = self._captured_crops_dir(tmp_path, [])
+        assert crops_dir == os.path.join(
+            root, "derivatives", f"cortical_tiles-{CORTICAL_TILES_VERSION}", "crops", "canonical_25", "2mm"
+        )
 
 
 @pytest.mark.integration
