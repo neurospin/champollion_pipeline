@@ -166,6 +166,12 @@ pixi run champollion-cortical-tiles \
 ls /data/myproject/derivatives/cortical_tiles-2026/crops/canonical_25/2mm
 ```
 
+### Whole-brain volume
+
+After the per-region crops, the same run fuses the left and right hemisphere skeletons into a single whole-brain volume and strips the ventricle from it. The result is written to `{output}/cortical_tiles-2026/whole_brain/F/` (one volume per subject). The ventricle is located from each subject's labelled Morphologist graph for the session given by `--labelling_session` (default `deepcnn_session_auto`).
+
+If crop generation fails (the cortical_tiles subprocess exits with a non-zero code), the command returns that code immediately: mask `.npy` generation and whole-brain fusion are skipped for that run, so no whole-brain volume is built from incomplete hemisphere data.
+
 ### QC File
 
 To skip subjects with failing quality control, pass a tab-separated file with `participant_id` and `qc` columns (1 = keep, 0 = skip):
@@ -203,6 +209,8 @@ Pass `--masks canonical_25` (or another version) to override the default.
 | `--skip-distbottom` | Skip distbottom generation (saves time; not needed for inference) |
 | `--masks` | Mask version tag |
 | `--regions` | Restrict to specific sulcal regions (space-separated) |
+| `--labelling_session` | Morphologist labelling session whose labelled graphs locate the ventricle for whole-brain removal (e.g. `0_auto`). Default: `deepcnn_session_auto`. |
+| `--overwrite` | Regenerate crops even if crops for the requested mask version already exist; without it the run stops instead. Also removes legacy unversioned `crops/2mm/` crops when they conflict with versioned ones. |
 
 </details>
 

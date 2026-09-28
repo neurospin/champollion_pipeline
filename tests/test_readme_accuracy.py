@@ -1,7 +1,7 @@
 #!/usr/bin/env python3
 # -*- coding: utf-8 -*-
-"""README accuracy guards for REQ-DOCS-05, REQ-DOCS-06, REQ-DOCS-09, and
-REQ-DOCS-10.
+"""README accuracy guards for REQ-DOCS-05, REQ-DOCS-06, REQ-DOCS-09,
+REQ-DOCS-10, and REQ-DOCS-11.
 
 Joël asked (FEEDBACK-JOEL-G1) for ``README.md`` to reflect the pipeline's
 current architecture and naming. Two independent, mechanically checkable
@@ -29,6 +29,14 @@ stages 2-6 (cortical_tiles, config, embeddings, combine, snapshots):
   current CLI/behavior of ``run_cortical_tiles.py``,
   ``generate_champollion_config.py``, ``generate_embeddings.py``,
   ``put_together_embeddings.py``, and ``generate_snapshots.py``.
+
+Following TASK-068 (``--labelling_session``) and REQ-WHOLEBRAIN-04, section 3
+had fallen behind ``run_cortical_tiles.py`` again:
+
+* **REQ-DOCS-11** — section "3. Generate Sulcal Region Crops" must name the
+  whole-brain output directory ``{output}/cortical_tiles-2026/whole_brain/F/``,
+  and its "All options" table must carry a ``--labelling_session`` row stating
+  default ``deepcnn_session_auto`` and an ``--overwrite`` row.
 
 Both artifacts are read as plain text: no import of the package, no Sphinx
 build, no network, and no checked-out ``external/`` submodule is required —
@@ -371,4 +379,65 @@ class TestMorphologistStepMatchesReadme:
             "BrainVISA/Morphologist is installed via pixi.toml's own [feature.brainvisa] table, which "
             "is part of the default environment (`default = { features = [\"brainvisa\", ...] }`); "
             "README's '...not through Pixi' claim in the Morphologist step is stale"
+        )
+
+
+def _cortical_tiles_options_rows() -> dict[str, str]:
+    """Map each ``--flag`` to its row in section 3's ``All options`` table.
+
+    Only rows whose first cell is a backticked ``--flag`` are collected; the
+    table lives inside the ``<details><summary>All options</summary>`` block.
+    """
+    section = _section_block(r"3\. Generate Sulcal Region Crops")
+    m = re.search(r"<summary>\s*All options\s*</summary>(.*?)</details>", section, re.DOTALL)
+    assert m, "section 3 has no '<summary>All options</summary>' ... '</details>' block"
+    rows: dict[str, str] = {}
+    for line in m.group(1).splitlines():
+        cell = re.match(r"^\|\s*`(--[A-Za-z][A-Za-z0-9_-]*)`\s*\|", line)
+        if cell:
+            rows[cell.group(1)] = line
+    assert rows, "sanity check: expected at least one `--flag` row in section 3's 'All options' table"
+    return rows
+
+
+@pytest.mark.smoke
+class TestCorticalTilesWholeBrainAndOptionsMatchReadme:
+    """REQ-DOCS-11: section 3 documents the whole-brain output and lists --labelling_session/--overwrite."""
+
+    def test_whole_brain_output_directory_is_documented(self):
+        """run() fuses L+R and strips the ventricle into {output}/cortical_tiles-2026/whole_brain/F/."""
+        from champollion_pipeline.utils.lib import DERIVATIVES_FOLDER
+
+        expected = f"{{output}}/{DERIVATIVES_FOLDER}/whole_brain/F/"
+        section = _section_block(r"3\. Generate Sulcal Region Crops")
+        assert expected in section, (
+            f"run_cortical_tiles.py writes the fused whole-brain volume to '{expected}' (remove_ventricle "
+            "output_dir=<derivatives>/whole_brain, side 'F'), alongside the per-region crops; section 3 "
+            "of README.md does not document this output directory"
+        )
+
+    def test_labelling_session_row_states_default(self):
+        """--labelling_session (REQ-LABELSESSION-01) must appear in 'All options' with its real default."""
+        from champollion_pipeline.run_cortical_tiles import LABELLING_SESSION_DEFAULT
+
+        assert "--labelling_session" in _real_option_strings(RunCorticalTiles), (
+            "sanity check: expected run_cortical_tiles.py to declare --labelling_session"
+        )
+        rows = _cortical_tiles_options_rows()
+        assert "--labelling_session" in rows, (
+            "run_cortical_tiles.py declares --labelling_session but section 3's 'All options' table has no row for it"
+        )
+        assert LABELLING_SESSION_DEFAULT in rows["--labelling_session"], (
+            f"the --labelling_session row does not state its default '{LABELLING_SESSION_DEFAULT}': "
+            f"{rows['--labelling_session']!r}"
+        )
+
+    def test_overwrite_row_is_listed(self):
+        """--overwrite exists in run_cortical_tiles.py's parser and must appear in 'All options'."""
+        assert "--overwrite" in _real_option_strings(RunCorticalTiles), (
+            "sanity check: expected run_cortical_tiles.py to declare --overwrite"
+        )
+        rows = _cortical_tiles_options_rows()
+        assert "--overwrite" in rows, (
+            "run_cortical_tiles.py declares --overwrite but section 3's 'All options' table has no row for it"
         )
