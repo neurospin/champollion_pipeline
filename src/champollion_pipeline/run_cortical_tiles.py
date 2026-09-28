@@ -33,6 +33,8 @@ from soma import aims
 from champollion_pipeline.utils.cortical_tiles_config import CorticalTilesConfigFactory, versioned_crops_exist
 from champollion_pipeline.utils.lib import DERIVATIVES_FOLDER
 
+LABELLING_SESSION_DEFAULT = "deepcnn_session_auto"
+
 
 class RunCorticalTiles(ScriptBuilder):
     """Script for running cortical_tiles to generate sulcal regions."""
@@ -74,6 +76,12 @@ class RunCorticalTiles(ScriptBuilder):
                 "--masks",
                 "Mask version tag (e.g. 'canonical_25'). Overrides masks_version in the pipeline JSON config.",
                 default=None,
+            )
+            .add_optional_argument(
+                "--labelling_session",
+                "Morphologist labelling session whose labelled graphs locate the ventricle "
+                f"for whole-brain removal (e.g. '0_auto'). Default: {LABELLING_SESSION_DEFAULT}.",
+                default=LABELLING_SESSION_DEFAULT,
             )
             .add_flag("--overwrite", "Re-generate crops even if they already exist for this mask version.")
         )
@@ -303,6 +311,7 @@ class RunCorticalTiles(ScriptBuilder):
             parallel=True,
             output_dir=join(output_abs, DERIVATIVES_FOLDER, "whole_brain"),
             transform_dir=join(output_abs, DERIVATIVES_FOLDER, "transforms"),
+            labelling_session=self.args.labelling_session,
         )
 
         return result
