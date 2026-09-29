@@ -155,6 +155,25 @@ class TestRunCorticalTilesArguments:
         )
         assert args.skip_distbottom is True
 
+    def test_bids_default_false(self):
+        """--bids is an opt-in flag on RunCorticalTiles's parser, defaulting to False (REQ-BIDS-01/-02)."""
+        script = RunCorticalTiles()
+        args = script.parse_args(["/input", "/output", "--path_to_graph", "graphs", "--path_sk_with_hull", "skeleton"])
+        assert args.bids is False
+
+    def test_bids_can_be_set(self):
+        """--bids is recognized by RunCorticalTiles's parser and sets args.bids to True (REQ-BIDS-01/-02).
+
+        main.py's RunCorticalTilesStage already appends --bids when
+        config.dataset.bids is set; without this flag the receiving parser
+        rejects it.
+        """
+        script = RunCorticalTiles()
+        args = script.parse_args(
+            ["/input", "/output", "--path_to_graph", "graphs", "--path_sk_with_hull", "skeleton", "--bids"]
+        )
+        assert args.bids is True
+
 
 class TestNjobsHandling:
     """Test njobs calculation and validation."""
@@ -560,6 +579,55 @@ class TestSkipDistbottom:
                         updated = json.loads(config_path.read_text())
                         assert updated["graphs_dir"] == str(input_dir.resolve())
                         assert updated["output_dir"] == str(output_dir.resolve() / DF)
+
+
+class TestBidsConfig:
+    """REQ-BIDS-01: --bids sets the top-level "bids" key in pipeline_loop_2mm.json.
+
+    generate_one_sulcal_region.py reads params['bids'] to drive BIDS-aware
+    skeleton/crop generation; run() must write it when --bids is given and
+    leave the existing value untouched otherwise (same shape as
+    skip_distbottom).
+    """
+
+    def _run(self, temp_dir, config_data, extra_args=None):
+        input_dir = Path(temp_dir) / "input"
+        output_dir = Path(temp_dir) / "output"
+        input_dir.mkdir()
+        output_dir.mkdir()
+        config_path = output_dir / "pipeline_loop_2mm.json"
+        config_path.write_text(json.dumps(config_data))
+
+        script = RunCorticalTiles()
+        script.parse_args(
+            [
+                str(input_dir),
+                str(output_dir),
+                "--path_to_graph",
+                "graphs",
+                "--path_sk_with_hull",
+                "skeleton",
+            ]
+            + (extra_args or [])
+        )
+
+        with patch.object(script, "validate_paths", return_value=True):
+            with patch.object(script, "execute_command", return_value=0):
+                with patch("champollion_pipeline.run_cortical_tiles.chdir"):
+                    with patch("champollion_pipeline.run_cortical_tiles.getcwd", return_value="/original"):
+                        script.run()
+
+        return json.loads(config_path.read_text())
+
+    def test_bids_flag_sets_bids_true_in_config(self, temp_dir):
+        """With --bids, the written pipeline_loop_2mm.json has "bids": true, overriding the template's false."""
+        updated_config = self._run(temp_dir, {"graphs_dir": "", "bids": False}, extra_args=["--bids"])
+        assert updated_config.get("bids") is True
+
+    def test_no_bids_flag_leaves_bids_unchanged_in_config(self, temp_dir):
+        """Without --bids, the config's existing "bids" value is left as-is (regression guard)."""
+        updated_config = self._run(temp_dir, {"graphs_dir": "", "bids": False})
+        assert updated_config.get("bids") is False
 
 
 class TestGraphPathConfigOverride:
@@ -1209,6 +1277,18 @@ class TestWholeBrainGeneration:
         _, _, _, _, _, _, mock_remove = self._run(temp_dir, extra_args=["--labelling_session", "0_auto"])
 
         assert mock_remove.call_args.kwargs.get("labelling_session") == "0_auto"
+
+    def test_remove_ventricle_called_with_bids_false_by_default(self, temp_dir):
+        """Without --bids, remove_ventricle receives bids=False explicitly (REQ-BIDS-02)."""
+        _, _, _, _, _, _, mock_remove = self._run(temp_dir)
+
+        assert mock_remove.call_args.kwargs.get("bids") is False
+
+    def test_remove_ventricle_called_with_bids_true_when_flag_set(self, temp_dir):
+        """--bids is forwarded as remove_ventricle(bids=True) (REQ-BIDS-02)."""
+        _, _, _, _, _, _, mock_remove = self._run(temp_dir, extra_args=["--bids"])
+
+        assert mock_remove.call_args.kwargs.get("bids") is True
 
     def test_add_left_and_right_volumes_called_before_remove_ventricle(self, temp_dir):
         """Fusion must happen before ventricle removal reads the fused F/ directory."""
