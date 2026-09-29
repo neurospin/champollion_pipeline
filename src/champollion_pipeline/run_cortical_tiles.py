@@ -84,6 +84,11 @@ class RunCorticalTiles(ScriptBuilder):
                 default=LABELLING_SESSION_DEFAULT,
             )
             .add_flag("--overwrite", "Re-generate crops even if they already exist for this mask version.")
+            .add_flag(
+                "--bids",
+                "Input is BIDS-named (sub-/ses-/run- prefixed files). Threaded into the "
+                "pipeline JSON config and the whole-brain ventricle-removal call.",
+            )
         )
 
     def _preflight_check(self, output_abs: str, config_path: str) -> bool:
@@ -190,6 +195,8 @@ class RunCorticalTiles(ScriptBuilder):
             config["path_to_skeleton_with_hull"] = self.args.path_sk_with_hull
             config["masks_version"] = self.args.masks if self.args.masks else "canonical_25"
             config["skel_qc_path"] = self.args.sk_qc_path if self.args.sk_qc_path else ""
+            if self.args.bids:
+                config["bids"] = True
             with open(config_file_path, "w") as f:
                 json.dump(config, f, indent=3)
 
@@ -316,6 +323,7 @@ class RunCorticalTiles(ScriptBuilder):
             output_dir=join(output_abs, DERIVATIVES_FOLDER, "whole_brain"),
             transform_dir=join(output_abs, DERIVATIVES_FOLDER, "transforms"),
             labelling_session=self.args.labelling_session,
+            bids=self.args.bids,
         )
 
         return result
