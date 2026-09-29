@@ -45,3 +45,8 @@ jobs:
       - name: pip-audit (CVE scan)
         continue-on-error: true
         run: pixi run audit
+
+      - name: Verify pip install -e .[embeddings] (venv-only smoke check)
+        run: |
+          python3 -m venv /tmp/pip-extras-venv
+          /tmp/pip-extras-venv/bin/pip install -e .[embeddings]
