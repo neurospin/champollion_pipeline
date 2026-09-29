@@ -82,6 +82,8 @@ pixi run install-all
 
 `install-all` initializes the git submodules (`champollion_V1` and `cortical_tiles`), installs them in editable mode, clones `champollion_utils`, and creates the `data/` directory.
 
+Prefer an interactive, guided setup instead? Run `./install.sh` (or `pixi run setup` once `pixi install -e default` has run) — the install wizard asks where you're running the pipeline and what you'll use it for, then runs the matching install command for you.
+
 To enter the managed environment interactively:
 
 ```bash

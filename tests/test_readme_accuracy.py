@@ -1,7 +1,7 @@
 #!/usr/bin/env python3
 # -*- coding: utf-8 -*-
 """README accuracy guards for REQ-DOCS-05, REQ-DOCS-06, REQ-DOCS-09,
-REQ-DOCS-10, and REQ-DOCS-11.
+REQ-DOCS-10, REQ-DOCS-11, and REQ-DOCS-12.
 
 Joël asked (FEEDBACK-JOEL-G1) for ``README.md`` to reflect the pipeline's
 current architecture and naming. Two independent, mechanically checkable
@@ -37,6 +37,12 @@ had fallen behind ``run_cortical_tiles.py`` again:
   whole-brain output directory ``{output}/cortical_tiles-2026/whole_brain/F/``,
   and its "All options" table must carry a ``--labelling_session`` row stating
   default ``deepcnn_session_auto`` and an ``--overwrite`` row.
+
+The interactive install wizard (``scripts/setup_wizard.py``) was never
+mentioned in README.md:
+
+* **REQ-DOCS-12** — section "1. Installation" must contain ``./install.sh`` or
+  ``pixi run setup`` as the interactive install wizard entry point.
 
 Both artifacts are read as plain text: no import of the package, no Sphinx
 build, no network, and no checked-out ``external/`` submodule is required —
@@ -210,8 +216,7 @@ class TestEmbeddingsCLIMatchesReadme:
         real = _real_option_strings(GenerateEmbeddings)
         bogus = sorted(documented - real)
         assert not bogus, (
-            "README documents embeddings flags that do not exist in generate_embeddings.py's "
-            f"argparse: {bogus}"
+            f"README documents embeddings flags that do not exist in generate_embeddings.py's argparse: {bogus}"
         )
 
     def test_output_path_does_not_use_stale_split_named_subfolder(self):
@@ -250,8 +255,7 @@ class TestCombineCLIMatchesReadme:
         real = _real_option_strings(PutTogetherEmbeddings)
         bogus = sorted(documented - real)
         assert not bogus, (
-            "README documents combine flags that do not exist in put_together_embeddings.py's "
-            f"argparse: {bogus}"
+            f"README documents combine flags that do not exist in put_together_embeddings.py's argparse: {bogus}"
         )
 
     def test_embeddings_subpath_pattern_not_referenced(self):
@@ -377,7 +381,7 @@ class TestMorphologistStepMatchesReadme:
         text = _read(README)
         assert "not through Pixi" not in text, (
             "BrainVISA/Morphologist is installed via pixi.toml's own [feature.brainvisa] table, which "
-            "is part of the default environment (`default = { features = [\"brainvisa\", ...] }`); "
+            'is part of the default environment (`default = { features = ["brainvisa", ...] }`); '
             "README's '...not through Pixi' claim in the Morphologist step is stale"
         )
 
@@ -440,4 +444,39 @@ class TestCorticalTilesWholeBrainAndOptionsMatchReadme:
         rows = _cortical_tiles_options_rows()
         assert "--overwrite" in rows, (
             "run_cortical_tiles.py declares --overwrite but section 3's 'All options' table has no row for it"
+        )
+
+
+INSTALL_SH = PROJECT_ROOT / "install.sh"
+PIXI_TOML = PROJECT_ROOT / "pixi.toml"
+SETUP_WIZARD = PROJECT_ROOT / "scripts" / "setup_wizard.py"
+WIZARD_ENTRY_POINTS = ("./install.sh", "pixi run setup")
+
+
+@pytest.mark.smoke
+class TestInstallWizardMatchesReadme:
+    """REQ-DOCS-12: section 1 names the interactive install wizard entry point."""
+
+    def test_installation_section_names_wizard_entry_point(self):
+        """Section '1. Installation' must mention `./install.sh` or `pixi run setup`."""
+        section = _section_block(r"1\. Installation")
+        assert any(cmd in section for cmd in WIZARD_ENTRY_POINTS), (
+            "README.md's '1. Installation' section never names the interactive install wizard "
+            f"(scripts/setup_wizard.py); expected one of {WIZARD_ENTRY_POINTS} to appear"
+        )
+
+    def test_wizard_entry_points_exist(self):
+        """Guard: the documented entry points really exist in source."""
+        assert SETUP_WIZARD.is_file(), f"expected wizard script at {SETUP_WIZARD}"
+        assert "pixi run setup" in _read(INSTALL_SH), "expected install.sh to invoke 'pixi run setup'"
+        assert re.search(r'^setup\s*=\s*"python scripts/setup_wizard\.py"\s*$', _read(PIXI_TOML), re.MULTILINE), (
+            'expected pixi.toml to declare task: setup = "python scripts/setup_wizard.py"'
+        )
+
+    def test_installation_section_still_documents_install_all(self):
+        """Regression guard: the manual/non-interactive `pixi run install-all` path stays documented."""
+        section = _section_block(r"1\. Installation")
+        assert "pixi run install-all" in section, (
+            "README.md's '1. Installation' section must keep documenting 'pixi run install-all' "
+            "(non-interactive/CI path) alongside the wizard"
         )
