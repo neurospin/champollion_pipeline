@@ -11,6 +11,11 @@ commit, imperative mood); and that the ``external/champollion_V1`` and
 ``external/cortical_tiles`` submodules are never edited directly, with fixes
 going upstream.
 
+REQ-CONTRIB-02 supersedes the "no AI attribution" clause of REQ-CONTRIB-01:
+``CONTRIBUTING.md`` shall not prescribe any AI-attribution practice in commit
+messages, since that rule is an internal team norm (workspace ``CLAUDE.md``),
+not an obligation on external contributors.
+
 Each test pins down one distinct acquired behaviour, so a partial document
 reads as a partial failure rather than an all-or-nothing one. Keyword checks
 are case-insensitive and accept a few phrasings, so the requirement constrains
@@ -59,9 +64,23 @@ class TestContributingDoc:
         pattern = re.escape(command) + r"(?![\w-])"
         assert re.search(pattern, _read_contributing_md()), f"{CONTRIBUTING_MD} does not mention '{command}'."
 
-    def test_documents_no_ai_attribution_convention(self):
-        assert _mentions_any((r"\bAI\b[^\n]*attribution", r"attribution[^\n]*\bAI\b", r"Co-Authored-By")), (
-            f"{CONTRIBUTING_MD} does not state the no-AI-attribution commit convention."
+    def test_does_not_prescribe_ai_attribution_practice(self):
+        # REQ-CONTRIB-02 (supersedes REQ-CONTRIB-01's "no AI attribution"
+        # clause): the no-AI-attribution rule is an internal team norm kept in
+        # the workspace CLAUDE.md, not an obligation on external contributors,
+        # who choose their own AI-attribution practice. A plain human
+        # "Co-Authored-By" mention is not an AI-attribution statement, so only
+        # AI-related trailers/footers are matched.
+        assert not _mentions_any(
+            (
+                r"\bAI\b[^\n]*attribution",
+                r"attribution[^\n]*\bAI\b",
+                r"Co-Authored-By[^\n]*(\bAI\b|Claude|Anthropic|Copilot|GPT)",
+                r"Generated with[^\n]*(\bAI\b|Claude|Copilot|GPT)",
+            )
+        ), (
+            f"{CONTRIBUTING_MD} prescribes an AI-attribution commit practice; per REQ-CONTRIB-02 "
+            "that convention is internal-only and must not be imposed on external contributors."
         )
 
     def test_documents_one_logical_change_per_commit_convention(self):
