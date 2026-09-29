@@ -118,3 +118,31 @@ class TestVirtualEnvironmentInstallSection:
             f"{INSTALLATION_MD} mentions BrainVISA/Morphologist but does not say it "
             "requires conda and cannot be pip-installed."
         )
+
+
+# ``pip install -e .[embeddings]`` with any shell quoting of the target:
+# ``.[embeddings]``, ``".[embeddings]"``, ``'.[embeddings]'``.
+EMBEDDINGS_EXTRA_INSTALL_RE = re.compile(r"pip\s+install\s+-e\s+[\"']?\.\[embeddings\][\"']?")
+
+
+@pytest.mark.smoke
+class TestVirtualEnvironmentSectionDocumentsEmbeddingsExtra:
+    """REQ-INSTALL-08: the pip route shows the ``embeddings`` extra for step 4.
+
+    REQ-INSTALL-04 added the ``embeddings`` extra (torch, pandas) because
+    ``generate_embeddings`` is not importable after a plain ``pip install -e .``.
+    A pip route that only ever shows the bare install leaves step 4 broken for
+    anyone following it.
+    """
+
+    def test_section_shows_editable_install_with_embeddings_extra(self):
+        """The venv section shows ``pip install -e .[embeddings]``."""
+        section = _venv_section()
+
+        assert EMBEDDINGS_EXTRA_INSTALL_RE.search(section) is not None, (
+            "the virtual-environment section of "
+            f"{INSTALLATION_MD} never shows `pip install -e .[embeddings]`; "
+            "pipeline step 4 (generate_embeddings) needs torch and pandas, which "
+            "only the `embeddings` extra declared in pyproject.toml provides — a "
+            "bare `pip install -e .` does not make step 4 importable."
+        )
