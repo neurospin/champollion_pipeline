@@ -105,7 +105,8 @@ torchinfo = ">=1.4"
 # env = { LD_LIBRARY_PATH = "$CONDA_PREFIX/lib:$CONDA_PREFIX/lib/python3.11/site-packages/torch/lib:${LD_LIBRARY_PATH:-}" }
 
 [feature.embeddings.tasks]
-install-champollion = "pip install -e external/champollion_V1 --no-deps --no-build-isolation"
+init-submodules = "git submodule update --init --recursive"
+install-champollion = { cmd = "pip install -e external/champollion_V1 --no-deps --no-build-isolation", depends-on = ["init-submodules"] }
 install-pipeline = "pip install -e . --no-deps --no-build-isolation"
 install-utils = """
   cd .. && git clone https://github.com/neurospin/champollion_utils.git 2>/dev/null || echo 'champollion_utils already exists' && \
@@ -160,8 +161,6 @@ docs           = { features = ["docs"], no-default-feature = true, solve-group =
 
 # ── Shared tasks (available in all environments) ──────────────────────────────
 [tasks]
-init-submodules = "git submodule update --init --recursive"
-
 install-utils = """
   cd .. && git clone https://github.com/neurospin/champollion_utils.git 2>/dev/null || echo 'champollion_utils already exists' && \
   cd champollion_utils && pip install -e . && cd ..
@@ -170,7 +169,7 @@ install-utils = """
 setup-data = "mkdir -p ../data"
 
 install-pipeline = "pip install -e . --no-deps --no-build-isolation"
-install-champollion = "pip install -e external/champollion_V1 --no-deps --no-build-isolation"
+install-champollion = { cmd = "pip install -e external/champollion_V1 --no-deps --no-build-isolation", depends-on = ["init-submodules"] }
 check-install = "python scripts/install_health.py"
 check-install-fix = "python scripts/install_health.py --fix"
 pre-update = "python scripts/install_health.py --pre-update"
