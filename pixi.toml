@@ -43,10 +43,6 @@ morphologist = ">=6.0.19"
 disco = ">=6.0"
 
 [feature.brainvisa.tasks]
-install-utils = """
-  cd .. && git clone https://github.com/neurospin/champollion_utils.git 2>/dev/null || echo 'champollion_utils already exists' && \
-  cd champollion_utils && pip install -e . && cd ..
-"""
 morphologist = "python3 src/champollion_pipeline/generate_morphologist_graphs.py"
 snapshots = "python3 src/champollion_pipeline/generate_snapshots.py"
 
@@ -60,15 +56,27 @@ cortical-tiles = "python3 src/champollion_pipeline/run_cortical_tiles.py"
 prune-failed-subjects = "python3 src/champollion_pipeline/prune_failed_subjects.py"
 purge-subject = "python3 src/champollion_pipeline/purge_subject.py"
 
+# ── Utils feature (champollion_utils sibling install, shared by every env) ───
+# Single home of `install-utils`: pixi refuses a task name that resolves to
+# different bodies across environments, so every env that needs
+# champollion_utils (all of them except docs) includes this one feature.
+[feature.utils.dependencies]
+# Build backend for `install-utils` (champollion_utils is hatchling-built).
+# Needed here because no-default-feature envs don't inherit [dependencies].
+hatchling = ">=1.18"
+editables = ">=0.3"
+
+[feature.utils.tasks]
+install-utils = """
+  cd .. && git clone https://github.com/neurospin/champollion_utils.git 2>/dev/null || echo 'champollion_utils already exists' && \
+  cd champollion_utils && pip install -e . --no-build-isolation && cd ..
+"""
+
 # ── Embeddings feature (inference + training) ─────────────────────────────────
 [feature.embeddings.dependencies]
 python = ">=3.10"
 pip = ">=25.3,<26"
 setuptools = ">=65.0,<81"
-# Build backend for `install-utils` (champollion_utils is hatchling-built).
-# Needed here because no-default-feature envs don't inherit [dependencies].
-hatchling = ">=1.18"
-editables = ">=0.3"
 # pytorch-cuda = { channel = "pytorch", version = "12.4.*" }
 # torchvision = { channel = "pytorch", version = ">=0.15" }
 datasets = ">=2.16.0,<4.5"
@@ -108,10 +116,6 @@ torchinfo = ">=1.4"
 init-submodules = "git submodule update --init --recursive"
 install-champollion = { cmd = "pip install -e external/champollion_V1 --no-deps --no-build-isolation", depends-on = ["init-submodules"] }
 install-pipeline = "pip install -e . --no-deps --no-build-isolation"
-install-utils = """
-  cd .. && git clone https://github.com/neurospin/champollion_utils.git 2>/dev/null || echo 'champollion_utils already exists' && \
-  cd champollion_utils && pip install -e . --no-build-isolation && cd ..
-"""
 install-embeddings = { depends-on = ["install-champollion", "install-pipeline", "install-utils"] }
 update = """
   git fetch && git checkout -- pixi.lock && git merge --no-edit -X theirs FETCH_HEAD && \
@@ -152,20 +156,15 @@ docs-serve = "python -m http.server 8080 --directory docs/_build/html"
 
 # ── Environments ──────────────────────────────────────────────────────────────
 [environments]
-default        = { features = ["brainvisa", "cortical-tiles", "embeddings"] }
-embeddings     = { features = ["embeddings"], no-default-feature = true, solve-group = "embeddings" }
-training       = { features = ["embeddings"], no-default-feature = true, solve-group = "embeddings" }
-cortical-tiles = { features = ["brainvisa", "cortical-tiles"], no-default-feature = true, solve-group = "cortical-tiles" }
-brainvisa      = { features = ["brainvisa"], no-default-feature = true, solve-group = "brainvisa" }
+default        = { features = ["utils", "brainvisa", "cortical-tiles", "embeddings"] }
+embeddings     = { features = ["utils", "embeddings"], no-default-feature = true, solve-group = "embeddings" }
+training       = { features = ["utils", "embeddings"], no-default-feature = true, solve-group = "embeddings" }
+cortical-tiles = { features = ["utils", "brainvisa", "cortical-tiles"], no-default-feature = true, solve-group = "cortical-tiles" }
+brainvisa      = { features = ["utils", "brainvisa"], no-default-feature = true, solve-group = "brainvisa" }
 docs           = { features = ["docs"], no-default-feature = true, solve-group = "docs" }
 
 # ── Shared tasks (available in all environments) ──────────────────────────────
 [tasks]
-install-utils = """
-  cd .. && git clone https://github.com/neurospin/champollion_utils.git 2>/dev/null || echo 'champollion_utils already exists' && \
-  cd champollion_utils && pip install -e . && cd ..
-"""
-
 setup-data = "mkdir -p ../data"
 
 install-pipeline = "pip install -e . --no-deps --no-build-isolation"
