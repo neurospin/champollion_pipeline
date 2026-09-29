@@ -29,12 +29,12 @@ pixi shell
 
 For users who manage their own virtualenv, venv, or uv environment and prefer a standard pip workflow.
 
-> **Note:** BrainVISA/Morphologist (pipeline step 1 — sulcal graph extraction) requires conda and **cannot be pip-installed**. If you need that step, use the pixi route above. The pip route covers steps 2–6 (cortical tiles, config, embeddings, combine, snapshots).
+> **Note:** BrainVISA/Morphologist (pipeline step 1 — sulcal graph extraction) requires conda and **cannot be pip-installed**. If you need that step, use the pixi route above. The pip route covers steps 2–6 (cortical tiles, config, embeddings, combine, snapshots); step 4 (embeddings) additionally requires the `embeddings` extra.
 
 Steps:
 
 1. Clone the repository and initialize submodules.
-2. Run `pip install -e .` to install the pipeline. `champollion-utils` is resolved automatically from GitHub — no separate clone needed.
+2. Run `pip install -e .[embeddings]` to install the pipeline plus the torch/pandas dependencies step 4 needs. `champollion-utils` is resolved automatically from GitHub — no separate clone needed.
 3. Install `external/cortical_tiles` in editable mode (needs the deprecated sklearn compatibility shim).
 4. Optionally install `external/champollion_V1` in editable mode.
 
@@ -43,7 +43,7 @@ git clone https://github.com/neurospin/champollion_pipeline.git
 cd champollion_pipeline
 git submodule update --init
 
-pip install -e .
+pip install -e .[embeddings]
 pip install -e external/champollion_V1 --no-deps --no-build-isolation
 SKLEARN_ALLOW_DEPRECATED_SKLEARN_PACKAGE_INSTALL=True \
     pip install -e external/cortical_tiles --no-deps --no-build-isolation
