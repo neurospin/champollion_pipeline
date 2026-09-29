@@ -1,8 +1,8 @@
 """Champollion pipeline — end-to-end sulcal embedding pipeline."""
 
-__version__ = "0.2.0"
+__version__ = "0.2.32"
 
-# Each script has optional dependencies (brainvisa, dracopy, torch…) that may
+# Each script has optional dependencies (brainvisa, torch…) that may
 # not be installed in every pixi environment. Guard each import so the package
 # is importable in partial envs (e.g. embeddings-only on Jean-Zay).
 
