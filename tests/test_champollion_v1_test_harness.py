@@ -13,6 +13,18 @@ Pipeline-side requirements:
 - REQ-CHAMPTEST-04 — the pipeline's own ``test`` task keeps collecting only
   ``tests/`` (adding the upstream harness must not leak into it).
 
+Coverage configuration of the task (TASK-105):
+
+- REQ-CHAMPTEST-21 — ``test-champollion`` passes ``--cov-config`` naming a
+  dedicated pipeline file that coverage.py never reads by default, so other
+  coverage runs (``test-cov --cov=src``) are unaffected.
+- REQ-CHAMPTEST-22 — that file omits exactly the two dead-code globs
+  (decision pending in TASK-120).
+- REQ-CHAMPTEST-23 — that file enables multiprocessing collection, so lines run
+  in forked DataLoader workers are counted.
+- REQ-CHAMPTEST-24 — ``test-champollion`` passes ``--cov-fail-under`` with an
+  integer between 61 and 100.
+
 REQ-CHAMPTEST-02 (per-test cwd isolation) is verified upstream in
 ``external/champollion_V1/test/test_harness_isolation.py``.
 
@@ -20,6 +32,7 @@ Offline: only parses ``pixi.toml``/``pyproject.toml`` and inspects the
 submodule working tree.
 """
 
+import configparser
 import shlex
 from pathlib import Path
 
@@ -34,6 +47,17 @@ CHAMPOLLION_V1 = REPO_ROOT / "external" / "champollion_V1"
 TASK_NAME = "test-champollion"
 UPSTREAM_TEST_DIR = "external/champollion_V1/test"
 COVERAGE_TARGETS = {"champollion", "external/champollion_V1/champollion"}
+
+# Files coverage.py reads on its own when no --rcfile/--cov-config is given.
+COVERAGE_DEFAULT_CONFIG_FILES = {".coveragerc", "setup.cfg", "tox.ini", "pyproject.toml"}
+DEAD_CODE_OMITS = {
+    "*/champollion/config_manager/*",
+    "*/champollion/utils/create_dataset_config_files.py",
+}
+# Total champollion coverage with the dead-code omits but without worker
+# collection, measured 2026-09-30 on champollion_V1 WIP f16990d2: 61.3%.
+# A lower threshold would not protect what TASK-101..TASK-104 added.
+MIN_FAIL_UNDER = 61
 
 
 @pytest.fixture(scope="module")
@@ -84,7 +108,18 @@ def _option_values(argv: list[str], option: str) -> list[str]:
 
 def _positional_paths(argv: list[str]) -> list[str]:
     """Positional (non-option) arguments, skipping values of options that take one."""
-    takes_value = {"--cov", "--cov-report", "--cov-config", "-m", "-k", "-c", "--rootdir", "-p", "--basetemp"}
+    takes_value = {
+        "--cov",
+        "--cov-report",
+        "--cov-config",
+        "--cov-fail-under",
+        "-m",
+        "-k",
+        "-c",
+        "--rootdir",
+        "-p",
+        "--basetemp",
+    }
     paths, skip = [], False
     for token in argv:
         if skip:
@@ -173,3 +208,80 @@ class TestPipelineTestTaskScope:
         with PYPROJECT_TOML.open("rb") as handle:
             ini = tomllib.load(handle)["tool"]["pytest"]["ini_options"]
         assert ini.get("testpaths") == ["tests"]
+
+
+def _champollion_cov_config_path(pixi_config) -> Path:
+    """The single ``--cov-config`` file of ``test-champollion``, resolved from the pipeline root."""
+    values = _option_values(_champollion_test_argv(pixi_config), "--cov-config")
+    assert len(values) == 1, f"{TASK_NAME} must pass exactly one --cov-config (REQ-CHAMPTEST-21); got {values!r}"
+    return (REPO_ROOT / values[0]).resolve()
+
+
+def _champollion_cov_run_section(pixi_config) -> configparser.SectionProxy:
+    path = _champollion_cov_config_path(pixi_config)
+    assert path.is_file(), f"--cov-config file {path} does not exist"
+    parser = configparser.ConfigParser()
+    parser.read(path, encoding="utf-8")
+    assert parser.has_section("run"), f"{path.name} has no [run] section"
+    return parser["run"]
+
+
+def _list_setting(value: str) -> list[str]:
+    """coverage.py list option: comma- and/or newline-separated."""
+    return [item.strip() for line in value.splitlines() for item in line.split(",") if item.strip()]
+
+
+@pytest.mark.smoke
+class TestChampollionCoverageConfigFile:
+    """REQ-CHAMPTEST-21."""
+
+    def test_task_passes_a_dedicated_cov_config_inside_the_pipeline(self, pixi_config):
+        path = _champollion_cov_config_path(pixi_config)
+        assert path.is_file(), f"--cov-config file {path} does not exist"
+        rel = path.relative_to(REPO_ROOT)  # raises if outside the pipeline repo
+        assert rel.parts[0] != "external", (
+            f"--cov-config must live in champollion_pipeline, not in a submodule; got {rel}"
+        )
+        assert path.name not in COVERAGE_DEFAULT_CONFIG_FILES, (
+            f"--cov-config must not be a file coverage.py reads by default "
+            f"({sorted(COVERAGE_DEFAULT_CONFIG_FILES)}), or it would also apply to test-cov; got {rel}"
+        )
+
+
+@pytest.mark.smoke
+class TestChampollionCoverageOmits:
+    """REQ-CHAMPTEST-22."""
+
+    def test_cov_config_omits_exactly_the_dead_code_modules(self, pixi_config):
+        run = _champollion_cov_run_section(pixi_config)
+        omits = _list_setting(run.get("omit", ""))
+        assert sorted(omits) == sorted(DEAD_CODE_OMITS), (
+            f"[run] omit must be exactly {sorted(DEAD_CODE_OMITS)} (TASK-120 dead code); got {omits!r}"
+        )
+
+
+@pytest.mark.smoke
+class TestChampollionCoverageWorkerCollection:
+    """REQ-CHAMPTEST-23."""
+
+    def test_cov_config_collects_multiprocessing_children(self, pixi_config):
+        run = _champollion_cov_run_section(pixi_config)
+        concurrency = _list_setting(run.get("concurrency", ""))
+        assert "multiprocessing" in concurrency, (
+            "[run] concurrency must include 'multiprocessing' so forked DataLoader workers are measured; "
+            f"got {concurrency!r}"
+        )
+
+
+@pytest.mark.smoke
+class TestChampollionCoverageThreshold:
+    """REQ-CHAMPTEST-24."""
+
+    def test_task_enforces_an_integer_coverage_floor(self, pixi_config):
+        values = _option_values(_champollion_test_argv(pixi_config), "--cov-fail-under")
+        assert len(values) == 1, f"{TASK_NAME} must pass exactly one --cov-fail-under; got {values!r}"
+        assert values[0].isdigit(), f"--cov-fail-under must be an integer; got {values[0]!r}"
+        threshold = int(values[0])
+        assert MIN_FAIL_UNDER <= threshold <= 100, (
+            f"--cov-fail-under must be between {MIN_FAIL_UNDER} and 100; got {threshold}"
+        )

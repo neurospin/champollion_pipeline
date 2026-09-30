@@ -29,6 +29,7 @@ SPECS.md
 
 # test
 .coverage
+.coverage.*
 
 # Generated reports
 comparison_report.json

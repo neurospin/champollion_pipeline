@@ -1,0 +1,15 @@
+# Coverage config for the `test-champollion` pixi task only.
+[run]
+# Anchored at the pipeline root: the champollion_V1 test conftest chdirs into
+# tmp_path, so forked DataLoader workers would otherwise write shards there
+# that pytest-cov never combines.
+data_file = ${PIXI_PROJECT_ROOT-.}/.coverage
+omit =
+    # Dead code with no importer in any repo; keep-or-delete pending in TASK-120.
+    */champollion/config_manager/*
+    # Dead code with no importer in any repo; keep-or-delete pending in TASK-120.
+    */champollion/utils/create_dataset_config_files.py
+# thread must be listed: a non-empty list without it disables thread tracing.
+concurrency =
+    multiprocessing
+    thread
