@@ -321,7 +321,9 @@ class GenerateMorphologistGraphsStage(PipelineStage):
                 str(self.config.dataset.input_path),
                 str(self.config.dataset.morphologist_graphs),
             ]
-            if self.config.dataset.bids or getattr(self.config, "parallel", False):
+            if self.config.dataset.bids:
+                args.append("--bids")
+            if getattr(self.config, "parallel", False):
                 args.append("--parallel")
             script = GenerateMorphologistGraphs()
             script.parse_args(args)
