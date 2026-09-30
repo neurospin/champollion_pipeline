@@ -67,14 +67,6 @@ class PruneFailedSubjects(ScriptBuilder):
         passing = qc_file[qc_file["qc"] != 0]["participant_id"].tolist()
         return set(passing)
 
-    def _read_non_passing_subjects(self, qc_path: str) -> set:
-        """Return set of subject IDs with qc != 0."""
-        sep = "\t" if qc_path.endswith(".tsv") else ","
-        qc_file = pd.read_csv(qc_path, sep=sep)
-        qc_file["participant_id"] = qc_file["participant_id"].astype(str)
-        non_passing = qc_file[qc_file["qc"] != 1]["participant_id"].tolist()
-        return set(non_passing)
-
     def run(self):
         """Execute the prune operation."""
         derivatives_dir = join(self.args.output, DERIVATIVES_FOLDER)

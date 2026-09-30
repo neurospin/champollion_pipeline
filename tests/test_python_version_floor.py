@@ -11,8 +11,8 @@ stated in `README.md` shall be at least 3.10, the floor set by
 
 3.10 is the genuine floor, not a stale constraint: source modules evaluate
 PEP 604 unions of runtime types in function signatures without
-`from __future__ import annotations` (e.g. `utils/lib.py::are_paths_valid`
-`-> bool | None`, `generate_champollion_config.py::_get_crop_size`
+`from __future__ import annotations` (e.g.
+`generate_champollion_config.py::_get_crop_size`
 `-> tuple[int, int, int] | None`), which raises `TypeError` at import time
 on Python < 3.10; and the hard dependency `champollion-utils` itself
 declares `requires-python = ">=3.10"`.
