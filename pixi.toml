@@ -231,6 +231,7 @@ test-cov = "pytest tests/ -v --cov=src --cov-report=html --cov-report=term"
 test-fast = "pytest tests/ -v -x --tb=short"
 test-verbose = "pytest tests/ -vv"
 test-specific = "pytest"
+test-champollion = "pytest external/champollion_V1/test -v --cov=champollion --cov-report=term-missing"
 
 generate-masks = "python3 src/champollion_pipeline/generate_masks.py"
 compare-databases = "python3 src/compare_databases.py"
