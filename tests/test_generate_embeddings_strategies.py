@@ -11,12 +11,15 @@ GPU is required.
 """
 
 import gzip
+import logging
 import os
 import sys
 import tarfile
 from pathlib import Path
 from unittest.mock import MagicMock, patch
 
+import numpy as np
+import pandas as pd
 import pytest
 import torch
 
@@ -30,6 +33,9 @@ from champollion_pipeline.generate_embeddings import (
     RemoteArchiveStrategy,
     main,
 )
+
+# champollion_V1's cka_coherence module (put on sys.path by generate_embeddings).
+cka_mod = sys.modules[ge.test_models_coherence_from_directory.__module__]
 
 
 def make_tar(tmp_path, name="models.tar.gz", top="models"):
@@ -673,7 +679,8 @@ class TestRunCkaTest:
         assert kwargs["models_dir"] == str(tmp_path)
         assert kwargs["output_dir"] == str(tmp_path / "cka_results")
         assert kwargs["embedding_filename"] == "full_embeddings.csv"
-        assert kwargs["subject_column"] == "Subject"
+        # REQ-EMBED-02: champollion_V1 evaluate.py writes subject IDs in "ID".
+        assert kwargs["subject_column"] == "ID"
 
     def test_failure_is_warned_but_not_raised(self, tmp_path, capsys):
         script = make_script(["/m", "/d"])
@@ -688,6 +695,52 @@ class TestRunCkaTest:
         with patch.object(ge, "test_models_coherence_from_directory"):
             script._run_cka_test(str(tmp_path))
         assert "CKA coherence test completed." in capsys.readouterr().out
+
+
+class TestRunCkaTestOnEvaluateOutput:
+    """REQ-EMBED-02: real CKA run on CSVs in champollion_V1 evaluate.py's format.
+
+    Nothing is mocked: two ``full_embeddings.csv`` files are written exactly
+    as evaluate.py writes them (first column ``ID``, then ``dim1..dimN``,
+    ``index=False``) and fed through the real ``_run_cka_test`` and the real
+    ``test_models_coherence_from_directory``.
+    """
+
+    @staticmethod
+    def _write_evaluate_csvs(root):
+        rng = np.random.default_rng(0)
+        subjects = [f"sub-{i:02d}" for i in range(8)]
+        for region, order in (("SOr_left", subjects), ("SC_right", subjects[::-1])):
+            df = pd.DataFrame(
+                rng.normal(size=(len(order), 4)),
+                columns=[f"dim{i}" for i in range(1, 5)],
+            )
+            df.insert(0, "ID", order)
+            (root / region).mkdir(parents=True)
+            df.to_csv(root / region / "full_embeddings.csv", index=False)
+        return subjects
+
+    def test_no_missing_subject_column_warning(self, tmp_path):
+        self._write_evaluate_csvs(tmp_path)
+        records = []
+        handler = logging.Handler(level=logging.WARNING)
+        handler.emit = records.append
+        cka_mod.log.addHandler(handler)
+        try:
+            make_script(["/m", "/d"])._run_cka_test(str(tmp_path))
+        finally:
+            cka_mod.log.removeHandler(handler)
+        missing = [r.getMessage() for r in records if "not found" in r.getMessage()]
+        assert missing == []
+
+    def test_results_written_for_all_subjects(self, tmp_path):
+        subjects = self._write_evaluate_csvs(tmp_path)
+        make_script(["/m", "/d"])._run_cka_test(str(tmp_path))
+        out = tmp_path / "cka_results"
+        assert (out / "cka_matrix.csv").is_file()
+        assert (out / "coherence_stats.json").is_file()
+        common = (out / "common_subjects.txt").read_text().split()
+        assert sorted(common) == sorted(subjects)
 
 
 class TestRunPipelineCkaHook:
