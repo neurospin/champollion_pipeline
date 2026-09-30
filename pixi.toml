@@ -41,6 +41,8 @@ soma-env = ">=6.0"
 anatomist = ">=6.0.18"
 morphologist = ">=6.0.19"
 disco = ">=6.0"
+# neuro-forge's openjpeg-2.5.2-hb0f4dca_0 artifact returns HTTP 404 upstream.
+openjpeg = { channel = "conda-forge", version = "*" }
 
 [feature.brainvisa.tasks]
 morphologist = "python3 src/champollion_pipeline/generate_morphologist_graphs.py"
