@@ -32,6 +32,11 @@ class GenerateMorphologistGraphs(ScriptBuilder):
                 "--enable-sulcal-recognition",
                 "Enable sulcal recognition (adds 10-20 min/subject, disabled by default for embeddings pipeline).",
             )
+            .add_flag(
+                "--bids",
+                "Input is BIDS-named; run morphologist-cli with --if/--of "
+                "morphologist-bids-2.0 instead of morphologist-auto-nonoverlap-1.0.",
+            )
         )
 
     def _get_input_files(self):
@@ -61,16 +66,19 @@ class GenerateMorphologistGraphs(ScriptBuilder):
         chdir(self.args.input)
 
         # Build command
-        # Explicitly set both --if and --of to prevent morphologist-cli from auto-detecting
+        # Force nonoverlap format by default to prevent morphologist-cli from auto-detecting
         # BIDS format when filenames contain BIDS entities (_acq-, _run-, etc.) and silently
-        # overriding the input format to morphologist-bids-2.0.
+        # overriding the input format to morphologist-bids-2.0. --bids opts in explicitly.
+        io_format = "morphologist-bids-2.0" if self.args.bids else "morphologist-auto-nonoverlap-1.0"
         cmd = [
             "morphologist-cli",
             *input_files,
             self.args.output,
             "--",
-            "--if", "morphologist-auto-nonoverlap-1.0",
-            "--of", "morphologist-auto-nonoverlap-1.0",
+            "--if",
+            io_format,
+            "--of",
+            io_format,
         ]
 
         # Add parallel processing flag (capsul options come first)
