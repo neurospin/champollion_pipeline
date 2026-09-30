@@ -26,7 +26,7 @@ import logging
 import argparse
 import yaml
 from abc import ABC, abstractmethod
-from typing import Dict, List, Optional, Any
+from typing import Dict, List, Optional
 from pathlib import Path
 from dataclasses import dataclass, field
 from champollion_utils.update_check import check_for_updates
@@ -49,11 +49,9 @@ except ImportError as e:
 
 try:
     from file_indexer.pipeline_checks import SubjectEligibilityChecker, build_output_report
-    from file_indexer.scan_id import ScanId
 except ImportError:
     SubjectEligibilityChecker = None
     build_output_report = None
-    ScanId = None
 
 
 # ====================== Configuration Management ======================
@@ -255,7 +253,6 @@ class StageResult:
     success: bool
     message: str
     return_code: int = 0
-    outputs: Optional[Dict[str, Any]] = None
 
 
 class PipelineStage(ABC):
