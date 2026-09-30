@@ -31,7 +31,6 @@ environments:
       - conda: https://brainvisa.info/neuro-forge/linux-64/matlab-runtime-9.7-9-hb0f4dca_1.conda
       - conda: https://brainvisa.info/neuro-forge/linux-64/mesalib_software-24.3.3-hb0f4dca_3.conda
       - conda: https://brainvisa.info/neuro-forge/linux-64/morphologist-6.0.19-py311.conda
-      - conda: https://brainvisa.info/neuro-forge/linux-64/openjpeg-2.5.2-hb0f4dca_0.conda
       - conda: https://brainvisa.info/neuro-forge/linux-64/populse-db-3.0.26-py311.conda
       - conda: https://brainvisa.info/neuro-forge/linux-64/soma-6.0.20-py311.conda
       - conda: https://brainvisa.info/neuro-forge/linux-64/soma-base-6.0.19-py311.conda
@@ -218,6 +217,7 @@ environments:
       - conda: https://conda.anaconda.org/conda-forge/linux-64/nspr-4.40-h29cc59b_0.conda
       - conda: https://conda.anaconda.org/conda-forge/linux-64/nss-3.118-h445c969_0.conda
       - conda: https://conda.anaconda.org/conda-forge/linux-64/numpy-1.26.4-py311h64a7726_0.conda
+      - conda: https://conda.anaconda.org/conda-forge/linux-64/openjpeg-2.5.4-heb1ab33_2.conda
       - conda: https://conda.anaconda.org/conda-forge/linux-64/openpyxl-3.1.5-py311h534898f_3.conda
       - conda: https://conda.anaconda.org/conda-forge/linux-64/openssl-3.6.3-h35e630c_1.conda
       - conda: https://conda.anaconda.org/conda-forge/linux-64/optree-0.19.1-py311hdf67eae_0.conda
@@ -496,7 +496,6 @@ environments:
       - conda: https://brainvisa.info/neuro-forge/linux-64/matlab-runtime-9.7-9-hb0f4dca_1.conda
       - conda: https://brainvisa.info/neuro-forge/linux-64/mesalib_software-24.3.3-hb0f4dca_3.conda
       - conda: https://brainvisa.info/neuro-forge/linux-64/morphologist-6.0.19-py311.conda
-      - conda: https://brainvisa.info/neuro-forge/linux-64/openjpeg-2.5.2-hb0f4dca_0.conda
       - conda: https://brainvisa.info/neuro-forge/linux-64/populse-db-3.0.26-py311.conda
       - conda: https://brainvisa.info/neuro-forge/linux-64/soma-6.0.20-py311.conda
       - conda: https://brainvisa.info/neuro-forge/linux-64/soma-base-6.0.19-py311.conda
@@ -710,6 +709,7 @@ environments:
       - conda: https://conda.anaconda.org/conda-forge/linux-64/nspr-4.40-h29cc59b_0.conda
       - conda: https://conda.anaconda.org/conda-forge/linux-64/nss-3.118-h445c969_0.conda
       - conda: https://conda.anaconda.org/conda-forge/linux-64/numpy-1.26.4-py311h64a7726_0.conda
+      - conda: https://conda.anaconda.org/conda-forge/linux-64/openjpeg-2.5.4-heb1ab33_2.conda
       - conda: https://conda.anaconda.org/conda-forge/linux-64/openpyxl-3.1.5-py311he9e6514_4.conda
       - conda: https://conda.anaconda.org/conda-forge/linux-64/openssl-3.6.4-h781a0a9_0.conda
       - conda: https://conda.anaconda.org/conda-forge/linux-64/optree-0.20.0-py311h5f908af_1.conda
@@ -1000,7 +1000,6 @@ environments:
       - conda: https://brainvisa.info/neuro-forge/linux-64/matlab-runtime-9.7-9-hb0f4dca_1.conda
       - conda: https://brainvisa.info/neuro-forge/linux-64/mesalib_software-24.3.3-hb0f4dca_3.conda
       - conda: https://brainvisa.info/neuro-forge/linux-64/morphologist-6.0.19-py311.conda
-      - conda: https://brainvisa.info/neuro-forge/linux-64/openjpeg-2.5.2-hb0f4dca_0.conda
       - conda: https://brainvisa.info/neuro-forge/linux-64/populse-db-3.0.26-py311.conda
       - conda: https://brainvisa.info/neuro-forge/linux-64/soma-6.0.20-py311.conda
       - conda: https://brainvisa.info/neuro-forge/linux-64/soma-base-6.0.19-py311.conda
@@ -1187,6 +1186,7 @@ environments:
       - conda: https://conda.anaconda.org/conda-forge/linux-64/nspr-4.40-h29cc59b_0.conda
       - conda: https://conda.anaconda.org/conda-forge/linux-64/nss-3.118-h445c969_0.conda
       - conda: https://conda.anaconda.org/conda-forge/linux-64/numpy-1.26.4-py311h64a7726_0.conda
+      - conda: https://conda.anaconda.org/conda-forge/linux-64/openjpeg-2.5.4-heb1ab33_2.conda
       - conda: https://conda.anaconda.org/conda-forge/linux-64/openpyxl-3.1.5-py311h534898f_3.conda
       - conda: https://conda.anaconda.org/conda-forge/linux-64/openssl-3.6.3-h35e630c_1.conda
       - conda: https://conda.anaconda.org/conda-forge/linux-64/optree-0.19.1-py311hdf67eae_0.conda
@@ -1468,7 +1468,6 @@ environments:
       - conda: https://brainvisa.info/neuro-forge/linux-64/matlab-runtime-9.7-9-hb0f4dca_1.conda
       - conda: https://brainvisa.info/neuro-forge/linux-64/mesalib_software-24.3.3-hb0f4dca_3.conda
       - conda: https://brainvisa.info/neuro-forge/linux-64/morphologist-6.0.19-py311.conda
-      - conda: https://brainvisa.info/neuro-forge/linux-64/openjpeg-2.5.2-hb0f4dca_0.conda
       - conda: https://brainvisa.info/neuro-forge/linux-64/populse-db-3.0.26-py311.conda
       - conda: https://brainvisa.info/neuro-forge/linux-64/soma-6.0.20-py311.conda
       - conda: https://brainvisa.info/neuro-forge/linux-64/soma-base-6.0.19-py311.conda
@@ -1682,6 +1681,7 @@ environments:
       - conda: https://conda.anaconda.org/conda-forge/linux-64/nspr-4.40-h29cc59b_0.conda
       - conda: https://conda.anaconda.org/conda-forge/linux-64/nss-3.118-h445c969_0.conda
       - conda: https://conda.anaconda.org/conda-forge/linux-64/numpy-1.26.4-py311h64a7726_0.conda
+      - conda: https://conda.anaconda.org/conda-forge/linux-64/openjpeg-2.5.4-heb1ab33_2.conda
       - conda: https://conda.anaconda.org/conda-forge/linux-64/openpyxl-3.1.5-py311he9e6514_4.conda
       - conda: https://conda.anaconda.org/conda-forge/linux-64/openssl-3.6.4-h781a0a9_0.conda
       - conda: https://conda.anaconda.org/conda-forge/linux-64/optree-0.20.0-py311h5f908af_1.conda
@@ -1975,7 +1975,6 @@ environments:
       - conda: https://brainvisa.info/neuro-forge/linux-64/matlab-runtime-9.7-9-hb0f4dca_1.conda
       - conda: https://brainvisa.info/neuro-forge/linux-64/mesalib_software-24.3.3-hb0f4dca_3.conda
       - conda: https://brainvisa.info/neuro-forge/linux-64/morphologist-6.0.19-py311.conda
-      - conda: https://brainvisa.info/neuro-forge/linux-64/openjpeg-2.5.2-hb0f4dca_0.conda
       - conda: https://brainvisa.info/neuro-forge/linux-64/populse-db-3.0.26-py311.conda
       - conda: https://brainvisa.info/neuro-forge/linux-64/soma-6.0.20-py311.conda
       - conda: https://brainvisa.info/neuro-forge/linux-64/soma-base-6.0.19-py311.conda
@@ -2221,6 +2220,7 @@ environments:
       - conda: https://conda.anaconda.org/conda-forge/linux-64/numba-0.67.0-py311hdfc3925_1.conda
       - conda: https://conda.anaconda.org/conda-forge/linux-64/numpy-1.26.4-py311h64a7726_0.conda
       - conda: https://conda.anaconda.org/conda-forge/linux-64/onemkl-license-2025.3.1-hf2ce2f3_12.conda
+      - conda: https://conda.anaconda.org/conda-forge/linux-64/openjpeg-2.5.4-heb1ab33_2.conda
       - conda: https://conda.anaconda.org/conda-forge/linux-64/openpyxl-3.1.5-py311h534898f_3.conda
       - conda: https://conda.anaconda.org/conda-forge/linux-64/openssl-3.6.3-h35e630c_1.conda
       - conda: https://conda.anaconda.org/conda-forge/linux-64/optree-0.19.1-py311hdf67eae_0.conda
@@ -2600,7 +2600,6 @@ environments:
       - conda: https://brainvisa.info/neuro-forge/linux-64/matlab-runtime-9.7-9-hb0f4dca_1.conda
       - conda: https://brainvisa.info/neuro-forge/linux-64/mesalib_software-24.3.3-hb0f4dca_3.conda
       - conda: https://brainvisa.info/neuro-forge/linux-64/morphologist-6.0.19-py311.conda
-      - conda: https://brainvisa.info/neuro-forge/linux-64/openjpeg-2.5.2-hb0f4dca_0.conda
       - conda: https://brainvisa.info/neuro-forge/linux-64/populse-db-3.0.26-py311.conda
       - conda: https://brainvisa.info/neuro-forge/linux-64/soma-6.0.20-py311.conda
       - conda: https://brainvisa.info/neuro-forge/linux-64/soma-base-6.0.19-py311.conda
@@ -2869,6 +2868,7 @@ environments:
       - conda: https://conda.anaconda.org/conda-forge/linux-64/numba-0.67.0-py311hdfc3925_1.conda
       - conda: https://conda.anaconda.org/conda-forge/linux-64/numpy-1.26.4-py311h64a7726_0.conda
       - conda: https://conda.anaconda.org/conda-forge/linux-64/onemkl-license-2025.3.1-hf2ce2f3_12.conda
+      - conda: https://conda.anaconda.org/conda-forge/linux-64/openjpeg-2.5.4-heb1ab33_2.conda
       - conda: https://conda.anaconda.org/conda-forge/linux-64/openpyxl-3.1.5-py311he9e6514_4.conda
       - conda: https://conda.anaconda.org/conda-forge/linux-64/openssl-3.6.4-h781a0a9_0.conda
       - conda: https://conda.anaconda.org/conda-forge/linux-64/optree-0.20.0-py311h5f908af_1.conda
@@ -5019,16 +5019,6 @@ packages:
   - soma-env >=6.0.40,<6.1
   size: 583911477
   timestamp: 1786012711689
-- conda: https://brainvisa.info/neuro-forge/linux-64/openjpeg-2.5.2-hb0f4dca_0.conda
-  sha256: 83747255d2204189d97be5baf6e79b7e5fc3841d9fb7fd12ed5f55a6d6ef273d
-  md5: a49c567c0eaad5875e505afb09737809
-  depends:
-  - zlib
-  - libpng
-  - lcms2
-  - libgcc >=14
-  size: 399361
-  timestamp: 1735910669443
 - conda: https://brainvisa.info/neuro-forge/linux-64/populse-db-3.0.26-py311.conda
   build_number: 0
   sha256: b0f9ecb780208905ce95dc3117fe34bcee91dbeadb21f455ec9b80b3e86e0c25
