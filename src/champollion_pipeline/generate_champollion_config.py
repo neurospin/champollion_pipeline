@@ -143,10 +143,11 @@ class GenerateChampollionConfig(ScriptBuilder):
         # When --output is given it is treated as the configs root (parallel to
         # contrastive/configs/), so region YAMLs land at {output}/dataset/{dataset}/
         # to match the Hydra config-group layout expected by train_champollion.py.
-        if self.args.output:
-            dataset_loc = join(abspath(self.args.output), "dataset", self.args.dataset)
-        else:
-            dataset_loc = join(champollion_loc, "champollion", "configs", "dataset", self.args.dataset)
+        dataset_loc = (
+            join(abspath(self.args.output), "dataset", self.args.dataset)
+            if self.args.output
+            else join(champollion_loc, "champollion", "configs", "dataset", self.args.dataset)
+        )
 
         # Create dataset directory if it doesn't exist
         if not exists(dataset_loc):
