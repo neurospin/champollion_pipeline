@@ -126,9 +126,7 @@ class HuggingFaceStrategy(ModelFetchStrategy):
         # Check if it's a huggingface.co URL
         parsed = urlparse(models_path)
         if parsed.scheme in ["http", "https"]:
-            if "huggingface.co" in parsed.netloc:
-                return True
-            return False
+            return "huggingface.co" in parsed.netloc
         # HF repo IDs are typically in format: username/repo-name
         # Check if it looks like a repo ID (no file extensions)
         return (
@@ -664,10 +662,7 @@ class GenerateEmbeddings(ScriptBuilder):
             return
         ckpt_dir.mkdir(parents=True, exist_ok=True)
         loaded = torch.load(str(pt_path), map_location="cpu")
-        if isinstance(loaded, dict) and "state_dict" in loaded:
-            state_dict = loaded["state_dict"]
-        else:
-            state_dict = loaded
+        state_dict = loaded["state_dict"] if isinstance(loaded, dict) and "state_dict" in loaded else loaded
         ckpt = {"state_dict": state_dict, "epoch": 0, "global_step": 0}
         ckpt_path = ckpt_dir / "best_model.ckpt"
         torch.save(ckpt, str(ckpt_path))

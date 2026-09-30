@@ -360,6 +360,27 @@ class TestGenerateTilesSnapshot:
         assert len(snaps) == 2
         modules["cortical_tiles.config"].config.assert_called()
 
+    def test_explicit_data_root_overrides_cortical_tiles_config(self, tmp_path, env):
+        """REQ-CLEANUP-BOILERPLATE-01 — pins the truthy branch of the `root` if/else.
+
+        Every other test passing `champollion_data_root` passes the same path the
+        mocked cortical_tiles config returns, so a rewrite that ignored the explicit
+        argument would go unnoticed. Here the config points at an empty directory
+        with no region graphs; only the explicit root has them.
+        """
+        modules, _, data_root, _ = env
+        decoy_root = tmp_path / "decoy_config_root"
+        decoy_root.mkdir()
+        cfg = modules["cortical_tiles.config"].config.return_value
+        cfg.get_champollion_data_root_dir.return_value = str(decoy_root)
+        crops = self._crops(tmp_path)
+        with patch.dict(sys.modules, modules):
+            snaps = generate_tiles_snapshot(
+                str(crops), str(tmp_path / "tiles.png"), champollion_data_root=str(data_root)
+            )
+        assert snaps == [str(tmp_path / "tiles_left.png"), str(tmp_path / "tiles_right.png")]
+        cfg.get_champollion_data_root_dir.assert_not_called()
+
     def test_missing_region_graph_is_reported_and_skipped(self, tmp_path, env, capsys):
         modules, _, data_root, _ = env
         crops = self._crops(tmp_path)

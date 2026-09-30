@@ -124,10 +124,8 @@ def find_white_mesh(graph_path):
         return None
 
     fname = osp.basename(graph_path).lower()
-    if fname.startswith("r") or "_r" in fname or "right" in fname:
-        pattern = osp.join(mesh_dir, "*Rwhite.gii")
-    else:
-        pattern = osp.join(mesh_dir, "*Lwhite.gii")
+    is_right = fname.startswith("r") or "_r" in fname or "right" in fname
+    pattern = osp.join(mesh_dir, "*Rwhite.gii" if is_right else "*Lwhite.gii")
 
     matches = glob.glob(pattern)
     return matches[0] if matches else None
@@ -247,10 +245,7 @@ def generate_tiles_snapshot(crops_dir, output_path, size=(800, 600), level=1, ch
         print("  No completed regions found in crops directory")
         return []
 
-    if champollion_data_root:
-        root = champollion_data_root
-    else:
-        root = config.config().get_champollion_data_root_dir()
+    root = champollion_data_root if champollion_data_root else config.config().get_champollion_data_root_dir()
     regions_graph_dir = f"{root}/mask/2mm/regions/meshes"
 
     nom = aims.read(aims.carto.Paths.findResourceFile("nomenclature/hierarchy/champollion_v1.hie"))
