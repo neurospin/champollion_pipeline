@@ -226,6 +226,103 @@ class TestModelDiscovery:
         assert found == [str(real)]
 
 
+@pytest.mark.unit
+class TestRegionNameResolution:
+    """REQ-EMBED-REGIONNAME-01 — region name is the nearest `*_left`/`*_right` segment.
+
+    Hugging Face-cache-downloaded models carry an extra fold-hash level between
+    the region+side folder and `logs/`, e.g.
+    `models_cache/Champollion_V1/STsbr_right/name08-32-57_200/logs/best_model_weights.pt`.
+    `_find_region_model_dirs` correctly returns the fold-hash directory (it holds
+    the checkpoint), so `_run_per_region` must not take that directory's own
+    basename as the region name.
+
+    Fixtures create `logs/` only (no `best_model_weights.pt`) so `_ensure_ckpt`
+    stays a no-op and never tries to `torch.load` a placeholder file.
+    """
+
+    CROP_DIR = "S.T.s.br."
+    REGION = "STsbr_left"
+    FOLD = "name08-32-57_200"
+
+    @staticmethod
+    def _run(script, crops, out):
+        """Run _run_per_region with execute_command stubbed; return the single command."""
+        executed = []
+
+        def fake_execute(cmd, **kwargs):
+            executed.append(cmd)
+            return 0
+
+        with patch.object(script, "execute_command", side_effect=fake_execute):
+            script._run_per_region(
+                evaluate_script="/eval.py",
+                crops_2mm_dir=str(crops),
+                output_base=str(out),
+            )
+
+        assert len(executed) == 1
+        return executed[0]
+
+    def _setup(self, tmp_path, nested):
+        """Build a models tree (flat or HF-cache nested) plus a matching crop dir."""
+        models_dir = tmp_path / "models_cache" / "Champollion_V1"
+        region_dir = models_dir / self.REGION
+        model_dir = region_dir / self.FOLD if nested else region_dir
+        (model_dir / "logs").mkdir(parents=True)
+        crops = tmp_path / "crops"
+        (crops / self.CROP_DIR / "mask").mkdir(parents=True)
+        out = tmp_path / "out"
+
+        script = GenerateEmbeddings()
+        script.args = script.parse_args([str(models_dir), str(tmp_path)])
+        return script, crops, out
+
+    def test_nested_hf_layout_skeleton_path_uses_region_side_folder(self, tmp_path):
+        """Nested fold-hash layout: `-sk` points at the region's crop Lskeleton.npy."""
+        script, crops, out = self._setup(tmp_path, nested=True)
+
+        cmd = self._run(script, crops, out)
+
+        assert cmd[cmd.index("-sk") + 1] == os.path.join(str(crops), self.CROP_DIR, "mask", "Lskeleton.npy")
+
+    def test_nested_hf_layout_subjects_path_uses_region_side_folder(self, tmp_path):
+        """Nested fold-hash layout: `-i` points at the region's crop Lskeleton_subject.csv."""
+        script, crops, out = self._setup(tmp_path, nested=True)
+
+        cmd = self._run(script, crops, out)
+
+        assert cmd[cmd.index("-i") + 1] == os.path.join(str(crops), self.CROP_DIR, "mask", "Lskeleton_subject.csv")
+
+    def test_nested_hf_layout_saving_path_uses_region_side_folder(self, tmp_path):
+        """Nested fold-hash layout: `-s` is written under `<output>/<Region>_<side>/`."""
+        script, crops, out = self._setup(tmp_path, nested=True)
+
+        cmd = self._run(script, crops, out)
+
+        assert cmd[cmd.index("-s") + 1] == os.path.join(str(out), self.REGION, "full_embeddings.csv")
+
+    def test_nested_hf_layout_model_path_is_fold_directory(self, tmp_path):
+        """Nested fold-hash layout: `-m` still points at the fold dir holding `logs/`."""
+        script, crops, out = self._setup(tmp_path, nested=True)
+
+        cmd = self._run(script, crops, out)
+
+        assert cmd[cmd.index("-m") + 1].endswith(os.path.join(self.REGION, self.FOLD))
+
+    def test_flat_layout_paths_unchanged(self, tmp_path):
+        """Regression guard: flat `<Region>_<side>/logs/` layout resolves the same paths."""
+        script, crops, out = self._setup(tmp_path, nested=False)
+
+        cmd = self._run(script, crops, out)
+
+        mask_dir = os.path.join(str(crops), self.CROP_DIR, "mask")
+        assert cmd[cmd.index("-sk") + 1] == os.path.join(mask_dir, "Lskeleton.npy")
+        assert cmd[cmd.index("-i") + 1] == os.path.join(mask_dir, "Lskeleton_subject.csv")
+        assert cmd[cmd.index("-s") + 1] == os.path.join(str(out), self.REGION, "full_embeddings.csv")
+        assert cmd[cmd.index("-m") + 1].endswith(self.REGION)
+
+
 class TestRunMethod:
     """Test the run method."""
 

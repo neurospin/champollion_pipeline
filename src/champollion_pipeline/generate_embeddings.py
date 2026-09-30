@@ -703,6 +703,25 @@ class GenerateEmbeddings(ScriptBuilder):
                     stack.append(child_path)
         return sorted(found)
 
+    def _resolve_region_name(self, model_path: str, models_path: str) -> str:
+        """Return the nearest path segment, at or above model_path and below
+        models_path, whose name ends in '_left' or '_right'.
+
+        A flat model layout (<models_path>/<Region>_<side>/logs/...) has
+        model_path itself end in the suffix. A HuggingFace-cache layout with
+        an extra fold-hash directory (<models_path>/<Region>_<side>/<hash>/logs/...)
+        needs one step up. Falls back to the model directory's own basename
+        if no ancestor matches (unchanged from prior behaviour).
+        """
+        models_path = os.path.normpath(models_path)
+        segment = os.path.normpath(model_path)
+        while segment and segment != models_path:
+            name = os.path.basename(segment)
+            if name.endswith("_left") or name.endswith("_right"):
+                return name
+            segment = os.path.dirname(segment)
+        return os.path.basename(model_path)
+
     def _run_per_region(
         self, evaluate_script: str, crops_2mm_dir: str, output_base: str
     ) -> int:
@@ -717,7 +736,7 @@ class GenerateEmbeddings(ScriptBuilder):
 
         last_result = 0
         for model_path in region_dirs:
-            region = os.path.basename(model_path)
+            region = self._resolve_region_name(model_path, models_path)
             side = "L" if region.endswith("_left") else "R"
             crop_name = self._find_crop_dir(crops_2mm_dir, region)
             mask_dir = join(crops_2mm_dir, crop_name, "mask")
