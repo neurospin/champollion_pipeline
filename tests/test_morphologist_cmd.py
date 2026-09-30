@@ -27,12 +27,15 @@ FORMAT = "morphologist-auto-nonoverlap-1.0"
 
 
 def _parse_cmd_literal() -> list[str]:
-    """Return the string elements of the `cmd = [...]` list in `run()`.
+    """Return the default-case string elements of the `cmd = [...]` list in `run()`.
 
     Walks the AST of generate_morphologist_graphs.py, finds the assignment
     ``cmd = [...]`` inside the ``run`` method body, and extracts the constant
-    string nodes.  Non-string nodes (e.g. starred unpacks, f-strings) are
-    skipped — the test only needs the static flag tokens.
+    string nodes. A `Name` element referencing a same-scope `x = A if cond
+    else B` assignment (e.g. `io_format`, REQ-BIDS-03's --bids branch) is
+    resolved to its default (`orelse`) branch's constant, i.e. the no-flag
+    case this regression guard cares about. Other non-string nodes (e.g.
+    starred unpacks, f-strings) are skipped.
     """
     source = SOURCE_FILE.read_text(encoding="utf-8")
     tree = ast.parse(source)
@@ -43,6 +46,18 @@ def _parse_cmd_literal() -> list[str]:
         for item in node.body:
             if not (isinstance(item, ast.FunctionDef) and item.name == "run"):
                 continue
+            name_defaults: dict[str, str] = {}
+            for stmt in item.body:
+                if (
+                    isinstance(stmt, ast.Assign)
+                    and len(stmt.targets) == 1
+                    and isinstance(stmt.targets[0], ast.Name)
+                    and isinstance(stmt.value, ast.IfExp)
+                    and isinstance(stmt.value.orelse, ast.Constant)
+                    and isinstance(stmt.value.orelse.value, str)
+                ):
+                    name_defaults[stmt.targets[0].id] = stmt.value.orelse.value
+
             for stmt in item.body:
                 if not isinstance(stmt, ast.Assign):
                     continue
@@ -51,11 +66,13 @@ def _parse_cmd_literal() -> list[str]:
                     continue
                 if not isinstance(stmt.value, ast.List):
                     continue
-                return [
-                    elt.value
-                    for elt in stmt.value.elts
-                    if isinstance(elt, ast.Constant) and isinstance(elt.value, str)
-                ]
+                result = []
+                for elt in stmt.value.elts:
+                    if isinstance(elt, ast.Constant) and isinstance(elt.value, str):
+                        result.append(elt.value)
+                    elif isinstance(elt, ast.Name) and elt.id in name_defaults:
+                        result.append(name_defaults[elt.id])
+                return result
     return []
 
 
