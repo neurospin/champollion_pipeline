@@ -777,7 +777,7 @@ class GenerateEmbeddings(ScriptBuilder):
                 models_dir=output_base,
                 embedding_filename="full_embeddings.csv",
                 output_dir=cka_output,
-                subject_column="Subject",
+                subject_column="ID",
             )
             print("CKA coherence test completed.")
         except Exception as e:
