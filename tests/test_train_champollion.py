@@ -327,6 +327,59 @@ class TestRunTraining:
         assert chdir_calls[-1] == str(tmp_path)
 
 
+class TestSwfUnsupported:
+    """REQ-SWF-01: --swf fails fast with NotImplementedError instead of being a silent no-op.
+
+    The flag stays parseable (champollion_sulcal_mcp's start_training forwards it), but
+    run() must refuse it before any side effect: no output directory, no chdir, no command.
+    """
+
+    def _prepare(self, tmp_path, calls):
+        out = tmp_path / "models"
+        script = make_script(BASE_ARGS + ["--output_dir", str(out), "--swf"])
+        script._validate_inputs = lambda: None
+
+        def fake_execute(cmd, shell=False):
+            calls["execute"].append(cmd)
+            return 0
+
+        script.execute_command = fake_execute
+        return script, out
+
+    def _run_ignoring_not_implemented(self, script, calls):
+        with patch.object(train_champollion.os, "chdir") as chdir:
+            try:
+                script.run()
+            except NotImplementedError:
+                pass
+        calls["chdir"] = [c.args[0] for c in chdir.call_args_list]
+
+    def test_swf_raises_not_implemented_naming_the_flag(self, tmp_path):
+        calls = {"execute": []}
+        script, _ = self._prepare(tmp_path, calls)
+        with patch.object(train_champollion.os, "chdir"):
+            with pytest.raises(NotImplementedError, match="--swf"):
+                script.run()
+
+    def test_swf_does_not_create_output_directory(self, tmp_path):
+        calls = {"execute": []}
+        script, out = self._prepare(tmp_path, calls)
+        self._run_ignoring_not_implemented(script, calls)
+        assert not out.exists()
+
+    def test_swf_does_not_change_working_directory(self, tmp_path):
+        calls = {"execute": []}
+        script, _ = self._prepare(tmp_path, calls)
+        self._run_ignoring_not_implemented(script, calls)
+        assert calls["chdir"] == []
+
+    def test_swf_does_not_execute_any_command(self, tmp_path):
+        calls = {"execute": []}
+        script, _ = self._prepare(tmp_path, calls)
+        self._run_ignoring_not_implemented(script, calls)
+        assert calls["execute"] == []
+
+
 class TestMain:
     """Test the main() entry point."""
 

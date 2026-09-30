@@ -13,6 +13,11 @@ from champollion_utils.script_builder import ScriptBuilder
 
 _SCRIPT_DIR = dirname(abspath(__file__))
 _CONTRASTIVE_DIR = abspath(join(_SCRIPT_DIR, "..", "..", "external", "champollion_V1", "champollion"))
+_SWF_UNSUPPORTED_MESSAGE = (
+    "--swf is not supported yet by train_champollion: soma-workflow submission "
+    "for training is not implemented. Re-run without --swf to train locally, "
+    "or submit the command through a cluster scheduler script."
+)
 
 
 class TrainChampollion(ScriptBuilder):
@@ -73,7 +78,11 @@ class TrainChampollion(ScriptBuilder):
                 "Must match the value used in generate_champollion_config.py.",
                 default="local",
             )
-            .add_flag("--swf", "Submit via soma-workflow for scheduling on Neurospin HPC clusters.")
+            .add_flag(
+                "--swf",
+                "Not supported yet: soma-workflow submission for training is not implemented; "
+                "passing this flag makes the run fail immediately.",
+            )
         )
 
     def _resolve_output_dir(self):
@@ -121,6 +130,8 @@ class TrainChampollion(ScriptBuilder):
 
     def run(self):
         """Execute the training pipeline."""
+        if self.args.swf:
+            raise NotImplementedError(_SWF_UNSUPPORTED_MESSAGE)
         self._validate_inputs()
 
         local_dir = os.getcwd()
