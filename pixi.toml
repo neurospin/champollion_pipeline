@@ -232,6 +232,8 @@ test-fast = "pytest tests/ -v -x --tb=short"
 test-verbose = "pytest tests/ -vv"
 test-specific = "pytest"
 test-champollion = "pytest external/champollion_V1/test -v --cov=champollion --cov-report=term-missing"
+# cortical_tiles tests resolve data/ paths from the cwd; .coverage kept out of the submodule.
+test-cortical-tiles = { cmd = "pytest tests -v --cov=cortical_tiles --cov-report=term-missing", cwd = "external/cortical_tiles", env = { COVERAGE_FILE = "$PIXI_PROJECT_ROOT/.coverage" } }
 
 generate-masks = "python3 src/champollion_pipeline/generate_masks.py"
 compare-databases = "python3 src/compare_databases.py"
