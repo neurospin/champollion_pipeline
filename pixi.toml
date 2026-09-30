@@ -108,6 +108,8 @@ odfpy = ">=1.4"
 python-kaleido = ">=0.2"
 huggingface_hub = ">=0.20.0"
 torchinfo = ">=1.4"
+# neuro-forge's openjpeg-2.5.2-hb0f4dca_0 artifact returns HTTP 404 upstream.
+openjpeg = { channel = "conda-forge", version = "*" }
 
 [feature.embeddings.activation]
 # env = { LD_LIBRARY_PATH = "$CONDA_PREFIX/lib:$CONDA_PREFIX/lib/python3.11/site-packages/torch/lib:${LD_LIBRARY_PATH:-}" }
