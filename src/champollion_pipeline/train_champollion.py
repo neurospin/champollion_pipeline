@@ -149,7 +149,7 @@ class TrainChampollion(ScriptBuilder):
         os.makedirs(output_dir, exist_ok=True)
         os.chdir(_CONTRASTIVE_DIR)
 
-        platform = "cpu" if self.args.cpu else "cuda_not_brainvisa"
+        platform = "cpu" if self.args.cpu else "cuda"
 
         # Hydra command-line overrides
         # +dataset/{dataset}/{region}=null appends the generated region config

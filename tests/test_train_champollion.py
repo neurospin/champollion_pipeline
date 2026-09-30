@@ -237,9 +237,38 @@ class TestRunTraining:
         assert "mode=classifier" in cmd
         assert f"hydra.run.dir={os.path.abspath(str(out))}" in cmd
 
-    def test_platform_is_cuda_by_default(self, tmp_path):
+    # REQ-TRAIN-PLATFORM-01: the GPU-mode platform override must name a config that exists
+    # in the pinned champollion_V1 submodule (guards against upstream renames, e.g. the
+    # removal of cuda_not_brainvisa.yaml in champollion_V1 cde9a184).
+    _PLATFORM_DIR = (
+        Path(__file__).resolve().parents[1] / "external" / "champollion_V1" / "champollion" / "configs" / "platform"
+    )
+
+    def _platform_override(self, script, tmp_path):
+        values = [c.split("=", 1)[1] for c in self._run(script, tmp_path)["cmd"] if c.startswith("platform=")]
+        assert len(values) == 1, f"expected exactly one platform= override, got {values}"
+        return values[0]
+
+    def _platform_yaml(self, name):
+        if not self._PLATFORM_DIR.is_dir():
+            pytest.skip(f"champollion_V1 submodule not checked out: {self._PLATFORM_DIR}")
+        path = self._PLATFORM_DIR / f"{name}.yaml"
+        available = sorted(p.stem for p in self._PLATFORM_DIR.glob("*.yaml"))
+        assert path.is_file(), f"platform={name} has no {path.name} in pinned champollion_V1 (available: {available})"
+        return path.read_text()
+
+    def test_gpu_platform_config_exists_in_pinned_champollion_v1(self, tmp_path):
         script = make_script(BASE_ARGS + ["--output_dir", str(tmp_path / "m")])
-        assert "platform=cuda_not_brainvisa" in self._run(script, tmp_path)["cmd"]
+        self._platform_yaml(self._platform_override(script, tmp_path))
+
+    def test_gpu_platform_config_sets_cuda_device(self, tmp_path):
+        script = make_script(BASE_ARGS + ["--output_dir", str(tmp_path / "m")])
+        text = self._platform_yaml(self._platform_override(script, tmp_path))
+        assert any(line.split("#", 1)[0].split() == ["device:", "cuda"] for line in text.splitlines())
+
+    def test_cpu_platform_config_exists_in_pinned_champollion_v1(self, tmp_path):
+        script = make_script(BASE_ARGS + ["--output_dir", str(tmp_path / "m"), "--cpu"])
+        self._platform_yaml(self._platform_override(script, tmp_path))
 
     def test_platform_is_cpu_with_cpu_flag(self, tmp_path):
         script = make_script(BASE_ARGS + ["--output_dir", str(tmp_path / "m"), "--cpu"])
