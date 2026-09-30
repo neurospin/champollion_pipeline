@@ -75,6 +75,18 @@ class TestGenerateMorphologistGraphsArguments:
         args = script.parse_args(["/input", "/output", "--enable-sulcal-recognition"])
         assert args.enable_sulcal_recognition is True
 
+    def test_bids_default_false(self):
+        """REQ-BIDS-03: --bids exists on the parser and defaults to False."""
+        script = GenerateMorphologistGraphs()
+        args = script.parse_args(["/input", "/output"])
+        assert args.bids is False
+
+    def test_bids_can_be_set(self):
+        """REQ-BIDS-03: --bids is recognized and sets args.bids to True."""
+        script = GenerateMorphologistGraphs()
+        args = script.parse_args(["/input", "/output", "--bids"])
+        assert args.bids is True
+
 
 class TestGetInputFiles:
     """Test _get_input_files method."""
@@ -358,6 +370,39 @@ class TestCommandFlags:
             cmd = mock_exec.call_args[0][0]
             cmd_str = " ".join(cmd) if isinstance(cmd, list) else cmd
             assert "sulci_labelling=False" not in cmd_str
+
+
+class TestBidsFormat:
+    """REQ-BIDS-03: --bids selects the morphologist-cli --if/--of formats."""
+
+    @staticmethod
+    def _run_and_get_cmd(temp_dir, extra_args):
+        script = GenerateMorphologistGraphs()
+        input_dir = Path(temp_dir) / "input"
+        output_dir = Path(temp_dir) / "output"
+        input_dir.mkdir()
+        output_dir.mkdir()
+        (input_dir / "subject.nii.gz").touch()
+
+        script.parse_args([str(input_dir), str(output_dir), *extra_args])
+
+        with patch.object(script, "execute_command", return_value=0) as mock_exec:
+            script.run()
+        return mock_exec.call_args[0][0]
+
+    def test_bids_flag_sets_bids_input_and_output_formats(self, temp_dir):
+        """With --bids, both --if and --of are morphologist-bids-2.0."""
+        cmd = self._run_and_get_cmd(temp_dir, ["--bids"])
+        assert cmd[cmd.index("--if") + 1] == "morphologist-bids-2.0"
+        assert cmd[cmd.index("--of") + 1] == "morphologist-bids-2.0"
+        assert "morphologist-auto-nonoverlap-1.0" not in cmd
+
+    def test_no_bids_flag_keeps_nonoverlap_formats(self, temp_dir):
+        """Regression guard: without --bids, both --if and --of stay morphologist-auto-nonoverlap-1.0."""
+        cmd = self._run_and_get_cmd(temp_dir, [])
+        assert cmd[cmd.index("--if") + 1] == "morphologist-auto-nonoverlap-1.0"
+        assert cmd[cmd.index("--of") + 1] == "morphologist-auto-nonoverlap-1.0"
+        assert "morphologist-bids-2.0" not in cmd
 
 
 @pytest.mark.integration
