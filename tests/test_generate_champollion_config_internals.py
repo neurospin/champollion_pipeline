@@ -22,6 +22,14 @@ from champollion_pipeline.generate_champollion_config import GenerateChampollion
 from champollion_pipeline.utils.lib import DERIVATIVES_FOLDER
 
 
+@pytest.fixture(autouse=True)
+def isolated_default_champollion_loc(tmp_path, monkeypatch):
+    """Keep run() from writing localization YAMLs into the real champollion_V1 checkout."""
+    loc = tmp_path / "default_champollion_V1"
+    monkeypatch.setattr(gcc, "_DEFAULT_CHAMPOLLION_LOC", str(loc))
+    return loc
+
+
 def make_script(argv):
     """Return a GenerateChampollionConfig with parsed arguments."""
     script = GenerateChampollionConfig()
