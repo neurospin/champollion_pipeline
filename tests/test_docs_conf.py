@@ -140,7 +140,8 @@ class TestDocsConfBuild:
     """REQ-DOCS-02: the configuration actually drives a clean Sphinx build."""
 
     @pytest.fixture(scope="class")
-    def conf_build_dir(self, tmp_path_factory) -> Path:
+    @staticmethod
+    def conf_build_dir(tmp_path_factory) -> Path:
         """Per-session scratch directory for the build (REQ-TEST-SPEED-07).
 
         Building into the pytest temporary base directory keeps ``docs/_build``
@@ -150,7 +151,8 @@ class TestDocsConfBuild:
         return tmp_path_factory.mktemp("docs_conf_build")
 
     @pytest.fixture(scope="class")
-    def sphinx_build_result(self, conf_build_dir) -> subprocess.CompletedProcess:
+    @staticmethod
+    def sphinx_build_result(conf_build_dir) -> subprocess.CompletedProcess:
         """Run ``sphinx-build`` end to end inside the ``docs`` pixi environment.
 
         The Sphinx toolchain (``sphinx``, ``furo``, ``myst-parser``) lives only
