@@ -18,9 +18,11 @@ Coverage configuration (TASK-130):
 
 - REQ-CTILESTEST-24 — that task passes ``--cov-config`` naming the
   pipeline-root ``.coveragerc-cortical-tiles`` (resolved from the task cwd).
-- REQ-CTILESTEST-25 — that file's ``[run] omit`` is exactly the 16 dead
-  cortical_tiles modules (keep-or-delete pending in TASK-131); the
-  extremities/distbottom modules are not omitted.
+- REQ-CTILESTEST-139 (supersedes REQ-CTILESTEST-25, TASK-137) — that file's
+  ``[run] omit`` is exactly the 22 dead cortical_tiles modules (the 16 of
+  REQ-CTILESTEST-25 plus the three extremities modules and three modules
+  with no live importer; keep-or-delete pending in TASK-131); the
+  distbottom modules are not omitted.
 - REQ-CTILESTEST-26 — that file's ``[run] data_file`` resolves to the
   pipeline-root ``.coverage``.
 
@@ -49,7 +51,7 @@ COVERAGE_PACKAGE = "cortical_tiles"
 COVERAGE_PACKAGE_DIR = CORTICAL_TILES / "cortical_tiles"
 
 COV_CONFIG_FILE = REPO_ROOT / ".coveragerc-cortical-tiles"
-# REQ-CTILESTEST-25 Omit set (paths inside the cortical_tiles package).
+# REQ-CTILESTEST-139 Omit set (paths inside the cortical_tiles package).
 DEAD_MODULES = (
     "preprocessing/transforms.py",
     "preprocessing/pynet_transforms.py",
@@ -67,8 +69,22 @@ DEAD_MODULES = (
     "brainvisa/utils/generate_spam_sulcal_region.py",
     "brainvisa/utils/suppress_files_from_csv.py",
     "utils/split_train_test.py",
+    # Added by REQ-CTILESTEST-139 (TASK-137): extremities, dead for
+    # champollion_V1 since champollion_V1 commit 770a5b74.
+    "brainvisa/generate_extremities.py",
+    "brainvisa/mask_resampled_extremities.py",
+    "brainvisa/utils/skeleton_extremities.py",
+    # Added by REQ-CTILESTEST-139 (TASK-137): no live importer.
+    "utils/pytorchtools.py",
+    "preprocessing/generate_numpy_array.py",
+    "utils/save_results.py",
 )
 DEAD_MODULE_OMITS = tuple(f"*/cortical_tiles/{module}" for module in DEAD_MODULES)
+# REQ-CTILESTEST-139: still reachable, so explicitly NOT omitted.
+LIVE_DISTBOTTOM_MODULES = (
+    "brainvisa/generate_distbottom_crops.py",
+    "brainvisa/utils/distbottom.py",
+)
 
 
 @pytest.fixture(scope="module")
@@ -260,12 +276,19 @@ class TestCorticalTilesCoverageConfigFile:
 
 @pytest.mark.smoke
 class TestCorticalTilesCoverageOmits:
-    """REQ-CTILESTEST-25."""
+    """REQ-CTILESTEST-139 (supersedes REQ-CTILESTEST-25)."""
 
     def test_cov_config_omits_exactly_the_dead_modules(self, pixi_config):
         omits = _list_setting(_cortical_tiles_cov_run_section(pixi_config).get("omit", ""))
+        omitted_distbottom = [
+            omit for omit in omits if any(omit.endswith(module) for module in LIVE_DISTBOTTOM_MODULES)
+        ]
+        assert not omitted_distbottom, (
+            f"distbottom modules must stay measured (REQ-CTILESTEST-139); omitted: {omitted_distbottom!r}"
+        )
         assert sorted(omits) == sorted(DEAD_MODULE_OMITS), (
-            f"[run] omit must be exactly the 16 dead-module globs {sorted(DEAD_MODULE_OMITS)} (TASK-131); got {omits!r}"
+            f"[run] omit must be exactly the {len(DEAD_MODULE_OMITS)} dead-module globs "
+            f"{sorted(DEAD_MODULE_OMITS)} (REQ-CTILESTEST-139, TASK-131); got {omits!r}"
         )
 
 
