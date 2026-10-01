@@ -3,7 +3,7 @@
 [run]
 # Anchored at the pipeline root so nothing is written into the submodule;
 # the ../.. fallback is the pipeline root from the task cwd.
-data_file = ${PIXI_PROJECT_ROOT-../..}/.coverage
+data_file = ${PIXI_PROJECT_ROOT-../..}/.coverage-cortical-tiles
 omit =
     # Dead code with no importer outside its own cluster; keep-or-delete pending in TASK-131.
     */cortical_tiles/preprocessing/transforms.py

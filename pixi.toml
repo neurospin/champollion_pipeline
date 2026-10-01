@@ -227,12 +227,12 @@ test = "pytest tests/ -v"
 test-unit = "pytest tests/ -v -m unit"
 test-integration = "pytest tests/ -v -m integration"
 test-smoke = "pytest tests/ -v -m smoke"
-test-cov = "pytest tests/ -v --cov=src --cov-report=html --cov-report=term"
+test-cov = { cmd = "pytest tests/ -v --cov=src --cov-report=html --cov-report=term", env = { COVERAGE_FILE = "$PIXI_PROJECT_ROOT/.coverage-pipeline" } }
 test-fast = "pytest tests/ -v -x --tb=short"
 test-verbose = "pytest tests/ -vv"
 test-specific = "pytest"
 test-champollion = "pytest external/champollion_V1/test -v --cov=champollion --cov-config=.coveragerc-champollion --cov-report=term-missing --cov-fail-under=64"
-# cortical_tiles tests resolve data/ paths from the cwd; .coverage kept out of the submodule.
+# cortical_tiles tests resolve data/ paths from the cwd; coverage data file kept out of the submodule.
 test-cortical-tiles = { cmd = "pytest tests -v --cov=cortical_tiles --cov-config=$PIXI_PROJECT_ROOT/.coveragerc-cortical-tiles --cov-report=term-missing --cov-fail-under=85", cwd = "external/cortical_tiles" }
 
 generate-masks = "python3 src/champollion_pipeline/generate_masks.py"
