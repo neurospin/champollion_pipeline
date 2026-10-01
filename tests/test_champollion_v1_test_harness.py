@@ -174,7 +174,7 @@ class TestChampollionTestTask:
 class TestNoPixiConfigInChampollionV1:
     """REQ-CHAMPTEST-03 — encodes the user constraint; passes today by design."""
 
-    @pytest.fixture(autouse=True)
+    @pytest.fixture(autouse=True)  # noqa: V105
     def _require_checkout(self):
         if not (CHAMPOLLION_V1 / "setup.py").exists():
             pytest.skip("external/champollion_V1 is not checked out")

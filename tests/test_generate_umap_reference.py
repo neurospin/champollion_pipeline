@@ -39,7 +39,7 @@ class _FakeReducer:
         return np.asarray(X)[:, :2]
 
 
-@pytest.fixture
+@pytest.fixture  # noqa: V103
 def fake_umap(monkeypatch):
     module = MagicMock()
     module.UMAP = _FakeReducer
@@ -128,7 +128,8 @@ class TestGenerateUmapReference:
         assert result == []
         assert "Could not load" in capsys.readouterr().out
 
-    def test_fits_and_saves_one_roi(self, tmp_path, monkeypatch, fake_umap, no_disk_writes):
+    @pytest.mark.usefixtures("fake_umap")
+    def test_fits_and_saves_one_roi(self, tmp_path, monkeypatch, no_disk_writes):
         dumps, saves = no_disk_writes
         models_dir = tmp_path / "models"
         out_dir = tmp_path / "out"
@@ -146,7 +147,8 @@ class TestGenerateUmapReference:
         assert saves[0][1].shape == (5, 2)
         assert dumps[0][0].kwargs == {"n_neighbors": 7, "min_dist": 0.2, "random_state": 1}
 
-    def test_concatenates_runs_of_the_same_roi(self, tmp_path, monkeypatch, fake_umap, no_disk_writes):
+    @pytest.mark.usefixtures("fake_umap")
+    def test_concatenates_runs_of_the_same_roi(self, tmp_path, monkeypatch, no_disk_writes):
         _, saves = no_disk_writes
         models_dir = tmp_path / "models"
         paths = [
@@ -160,7 +162,8 @@ class TestGenerateUmapReference:
         assert result == [("SC", "left")]
         assert saves[0][1].shape == (5, 2)
 
-    def test_handles_both_hemispheres(self, tmp_path, monkeypatch, fake_umap, no_disk_writes):
+    @pytest.mark.usefixtures("fake_umap")
+    def test_handles_both_hemispheres(self, tmp_path, monkeypatch, no_disk_writes):
         models_dir = tmp_path / "models"
         paths = [
             _make_model_dir(models_dir, "SC_left", "emb.csv"),
@@ -170,7 +173,8 @@ class TestGenerateUmapReference:
         result = generate_umap_reference_fn(str(models_dir), "emb.csv", str(tmp_path / "out"))
         assert result == [("SC", "left"), ("SC", "right")]
 
-    def test_existing_artefacts_are_skipped(self, tmp_path, monkeypatch, fake_umap, no_disk_writes):
+    @pytest.mark.usefixtures("fake_umap")
+    def test_existing_artefacts_are_skipped(self, tmp_path, monkeypatch, no_disk_writes):
         dumps, _ = no_disk_writes
         models_dir = tmp_path / "models"
         out_dir = tmp_path / "out"
@@ -184,7 +188,8 @@ class TestGenerateUmapReference:
         assert result == [("SC", "left")]
         assert dumps == []
 
-    def test_overwrite_regenerates_existing_artefacts(self, tmp_path, monkeypatch, fake_umap, no_disk_writes):
+    @pytest.mark.usefixtures("fake_umap")
+    def test_overwrite_regenerates_existing_artefacts(self, tmp_path, monkeypatch, no_disk_writes):
         dumps, _ = no_disk_writes
         models_dir = tmp_path / "models"
         out_dir = tmp_path / "out"

@@ -485,7 +485,7 @@ class TestCompareNiftiMasks:
     def test_visualisation_uses_diff_counts(self, mask_sets, tmp_path, monkeypatch):
         dir_a, dir_b = mask_sets
         seen = {}
-        monkeypatch.setattr(compare, "visualise_mask_diffs", lambda diffs, ma, mb: seen.update({"diffs": diffs}))
+        monkeypatch.setattr(compare, "visualise_mask_diffs", lambda diffs, _ma, _mb: seen.update({"diffs": diffs}))
         script = _make_script(
             [
                 "masks",
@@ -504,7 +504,7 @@ class TestCompareNiftiMasks:
     def test_visualisation_synthesises_from_wasserstein(self, mask_sets, tmp_path, monkeypatch):
         dir_a, dir_b = mask_sets
         seen = {}
-        monkeypatch.setattr(compare, "visualise_mask_diffs", lambda diffs, ma, mb: seen.update({"diffs": diffs}))
+        monkeypatch.setattr(compare, "visualise_mask_diffs", lambda diffs, _ma, _mb: seen.update({"diffs": diffs}))
         script = _make_script(
             [
                 "masks",
@@ -563,7 +563,7 @@ def _db_argv(tmp_path, **overrides):
 class TestLoadDatabase:
     def test_aggregates_subjects_over_sides(self, tmp_path, stub_deep_folding, monkeypatch):
         subjects_mod = stub_deep_folding([{"subject": "sub-01", "dir": "d", "graph_file": "g"}])
-        monkeypatch.setattr(compare, "_get_subject_voxel_counts", lambda sub, bv: (sub["subject"], {"S.C.": 7}))
+        monkeypatch.setattr(compare, "_get_subject_voxel_counts", lambda sub, _bv: (sub["subject"], {"S.C.": 7}))
         script = _make_script(_db_argv(tmp_path))
         data = script._load_database("folds/3.3/a", ["L", "R"], str(tmp_path), 1, str(tmp_path))
         assert data == {"sub-01": {"S.C.": 7}}
@@ -571,13 +571,13 @@ class TestLoadDatabase:
 
     def test_warns_when_subject_has_no_graph(self, tmp_path, stub_deep_folding, monkeypatch, capsys):
         stub_deep_folding([{"subject": "sub-99", "dir": "d", "graph_file": "g"}])
-        monkeypatch.setattr(compare, "_get_subject_voxel_counts", lambda sub, bv: ("sub-99", None))
+        monkeypatch.setattr(compare, "_get_subject_voxel_counts", lambda sub, _bv: ("sub-99", None))
         script = _make_script(_db_argv(tmp_path))
         assert script._load_database("p", ["L"], str(tmp_path), 1, str(tmp_path)) == {}
         assert "no graph for sub-99" in capsys.readouterr().out
 
 
-@pytest.fixture
+@pytest.fixture  # noqa: V103
 def two_campaigns(monkeypatch):
     data_a = {"sub-01": {"S.C.": 100}, "sub-02": {"S.C.": 200, "F.C.M.": 50}}
     data_b = {"sub-02": {"S.C.": 400, "F.C.M.": 50}, "sub-03": {"S.C.": 300}}
@@ -587,7 +587,8 @@ def two_campaigns(monkeypatch):
 
 
 class TestRunDatabases:
-    def test_writes_csv_with_per_sulcus_rows(self, tmp_path, two_campaigns):
+    @pytest.mark.usefixtures("two_campaigns")
+    def test_writes_csv_with_per_sulcus_rows(self, tmp_path):
         out = tmp_path / "out" / "db.csv"
         script = _make_script(_db_argv(tmp_path, output=out))
         assert script.run() == 0
@@ -598,7 +599,8 @@ class TestRunDatabases:
         assert rows["S.C."]["vox_per_subject_B"] == "350.0"
         assert float(rows["S.C."]["vox_ratio_B_over_A"]) == pytest.approx(2.333, abs=1e-3)
 
-    def test_reports_subject_set_overlap(self, tmp_path, two_campaigns, capsys):
+    @pytest.mark.usefixtures("two_campaigns")
+    def test_reports_subject_set_overlap(self, tmp_path, capsys):
         script = _make_script(_db_argv(tmp_path, output=tmp_path / "db.csv"))
         script.run()
         printed = capsys.readouterr().out
@@ -636,7 +638,8 @@ class TestRunDatabases:
         assert script.run() == 0
         assert not out.exists()
 
-    def test_mask_stats_columns_are_merged(self, tmp_path, two_campaigns, monkeypatch):
+    @pytest.mark.usefixtures("two_campaigns")
+    def test_mask_stats_columns_are_merged(self, tmp_path, monkeypatch):
         masks_a = tmp_path / "masks_a"
         masks_b = tmp_path / "masks_b"
         masks_a.mkdir()
@@ -647,7 +650,7 @@ class TestRunDatabases:
                 {"L/S.C..nii.gz": (20, 800, 80), "L/F.C.M..nii.gz": (2, 80, 8)},
             ]
         )
-        monkeypatch.setattr(compare, "_mask_stats", lambda d, bv: next(stats))
+        monkeypatch.setattr(compare, "_mask_stats", lambda d, _bv: next(stats))
         out = tmp_path / "masked.csv"
         script = _make_script(_db_argv(tmp_path, output=out, masks_a=masks_a, masks_b=masks_b))
         assert script.run() == 0
@@ -656,7 +659,8 @@ class TestRunDatabases:
         assert rows["S.C."]["mask_max_A"] == "10"
         assert rows["S.C."]["mask_sum_per_sub_B"] == "400.0"
 
-    def test_mask_dirs_ignored_when_absent(self, tmp_path, two_campaigns, monkeypatch):
+    @pytest.mark.usefixtures("two_campaigns")
+    def test_mask_dirs_ignored_when_absent(self, tmp_path, monkeypatch):
         called = MagicMock()
         monkeypatch.setattr(compare, "_mask_stats", called)
         script = _make_script(_db_argv(tmp_path, output=tmp_path / "nomask.csv", masks_a=tmp_path / "nope"))

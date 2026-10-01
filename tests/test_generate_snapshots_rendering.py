@@ -298,7 +298,7 @@ class TestGenerateTilesSnapshot:
         (icbm / "mni_icbm152_nlin_asym_09c_Rhemi.gii").touch()
 
         aims = MagicMock()
-        aims.carto.Paths.findResourceFile.side_effect = lambda *args, **kwargs: (
+        aims.carto.Paths.findResourceFile.side_effect = lambda *args, **kwargs: (  # noqa: V101
             str(icbm) if "icbm152" in args[0] else "/nomenclature.hie"
         )
 
@@ -405,7 +405,7 @@ class TestGenerateTilesSnapshot:
 
     def test_fallback_mesh_dir_used_when_resource_lookup_fails(self, tmp_path, env, capsys):
         modules, _, data_root, _ = env
-        modules["soma.aims"].carto.Paths.findResourceFile.side_effect = (
+        modules["soma.aims"].carto.Paths.findResourceFile.side_effect = (  # noqa: V101
             lambda *args, **kwargs: None if "icbm152" in args[0] else "/nomenclature.hie"
         )
         crops = self._crops(tmp_path)

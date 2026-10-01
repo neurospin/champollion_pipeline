@@ -22,7 +22,7 @@ from champollion_pipeline.generate_champollion_config import GenerateChampollion
 from champollion_pipeline.utils.lib import DERIVATIVES_FOLDER
 
 
-@pytest.fixture(autouse=True)
+@pytest.fixture(autouse=True)  # noqa: V103
 def isolated_default_champollion_loc(tmp_path, monkeypatch):
     """Keep run() from writing localization YAMLs into the real champollion_V1 checkout."""
     loc = tmp_path / "default_champollion_V1"
@@ -217,7 +217,7 @@ def crop_tree(temp_dir):
 class TestRun:
     """Test run() end-to-end with shell-outs replaced in process."""
 
-    def _run(self, argv, output_root):
+    def _run(self, argv):
         script = make_script(argv)
         script.execute_command = fake_execute_command
         result = script.run()
@@ -226,7 +226,7 @@ class TestRun:
     def test_returns_zero_and_writes_region_configs(self, crop_tree, temp_dir):
         out = Path(temp_dir) / "configs"
         _, result = self._run(
-            [str(crop_tree), "--dataset", "TEST01", "--output", str(out)], out
+            [str(crop_tree), "--dataset", "TEST01", "--output", str(out)]
         )
         assert result == 0
         dataset_dir = out / "dataset" / "TEST01"
@@ -236,7 +236,7 @@ class TestRun:
 
     def test_reference_yaml_gets_derivatives_path(self, crop_tree, temp_dir):
         out = Path(temp_dir) / "configs"
-        self._run([str(crop_tree), "--dataset", "TEST01", "--output", str(out)], out)
+        self._run([str(crop_tree), "--dataset", "TEST01", "--output", str(out)])
         ref = (out / "dataset" / "TEST01" / "reference.yaml").read_text()
         assert f"TEST01/derivatives/{DERIVATIVES_FOLDER}/crops/canonical_25/2mm" in ref
         assert "TESTXX/crops/2mm" not in ref
@@ -245,7 +245,6 @@ class TestRun:
         out = Path(temp_dir) / "configs"
         self._run(
             [str(crop_tree), "--dataset", "TEST01", "--output", str(out), "--masks", "canonical_99"],
-            out,
         )
         ref = (out / "dataset" / "TEST01" / "reference.yaml").read_text()
         assert "crops/canonical_99/2mm" in ref
@@ -254,7 +253,6 @@ class TestRun:
         out = Path(temp_dir) / "configs"
         self._run(
             [str(crop_tree), "--dataset", "TEST01", "--output", str(out), "--external_crops"],
-            out,
         )
         ref = (out / "dataset" / "TEST01" / "reference.yaml").read_text()
         expected = os.path.relpath(str(crop_tree), str(Path(temp_dir) / "data"))
@@ -264,7 +262,6 @@ class TestRun:
         champollion_loc = Path(temp_dir) / "champollion_V1"
         self._run(
             [str(crop_tree), "--dataset", "TEST01", "--champollion_loc", str(champollion_loc)],
-            champollion_loc,
         )
         assert (champollion_loc / "champollion" / "configs" / "dataset" / "TEST01" / "reference.yaml").exists()
 
@@ -272,7 +269,6 @@ class TestRun:
         champollion_loc = Path(temp_dir) / "champollion_V1"
         self._run(
             [str(crop_tree), "--dataset", "TEST01", "--champollion_loc", str(champollion_loc)],
-            champollion_loc,
         )
         loc = champollion_loc / "champollion" / "configs" / "dataset_localization" / "local.yaml"
         assert loc.exists()
@@ -290,7 +286,6 @@ class TestRun:
                 "--localization",
                 "jean-zay",
             ],
-            champollion_loc,
         )
         loc_dir = champollion_loc / "champollion" / "configs" / "dataset_localization"
         assert (loc_dir / "jean-zay.yaml").exists()
@@ -309,7 +304,6 @@ class TestRun:
                 "--external-config",
                 str(external),
             ],
-            out,
         )
         assert external.exists()
 
@@ -327,16 +321,15 @@ class TestRun:
                 "--external-config",
                 str(external_dir),
             ],
-            out,
         )
         assert (external_dir / "dataset_localization" / "local.yaml").exists()
 
     def test_run_is_idempotent(self, crop_tree, temp_dir):
         out = Path(temp_dir) / "configs"
         argv = [str(crop_tree), "--dataset", "TEST01", "--output", str(out)]
-        self._run(argv, out)
+        self._run(argv)
         first = (out / "dataset" / "TEST01" / "reference.yaml").read_text()
-        self._run(argv, out)
+        self._run(argv)
         assert (out / "dataset" / "TEST01" / "reference.yaml").read_text() == first
 
 

@@ -13,7 +13,7 @@ import pytest
 from champollion_pipeline.run_cortical_tiles import RunCorticalTiles
 
 
-@pytest.fixture(autouse=True)
+@pytest.fixture(autouse=True)  # noqa: V103
 def _stub_whole_brain_functions(monkeypatch):
     """Prevent the real whole-brain submodule calls from running in tests that
     don't care about them (REQ-WHOLEBRAIN-01 runs unconditionally in run()).
@@ -179,7 +179,7 @@ class TestNjobsHandling:
     """Test njobs calculation and validation."""
 
     @patch("champollion_pipeline.run_cortical_tiles.cpu_count", return_value=24)
-    def test_njobs_none_uses_default_calculation(self, mock_cpu):
+    def test_njobs_none_uses_default_calculation(self, _mock_cpu):
         """Test that njobs=None calculates min(22, cpu_count-2)."""
         script = RunCorticalTiles()
         script.parse_args(["/input", "/output", "--path_to_graph", "graphs", "--path_sk_with_hull", "skeleton"])
@@ -194,7 +194,7 @@ class TestNjobsHandling:
                         assert script.args.njobs == 22
 
     @patch("champollion_pipeline.run_cortical_tiles.cpu_count", return_value=8)
-    def test_njobs_none_with_low_cpu_count(self, mock_cpu):
+    def test_njobs_none_with_low_cpu_count(self, _mock_cpu):
         """Test njobs calculation with low CPU count."""
         script = RunCorticalTiles()
         script.parse_args(["/input", "/output", "--path_to_graph", "graphs", "--path_sk_with_hull", "skeleton"])
@@ -210,7 +210,7 @@ class TestNjobsHandling:
 
     @patch("champollion_pipeline.run_cortical_tiles.cpu_count", return_value=8)
     @patch("builtins.print")
-    def test_njobs_exceeds_cpu_count_prints_warning(self, mock_print, mock_cpu):
+    def test_njobs_exceeds_cpu_count_prints_warning(self, mock_print, _mock_cpu):
         """Test that warning is printed when njobs >= cpu_count."""
         script = RunCorticalTiles()
         script.parse_args(
@@ -237,7 +237,7 @@ class TestNjobsHandling:
                         assert warning_printed
 
     @patch("champollion_pipeline.run_cortical_tiles.cpu_count", return_value=1)
-    def test_njobs_minimum_one_with_cpu_count_one(self, mock_cpu):
+    def test_njobs_minimum_one_with_cpu_count_one(self, _mock_cpu):
         """njobs is at least 1 even on a single-core machine (cpu_count=1)."""
         script = RunCorticalTiles()
         script.parse_args(["/input", "/output", "--path_to_graph", "graphs", "--path_sk_with_hull", "skeleton"])
@@ -251,7 +251,7 @@ class TestNjobsHandling:
                         assert script.args.njobs == 1
 
     @patch("champollion_pipeline.run_cortical_tiles.cpu_count", return_value=2)
-    def test_njobs_minimum_one_with_cpu_count_two(self, mock_cpu):
+    def test_njobs_minimum_one_with_cpu_count_two(self, _mock_cpu):
         """njobs is at least 1 on a dual-core machine (cpu_count=2)."""
         script = RunCorticalTiles()
         script.parse_args(["/input", "/output", "--path_to_graph", "graphs", "--path_sk_with_hull", "skeleton"])
@@ -938,7 +938,7 @@ class TestRunMethod:
 
     @patch("champollion_pipeline.run_cortical_tiles.chdir")
     @patch("champollion_pipeline.run_cortical_tiles.getcwd", return_value="/original")
-    def test_run_changes_to_script_directory(self, mock_getcwd, mock_chdir, temp_dir):
+    def test_run_changes_to_script_directory(self, _mock_getcwd, mock_chdir, temp_dir):
         """Test that run changes to the cortical_tiles script directory."""
         script = RunCorticalTiles()
         script.parse_args([temp_dir, temp_dir, "--path_to_graph", "graphs", "--path_sk_with_hull", "skeleton"])

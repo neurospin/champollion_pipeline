@@ -220,7 +220,7 @@ class TestCorticalTilesTaskWorkingDirectory:
 class TestNoPixiConfigInCorticalTiles:
     """REQ-CTILESTEST-03 — encodes the user constraint; passes today by design."""
 
-    @pytest.fixture(autouse=True)
+    @pytest.fixture(autouse=True)  # noqa: V105
     def _require_checkout(self):
         if not (CORTICAL_TILES / "setup.py").exists():
             pytest.skip("external/cortical_tiles is not checked out")

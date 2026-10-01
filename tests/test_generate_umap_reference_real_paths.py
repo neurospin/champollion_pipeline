@@ -54,7 +54,7 @@ class _FakeReducer:
         return np.asarray(X)[:, :2]
 
 
-@pytest.fixture
+@pytest.fixture  # noqa: V103
 def real_get_model_paths(monkeypatch):
     fn = _load_real_get_model_paths()
     assert Path(fn.__code__.co_filename).resolve() == _HELPER_FILE
@@ -62,7 +62,7 @@ def real_get_model_paths(monkeypatch):
     return fn
 
 
-@pytest.fixture
+@pytest.fixture  # noqa: V103
 def fake_umap(monkeypatch):
     module = MagicMock()
     module.UMAP = _FakeReducer
@@ -114,9 +114,8 @@ EXPECTED_PAIRS = [("FColl-SRh", "right"), ("SC", "left")]
 
 
 class TestRealModelDiscovery:
-    def test_returns_pairs_of_recognised_models_at_any_depth(
-        self, tmp_path, models_tree, real_get_model_paths, fake_umap
-    ):
+    @pytest.mark.usefixtures("real_get_model_paths", "fake_umap")
+    def test_returns_pairs_of_recognised_models_at_any_depth(self, tmp_path, models_tree):
         out_dir = tmp_path / "out"
 
         result = generate_umap_reference.generate_umap_reference(str(models_tree), REFERENCE_SUBPATH, str(out_dir))
@@ -132,9 +131,8 @@ class TestRealModelDiscovery:
         assert np.load(out_dir / "umap_FColl-SRh_right_coords.npy").shape == (7, 2)
         assert np.load(out_dir / "umap_SC_left_coords.npy").shape == (3, 2)
 
-    def test_trailing_slash_on_models_dir_gives_same_pairs(
-        self, tmp_path, models_tree, real_get_model_paths, fake_umap
-    ):
+    @pytest.mark.usefixtures("real_get_model_paths", "fake_umap")
+    def test_trailing_slash_on_models_dir_gives_same_pairs(self, tmp_path, models_tree):
         without_slash = generate_umap_reference.generate_umap_reference(
             str(models_tree), REFERENCE_SUBPATH, str(tmp_path / "out_a")
         )

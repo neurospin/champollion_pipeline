@@ -34,7 +34,7 @@ GUARD = REPO_ROOT / "tests" / "test_submodule_checkout_isolation.py"
 CHILD_MODULE = "test_generate_champollion_config_internals.py"
 CHECKOUTS = ("champollion_V1", "cortical_tiles")
 
-pytestmark = pytest.mark.skipif(shutil.which("git") is None, reason="git not available")
+pytestmark = pytest.mark.skipif(shutil.which("git") is None, reason="git not available")  # noqa: V107
 
 
 def _git(cwd, *args):
