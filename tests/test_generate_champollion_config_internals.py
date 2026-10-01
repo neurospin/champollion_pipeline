@@ -245,24 +245,21 @@ class TestRun:
         expected = os.path.relpath(str(crop_tree), str(Path(temp_dir) / "data"))
         assert expected in ref
 
-    def test_default_output_lands_in_champollion_loc(self, crop_tree, temp_dir):
+    def test_explicit_output_inside_champollion_loc_writes_dataset_configs(self, crop_tree, temp_dir):
+        """--output pointing inside champollion_loc writes dataset YAMLs there (opt-in path)."""
         champollion_loc = Path(temp_dir) / "champollion_V1"
+        out = champollion_loc / "champollion" / "configs"
         self._run(
-            [str(crop_tree), "--dataset", "TEST01", "--champollion_loc", str(champollion_loc)],
+            [str(crop_tree), "--dataset", "TEST01", "--champollion_loc", str(champollion_loc), "--output", str(out)],
         )
-        assert (champollion_loc / "champollion" / "configs" / "dataset" / "TEST01" / "reference.yaml").exists()
+        assert (out / "dataset" / "TEST01" / "reference.yaml").exists()
 
-    def test_localization_yaml_written_into_champollion_loc_by_default(self, crop_tree, temp_dir):
+    def test_explicit_external_config_inside_champollion_loc_writes_localization_yaml(self, crop_tree, temp_dir):
+        """--external-config pointing inside champollion_loc writes localization YAML there (opt-in path)."""
         champollion_loc = Path(temp_dir) / "champollion_V1"
-        self._run(
-            [str(crop_tree), "--dataset", "TEST01", "--champollion_loc", str(champollion_loc)],
-        )
-        loc = champollion_loc / "champollion" / "configs" / "dataset_localization" / "local.yaml"
-        assert loc.exists()
-        assert f"dataset_folder: {Path(temp_dir) / 'data'}" in loc.read_text()
-
-    def test_localization_name_is_configurable(self, crop_tree, temp_dir):
-        champollion_loc = Path(temp_dir) / "champollion_V1"
+        out = Path(temp_dir) / "configs"
+        ext_config_dir = champollion_loc / "champollion" / "configs"
+        ext_config_dir.mkdir(parents=True)
         self._run(
             [
                 str(crop_tree),
@@ -270,11 +267,34 @@ class TestRun:
                 "TEST01",
                 "--champollion_loc",
                 str(champollion_loc),
+                "--output",
+                str(out),
+                "--external-config",
+                str(ext_config_dir),
+            ],
+        )
+        loc = ext_config_dir / "dataset_localization" / "local.yaml"
+        assert loc.exists()
+        assert f"dataset_folder: {Path(temp_dir) / 'data'}" in loc.read_text()
+
+    def test_localization_name_is_configurable_with_explicit_output(self, crop_tree, temp_dir):
+        """Custom --localization name is written in the correct file when --output is explicit."""
+        champollion_loc = Path(temp_dir) / "champollion_V1"
+        out = champollion_loc / "champollion" / "configs"
+        self._run(
+            [
+                str(crop_tree),
+                "--dataset",
+                "TEST01",
+                "--champollion_loc",
+                str(champollion_loc),
+                "--output",
+                str(out),
                 "--localization",
                 "jean-zay",
             ],
         )
-        loc_dir = champollion_loc / "champollion" / "configs" / "dataset_localization"
+        loc_dir = out / "dataset_localization"
         assert (loc_dir / "jean-zay.yaml").exists()
         assert not (loc_dir / "local.yaml").exists()
 

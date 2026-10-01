@@ -210,7 +210,7 @@ sulcal graphs (.arg)
   │     → aggregate → {region}/mask/{side}skeleton.npy + _subject.csv
   │
   ▼ generate_champollion_config.py
-  │   region YAMLs + local.yaml (dataset_folder)
+  │   region YAMLs + local.yaml (dataset_folder) → <dataset>/derivatives/champollion_V1/configs/ by default
   │
   ▼ champollion_V1 training (train_champollion.py)  ×56 region/side models
   │   DataModule → augmented positive pairs

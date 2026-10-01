@@ -4,12 +4,13 @@
 Guard: pipeline tests must not write into the external/ submodule checkouts
 (REQ-TESTISOL-01, REQ-TESTISOL-02).
 
-generate_champollion_config.run() writes
-``<champollion_loc>/champollion/configs/dataset_localization/<name>.yaml``
-unless ``--external-config`` is given, and ``--champollion_loc`` defaults to
-the real ``external/champollion_V1`` checkout. Tests that exercise run()
-without redirecting that write leave a dead ``/tmp`` ``dataset_folder`` in the
-submodule's ``local.yaml``.
+generate_champollion_config.run() writes YAMLs to the dataset's own derivatives
+tree by default (``<D>/<dataset>/derivatives/champollion_V1/configs``), so a
+default run no longer touches ``--champollion_loc``.  Writing inside the
+checkout is opt-in only, via explicit ``--output`` / ``--external-config``
+paths.  Tests that exercise run() use isolated tmp paths and/or the autouse
+fixture that redirects ``_DEFAULT_CHAMPOLLION_LOC``, so nothing is ever written
+into the real ``external/champollion_V1`` checkout.
 
 This guard runs the module known to exercise that code path in a child
 pytest process, then checks every initialised checkout under ``external/``:

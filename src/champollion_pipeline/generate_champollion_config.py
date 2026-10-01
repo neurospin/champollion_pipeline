@@ -2,6 +2,13 @@
 # -*- coding: utf-8 -*-
 """
 Script to define and generate Champollion's configuration.
+
+By default, YAMLs are written to the dataset's own derivatives tree:
+``<D>/<dataset>/derivatives/champollion_V1/configs``, where ``<D>`` is the
+parent of the ``<dataset>`` directory found in ``crop_path``.  Use ``--output``
+to choose a different configs root; use ``--external-config`` to write the
+dataset_localization YAML elsewhere (e.g. a writable path in read-only
+container environments).  ``--champollion_loc`` is read-only by default.
 """
 
 import glob
@@ -12,6 +19,7 @@ from os.path import abspath, dirname, exists, join
 import numpy as np
 from champollion_utils.script_builder import ScriptBuilder
 
+from champollion_pipeline.derivatives_layout import compute_champollion_configs_root
 from champollion_pipeline.utils.lib import DERIVATIVES_FOLDER, find_dataset_folder
 
 # Get the script's directory for reliable path resolution
@@ -33,13 +41,24 @@ class GenerateChampollionConfig(ScriptBuilder):
             self.add_argument("crop_path", help="Absolute path to crops path.", type=str)
             .add_required_argument("--dataset", "Name of the dataset.")
             .add_optional_argument(
-                "--champollion_loc", "Absolute path to Champollion binaries.", default=_DEFAULT_CHAMPOLLION_LOC
+                "--champollion_loc",
+                "Path to the champollion_V1 checkout (default: external/champollion_V1). "
+                "Read only: never written to unless --output / --external-config point inside it.",
+                default=_DEFAULT_CHAMPOLLION_LOC,
             )
             .add_optional_argument(
-                "--output", "Absolute path to desired output. Default is in Champollion_V1/config/dataset/"
+                "--output",
+                "Configs root; region YAMLs land at {output}/dataset/{dataset}/. "
+                "Default: <D>/<dataset>/derivatives/champollion_V1/configs, where <D> is "
+                "the parent of the <dataset> directory in crop_path.",
             )
             .add_optional_argument(
-                "--external-config", "External path to write local.yaml (for read-only containers).", default=None
+                "--external-config",
+                "Where to write the dataset_localization YAML: an existing directory "
+                "(file lands at {dir}/dataset_localization/{localization}.yaml) or a file path. "
+                "Default: {configs root}/dataset_localization/, i.e. under --output if given, "
+                "else under <D>/<dataset>/derivatives/champollion_V1/configs.",
+                default=None,
             )
             .add_flag(
                 "--external_crops",
@@ -132,22 +151,36 @@ class GenerateChampollionConfig(ScriptBuilder):
             f.write(_LOCALIZATION_TEMPLATE.format(dataset_folder=dataset_folder))
         print(f"Localization config written: {dest_path}")
 
+    def _find_checkout_dataset_configs(self, champollion_loc: str) -> str | None:
+        """Return <champollion_loc>/champollion/configs/dataset/<dataset> if that dir exists, else None.
+
+        Used only to print a notice: Hydra's primary config_path (the checkout's
+        built-in configs) wins over hydra.searchpath (--config-dir), so stale
+        in-checkout YAMLs from earlier default runs shadow the newly generated
+        ones in training. O(1).
+        """
+        path = join(champollion_loc, "champollion", "configs", "dataset", self.args.dataset)
+        return path if os.path.isdir(path) else None
+
     def run(self):
         """Execute the champollion config generation script."""
         self._validate_inputs()
 
-        # Resolve champollion_loc to absolute path
+        # Resolve champollion_loc to absolute path (read-only by default).
         champollion_loc = abspath(self.args.champollion_loc)
 
-        # Determine output location.
-        # When --output is given it is treated as the configs root (parallel to
-        # contrastive/configs/), so region YAMLs land at {output}/dataset/{dataset}/
-        # to match the Hydra config-group layout expected by train_champollion.py.
-        dataset_loc = (
-            join(abspath(self.args.output), "dataset", self.args.dataset)
+        # dataset_folder must be computed first — needed for configs_root default.
+        dataset_folder = find_dataset_folder(self.args.crop_path, self.args.dataset)
+
+        # Determine configs root: explicit --output wins, otherwise the dataset derivatives tree.
+        configs_root = (
+            abspath(self.args.output)
             if self.args.output
-            else join(champollion_loc, "champollion", "configs", "dataset", self.args.dataset)
+            else compute_champollion_configs_root(dataset_folder, self.args.dataset)
         )
+
+        # Region YAMLs land at {configs_root}/dataset/{dataset}/ to match Hydra config-group layout.
+        dataset_loc = join(configs_root, "dataset", self.args.dataset)
 
         # Create dataset directory if it doesn't exist
         if not exists(dataset_loc):
@@ -157,8 +190,6 @@ class GenerateChampollionConfig(ScriptBuilder):
         reference_yaml_dest = join(dataset_loc, "reference.yaml")
         reference_yaml_src = join(dirname(dirname(_SCRIPT_DIR)), "reference.yaml")
         self.execute_command(["cp", reference_yaml_src, dataset_loc], shell=False)
-
-        dataset_folder = find_dataset_folder(self.args.crop_path, self.args.dataset)
 
         my_lines = []
         with open(reference_yaml_dest, "r") as f:
@@ -187,7 +218,6 @@ class GenerateChampollionConfig(ScriptBuilder):
 
         # Write the dataset_localization YAML for the requested environment.
         localization_name = f"{self.args.localization}.yaml"
-        builtin_yaml = join(champollion_loc, "champollion", "configs", "dataset_localization", localization_name)
 
         if self.args.external_config:
             external_yaml = abspath(self.args.external_config)
@@ -195,7 +225,17 @@ class GenerateChampollionConfig(ScriptBuilder):
                 external_yaml = join(external_yaml, "dataset_localization", localization_name)
             self._write_localization_yaml(external_yaml, dataset_folder)
         else:
-            self._write_localization_yaml(builtin_yaml, dataset_folder)
+            # Default: follow configs_root (--output if given, else derivatives default).
+            default_yaml = join(configs_root, "dataset_localization", localization_name)
+            self._write_localization_yaml(default_yaml, dataset_folder)
+
+        # Warn if stale in-checkout dataset configs would shadow the newly generated ones.
+        stale = self._find_checkout_dataset_configs(champollion_loc)
+        if stale:
+            print(
+                f"Notice: stale in-checkout dataset configs at {stale} take precedence over "
+                f"{configs_root} in train_champollion.py; delete them."
+            )
 
         return result
 
