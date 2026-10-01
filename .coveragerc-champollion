@@ -3,7 +3,7 @@
 # Anchored at the pipeline root: the champollion_V1 test conftest chdirs into
 # tmp_path, so forked DataLoader workers would otherwise write shards there
 # that pytest-cov never combines.
-data_file = ${PIXI_PROJECT_ROOT-.}/.coverage
+data_file = ${PIXI_PROJECT_ROOT-.}/.coverage-champollion
 omit =
     # Dead code with no importer in any repo; keep-or-delete pending in TASK-120.
     */champollion/config_manager/*

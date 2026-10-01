@@ -23,8 +23,9 @@ Coverage configuration (TASK-130):
   REQ-CTILESTEST-25 plus the three extremities modules and three modules
   with no live importer; keep-or-delete pending in TASK-131); the
   distbottom modules are not omitted.
-- REQ-CTILESTEST-26 — that file's ``[run] data_file`` resolves to the
-  pipeline-root ``.coverage``.
+- REQ-CTILESTEST-26 — superseded by REQ-COVISO-03 (TASK-125): the shared
+  pipeline-root ``.coverage`` is replaced by per-task data files; location,
+  naming and gitignore are tested in ``tests/test_coverage_data_file_isolation.py``.
 
 Coverage threshold (TASK-119):
 
@@ -294,23 +295,6 @@ class TestCorticalTilesCoverageOmits:
         assert sorted(omits) == sorted(DEAD_MODULE_OMITS), (
             f"[run] omit must be exactly the {len(DEAD_MODULE_OMITS)} dead-module globs "
             f"{sorted(DEAD_MODULE_OMITS)} (REQ-CTILESTEST-139, TASK-131); got {omits!r}"
-        )
-
-
-@pytest.mark.smoke
-class TestCorticalTilesCoverageDataFile:
-    """REQ-CTILESTEST-26."""
-
-    def test_cov_config_data_file_is_pipeline_root_coverage(self, pixi_config):
-        from coverage.misc import substitute_variables
-
-        cwd, _ = _cortical_tiles_invocation(pixi_config)
-        raw = _cortical_tiles_cov_run_section(pixi_config).get("data_file")
-        assert raw, "[run] data_file must be set (REQ-CTILESTEST-26)"
-        expanded = substitute_variables(raw, {"PIXI_PROJECT_ROOT": str(REPO_ROOT)})
-        resolved = (cwd / expanded).resolve()
-        assert resolved == (REPO_ROOT / ".coverage").resolve(), (
-            f"[run] data_file {raw!r} resolves from {cwd} to {resolved}; expected {REPO_ROOT / '.coverage'}"
         )
 
 
