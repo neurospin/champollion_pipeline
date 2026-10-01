@@ -11,8 +11,11 @@ from os.path import abspath, dirname, exists, join
 
 from champollion_utils.script_builder import ScriptBuilder
 
+from champollion_pipeline.derivatives_layout import compute_champollion_configs_root
+
 _SCRIPT_DIR = dirname(abspath(__file__))
 _CONTRASTIVE_DIR = abspath(join(_SCRIPT_DIR, "..", "..", "external", "champollion_V1", "champollion"))
+_PIPELINE_DATA_DIR = abspath(join(_SCRIPT_DIR, "..", "..", "data"))
 _SWF_UNSUPPORTED_MESSAGE = (
     "--swf is not supported yet by train_champollion: soma-workflow submission "
     "for training is not implemented. Re-run without --swf to train locally, "
@@ -45,9 +48,10 @@ class TrainChampollion(ScriptBuilder):
             )
             .add_optional_argument(
                 "--config-dir",
-                "Root of a local Hydra configs directory to search for dataset configs, "
-                "in addition to the built-in champollion_V1 configs. "
-                "Must contain a dataset/{dataset}/{region}.yaml layout.",
+                "Root of a Hydra configs directory searched for dataset configs in addition to "
+                "the built-in champollion_V1 configs. Must contain dataset/{dataset}/{region}.yaml. "
+                "Default: data/{dataset}/derivatives/champollion_V1/configs (where "
+                "generate_champollion_config.py writes for crops under data/).",
                 default=None,
             )
             .add_optional_argument(
@@ -85,6 +89,13 @@ class TrainChampollion(ScriptBuilder):
             )
         )
 
+    def _resolve_config_dir(self) -> str:
+        """Return abspath(--config-dir) if given, else
+        compute_champollion_configs_root(_PIPELINE_DATA_DIR, dataset). O(1)."""
+        if self.args.config_dir:
+            return abspath(self.args.config_dir)
+        return compute_champollion_configs_root(_PIPELINE_DATA_DIR, self.args.dataset)
+
     def _resolve_output_dir(self):
         """Return absolute output path, defaulting to the pipeline derivatives tree."""
         if self.args.output_dir:
@@ -106,23 +117,15 @@ class TrainChampollion(ScriptBuilder):
     def _validate_inputs(self):
         """Check that the Hydra dataset config for this region exists."""
         builtin_path = join(_CONTRASTIVE_DIR, "configs", "dataset", self.args.dataset, f"{self.args.region}.yaml")
-        config_dir = self.args.config_dir
-        if config_dir:
-            local_path = join(abspath(config_dir), "dataset", self.args.dataset, f"{self.args.region}.yaml")
-            if not exists(local_path) and not exists(builtin_path):
-                raise FileNotFoundError(
-                    f"Dataset config not found in either location:\n"
-                    f"  local   : {local_path}\n"
-                    f"  built-in: {builtin_path}\n"
-                    f"Run generate_champollion_config.py --dataset {self.args.dataset} first."
-                )
-        else:
-            if not exists(builtin_path):
-                raise FileNotFoundError(
-                    f"Dataset config not found: {builtin_path}\n"
-                    f"Run generate_champollion_config.py --dataset {self.args.dataset} first.\n"
-                    f"For configs stored outside champollion_V1, supply --config-dir."
-                )
+        local_path = join(self._resolve_config_dir(), "dataset", self.args.dataset, f"{self.args.region}.yaml")
+        if not exists(local_path) and not exists(builtin_path):
+            raise FileNotFoundError(
+                f"Dataset config not found in either location:\n"
+                f"  local   : {local_path}\n"
+                f"  built-in: {builtin_path}\n"
+                f"Run generate_champollion_config.py --dataset {self.args.dataset} first.\n"
+                f"pass --config-dir for configs elsewhere"
+            )
 
         valid_modes = ("encoder", "classifier", "regresser")
         if self.args.mode not in valid_modes:
@@ -172,22 +175,21 @@ class TrainChampollion(ScriptBuilder):
                 f"hydra.run.dir={output_dir}",
             ]
 
-            if self.args.config_dir:
-                config_dir_abs = abspath(self.args.config_dir)
-                overrides.append(f"hydra.searchpath=[file://{config_dir_abs}]")
-                # hydra.searchpath is appended after the primary config dir, so the built-in
-                # local.yaml would take precedence over the one in config-dir. Override
-                # dataset_folder directly to ensure the config-dir's value is used.
-                local_yaml_path = join(config_dir_abs, "dataset_localization", f"{self.args.localization}.yaml")
-                if exists(local_yaml_path):
-                    with open(local_yaml_path) as _f:
-                        for _line in _f:
-                            if _line.strip().startswith("dataset_folder:"):
-                                _dataset_folder = _line.split(":", 1)[1].strip()
-                                # local.yaml uses @package _global_, so dataset_folder
-                                # is at the config root, not nested under dataset_localization.
-                                overrides.append(f"++dataset_folder={_dataset_folder}")
-                                break
+            config_dir = self._resolve_config_dir()
+            overrides.append(f"hydra.searchpath=[file://{config_dir}]")
+            # hydra.searchpath is appended after the primary config dir, so the built-in
+            # local.yaml would take precedence over the one in config-dir. Override
+            # dataset_folder directly to ensure the config-dir's value is used.
+            local_yaml_path = join(config_dir, "dataset_localization", f"{self.args.localization}.yaml")
+            if exists(local_yaml_path):
+                with open(local_yaml_path) as _f:
+                    for _line in _f:
+                        if _line.strip().startswith("dataset_folder:"):
+                            _dataset_folder = _line.split(":", 1)[1].strip()
+                            # local.yaml uses @package _global_, so dataset_folder
+                            # is at the config root, not nested under dataset_localization.
+                            overrides.append(f"++dataset_folder={_dataset_folder}")
+                            break
 
             overrides.append(f"load_sparse={'true' if self.args.load_sparse else 'false'}")
 

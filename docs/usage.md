@@ -24,9 +24,11 @@ pixi run champollion-cortical-tiles \
 ```bash
 pixi run champollion-config \
     /data/myproject/derivatives/cortical_tiles-2026/crops/2mm \
-    --dataset myproject \
-    --output /data/myproject/derivatives/champollion_V1/configs
+    --dataset myproject
 ```
+
+YAMLs are written to `/data/myproject/derivatives/champollion_V1/configs/` by default.
+Pass `--output <dir>` to choose a different configs root.
 
 ## Stage 4 — Generate Embeddings
 

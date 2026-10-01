@@ -228,9 +228,10 @@ Create the YAML configuration files that link your dataset's crop paths to the C
 ```bash
 pixi run champollion-config \
     /data/myproject/derivatives/cortical_tiles-2026/crops/canonical_25/2mm \  # path to 2mm crops (step 2 output)
-    --dataset myproject \                                          # dataset name used in YAML and paths
-    --output /data/myproject/derivatives/champollion_V1/configs   # config root; YAMLs land at {output}/dataset/{dataset}/
+    --dataset myproject                                            # dataset name used in YAML and paths
 ```
+
+By default, YAMLs are written to `/data/myproject/derivatives/champollion_V1/configs/` — the dataset's own derivatives tree. Pass `--output <dir>` to choose a different configs root; region YAMLs then land at `{output}/dataset/{dataset}/`. Use `--config-dir <dir>` in `champollion-train` when the configs root is not the default.
 
 This writes region YAML files to `configs/dataset/myproject/` and sets `dataset_folder` in `dataset_localization/local.yaml` so the model knows where your data lives. This config directory is consumed by `champollion-train` (see [Console scripts](#console-scripts)), not by `champollion-embeddings`.
 
@@ -248,14 +249,13 @@ pixi run champollion-config \
 
 ### Read-only containers (Apptainer / Docker)
 
-When the pipeline directory is read-only, write `local.yaml` to a writable path with `--external-config`:
+Because configs are written to the dataset derivatives tree by default, no special flag is needed for read-only pipeline directories. If you still need `local.yaml` in a custom location, use `--external-config`:
 
 ```bash
 pixi run champollion-config \
     /path/to/crops/2mm \
     --dataset myproject \
-    --output /writable/path/configs \
-    --external-config /writable/path/configs/dataset_localization/local.yaml  # write local.yaml here instead of inside the pipeline dir
+    --external-config /writable/path/configs/dataset_localization/local.yaml  # write local.yaml to an explicit path
 ```
 
 <details>
@@ -263,10 +263,10 @@ pixi run champollion-config \
 
 | Option | Description |
 |--------|-------------|
-| `--champollion_loc` | Path to Champollion binaries (default: `external/champollion_V1`) |
-| `--output` | Configs root directory. Region YAMLs land at `{output}/dataset/{dataset}/`. |
+| `--champollion_loc` | Path to champollion_V1 checkout (default: `external/champollion_V1`). Read only by default — never written to unless `--output` / `--external-config` point inside it. |
+| `--output` | Configs root; region YAMLs land at `{output}/dataset/{dataset}/`. Default: `<D>/<dataset>/derivatives/champollion_V1/configs`. |
 | `--external_crops` | Use the exact crop path instead of assuming the standard derivatives layout. |
-| `--external-config` | For read-only containers: write `local.yaml` to a writable path. |
+| `--external-config` | Where to write `local.yaml`: a directory (file lands at `{dir}/dataset_localization/{localization}.yaml`) or a file path. Default: `{configs root}/dataset_localization/`. |
 
 </details>
 
@@ -428,6 +428,7 @@ champollion_pipeline/
 │   └── champollion_pipeline/   # Installable Python package (entry points: champollion-*)
 │       ├── generate_morphologist_graphs.py
 │       ├── run_cortical_tiles.py
+│       ├── derivatives_layout.py
 │       ├── generate_champollion_config.py
 │       ├── generate_embeddings.py
 │       ├── put_together_embeddings.py
