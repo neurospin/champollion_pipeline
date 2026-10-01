@@ -33,8 +33,6 @@ PROJECT_ROOT = Path(__file__).resolve().parents[1]
 DOCS_DIR = PROJECT_ROOT / "docs"
 INDEX_MD = DOCS_DIR / "index.md"
 API_MD = DOCS_DIR / "api.md"
-BUILD_DIR = DOCS_DIR / "_build" / "html"
-API_HTML = BUILD_DIR / "api.html"
 
 USER_GUIDE_PAGES = ("installation", "usage", "troubleshooting")
 REFERENCE_PAGES = ("internals", "api")
@@ -106,7 +104,12 @@ class TestDocsStrictBuild:
     """REQ-DOCS-03: the page set builds strictly and renders autodoc output."""
 
     @pytest.fixture(scope="class")
-    def strict_build_result(self) -> subprocess.CompletedProcess:
+    def strict_build_dir(self, tmp_path_factory):
+        """Isolated temporary directory for the strict Sphinx build output."""
+        return tmp_path_factory.mktemp("docs_strict_build")
+
+    @pytest.fixture(scope="class")
+    def strict_build_result(self, strict_build_dir) -> subprocess.CompletedProcess:
         """Run the requirement's verify command inside the ``docs`` pixi environment.
 
         The Sphinx toolchain lives only in the ``docs`` environment declared by
@@ -115,6 +118,8 @@ class TestDocsStrictBuild:
         ``-W`` promotes warnings — including "document isn't included in any
         toctree" and unresolved references — to errors; ``--keep-going`` makes
         the build report all of them instead of stopping at the first.
+        Output is written to an isolated temporary directory so the build does
+        not touch the project tree.
         """
         if shutil.which("pixi") is None:
             pytest.skip("pixi is not on PATH; cannot reach the docs environment")
@@ -124,9 +129,6 @@ class TestDocsStrictBuild:
         pixi_ver_tuple = tuple(int(x) for x in pixi_ver_str.split()[-1].split(".") if x.isdigit())
         if pixi_ver_tuple < (0, 77, 0):
             pytest.skip(f"{pixi_ver_str} < 0.77.0: platforms table syntax not supported")
-
-        if BUILD_DIR.exists():
-            shutil.rmtree(BUILD_DIR)
 
         # Sphinx localises its diagnostics; pin the subprocess to the C locale
         # so the captured output stays readable in failure messages.
@@ -143,8 +145,10 @@ class TestDocsStrictBuild:
                 "--keep-going",
                 "-b",
                 "html",
+                "-d",
+                str(strict_build_dir / "doctrees"),
                 "docs",
-                "docs/_build/html",
+                str(strict_build_dir / "html"),
             ],
             cwd=PROJECT_ROOT,
             capture_output=True,
@@ -162,22 +166,24 @@ class TestDocsStrictBuild:
             f"--- stderr ---\n{strict_build_result.stderr}"
         )
 
-    def test_build_produces_api_html(self, strict_build_result):
-        """The build writes ``docs/_build/html/api.html``."""
-        assert API_HTML.is_file(), (
-            f"{API_HTML} was not produced by sphinx-build\n--- stdout ---\n{strict_build_result.stdout}"
+    def test_build_produces_api_html(self, strict_build_result, strict_build_dir):
+        """The build writes ``api.html`` into the isolated output directory."""
+        api_html = strict_build_dir / "html" / "api.html"
+        assert api_html.is_file(), (
+            f"{api_html} was not produced by sphinx-build\n--- stdout ---\n{strict_build_result.stdout}"
         )
 
-    def test_api_html_contains_autodoc_output(self, strict_build_result):
+    def test_api_html_contains_autodoc_output(self, strict_build_result, strict_build_dir):
         """``api.html`` mentions ``champollion_pipeline`` — proof autodoc ran.
 
         Autodoc only emits the package name into the page after successfully
         importing it, so its presence distinguishes a rendered API reference
         from a page that merely declared the directive.
         """
-        rendered = _read(API_HTML)
+        api_html = strict_build_dir / "html" / "api.html"
+        rendered = _read(api_html)
         assert "champollion_pipeline" in rendered, (
-            f"{API_HTML} does not mention 'champollion_pipeline'; autodoc produced no output\n"
+            f"{api_html} does not mention 'champollion_pipeline'; autodoc produced no output\n"
             f"--- stdout ---\n{strict_build_result.stdout}"
         )
 
