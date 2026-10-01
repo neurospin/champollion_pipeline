@@ -104,12 +104,14 @@ class TestDocsStrictBuild:
     """REQ-DOCS-03: the page set builds strictly and renders autodoc output."""
 
     @pytest.fixture(scope="class")
-    def strict_build_dir(self, tmp_path_factory):
+    @staticmethod
+    def strict_build_dir(tmp_path_factory):
         """Isolated temporary directory for the strict Sphinx build output."""
         return tmp_path_factory.mktemp("docs_strict_build")
 
     @pytest.fixture(scope="class")
-    def strict_build_result(self, strict_build_dir) -> subprocess.CompletedProcess:
+    @staticmethod
+    def strict_build_result(strict_build_dir) -> subprocess.CompletedProcess:
         """Run the requirement's verify command inside the ``docs`` pixi environment.
 
         The Sphinx toolchain lives only in the ``docs`` environment declared by
