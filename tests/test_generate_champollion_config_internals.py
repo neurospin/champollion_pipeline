@@ -86,9 +86,7 @@ class TestGetCropSize:
     def test_reads_minf_when_no_npy_present(self, temp_dir):
         mask_dir = Path(temp_dir) / "S.T.s." / "mask"
         mask_dir.mkdir(parents=True)
-        (mask_dir / "Lmask_cropped.nii.gz.minf").write_text(
-            "attributes = {'sizeX': 21, 'sizeY': 22, 'sizeZ': 23}"
-        )
+        (mask_dir / "Lmask_cropped.nii.gz.minf").write_text("attributes = {'sizeX': 21, 'sizeY': 22, 'sizeZ': 23}")
         script = make_script([temp_dir, "--dataset", "TEST01"])
         assert script._get_crop_size(os.path.join(temp_dir, "S.T.s."), "L") == (21, 22, 23)
 
@@ -199,16 +197,7 @@ class TestWriteLocalizationYaml:
 @pytest.fixture
 def crop_tree(temp_dir):
     """Build a pipeline-shaped crops tree containing one region, both sides."""
-    crops = (
-        Path(temp_dir)
-        / "data"
-        / "TEST01"
-        / "derivatives"
-        / DERIVATIVES_FOLDER
-        / "crops"
-        / "canonical_25"
-        / "2mm"
-    )
+    crops = Path(temp_dir) / "data" / "TEST01" / "derivatives" / DERIVATIVES_FOLDER / "crops" / "canonical_25" / "2mm"
     make_crop(crops, "S.C.-sylv.", side="L", shape=(1, 4, 5, 6))
     make_crop(crops, "S.C.-sylv.", side="R", shape=(1, 4, 5, 6))
     return crops
@@ -225,9 +214,7 @@ class TestRun:
 
     def test_returns_zero_and_writes_region_configs(self, crop_tree, temp_dir):
         out = Path(temp_dir) / "configs"
-        _, result = self._run(
-            [str(crop_tree), "--dataset", "TEST01", "--output", str(out)]
-        )
+        _, result = self._run([str(crop_tree), "--dataset", "TEST01", "--output", str(out)])
         assert result == 0
         dataset_dir = out / "dataset" / "TEST01"
         assert (dataset_dir / "reference.yaml").exists()

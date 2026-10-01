@@ -90,11 +90,34 @@ class TestInstallHealthStdlibOnly:
     def test_no_unconditional_third_party(self, health_source):
         """No third-party package other than optionally rich is imported at module level."""
         stdlib = {
-            "os", "sys", "re", "json", "subprocess", "pathlib", "argparse",
-            "datetime", "shutil", "platform", "importlib", "importlib.util",
-            "importlib.metadata", "textwrap", "collections", "dataclasses",
-            "contextlib", "io", "traceback", "typing", "__future__", "socket",
-            "time", "uuid", "hashlib", "stat", "tomllib", "enum",
+            "os",
+            "sys",
+            "re",
+            "json",
+            "subprocess",
+            "pathlib",
+            "argparse",
+            "datetime",
+            "shutil",
+            "platform",
+            "importlib",
+            "importlib.util",
+            "importlib.metadata",
+            "textwrap",
+            "collections",
+            "dataclasses",
+            "contextlib",
+            "io",
+            "traceback",
+            "typing",
+            "__future__",
+            "socket",
+            "time",
+            "uuid",
+            "hashlib",
+            "stat",
+            "tomllib",
+            "enum",
         }
         # Everything between module start and first try/except block
         before_try: list[str] = []
@@ -144,9 +167,7 @@ class TestInstallHealthVerbosity:
         )
 
     def test_warn_prefix_used(self, health_source):
-        assert "[WARN]" in health_source or "WARN" in health_source, (
-            "script must label warnings with a [WARN] prefix"
-        )
+        assert "[WARN]" in health_source or "WARN" in health_source, "script must label warnings with a [WARN] prefix"
 
     def test_report_header_present(self, health_source):
         assert "CHAMPOLLION INSTALL REPORT" in health_source, (

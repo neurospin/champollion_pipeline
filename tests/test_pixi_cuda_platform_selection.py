@@ -87,8 +87,7 @@ class TestWorkspaceCudaPlatformSelection:
         """
         platforms = pixi_config["workspace"]["platforms"]
         assert _has_cuda_platform_entry(platforms), (
-            "pixi.toml's [workspace] platforms has no named-platform table "
-            f"entry carrying a 'cuda' key ({platforms!r})"
+            f"pixi.toml's [workspace] platforms has no named-platform table entry carrying a 'cuda' key ({platforms!r})"
         )
 
 

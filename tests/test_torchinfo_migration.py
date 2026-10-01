@@ -111,16 +111,14 @@ class TestPixiTomlTorchinfoMigration:
         """torchinfo is declared (uncommented) under [feature.embeddings.dependencies]."""
         deps = pixi_config["feature"]["embeddings"]["dependencies"]
         assert "torchinfo" in deps, (
-            "pixi.toml's [feature.embeddings.dependencies] has no active "
-            "'torchinfo' entry; it is still commented out"
+            "pixi.toml's [feature.embeddings.dependencies] has no active 'torchinfo' entry; it is still commented out"
         )
 
     def test_torch_summary_pypi_dependency_removed(self, pixi_config):
         """torch-summary is no longer an embeddings pypi-dependency."""
         pypi_deps = pixi_config.get("feature", {}).get("embeddings", {}).get("pypi-dependencies", {})
         assert "torch-summary" not in pypi_deps, (
-            "pixi.toml's [feature.embeddings.pypi-dependencies] still lists "
-            "'torch-summary'"
+            "pixi.toml's [feature.embeddings.pypi-dependencies] still lists 'torch-summary'"
         )
 
     def test_torch_summary_string_absent_from_manifest(self, pixi_toml_text):
