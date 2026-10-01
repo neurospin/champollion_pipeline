@@ -34,6 +34,7 @@ from champollion_pipeline.utils.cortical_tiles_config import CorticalTilesConfig
 from champollion_pipeline.utils.lib import DERIVATIVES_FOLDER
 
 LABELLING_SESSION_DEFAULT = "deepcnn_session_auto"
+INPUT_TYPES_DEFAULT = ("skeleton", "foldlabel")
 
 
 class RunCorticalTiles(ScriptBuilder):
@@ -63,9 +64,11 @@ class RunCorticalTiles(ScriptBuilder):
                 "--input-types",
                 nargs="+",
                 default=None,
-                help="Input types to generate (e.g. skeleton foldlabel extremities). Default: all types.",
+                help=(
+                    "Input types to generate (e.g. skeleton foldlabel extremities). "
+                    "Default: skeleton foldlabel (extremities only on request)."
+                ),
             )
-            .add_flag("--skip-distbottom", "Skip distbottom generation (unused during inference).")
             .add_argument(
                 "--regions",
                 nargs="+",
@@ -89,6 +92,17 @@ class RunCorticalTiles(ScriptBuilder):
                 "Input is BIDS-named (sub-/ses-/run- prefixed files). Threaded into the "
                 "pipeline JSON config and the whole-brain ventricle-removal call.",
             )
+        )
+        _distbottom_group = self.parser.add_mutually_exclusive_group()
+        _distbottom_group.add_argument(
+            "--with-distbottom",
+            action="store_true",
+            help="Generate distbottom crops (off by default; unused by champollion_V1).",
+        )
+        _distbottom_group.add_argument(
+            "--skip-distbottom",
+            action="store_true",
+            help="Deprecated: distbottom is skipped by default. Kept for backward compatibility.",
         )
 
     def _preflight_check(self, output_abs: str, config_path: str) -> bool:
@@ -197,14 +211,7 @@ class RunCorticalTiles(ScriptBuilder):
             config["skel_qc_path"] = self.args.sk_qc_path if self.args.sk_qc_path else ""
             if self.args.bids:
                 config["bids"] = True
-            with open(config_file_path, "w") as f:
-                json.dump(config, f, indent=3)
-
-        # Set skip_distbottom in pipeline JSON if requested
-        if self.args.skip_distbottom and exists(config_file_path):
-            with open(config_file_path, "r") as f:
-                config = json.load(f)
-            config["skip_distbottom"] = True
+            config["skip_distbottom"] = not self.args.with_distbottom
             with open(config_file_path, "w") as f:
                 json.dump(config, f, indent=3)
 
@@ -269,8 +276,8 @@ class RunCorticalTiles(ScriptBuilder):
         if self.args.sk_qc_path:
             cmd.extend(["--sk_qc_path", self.args.sk_qc_path])
 
-        if self.args.input_types:
-            cmd.extend(["-y"] + self.args.input_types)
+        input_types = self.args.input_types or list(INPUT_TYPES_DEFAULT)
+        cmd.extend(["-y", *input_types])
 
         # Change to script directory to run the command
         chdir(script_dir)

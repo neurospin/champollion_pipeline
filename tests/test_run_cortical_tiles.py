@@ -418,8 +418,8 @@ class TestSkipDistbottom:
                         updated_config = json.loads(config_path.read_text())
                         assert updated_config.get("skip_distbottom") is True
 
-    def test_no_skip_distbottom_does_not_modify_config(self, temp_dir):
-        """Test that without --skip-distbottom, config is unchanged for that key."""
+    def test_no_distbottom_flag_sets_skip_distbottom_true(self, temp_dir):
+        """Without a distbottom flag, skip_distbottom defaults to true (REQ-TILESDEF-02)."""
         input_dir = Path(temp_dir) / "input"
         output_dir = Path(temp_dir) / "output"
         input_dir.mkdir()
@@ -447,7 +447,24 @@ class TestSkipDistbottom:
                         script.run()
 
                         updated_config = json.loads(config_path.read_text())
-                        assert "skip_distbottom" not in updated_config
+                        assert updated_config.get("skip_distbottom") is True
+
+    def test_both_distbottom_flags_are_mutually_exclusive(self):
+        """Passing both --with-distbottom and --skip-distbottom raises SystemExit."""
+        script = RunCorticalTiles()
+        with pytest.raises(SystemExit):
+            script.parse_args(
+                [
+                    "/input",
+                    "/output",
+                    "--path_to_graph",
+                    "graphs",
+                    "--path_sk_with_hull",
+                    "skeleton",
+                    "--with-distbottom",
+                    "--skip-distbottom",
+                ]
+            )
 
     def test_graphs_dir_set_to_input(self, temp_dir):
         """Test that graphs_dir in config is set to input path."""

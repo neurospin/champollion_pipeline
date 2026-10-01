@@ -207,8 +207,9 @@ Pass `--masks canonical_25` (or another version) to override the default.
 | `--sk_qc_path` | Path to QC TSV file |
 | `--njobs` | Number of CPU cores (default: auto) |
 | `--region-file` | Accepted but currently has no effect (dead code upstream) — do not rely on it. |
-| `--input-types` | Input types to generate (e.g. `skeleton foldlabel extremities`). Default: all. |
-| `--skip-distbottom` | Skip distbottom generation (saves time; not needed for inference) |
+| `--input-types` | Input types to generate (e.g. `skeleton foldlabel extremities`). Default: `skeleton foldlabel` — extremities only when listed explicitly. |
+| `--with-distbottom` | Generate distbottom crops (off by default; not read by champollion_V1). |
+| `--skip-distbottom` | Deprecated — distbottom is already skipped by default. Cannot be combined with `--with-distbottom`. |
 | `--masks` | Mask version tag |
 | `--regions` | Restrict to specific sulcal regions (space-separated) |
 | `--labelling_session` | Morphologist labelling session whose labelled graphs locate the ventricle for whole-brain removal (e.g. `0_auto`). Default: `deepcnn_session_auto`. |
