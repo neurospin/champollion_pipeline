@@ -25,21 +25,13 @@ import importlib.metadata
 import importlib.util
 import os
 import platform
-import re
 import shutil
 import subprocess
 import sys
-import traceback
 from dataclasses import dataclass, field
 from pathlib import Path
 
-try:
-    from rich.console import Console
-    from rich.panel import Panel
-    from rich.table import Table
-    _HAS_RICH = True
-except ImportError:
-    _HAS_RICH = False
+_HAS_RICH = importlib.util.find_spec("rich") is not None
 
 # ── Constants ─────────────────────────────────────────────────────────────────
 
@@ -54,21 +46,36 @@ PACKAGES = {
     },
     "champollion": {
         "src": PROJECT_ROOT / "external" / "champollion_V1",
-        "fix_cmd": [sys.executable, "-m", "pip", "install", "-e",
-                    "external/champollion_V1", "--no-deps", "--no-build-isolation"],
+        "fix_cmd": [
+            sys.executable,
+            "-m",
+            "pip",
+            "install",
+            "-e",
+            "external/champollion_V1",
+            "--no-deps",
+            "--no-build-isolation",
+        ],
         "fix_cwd": PROJECT_ROOT,
     },
     "cortical_tiles": {
         "src": PROJECT_ROOT / "external" / "cortical_tiles",
-        "fix_cmd": [sys.executable, "-m", "pip", "install", "-e",
-                    "external/cortical_tiles", "--no-deps", "--no-build-isolation"],
+        "fix_cmd": [
+            sys.executable,
+            "-m",
+            "pip",
+            "install",
+            "-e",
+            "external/cortical_tiles",
+            "--no-deps",
+            "--no-build-isolation",
+        ],
         "fix_cwd": PROJECT_ROOT,
         "env_extra": {"SKLEARN_ALLOW_DEPRECATED_SKLEARN_PACKAGE_INSTALL": "True"},
     },
     "champollion_utils": {
         "src": UTILS_DIR,
-        "fix_cmd": [sys.executable, "-m", "pip", "install", "-e",
-                    str(UTILS_DIR), "--no-deps", "--no-build-isolation"],
+        "fix_cmd": [sys.executable, "-m", "pip", "install", "-e", str(UTILS_DIR), "--no-deps", "--no-build-isolation"],
         "fix_cwd": PROJECT_ROOT,
     },
 }
@@ -85,7 +92,7 @@ SUBMODULES = {
 class CheckResult:
     name: str
     ok: bool
-    status: str       # human-readable one-liner
+    status: str  # human-readable one-liner
     fixable: bool = False
     fix_attempted: bool = False
     fix_ok: bool = False
@@ -102,6 +109,7 @@ class State:
     remote_info: list[str] = field(default_factory=list)
     sys_info: dict = field(default_factory=dict)
     git_info: dict = field(default_factory=dict)
+
 
 # ── Output helpers ────────────────────────────────────────────────────────────
 
@@ -129,6 +137,7 @@ def log_warn(msg: str) -> None:
 
 def log_remote(msg: str) -> None:
     _out(_tag("REMOTE", msg))
+
 
 # ── System info ───────────────────────────────────────────────────────────────
 
@@ -164,12 +173,16 @@ def collect_git_info() -> dict:
         # commits behind
         r = subprocess.run(
             ["git", "rev-list", "--count", "HEAD..origin/main"],
-            capture_output=True, text=True, cwd=PROJECT_ROOT, timeout=5,
+            capture_output=True,
+            text=True,
+            cwd=PROJECT_ROOT,
+            timeout=5,
         )
         info["commits_behind"] = r.stdout.strip() if r.returncode == 0 else "unknown"
     except Exception:
         pass
     return info
+
 
 # ── Package checks ────────────────────────────────────────────────────────────
 
@@ -194,7 +207,8 @@ def check_package(name: str, meta: dict, state: State, fix: bool) -> CheckResult
 
     if importable:
         result = CheckResult(
-            name=name, ok=True,
+            name=name,
+            ok=True,
             status=f"OK  version={version or 'unknown'}  src={src_path}",
         )
     elif not src_exists:
@@ -208,8 +222,7 @@ def check_package(name: str, meta: dict, state: State, fix: bool) -> CheckResult
         state.manual_cmds.append(manual)
         log_warn(f"Cannot auto-fix {name}: source directory missing.\n        Run: {manual}")
     else:
-        result = CheckResult(name=name, ok=False, status="NOT importable (source exists)",
-                             fixable=True)
+        result = CheckResult(name=name, ok=False, status="NOT importable (source exists)", fixable=True)
         if fix:
             result = _run_fix(name, meta, result, state)
         else:
@@ -237,7 +250,7 @@ def _run_fix(name: str, meta: dict, result: CheckResult, state: State) -> CheckR
             result.fix_attempted = True
             result.fix_ok = True
             result.ok = True
-            result.status = f"FIXED by pip install"
+            result.status = "FIXED by pip install"
             log_fix(f"OK  {name} installed successfully")
             state.fix_log.append(f"[OK] {name} installed")
         else:
@@ -258,6 +271,7 @@ def _run_fix(name: str, meta: dict, result: CheckResult, state: State) -> CheckR
         log_fix(f"ERROR: {exc}")
     return result
 
+
 # ── Submodule checks ──────────────────────────────────────────────────────────
 
 
@@ -267,7 +281,10 @@ def check_submodule(rel_path: str, abs_path: Path, state: State) -> CheckResult:
         try:
             r = subprocess.run(
                 ["git", "rev-parse", "--short", "HEAD"],
-                capture_output=True, text=True, cwd=abs_path, timeout=5,
+                capture_output=True,
+                text=True,
+                cwd=abs_path,
+                timeout=5,
             )
             commit = r.stdout.strip() if r.returncode == 0 else "unknown"
         except Exception:
@@ -276,7 +293,8 @@ def check_submodule(rel_path: str, abs_path: Path, state: State) -> CheckResult:
     else:
         manual = f"git submodule update --init {rel_path}"
         result = CheckResult(
-            name=rel_path, ok=False,
+            name=rel_path,
+            ok=False,
             status="NOT initialized",
             fixable=False,
             manual_cmd=manual,
@@ -288,6 +306,7 @@ def check_submodule(rel_path: str, abs_path: Path, state: State) -> CheckResult:
     state.checks.append(result)
     return result
 
+
 # ── Remote diff (--pre-update) ────────────────────────────────────────────────
 
 
@@ -295,7 +314,10 @@ def pre_update_checks(state: State) -> None:
     log_remote("Fetching origin …")
     try:
         subprocess.run(
-            ["git", "fetch", "--quiet"], cwd=PROJECT_ROOT, check=True, timeout=30,
+            ["git", "fetch", "--quiet"],
+            cwd=PROJECT_ROOT,
+            check=True,
+            timeout=30,
         )
     except Exception as exc:
         log_warn(f"git fetch failed: {exc}")
@@ -306,9 +328,12 @@ def pre_update_checks(state: State) -> None:
     try:
         r = subprocess.run(
             ["git", "log", "HEAD..origin/main", "--oneline"],
-            capture_output=True, text=True, cwd=PROJECT_ROOT, timeout=10,
+            capture_output=True,
+            text=True,
+            cwd=PROJECT_ROOT,
+            timeout=10,
         )
-        commits = [l for l in r.stdout.strip().splitlines() if l]
+        commits = [line for line in r.stdout.strip().splitlines() if line]
         if commits:
             log_remote(f"{len(commits)} new commit(s) since your HEAD:")
             for c in commits:
@@ -323,7 +348,10 @@ def pre_update_checks(state: State) -> None:
     try:
         r = subprocess.run(
             ["git", "diff", "HEAD", "origin/main", "--", "pixi.toml"],
-            capture_output=True, text=True, cwd=PROJECT_ROOT, timeout=10,
+            capture_output=True,
+            text=True,
+            cwd=PROJECT_ROOT,
+            timeout=10,
         )
         if r.stdout.strip():
             msg = "pixi.toml changed upstream → run 'pixi install' after update"
@@ -336,7 +364,10 @@ def pre_update_checks(state: State) -> None:
     try:
         r = subprocess.run(
             ["git", "merge-tree", "HEAD", "origin/main", "--", "pixi.lock"],
-            capture_output=True, text=True, cwd=PROJECT_ROOT, timeout=10,
+            capture_output=True,
+            text=True,
+            cwd=PROJECT_ROOT,
+            timeout=10,
         )
         if "<<<<<<" in r.stdout:
             msg = "pixi.lock WILL conflict → safe to reset: 'git checkout -- pixi.lock' before merge"
@@ -347,7 +378,10 @@ def pre_update_checks(state: State) -> None:
         try:
             r = subprocess.run(
                 ["git", "diff", "HEAD", "origin/main", "--name-only"],
-                capture_output=True, text=True, cwd=PROJECT_ROOT, timeout=10,
+                capture_output=True,
+                text=True,
+                cwd=PROJECT_ROOT,
+                timeout=10,
             )
             if "pixi.lock" in r.stdout:
                 msg = "pixi.lock differs from remote → may conflict; reset with: 'git checkout -- pixi.lock'"
@@ -360,7 +394,10 @@ def pre_update_checks(state: State) -> None:
     try:
         r = subprocess.run(
             ["git", "diff", "HEAD", "origin/main", "--", ".gitmodules"],
-            capture_output=True, text=True, cwd=PROJECT_ROOT, timeout=10,
+            capture_output=True,
+            text=True,
+            cwd=PROJECT_ROOT,
+            timeout=10,
         )
         if r.stdout.strip():
             msg = "submodule pointer changed upstream → run 'git submodule update --init --remote --force' after update"
@@ -368,6 +405,7 @@ def pre_update_checks(state: State) -> None:
             state.remote_info.append(msg)
     except Exception:
         pass
+
 
 # ── Report generation ─────────────────────────────────────────────────────────
 
@@ -431,6 +469,7 @@ def generate_report(state: State) -> str:
     ]
     return "\n".join(lines)
 
+
 # ── Main ──────────────────────────────────────────────────────────────────────
 
 
@@ -440,12 +479,16 @@ def main() -> int:
         formatter_class=argparse.RawDescriptionHelpFormatter,
     )
     parser.add_argument("--fix", action="store_true", help="Auto-fix stale editable installs")
-    parser.add_argument("--pre-update", action="store_true", dest="pre_update",
-                        help="Fetch remote diff and warn about what update will change")
-    parser.add_argument("--report", action="store_true",
-                        help="Save full diagnostic report to a file")
-    parser.add_argument("--output", metavar="FILE",
-                        help="Path for the report file (default: install_report_TIMESTAMP.txt)")
+    parser.add_argument(
+        "--pre-update",
+        action="store_true",
+        dest="pre_update",
+        help="Fetch remote diff and warn about what update will change",
+    )
+    parser.add_argument("--report", action="store_true", help="Save full diagnostic report to a file")
+    parser.add_argument(
+        "--output", metavar="FILE", help="Path for the report file (default: install_report_TIMESTAMP.txt)"
+    )
     args = parser.parse_args()
 
     state = State()

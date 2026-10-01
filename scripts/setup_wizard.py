@@ -62,9 +62,7 @@ def build_plan(location: str, use_case: str, gpu: bool) -> Plan:
     jean_zay = location == "2"
 
     if jean_zay:
-        notes.append(
-            "Jean-Zay: always pass -e <env> to pixi. Never use the default environment."
-        )
+        notes.append("Jean-Zay: always pass -e <env> to pixi. Never use the default environment.")
         notes.append("Use srun / sbatch from slurm/ for heavy compute stages.")
 
     if use_case == "1":  # full pipeline
@@ -101,9 +99,7 @@ def build_plan(location: str, use_case: str, gpu: bool) -> Plan:
             ]
 
     if not gpu and use_case in {"1", "2", "3", "5"}:
-        warnings.append(
-            "No GPU detected or GPU unavailable — inference and training will run on CPU and may be slow."
-        )
+        warnings.append("No GPU detected or GPU unavailable — inference and training will run on CPU and may be slow.")
 
     return Plan(commands=commands, warnings=warnings, notes=notes)
 
