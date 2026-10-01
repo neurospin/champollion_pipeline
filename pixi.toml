@@ -10,6 +10,8 @@ platforms = [
   { name = "linux-64-cuda", platform = "linux-64", cuda = "12.0" },
   "linux-64",
 ]
+# Rich-platform tables above need pixi >= 0.71; 0.80.0 is the verified floor.
+requires-pixi = ">=0.80.0"
 
 # ── Shared base (dev tools, always present in default env) ───────────────────
 [dependencies]
@@ -123,9 +125,14 @@ install-champollion = { cmd = "pip install -e external/champollion_V1 --no-deps 
 install-pipeline = "pip install -e . --no-deps --no-build-isolation"
 install-embeddings = { depends-on = ["install-champollion", "install-pipeline", "install-utils"] }
 update = """
-  git fetch && git checkout -- pixi.lock && git merge --no-edit -X theirs FETCH_HEAD && \
+  export GIT_TERMINAL_PROMPT=0 && \
+  git fetch && \
+  bash scripts/check_update_history.sh && \
+  git checkout -- pixi.lock && \
+  git merge --no-edit -X theirs FETCH_HEAD && \
+  git submodule sync --recursive && \
   git submodule update --init --force external/champollion_V1 && \
-  (cd ../champollion_utils && git pull origin master) || echo 'WARNING: champollion_utils update failed' && \
+  (cd ../champollion_utils && git pull origin master || echo 'WARNING: champollion_utils update failed — check the error above') && \
   pip install -e external/champollion_V1 --no-deps --no-build-isolation && \
   pip install -e ../champollion_utils --no-deps --no-build-isolation && \
   pip install -e . --no-deps --no-build-isolation
@@ -180,14 +187,23 @@ pre-update = "python scripts/install_health.py --pre-update"
 
 install-all = { depends-on = ["init-submodules", "install-cortical-tiles", "install-champollion", "install-pipeline", "install-utils", "setup-data", "test-smoke", "check-install"] }
 
-update-pipeline = "git fetch && git checkout -- pixi.lock && git merge --no-edit -X theirs FETCH_HEAD"
+update-pipeline = """
+  export GIT_TERMINAL_PROMPT=0 && \
+  git fetch && \
+  bash scripts/check_update_history.sh && \
+  git checkout -- pixi.lock && \
+  git merge --no-edit -X theirs FETCH_HEAD
+"""
 
 update-submodules = """
+  export GIT_TERMINAL_PROMPT=0 && \
+  git submodule sync --recursive && \
   git submodule update --init --force external/champollion_V1 && \
   git submodule update --init --force external/cortical_tiles
 """
 
 update-utils = """
+  export GIT_TERMINAL_PROMPT=0 && \
   cd ../champollion_utils && git pull origin master || echo 'WARNING: champollion_utils update failed — check the error above'
 """
 

@@ -11,9 +11,11 @@ Usage:
 
 from __future__ import annotations
 
+import re
 import shutil
 import subprocess
 import sys
+from pathlib import Path
 from typing import NamedTuple
 
 try:
@@ -26,6 +28,34 @@ except ImportError:
     sys.exit(1)
 
 console = Console()
+
+PIXI_MANIFEST = Path(__file__).resolve().parents[1] / "pixi.toml"
+REQUIRES_PIXI_FLOOR = re.compile(r'^requires-pixi\s*=\s*"[^"]*>=\s*v?(\d+(?:\.\d+)*)', re.MULTILINE)
+PIXI_UPGRADE_COMMAND = "pixi self-update"
+
+
+def find_minimum_pixi_version(manifest: Path = PIXI_MANIFEST) -> str | None:
+    """Return the minimum pixi version from the requires-pixi floor, or None. O(n) in file size."""
+    try:
+        text = manifest.read_text(encoding="utf-8")
+    except OSError:
+        return None
+    match = REQUIRES_PIXI_FLOOR.search(text)
+    return match.group(1) if match else None
+
+
+def print_pixi_version_notice() -> None:
+    """Print the minimum pixi version and upgrade command before any questions."""
+    minimum = find_minimum_pixi_version()
+    if minimum is not None:
+        msg = (
+            f"This pipeline needs pixi >= {minimum}. "
+            f"Check with `pixi --version`; upgrade with `{PIXI_UPGRADE_COMMAND}`."
+        )
+    else:
+        msg = f"This pipeline needs a recent pixi. Check with `pixi --version`; upgrade with `{PIXI_UPGRADE_COMMAND}`."
+    console.print(msg, highlight=False)
+
 
 # ── Location ──────────────────────────────────────────────────────────────────
 
@@ -186,6 +216,7 @@ def main(dry_run: bool = False) -> None:
             border_style="cyan",
         )
     )
+    print_pixi_version_notice()
 
     location = ask_where()
     use_case = ask_use_case()
