@@ -30,7 +30,6 @@ PROJECT_ROOT = Path(__file__).resolve().parents[1]
 DOCS_DIR = PROJECT_ROOT / "docs"
 CONF_PY = DOCS_DIR / "conf.py"
 SRC_DIR = PROJECT_ROOT / "src"
-BUILD_DIR = DOCS_DIR / "_build" / "html"
 
 REQUIRED_EXTENSIONS = (
     "myst_parser",
@@ -141,7 +140,17 @@ class TestDocsConfBuild:
     """REQ-DOCS-02: the configuration actually drives a clean Sphinx build."""
 
     @pytest.fixture(scope="class")
-    def sphinx_build_result(self) -> subprocess.CompletedProcess:
+    def conf_build_dir(self, tmp_path_factory) -> Path:
+        """Per-session scratch directory for the build (REQ-TEST-SPEED-07).
+
+        Building into the pytest temporary base directory keeps ``docs/_build``
+        untouched, so concurrent suite runs or a parallel ``docs-build`` cannot
+        collide with this test.
+        """
+        return tmp_path_factory.mktemp("docs_conf_build")
+
+    @pytest.fixture(scope="class")
+    def sphinx_build_result(self, conf_build_dir) -> subprocess.CompletedProcess:
         """Run ``sphinx-build`` end to end inside the ``docs`` pixi environment.
 
         The Sphinx toolchain (``sphinx``, ``furo``, ``myst-parser``) lives only
@@ -158,16 +167,25 @@ class TestDocsConfBuild:
         if pixi_ver_tuple < (0, 77, 0):
             pytest.skip(f"{pixi_ver_str} < 0.77.0: platforms table syntax not supported")
 
-        if BUILD_DIR.exists():
-            shutil.rmtree(BUILD_DIR)
-
         # Sphinx localises its diagnostics; on a French locale the word
         # "ERROR" never appears and the error-line scan below would silently
         # pass on a broken build. Pin the subprocess to the C locale.
         env = {**os.environ, "LC_ALL": "C", "LANG": "C", "LANGUAGE": "en"}
 
         return subprocess.run(
-            ["pixi", "run", "-e", "docs", "sphinx-build", "-b", "html", "docs", "docs/_build/html"],
+            [
+                "pixi",
+                "run",
+                "-e",
+                "docs",
+                "sphinx-build",
+                "-b",
+                "html",
+                "-d",
+                str(conf_build_dir / "doctrees"),
+                "docs",
+                str(conf_build_dir / "html"),
+            ],
             cwd=PROJECT_ROOT,
             capture_output=True,
             text=True,
@@ -195,9 +213,9 @@ class TestDocsConfBuild:
         error_lines = [line for line in combined.splitlines() if "ERROR" in line or "Configuration error" in line]
         assert not error_lines, "sphinx-build reported errors:\n" + "\n".join(error_lines)
 
-    def test_build_produces_index_html(self, sphinx_build_result):
-        """The build writes ``docs/_build/html/index.html``."""
-        index_html = BUILD_DIR / "index.html"
+    def test_build_produces_index_html(self, sphinx_build_result, conf_build_dir):
+        """The build writes ``index.html`` into its output directory."""
+        index_html = conf_build_dir / "html" / "index.html"
         assert index_html.is_file(), (
             f"{index_html} was not produced by sphinx-build\n--- stdout ---\n{sphinx_build_result.stdout}"
         )
