@@ -380,6 +380,71 @@ class TestSwfUnsupported:
         assert calls["execute"] == []
 
 
+class TestRunRestoresWorkingDirectory:
+    """REQ-TRAIN-CWD-01: run() leaves the process cwd as it found it, even on error."""
+
+    START_CWD = "/virtual/caller/cwd"
+
+    @pytest.fixture
+    def virtual_cwd(self, monkeypatch):
+        """Replace os.chdir/os.getcwd with a tracker so no real directory change happens."""
+        state = {"cwd": self.START_CWD}
+
+        def fake_chdir(path):
+            state["cwd"] = os.fspath(path)
+
+        monkeypatch.setattr(train_champollion.os, "chdir", fake_chdir)
+        monkeypatch.setattr(train_champollion.os, "getcwd", lambda: state["cwd"])
+        return state
+
+    def _script(self, tmp_path, extra=()):
+        script = make_script(BASE_ARGS + ["--output_dir", str(tmp_path / "m"), *extra])
+        script._validate_inputs = lambda: None
+        return script
+
+    def test_cwd_restored_after_successful_training(self, tmp_path, virtual_cwd):
+        script = self._script(tmp_path)
+        script.execute_command = lambda cmd, shell=False: 0
+        assert script.run() == 0
+        assert virtual_cwd["cwd"] == self.START_CWD
+
+    def test_cwd_restored_when_training_command_raises(self, tmp_path, virtual_cwd):
+        def boom(cmd, shell=False):
+            raise RuntimeError("training subprocess failed")
+
+        script = self._script(tmp_path)
+        script.execute_command = boom
+        with pytest.raises(RuntimeError, match="training subprocess failed"):
+            script.run()
+        assert virtual_cwd["cwd"] == self.START_CWD
+
+    def test_cwd_restored_when_localization_file_read_raises(self, tmp_path, virtual_cwd):
+        config_dir = tmp_path / "cfg"
+        # A directory where local.yaml is expected: exists() is True, open() raises.
+        (config_dir / "dataset_localization" / "local.yaml").mkdir(parents=True)
+        script = self._script(tmp_path, ["--config-dir", str(config_dir)])
+        script.execute_command = lambda cmd, shell=False: pytest.fail("must not reach training")
+        with pytest.raises(IsADirectoryError):
+            script.run()
+        assert virtual_cwd["cwd"] == self.START_CWD
+
+
+class TestDocstringsNoContrastive:
+    """REQ-TRAIN-DOC-01: docstrings must not name the pre-rename `contrastive` package."""
+
+    def test_no_docstring_mentions_contrastive(self):
+        docs = {
+            "module": train_champollion.__doc__,
+            "TrainChampollion": TrainChampollion.__doc__,
+            "main": main.__doc__,
+        }
+        for name, member in vars(TrainChampollion).items():
+            if callable(member):
+                docs[f"TrainChampollion.{name}"] = member.__doc__
+        offenders = {name: doc for name, doc in docs.items() if doc and "contrastive" in doc.lower()}
+        assert not offenders, f"docstrings still mention 'contrastive': {sorted(offenders)}"
+
+
 class TestMain:
     """Test the main() entry point."""
 
