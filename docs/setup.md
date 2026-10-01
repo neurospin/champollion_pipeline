@@ -21,7 +21,7 @@ flowchart TD
     JZ -->|Embeddings inference| JZE["pixi run -e embeddings install-embeddings"]
     JZ -->|Training| JZT["pixi run -e training install-embeddings"]
     JZ -->|Docs| JZD["pixi run -e docs build-docs"]
-    JZE --> I[See slurm/ for SLURM scripts]
+    JZE --> I["SLURM template: scripts/templates/train_champollion.slurm.example"]
     JZT --> I
 ```
 

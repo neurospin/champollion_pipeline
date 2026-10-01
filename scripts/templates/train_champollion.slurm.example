@@ -1,0 +1,132 @@
+#!/bin/bash
+# Training template for Jean-Zay (or any SLURM GPU cluster).
+# Copy it to slurm/ (cluster-local, gitignored), replace every <PLACEHOLDER>,
+# create the logs directory, then submit with: sbatch <copy>.slurm
+#SBATCH --job-name=champ_train
+#SBATCH --account=<ACCOUNT>
+#SBATCH --partition=<PARTITION>
+#SBATCH --qos=<QOS>
+#SBATCH --gres=gpu:1
+#SBATCH --cpus-per-task=16
+#SBATCH --time=20:00:00
+#SBATCH --array=<INDICES>
+# SLURM opens these files before the script body runs: <LOG_DIR> must exist.
+#SBATCH --output=<LOG_DIR>/train_%A_%a_%x.out
+#SBATCH --error=<LOG_DIR>/train_%A_%a_%x.err
+
+# ---------------------------------------------------------------------------
+# One array task trains one region; --array lists indices into REGIONS below.
+# Compute nodes have no network: the training env must already be installed
+# on a login node (CONDA_OVERRIDE_CUDA=<CUDA_VERSION> pixi install -e training),
+# and every pixi call below uses --frozen so it never tries to resolve/install.
+# ---------------------------------------------------------------------------
+
+# ~/.bashrc puts pixi on PATH; source it before enabling nounset.
+source ~/.bashrc
+# Fail on the first error, unset variable or failed pipe stage, so a broken
+# job is reported FAILED by SLURM instead of COMPLETED.
+set -euo pipefail
+
+# ---- Configure here -------------------------------------------------------
+PIPELINE_DIR="<WORK_DIR>/champollion_pipeline"
+DATASET="<DATASET>"
+CONFIG_DIR="<CONFIG_DIR>"   # dataset configs (--external-config output); empty to use the defaults
+OUTPUT_DIR="<OUTPUT_DIR>"   # one sub-directory per region is created here
+LOCALIZATION="<LOCALIZATION>"
+LOAD_SPARSE=false
+OVERWRITE=false
+# ---------------------------------------------------------------------------
+
+REGIONS=(
+    SC-sylv_left
+    SC-SPeC_left
+    SC-SPoC_left
+    SPeC_left
+    SPoC_left
+    SFint-FCMant_left
+    SFinf-BROCA-SPeCinf_left
+    STs_left
+    ScCal-SLi_left
+    FCMpost-SpC_left
+    STi-SOTlat_left
+    OCCIPITAL_left
+    FIP-FIPPoCinf_left
+    SFinter-SFsup_left
+    SFmedian-SFpoltr-SFsup_left
+    SOr_left
+    SOr-SOlf_left
+    FPO-SCu-ScCal_left
+    SsP-SPaint_left
+    STsbr_left
+    Lobule_parietal_sup_left
+    SFmarginal-SFinfant_left
+    FColl-SRh_left
+    STi-STs-STpol_left
+    FCLp-subsc-FCLa-INSULA_left
+    SFint-SR_left
+    SCall_left
+    SCall-SsP-SintraCing_left
+    SC-sylv_right
+    SC-SPeC_right
+    SC-SPoC_right
+    SPeC_right
+    SPoC_right
+    SFint-FCMant_right
+    SFinf-BROCA-SPeCinf_right
+    STs_right
+    ScCal-SLi_right
+    FCMpost-SpC_right
+    STi-SOTlat_right
+    OCCIPITAL_right
+    FIP-FIPPoCinf_right
+    SFinter-SFsup_right
+    SFmedian-SFpoltr-SFsup_right
+    SOr_right
+    SOr-SOlf_right
+    FPO-SCu-ScCal_right
+    SsP-SPaint_right
+    STsbr_right
+    Lobule_parietal_sup_right
+    SFmarginal-SFinfant_right
+    FColl-SRh_right
+    STi-STs-STpol_right
+    FCLp-subsc-FCLa-INSULA_right
+    SFint-SR_right
+    SCall_right
+    SCall-SsP-SintraCing_right
+)
+
+# Record where and why the script stops, so a failure is never silent.
+trap 'echo "FAILED: exit $? at line ${LINENO}: ${BASH_COMMAND}" >&2' ERR
+trap 'rc=$?; echo "Finished  : $(date) (exit ${rc})"' EXIT
+
+REGION="${REGIONS[$SLURM_ARRAY_TASK_ID]}"
+
+# Stream Python output to the log instead of buffering it until exit.
+export PYTHONUNBUFFERED=1
+
+echo "========================================"
+echo "Array job : ${SLURM_ARRAY_JOB_ID}[${SLURM_ARRAY_TASK_ID}]"
+echo "Node      : ${SLURM_NODELIST}"
+echo "Dataset   : ${DATASET}"
+echo "Region    : ${REGION}"
+echo "Output    : ${OUTPUT_DIR}/${REGION}"
+echo "CUDA dev  : ${CUDA_VISIBLE_DEVICES:-unset}"
+echo "Started   : $(date)"
+echo "========================================"
+
+cd "${PIPELINE_DIR}"
+
+# Fail fast if the GPU is not usable from this environment.
+nvidia-smi --query-gpu=name,driver_version,memory.total --format=csv
+pixi run --frozen -e training python -c \
+    "import torch; assert torch.cuda.is_available(), 'CUDA not available'; print('torch', torch.__version__, 'cuda', torch.version.cuda, torch.cuda.get_device_name(0)); torch.zeros(1).cuda()"
+
+ARGS=(--localization "${LOCALIZATION}" --dataset "${DATASET}" --region "${REGION}" --njobs "${SLURM_CPUS_PER_TASK}")
+
+[[ "${LOAD_SPARSE}" == "true" ]] && ARGS+=(--load-sparse)
+[[ "${OVERWRITE}"   == "true" ]] && ARGS+=(--overwrite)
+[[ -n "${CONFIG_DIR}" ]]         && ARGS+=(--config-dir "${CONFIG_DIR}")
+[[ -n "${OUTPUT_DIR}" ]]         && ARGS+=(--output_dir "${OUTPUT_DIR}/${REGION}")
+
+pixi run --frozen -e training train "${ARGS[@]}"
