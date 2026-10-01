@@ -218,9 +218,9 @@ uninstall-all = """
   echo "Uninstallation of Pixi-managed dependencies complete."
 """
 
-lint = "ruff check src/ tests/"
-lint-fix = "ruff check --fix src/ tests/"
-format = "ruff format src/ tests/"
+lint = "ruff check src/ tests/ main.py scripts/"
+lint-fix = "ruff check --fix src/ tests/ main.py scripts/"
+format = "ruff format src/ tests/ main.py scripts/"
 dead-code = "vulture src/ tests/"
 audit = "pip-audit"
 

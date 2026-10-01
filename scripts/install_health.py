@@ -25,22 +25,13 @@ import importlib.metadata
 import importlib.util
 import os
 import platform
-import re
 import shutil
 import subprocess
 import sys
-import traceback
 from dataclasses import dataclass, field
 from pathlib import Path
 
-try:
-    from rich.console import Console
-    from rich.panel import Panel
-    from rich.table import Table
-
-    _HAS_RICH = True
-except ImportError:
-    _HAS_RICH = False
+_HAS_RICH = importlib.util.find_spec("rich") is not None
 
 # ── Constants ─────────────────────────────────────────────────────────────────
 
@@ -259,7 +250,7 @@ def _run_fix(name: str, meta: dict, result: CheckResult, state: State) -> CheckR
             result.fix_attempted = True
             result.fix_ok = True
             result.ok = True
-            result.status = f"FIXED by pip install"
+            result.status = "FIXED by pip install"
             log_fix(f"OK  {name} installed successfully")
             state.fix_log.append(f"[OK] {name} installed")
         else:
@@ -342,7 +333,7 @@ def pre_update_checks(state: State) -> None:
             cwd=PROJECT_ROOT,
             timeout=10,
         )
-        commits = [l for l in r.stdout.strip().splitlines() if l]
+        commits = [line for line in r.stdout.strip().splitlines() if line]
         if commits:
             log_remote(f"{len(commits)} new commit(s) since your HEAD:")
             for c in commits:

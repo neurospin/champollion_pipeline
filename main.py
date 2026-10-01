@@ -20,15 +20,16 @@ Usage:
     python main.py --dataset-name test_data --verbose
 """
 
+import argparse
+import logging
 import os
 import sys
-import logging
-import argparse
-import yaml
 from abc import ABC, abstractmethod
-from typing import Dict, List, Optional
-from pathlib import Path
 from dataclasses import dataclass, field
+from pathlib import Path
+from typing import Dict, List, Optional
+
+import yaml
 from champollion_utils.update_check import check_for_updates
 
 # Add src to path for imports
@@ -37,12 +38,12 @@ sys.path.insert(0, str(pipeline_src))
 
 # Import pipeline scripts
 try:
-    from generate_morphologist_graphs import GenerateMorphologistGraphs
-    from run_cortical_tiles import RunCorticalTiles
     from generate_champollion_config import GenerateChampollionConfig
     from generate_embeddings import GenerateEmbeddings
-    from put_together_embeddings import PutTogetherEmbeddings
+    from generate_morphologist_graphs import GenerateMorphologistGraphs
     from generate_snapshots import GenerateSnapshots
+    from put_together_embeddings import PutTogetherEmbeddings
+    from run_cortical_tiles import RunCorticalTiles
 except ImportError as e:
     print(f"Warning: Could not import pipeline scripts: {e}")
     print("Some stages may not be available.")
