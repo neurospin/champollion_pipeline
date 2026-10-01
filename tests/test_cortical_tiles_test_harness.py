@@ -14,6 +14,16 @@ Pipeline-side requirements:
   lock file or ``[tool.pixi]`` table (user constraint, 2026-09-30: the runner
   lives in this repo's ``pixi.toml``, never upstream).
 
+Coverage configuration (TASK-130):
+
+- REQ-CTILESTEST-24 — that task passes ``--cov-config`` naming the
+  pipeline-root ``.coveragerc-cortical-tiles`` (resolved from the task cwd).
+- REQ-CTILESTEST-25 — that file's ``[run] omit`` is exactly the 16 dead
+  cortical_tiles modules (keep-or-delete pending in TASK-131); the
+  extremities/distbottom modules are not omitted.
+- REQ-CTILESTEST-26 — that file's ``[run] data_file`` resolves to the
+  pipeline-root ``.coverage``.
+
 The pipeline ``test`` task scope guard (TASK-115 scope item c) is already
 REQ-CHAMPTEST-04, tested in ``tests/test_champollion_v1_test_harness.py``.
 
@@ -21,6 +31,8 @@ Offline: only parses ``pixi.toml``/``pyproject.toml`` and inspects the
 submodule working tree.
 """
 
+import configparser
+import re
 import shlex
 from pathlib import Path
 
@@ -35,6 +47,28 @@ TASK_NAME = "test-cortical-tiles"
 UPSTREAM_TEST_DIR = CORTICAL_TILES / "tests"
 COVERAGE_PACKAGE = "cortical_tiles"
 COVERAGE_PACKAGE_DIR = CORTICAL_TILES / "cortical_tiles"
+
+COV_CONFIG_FILE = REPO_ROOT / ".coveragerc-cortical-tiles"
+# REQ-CTILESTEST-25 Omit set (paths inside the cortical_tiles package).
+DEAD_MODULES = (
+    "preprocessing/transforms.py",
+    "preprocessing/pynet_transforms.py",
+    "preprocessing/create_sets.py",
+    "preprocessing/datasets.py",
+    "brainvisa/benchmark_pipeline.py",
+    "brainvisa/put_together_datasets.py",
+    "brainvisa/dataset_to_sparse.py",
+    "brainvisa/generate_sparse_dataset.py",
+    "brainvisa/utils/generate_spam_graph.py",
+    "brainvisa/utils/convert_volume_to_bucket.py",
+    "brainvisa/utils/display_reconstructions.py",
+    "brainvisa/utils/mask_qc.py",
+    "brainvisa/utils/write_distance_map.py",
+    "brainvisa/utils/generate_spam_sulcal_region.py",
+    "brainvisa/utils/suppress_files_from_csv.py",
+    "utils/split_train_test.py",
+)
+DEAD_MODULE_OMITS = tuple(f"*/cortical_tiles/{module}" for module in DEAD_MODULES)
 
 
 @pytest.fixture(scope="module")
@@ -183,3 +217,70 @@ class TestNoPixiConfigInCorticalTiles:
         with pyproject.open("rb") as handle:
             tool = tomllib.load(handle).get("tool", {})
         assert "pixi" not in tool, "external/cortical_tiles/pyproject.toml must not carry a [tool.pixi] table"
+
+
+def _expand_pixi_root(value: str) -> str:
+    """Expand ``$PIXI_PROJECT_ROOT``/``${PIXI_PROJECT_ROOT}`` as pixi's task shell does."""
+    return re.sub(r"\$\{PIXI_PROJECT_ROOT\}|\$PIXI_PROJECT_ROOT\b", str(REPO_ROOT), value)
+
+
+def _cortical_tiles_cov_config_path(pixi_config) -> Path:
+    """The single ``--cov-config`` of ``test-cortical-tiles``, resolved from the task cwd."""
+    cwd, argv = _cortical_tiles_invocation(pixi_config)
+    values = _option_values(argv, "--cov-config")
+    assert len(values) == 1, f"{TASK_NAME} must pass exactly one --cov-config (REQ-CTILESTEST-24); got {values!r}"
+    return (cwd / _expand_pixi_root(values[0])).resolve()
+
+
+def _cortical_tiles_cov_run_section(pixi_config) -> configparser.SectionProxy:
+    path = _cortical_tiles_cov_config_path(pixi_config)
+    assert path.is_file(), f"--cov-config file {path} does not exist"
+    parser = configparser.ConfigParser()
+    parser.read(path, encoding="utf-8")
+    assert parser.has_section("run"), f"{path.name} has no [run] section"
+    return parser["run"]
+
+
+def _list_setting(value: str) -> list[str]:
+    """coverage.py list option: comma- and/or newline-separated."""
+    return [item.strip() for line in value.splitlines() for item in line.split(",") if item.strip()]
+
+
+@pytest.mark.smoke
+class TestCorticalTilesCoverageConfigFile:
+    """REQ-CTILESTEST-24."""
+
+    def test_task_passes_pipeline_root_coveragerc_cortical_tiles(self, pixi_config):
+        path = _cortical_tiles_cov_config_path(pixi_config)
+        assert path == COV_CONFIG_FILE.resolve(), (
+            f"{TASK_NAME} --cov-config must resolve (from cwd external/cortical_tiles) to {COV_CONFIG_FILE}; got {path}"
+        )
+        assert path.is_file(), f"--cov-config file {path} does not exist"
+
+
+@pytest.mark.smoke
+class TestCorticalTilesCoverageOmits:
+    """REQ-CTILESTEST-25."""
+
+    def test_cov_config_omits_exactly_the_dead_modules(self, pixi_config):
+        omits = _list_setting(_cortical_tiles_cov_run_section(pixi_config).get("omit", ""))
+        assert sorted(omits) == sorted(DEAD_MODULE_OMITS), (
+            f"[run] omit must be exactly the 16 dead-module globs {sorted(DEAD_MODULE_OMITS)} (TASK-131); got {omits!r}"
+        )
+
+
+@pytest.mark.smoke
+class TestCorticalTilesCoverageDataFile:
+    """REQ-CTILESTEST-26."""
+
+    def test_cov_config_data_file_is_pipeline_root_coverage(self, pixi_config):
+        from coverage.misc import substitute_variables
+
+        cwd, _ = _cortical_tiles_invocation(pixi_config)
+        raw = _cortical_tiles_cov_run_section(pixi_config).get("data_file")
+        assert raw, "[run] data_file must be set (REQ-CTILESTEST-26)"
+        expanded = substitute_variables(raw, {"PIXI_PROJECT_ROOT": str(REPO_ROOT)})
+        resolved = (cwd / expanded).resolve()
+        assert resolved == (REPO_ROOT / ".coverage").resolve(), (
+            f"[run] data_file {raw!r} resolves from {cwd} to {resolved}; expected {REPO_ROOT / '.coverage'}"
+        )

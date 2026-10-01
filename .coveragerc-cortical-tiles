@@ -1,0 +1,24 @@
+# Coverage config for the `test-cortical-tiles` pixi task only.
+# The task runs with cwd = external/cortical_tiles.
+[run]
+# Anchored at the pipeline root so nothing is written into the submodule;
+# the ../.. fallback is the pipeline root from the task cwd.
+data_file = ${PIXI_PROJECT_ROOT-../..}/.coverage
+omit =
+    # Dead code with no importer outside its own cluster; keep-or-delete pending in TASK-131.
+    */cortical_tiles/preprocessing/transforms.py
+    */cortical_tiles/preprocessing/pynet_transforms.py
+    */cortical_tiles/preprocessing/create_sets.py
+    */cortical_tiles/preprocessing/datasets.py
+    */cortical_tiles/brainvisa/benchmark_pipeline.py
+    */cortical_tiles/brainvisa/put_together_datasets.py
+    */cortical_tiles/brainvisa/dataset_to_sparse.py
+    */cortical_tiles/brainvisa/generate_sparse_dataset.py
+    */cortical_tiles/brainvisa/utils/generate_spam_graph.py
+    */cortical_tiles/brainvisa/utils/convert_volume_to_bucket.py
+    */cortical_tiles/brainvisa/utils/display_reconstructions.py
+    */cortical_tiles/brainvisa/utils/mask_qc.py
+    */cortical_tiles/brainvisa/utils/write_distance_map.py
+    */cortical_tiles/brainvisa/utils/generate_spam_sulcal_region.py
+    */cortical_tiles/brainvisa/utils/suppress_files_from_csv.py
+    */cortical_tiles/utils/split_train_test.py
