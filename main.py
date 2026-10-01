@@ -56,9 +56,11 @@ except ImportError:
 
 # ====================== Configuration Management ======================
 
+
 @dataclass
 class DatasetConfig:
     """Configuration for dataset processing."""
+
     name: str = "example_dataset"
     dataset_localization: str = "local"
     datasets_root: str = ""
@@ -116,6 +118,7 @@ class DatasetConfig:
 @dataclass
 class PipelineConfig:
     """Configuration for pipeline execution."""
+
     # Root paths
     root_path: str = str(Path(__file__).parent)
     data_path: str = ""
@@ -124,28 +127,32 @@ class PipelineConfig:
     champollion_v1_path: str = ""
 
     # Pipeline stages to execute
-    stages: Dict[str, bool] = field(default_factory=lambda: {
-        'generate_morphologist_graphs': False,
-        'run_cortical_tiles': False,
-        'generate_champollion_config': False,
-        'generate_embeddings': True,
-        'put_together_embeddings': False,
-        'generate_snapshots': False,
-    })
+    stages: Dict[str, bool] = field(
+        default_factory=lambda: {
+            "generate_morphologist_graphs": False,
+            "run_cortical_tiles": False,
+            "generate_champollion_config": False,
+            "generate_embeddings": True,
+            "put_together_embeddings": False,
+            "generate_snapshots": False,
+        }
+    )
 
     # Stage dependencies
-    dependencies: Dict[str, List[str]] = field(default_factory=lambda: {
-        'generate_morphologist_graphs': [],
-        'run_cortical_tiles': ['generate_morphologist_graphs'],
-        'generate_champollion_config': ['run_cortical_tiles'],
-        'generate_embeddings': ['generate_champollion_config'],
-        'put_together_embeddings': ['generate_embeddings'],
-        'generate_snapshots': ['put_together_embeddings'],
-    })
+    dependencies: Dict[str, List[str]] = field(
+        default_factory=lambda: {
+            "generate_morphologist_graphs": [],
+            "run_cortical_tiles": ["generate_morphologist_graphs"],
+            "generate_champollion_config": ["run_cortical_tiles"],
+            "generate_embeddings": ["generate_champollion_config"],
+            "put_together_embeddings": ["generate_embeddings"],
+            "generate_snapshots": ["put_together_embeddings"],
+        }
+    )
 
     # Execution settings
     mode: str = "sequential"
-    n_workers: int = 0        # 0 means use os.cpu_count()
+    n_workers: int = 0  # 0 means use os.cpu_count()
     worker_timeout: int = 7200  # seconds per worker
     stop_on_error: bool = True
     verbose: bool = False
@@ -166,7 +173,7 @@ class ConfigLoader:
     @staticmethod
     def load_from_yaml(config_path: str) -> PipelineConfig:
         """Load configuration from YAML file."""
-        with open(config_path, 'r') as f:
+        with open(config_path, "r") as f:
             config_dict = yaml.safe_load(f)
 
         return ConfigLoader._dict_to_config(config_dict)
@@ -175,7 +182,7 @@ class ConfigLoader:
     def _dict_to_config(config_dict: Dict) -> PipelineConfig:
         """Convert dictionary to PipelineConfig object."""
         # Extract dataset config
-        dataset_dict = config_dict.pop('dataset', {})
+        dataset_dict = config_dict.pop("dataset", {})
         dataset_config = DatasetConfig(**dataset_dict)
 
         # Create pipeline config
@@ -188,67 +195,69 @@ class ConfigLoader:
         """Save configuration to YAML file."""
         # Convert to dictionary
         config_dict = {
-            'root_path': config.root_path,
-            'data_path': config.data_path,
-            'models_path': config.models_path,
-            'outputs_path': config.outputs_path,
-            'champollion_v1_path': config.champollion_v1_path,
-            'stages': config.stages,
-            'dependencies': config.dependencies,
-            'mode': config.mode,
-            'stop_on_error': config.stop_on_error,
-            'verbose': config.verbose,
-            'log_level': config.log_level,
-            'log_dir': config.log_dir,
-            'log_to_file': config.log_to_file,
-            'log_to_console': config.log_to_console,
-            'dataset': {
-                'name': config.dataset.name,
-                'dataset_localization': config.dataset.dataset_localization,
-                'datasets_root': config.dataset.datasets_root,
-                'datasets': config.dataset.datasets,
-                'labels': config.dataset.labels,
-                'input_path': config.dataset.input_path,
-                'morphologist_graphs': config.dataset.morphologist_graphs,
-                'cortical_tiles_output': config.dataset.cortical_tiles_output,
-                'crops_path': config.dataset.crops_path,
-                'embeddings_path': config.dataset.embeddings_path,
-                'njobs': config.dataset.njobs,
-                'path_to_graph': config.dataset.path_to_graph,
-                'path_sk_with_hull': config.dataset.path_sk_with_hull,
-                'sk_qc_path': config.dataset.sk_qc_path,
-                'regions': config.dataset.regions,
-                'classifier_name': config.dataset.classifier_name,
-                'overwrite': config.dataset.overwrite,
-                'embeddings_only': config.dataset.embeddings_only,
-                'use_best_model': config.dataset.use_best_model,
-                'subsets': config.dataset.subsets,
-                'epochs': config.dataset.epochs,
-                'split': config.dataset.split,
-                'cv': config.dataset.cv,
-                'splits_basedir': config.dataset.splits_basedir,
-                'idx_region_evaluation': config.dataset.idx_region_evaluation,
-                'short_name': config.dataset.short_name,
-                'hf_enabled': config.dataset.hf_enabled,
-                'hf_repo_id': config.dataset.hf_repo_id,
-                'hf_token': config.dataset.hf_token,
-                'config_path': config.dataset.config_path,
-                'cpu': config.dataset.cpu,
-                'bids': config.dataset.bids,
-                'snapshots_path': config.dataset.snapshots_path,
-                'reference_data_path': config.dataset.reference_data_path,
-            }
+            "root_path": config.root_path,
+            "data_path": config.data_path,
+            "models_path": config.models_path,
+            "outputs_path": config.outputs_path,
+            "champollion_v1_path": config.champollion_v1_path,
+            "stages": config.stages,
+            "dependencies": config.dependencies,
+            "mode": config.mode,
+            "stop_on_error": config.stop_on_error,
+            "verbose": config.verbose,
+            "log_level": config.log_level,
+            "log_dir": config.log_dir,
+            "log_to_file": config.log_to_file,
+            "log_to_console": config.log_to_console,
+            "dataset": {
+                "name": config.dataset.name,
+                "dataset_localization": config.dataset.dataset_localization,
+                "datasets_root": config.dataset.datasets_root,
+                "datasets": config.dataset.datasets,
+                "labels": config.dataset.labels,
+                "input_path": config.dataset.input_path,
+                "morphologist_graphs": config.dataset.morphologist_graphs,
+                "cortical_tiles_output": config.dataset.cortical_tiles_output,
+                "crops_path": config.dataset.crops_path,
+                "embeddings_path": config.dataset.embeddings_path,
+                "njobs": config.dataset.njobs,
+                "path_to_graph": config.dataset.path_to_graph,
+                "path_sk_with_hull": config.dataset.path_sk_with_hull,
+                "sk_qc_path": config.dataset.sk_qc_path,
+                "regions": config.dataset.regions,
+                "classifier_name": config.dataset.classifier_name,
+                "overwrite": config.dataset.overwrite,
+                "embeddings_only": config.dataset.embeddings_only,
+                "use_best_model": config.dataset.use_best_model,
+                "subsets": config.dataset.subsets,
+                "epochs": config.dataset.epochs,
+                "split": config.dataset.split,
+                "cv": config.dataset.cv,
+                "splits_basedir": config.dataset.splits_basedir,
+                "idx_region_evaluation": config.dataset.idx_region_evaluation,
+                "short_name": config.dataset.short_name,
+                "hf_enabled": config.dataset.hf_enabled,
+                "hf_repo_id": config.dataset.hf_repo_id,
+                "hf_token": config.dataset.hf_token,
+                "config_path": config.dataset.config_path,
+                "cpu": config.dataset.cpu,
+                "bids": config.dataset.bids,
+                "snapshots_path": config.dataset.snapshots_path,
+                "reference_data_path": config.dataset.reference_data_path,
+            },
         }
 
-        with open(output_path, 'w') as f:
+        with open(output_path, "w") as f:
             yaml.safe_dump(config_dict, f, default_flow_style=False, sort_keys=False)
 
 
 # ====================== Pipeline Stage Strategy Pattern ======================
 
+
 @dataclass
 class StageResult:
     """Result of a pipeline stage execution."""
+
     stage_name: str
     success: bool
     message: str
@@ -275,15 +284,15 @@ class PipelineStage(ABC):
 
     def log_start(self):
         """Log stage start."""
-        self.logger.info(f"{'='*60}")
+        self.logger.info(f"{'=' * 60}")
         self.logger.info(f"Starting stage: {self.name}")
-        self.logger.info(f"{'='*60}")
+        self.logger.info(f"{'=' * 60}")
 
     def log_end(self, result: StageResult):
         """Log stage end."""
         status = "✅ SUCCESS" if result.success else "❌ FAILED"
         self.logger.info(f"{status}: {self.name} - {result.message}")
-        self.logger.info(f"{'='*60}\n")
+        self.logger.info(f"{'=' * 60}\n")
 
     def subject_input_dir(self) -> Optional[str]:
         """Return the subjects directory to index before this stage. None = skip."""
@@ -330,16 +339,11 @@ class GenerateMorphologistGraphsStage(PipelineStage):
                 stage_name=self.name,
                 success=(return_code == 0),
                 message="Morphologist graphs generated successfully" if return_code == 0 else "Morphologist failed",
-                return_code=return_code
+                return_code=return_code,
             )
         except Exception as e:
             self.logger.exception(f"Exception in {self.name}")
-            result = StageResult(
-                stage_name=self.name,
-                success=False,
-                message=f"Failed: {str(e)}",
-                return_code=1
-            )
+            result = StageResult(stage_name=self.name, success=False, message=f"Failed: {str(e)}", return_code=1)
 
         self.log_end(result)
         return result
@@ -352,9 +356,7 @@ class RunCorticalTilesStage(PipelineStage):
         """Validate that Morphologist graphs exist."""
         graphs_path = Path(self.config.dataset.morphologist_graphs)
         if not graphs_path.exists():
-            self.logger.error(
-                f"Morphologist graphs path does not exist: {graphs_path}"
-            )
+            self.logger.error(f"Morphologist graphs path does not exist: {graphs_path}")
             return False
         return True
 
@@ -362,9 +364,7 @@ class RunCorticalTilesStage(PipelineStage):
         """Execute cortical_tiles."""
         self.log_start()
         try:
-            self.logger.info(
-                "Running cortical_tiles to generate sulcal regions..."
-            )
+            self.logger.info("Running cortical_tiles to generate sulcal regions...")
 
             # Build arguments from config
             args = [
@@ -372,7 +372,7 @@ class RunCorticalTilesStage(PipelineStage):
                 str(self.config.dataset.cortical_tiles_output),
                 f"--path_to_graph={self.config.dataset.path_to_graph}",
                 f"--path_sk_with_hull={self.config.dataset.path_sk_with_hull}",
-                f"--njobs={self.config.dataset.njobs}"
+                f"--njobs={self.config.dataset.njobs}",
             ]
 
             if self.config.dataset.sk_qc_path:
@@ -393,16 +393,11 @@ class RunCorticalTilesStage(PipelineStage):
                 stage_name=self.name,
                 success=(return_code == 0),
                 message="Cortical tiles completed" if return_code == 0 else "Failed",
-                return_code=return_code
+                return_code=return_code,
             )
         except Exception as e:
             self.logger.exception(f"Exception in {self.name}")
-            result = StageResult(
-                stage_name=self.name,
-                success=False,
-                message=f"Failed: {str(e)}",
-                return_code=1
-            )
+            result = StageResult(stage_name=self.name, success=False, message=f"Failed: {str(e)}", return_code=1)
 
         self.log_end(result)
         return result
@@ -413,6 +408,7 @@ class RunCorticalTilesStage(PipelineStage):
 
     def required_file_patterns(self) -> List[str]:
         import re as _re
+
         side = "R"
         g = self.config.dataset.path_to_graph
         s = self.config.dataset.path_sk_with_hull
@@ -447,10 +443,7 @@ class GenerateChampollionConfigStage(PipelineStage):
         try:
             self.logger.info("Generating Champollion configuration...")
 
-            args = [
-                str(self.config.dataset.crops_path),
-                f"--dataset={self.config.dataset.name}"
-            ]
+            args = [str(self.config.dataset.crops_path), f"--dataset={self.config.dataset.name}"]
 
             script = GenerateChampollionConfig()
             script.parse_args(args)
@@ -460,16 +453,11 @@ class GenerateChampollionConfigStage(PipelineStage):
                 stage_name=self.name,
                 success=(return_code == 0),
                 message="Champollion config generated" if return_code == 0 else "Config generation failed",
-                return_code=return_code
+                return_code=return_code,
             )
         except Exception as e:
             self.logger.exception(f"Exception in {self.name}")
-            result = StageResult(
-                stage_name=self.name,
-                success=False,
-                message=f"Failed: {str(e)}",
-                return_code=1
-            )
+            result = StageResult(stage_name=self.name, success=False, message=f"Failed: {str(e)}", return_code=1)
 
         self.log_end(result)
         return result
@@ -565,16 +553,11 @@ class GenerateEmbeddingsStage(PipelineStage):
                 stage_name=self.name,
                 success=(return_code == 0),
                 message="Embeddings generated" if return_code == 0 else "Embedding generation failed",
-                return_code=return_code
+                return_code=return_code,
             )
         except Exception as e:
             self.logger.exception(f"Exception in {self.name}")
-            result = StageResult(
-                stage_name=self.name,
-                success=False,
-                message=f"Failed: {str(e)}",
-                return_code=1
-            )
+            result = StageResult(stage_name=self.name, success=False, message=f"Failed: {str(e)}", return_code=1)
 
         self.log_end(result)
         return result
@@ -608,16 +591,11 @@ class PutTogetherEmbeddingsStage(PipelineStage):
                 stage_name=self.name,
                 success=(return_code == 0),
                 message="Embeddings combined successfully" if return_code == 0 else "Combine failed",
-                return_code=return_code
+                return_code=return_code,
             )
         except Exception as e:
             self.logger.exception(f"Exception in {self.name}")
-            result = StageResult(
-                stage_name=self.name,
-                success=False,
-                message=f"Failed: {str(e)}",
-                return_code=1
-            )
+            result = StageResult(stage_name=self.name, success=False, message=f"Failed: {str(e)}", return_code=1)
 
         self.log_end(result)
         return result
@@ -633,9 +611,7 @@ class GenerateSnapshotsStage(PipelineStage):
             return False
         embeddings_path = Path(self.config.dataset.embeddings_path)
         if self.config.dataset.embeddings_path and not embeddings_path.exists():
-            self.logger.error(
-                f"Embeddings path does not exist: {embeddings_path}"
-            )
+            self.logger.error(f"Embeddings path does not exist: {embeddings_path}")
             return False
         return True
 
@@ -648,21 +624,13 @@ class GenerateSnapshotsStage(PipelineStage):
             args = [f"--output_dir={self.config.dataset.snapshots_path}"]
 
             if self.config.dataset.embeddings_path:
-                args.append(
-                    f"--embeddings_dir={self.config.dataset.embeddings_path}"
-                )
+                args.append(f"--embeddings_dir={self.config.dataset.embeddings_path}")
             if self.config.dataset.morphologist_graphs:
-                args.append(
-                    f"--morphologist_dir={self.config.dataset.morphologist_graphs}"
-                )
+                args.append(f"--morphologist_dir={self.config.dataset.morphologist_graphs}")
             if self.config.dataset.crops_path:
-                args.append(
-                    f"--cortical_tiles_dir={self.config.dataset.crops_path}"
-                )
+                args.append(f"--cortical_tiles_dir={self.config.dataset.crops_path}")
             if self.config.dataset.reference_data_path:
-                args.append(
-                    f"--reference_data_dir={self.config.dataset.reference_data_path}"
-                )
+                args.append(f"--reference_data_dir={self.config.dataset.reference_data_path}")
 
             script = GenerateSnapshots()
             script.parse_args(args)
@@ -671,10 +639,7 @@ class GenerateSnapshotsStage(PipelineStage):
             result = StageResult(
                 stage_name=self.name,
                 success=(return_code == 0),
-                message=(
-                    "Snapshots generated" if return_code == 0
-                    else "Snapshot generation failed"
-                ),
+                message=("Snapshots generated" if return_code == 0 else "Snapshot generation failed"),
                 return_code=return_code,
             )
         except Exception as e:
@@ -692,17 +657,18 @@ class GenerateSnapshotsStage(PipelineStage):
 
 # ====================== Pipeline Orchestrator ======================
 
+
 class PipelineOrchestrator:
     """Orchestrates the execution of pipeline stages."""
 
     # Stage registry mapping names to classes
     STAGE_REGISTRY = {
-        'generate_morphologist_graphs': GenerateMorphologistGraphsStage,
-        'run_cortical_tiles': RunCorticalTilesStage,
-        'generate_champollion_config': GenerateChampollionConfigStage,
-        'generate_embeddings': GenerateEmbeddingsStage,
-        'put_together_embeddings': PutTogetherEmbeddingsStage,
-        'generate_snapshots': GenerateSnapshotsStage,
+        "generate_morphologist_graphs": GenerateMorphologistGraphsStage,
+        "run_cortical_tiles": RunCorticalTilesStage,
+        "generate_champollion_config": GenerateChampollionConfigStage,
+        "generate_embeddings": GenerateEmbeddingsStage,
+        "put_together_embeddings": PutTogetherEmbeddingsStage,
+        "generate_snapshots": GenerateSnapshotsStage,
     }
 
     def __init__(self, config: PipelineConfig):
@@ -721,9 +687,7 @@ class PipelineOrchestrator:
         if self.config.log_to_console:
             console_handler = logging.StreamHandler()
             console_handler.setLevel(logging.INFO)
-            formatter = logging.Formatter(
-                '%(asctime)s - %(levelname)s - %(message)s'
-            )
+            formatter = logging.Formatter("%(asctime)s - %(levelname)s - %(message)s")
             console_handler.setFormatter(formatter)
             logger.addHandler(console_handler)
 
@@ -733,9 +697,7 @@ class PipelineOrchestrator:
             log_dir.mkdir(parents=True, exist_ok=True)
             file_handler = logging.FileHandler(log_dir / "pipeline.log")
             file_handler.setLevel(logging.DEBUG)
-            formatter = logging.Formatter(
-                '%(asctime)s - %(name)s - %(levelname)s - %(message)s'
-            )
+            formatter = logging.Formatter("%(asctime)s - %(name)s - %(levelname)s - %(message)s")
             file_handler.setFormatter(formatter)
             logger.addHandler(file_handler)
 
@@ -744,11 +706,7 @@ class PipelineOrchestrator:
     def _register_stages(self):
         """Register all available pipeline stages."""
         for stage_name, stage_class in self.STAGE_REGISTRY.items():
-            self.stages[stage_name] = stage_class(
-                name=stage_name,
-                config=self.config,
-                logger=self.logger
-            )
+            self.stages[stage_name] = stage_class(name=stage_name, config=self.config, logger=self.logger)
 
     def _get_enabled_stages(self) -> List[str]:
         """Get list of enabled stages in dependency order."""
@@ -781,9 +739,7 @@ class PipelineOrchestrator:
 
         for dep in depends_on:
             if self.config.stages.get(dep, False) and dep not in completed:
-                self.logger.error(
-                    f"Stage '{stage_name}' depends on '{dep}' which hasn't completed"
-                )
+                self.logger.error(f"Stage '{stage_name}' depends on '{dep}' which hasn't completed")
                 return False
 
         return True
@@ -863,9 +819,7 @@ class PipelineOrchestrator:
                             self.config.outputs_path,
                             f"index_post_{stage_name}.json",
                         )
-                    out_report = build_output_report(
-                        out_dir, stage_name, save_index_to=index_path
-                    )
+                    out_report = build_output_report(out_dir, stage_name, save_index_to=index_path)
                     out_report.print()
 
             if result.success:
@@ -877,9 +831,9 @@ class PipelineOrchestrator:
                     break
 
         # Summary
-        self.logger.info("\n" + "="*60)
+        self.logger.info("\n" + "=" * 60)
         self.logger.info("Pipeline Execution Summary")
-        self.logger.info("="*60)
+        self.logger.info("=" * 60)
         self.logger.info(f"Completed stages: {completed_stages}")
         if failed_stages:
             self.logger.info(f"Failed stages: {failed_stages}")
@@ -893,6 +847,7 @@ class PipelineOrchestrator:
 
 
 # ====================== CLI Interface ======================
+
 
 def create_default_config() -> PipelineConfig:
     """Create default configuration."""
@@ -929,51 +884,28 @@ Examples:
 
   # Generate template config
   python main.py --generate-config my_config.yaml
-        """
+        """,
     )
 
-    parser.add_argument(
-        "--config",
-        type=str,
-        help="Path to configuration YAML file"
-    )
+    parser.add_argument("--config", type=str, help="Path to configuration YAML file")
 
     parser.add_argument(
         "--stages",
         nargs="+",
         choices=list(PipelineOrchestrator.STAGE_REGISTRY.keys()),
-        help="Specific stages to run (overrides config)"
+        help="Specific stages to run (overrides config)",
     )
 
-    parser.add_argument(
-        "--enable-all-stages",
-        action="store_true",
-        help="Enable all pipeline stages"
-    )
+    parser.add_argument("--enable-all-stages", action="store_true", help="Enable all pipeline stages")
+
+    parser.add_argument("--dataset-name", type=str, help="Dataset name (overrides config)")
+
+    parser.add_argument("--models-path", type=str, help="Path to models directory (overrides config)")
+
+    parser.add_argument("--verbose", action="store_true", help="Enable verbose output")
 
     parser.add_argument(
-        "--dataset-name",
-        type=str,
-        help="Dataset name (overrides config)"
-    )
-
-    parser.add_argument(
-        "--models-path",
-        type=str,
-        help="Path to models directory (overrides config)"
-    )
-
-    parser.add_argument(
-        "--verbose",
-        action="store_true",
-        help="Enable verbose output"
-    )
-
-    parser.add_argument(
-        "--generate-config",
-        type=str,
-        metavar="OUTPUT_PATH",
-        help="Generate a template configuration file and exit"
+        "--generate-config", type=str, metavar="OUTPUT_PATH", help="Generate a template configuration file and exit"
     )
 
     parser.add_argument(
@@ -1002,8 +934,7 @@ Examples:
         type=int,
         default=None,
         metavar="N",
-        help="Number of parallel scan workers (streaming mode only). "
-             "Defaults to os.cpu_count().",
+        help="Number of parallel scan workers (streaming mode only). Defaults to os.cpu_count().",
     )
     parser.add_argument(
         "--worker-timeout",
