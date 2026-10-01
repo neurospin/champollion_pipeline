@@ -87,8 +87,7 @@ class TestMorphologistBidsCrashSection:
         text = _read_troubleshooting_md()
 
         assert CRASH_HEADING_RE.search(text) is not None, (
-            f"{TROUBLESHOOTING_MD} has no heading mentioning Morphologist; the "
-            "BIDS-filename crash entry is missing."
+            f"{TROUBLESHOOTING_MD} has no heading mentioning Morphologist; the BIDS-filename crash entry is missing."
         )
 
     def test_section_identifies_the_bids_filename_failure_mode(self):

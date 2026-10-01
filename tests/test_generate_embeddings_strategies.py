@@ -154,9 +154,7 @@ class TestLocalPathStrategy:
 class TestHuggingFaceStrategy:
     """Test HuggingFaceStrategy."""
 
-    @pytest.mark.parametrize(
-        "path", ["neurospin/Champollion_V1", "https://huggingface.co/neurospin/Champollion_V1"]
-    )
+    @pytest.mark.parametrize("path", ["neurospin/Champollion_V1", "https://huggingface.co/neurospin/Champollion_V1"])
     def test_can_handle_repo_ids_and_urls(self, path):
         assert HuggingFaceStrategy().can_handle(path) is True
 
@@ -175,8 +173,7 @@ class TestHuggingFaceStrategy:
     def test_repo_id_extracted_from_url(self):
         strategy = HuggingFaceStrategy()
         assert (
-            strategy._extract_repo_id("https://huggingface.co/neurospin/Champollion_V1")
-            == "neurospin/Champollion_V1"
+            strategy._extract_repo_id("https://huggingface.co/neurospin/Champollion_V1") == "neurospin/Champollion_V1"
         )
 
     def test_repo_id_extracted_from_single_segment_url(self):
@@ -248,9 +245,7 @@ class TestRemoteArchiveStrategy:
     def test_can_handle_remote_archives(self, path):
         assert RemoteArchiveStrategy().can_handle(path) is True
 
-    @pytest.mark.parametrize(
-        "path", ["https://example.com/page.html", "/local/models.tar.gz", "neurospin/X"]
-    )
+    @pytest.mark.parametrize("path", ["https://example.com/page.html", "/local/models.tar.gz", "neurospin/X"])
     def test_cannot_handle_other_paths(self, path):
         assert RemoteArchiveStrategy().can_handle(path) is False
 
@@ -263,9 +258,7 @@ class TestRemoteArchiveStrategy:
             Path(target).write_bytes(source.read_bytes())
 
         with patch("urllib.request.urlretrieve", side_effect=fake_urlretrieve):
-            result = RemoteArchiveStrategy().fetch(
-                "https://example.com/models.tar.gz", str(cache)
-            )
+            result = RemoteArchiveStrategy().fetch("https://example.com/models.tar.gz", str(cache))
         assert result == str(cache / "models")
         assert not (cache / "models.tar.gz").exists()
 
@@ -287,17 +280,13 @@ class TestRemoteArchiveStrategy:
             Path(target).write_bytes(source.read_bytes())
 
         with patch("urllib.request.urlretrieve", side_effect=fake_urlretrieve):
-            RemoteArchiveStrategy().fetch(
-                "https://example.com/models.tar.gz", str(cache), no_cache=True
-            )
+            RemoteArchiveStrategy().fetch("https://example.com/models.tar.gz", str(cache), no_cache=True)
         assert "Removing existing cache" in capsys.readouterr().out
 
     def test_download_failure_is_wrapped_in_runtime_error(self, tmp_path):
         with patch("urllib.request.urlretrieve", side_effect=OSError("no route to host")):
             with pytest.raises(RuntimeError, match="Failed to download or extract archive"):
-                RemoteArchiveStrategy().fetch(
-                    "https://example.com/models.tar.gz", str(tmp_path)
-                )
+                RemoteArchiveStrategy().fetch("https://example.com/models.tar.gz", str(tmp_path))
 
     def test_extract_archive_handles_plain_gz(self, tmp_path):
         archive = make_gz(tmp_path)
@@ -414,9 +403,7 @@ class TestFetchModels:
             patch.object(ge.os, "makedirs"),
             patch.object(ge, "HuggingFaceStrategy", wraps=ge.HuggingFaceStrategy) as cls,
         ):
-            cls.return_value = MagicMock(
-                can_handle=MagicMock(return_value=True), fetch=MagicMock(return_value="/hf")
-            )
+            cls.return_value = MagicMock(can_handle=MagicMock(return_value=True), fetch=MagicMock(return_value="/hf"))
             script.fetch_models("neurospin/X")
         assert cls.call_args.kwargs["subfolder"] == "canonical_25"
 
@@ -497,9 +484,7 @@ class TestRunNormalCudaHandling:
         monkeypatch.delenv("CUDA_VISIBLE_DEVICES", raising=False)
         script = make_script(["/m", "/d", "--cpu"])
         seen = {}
-        script._run_pipeline = lambda local_dir: seen.setdefault(
-            "cuda", os.environ["CUDA_VISIBLE_DEVICES"]
-        )
+        script._run_pipeline = lambda local_dir: seen.setdefault("cuda", os.environ["CUDA_VISIBLE_DEVICES"])
         script._run_normal()
         assert seen["cuda"] == ""
 
@@ -662,9 +647,7 @@ class TestRunPerRegion:
         (models / "SOr_left" / "logs").mkdir(parents=True)
         script = make_script([str(models), "/d"])
         script.execute_command = lambda cmd, shell=False: 3
-        result = script._run_per_region(
-            "evaluate.py", str(tmp_path), str(tmp_path / "out")
-        )
+        result = script._run_per_region("evaluate.py", str(tmp_path), str(tmp_path / "out"))
         assert result == 3
 
 
@@ -684,9 +667,7 @@ class TestRunCkaTest:
 
     def test_failure_is_warned_but_not_raised(self, tmp_path, capsys):
         script = make_script(["/m", "/d"])
-        with patch.object(
-            ge, "test_models_coherence_from_directory", side_effect=RuntimeError("no data")
-        ):
+        with patch.object(ge, "test_models_coherence_from_directory", side_effect=RuntimeError("no data")):
             script._run_cka_test(str(tmp_path))
         assert "Warning: CKA test failed - no data" in capsys.readouterr().out
 

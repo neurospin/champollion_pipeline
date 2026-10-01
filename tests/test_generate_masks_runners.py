@@ -142,7 +142,7 @@ class TestSerialRunner:
         compute_mask_mod = types.ModuleType("compute_mask")
         compute_mask_mod.compute_mask = MagicMock()
         with patch.dict(sys.modules, deep_folding_modules(compute_mask=compute_mask_mod)):
-            (_, results), = list(SerialRunner()(config))
+            ((_, results),) = list(SerialRunner()(config))
         assert results == {"S.C.": RETURN_DICTIONARY["ok"]}
 
     def test_compute_mask_receives_config_values(self, tmp_path):
@@ -168,7 +168,7 @@ class TestSerialRunner:
         compute_mask_mod = types.ModuleType("compute_mask")
         compute_mask_mod.compute_mask = mock_compute
         with patch.dict(sys.modules, deep_folding_modules(compute_mask=compute_mask_mod)):
-            (_, results), = list(SerialRunner()(config))
+            ((_, results),) = list(SerialRunner()(config))
         assert results == {"S.C.": RETURN_DICTIONARY["skipped"]}
         mock_compute.assert_not_called()
 
@@ -181,7 +181,7 @@ class TestSerialRunner:
         compute_mask_mod = types.ModuleType("compute_mask")
         compute_mask_mod.compute_mask = mock_compute
         with patch.dict(sys.modules, deep_folding_modules(compute_mask=compute_mask_mod)):
-            (_, results), = list(SerialRunner()(config))
+            ((_, results),) = list(SerialRunner()(config))
         assert results == {"S.C.": RETURN_DICTIONARY["ok"]}
         mock_compute.assert_called_once()
 
@@ -200,26 +200,22 @@ class TestSerialRunner:
         compute_mask_mod = types.ModuleType("compute_mask")
         compute_mask_mod.compute_mask = MagicMock(side_effect=RuntimeError("boom"))
         with patch.dict(sys.modules, deep_folding_modules(compute_mask=compute_mask_mod)):
-            (_, results), = list(SerialRunner()(config))
+            ((_, results),) = list(SerialRunner()(config))
         assert results["S.C."].startswith("failed: ")
         assert "boom" in results["S.C."]
 
     def test_too_many_simple_surfaces_is_invalid_foldlabel(self, tmp_path):
         config = make_config(tmp_path)
         compute_mask_mod = types.ModuleType("compute_mask")
-        compute_mask_mod.compute_mask = MagicMock(
-            side_effect=RuntimeError("graph has too many simple surfaces")
-        )
+        compute_mask_mod.compute_mask = MagicMock(side_effect=RuntimeError("graph has too many simple surfaces"))
         with patch.dict(sys.modules, deep_folding_modules(compute_mask=compute_mask_mod)):
-            (_, results), = list(SerialRunner()(config))
+            ((_, results),) = list(SerialRunner()(config))
         assert results["S.C."] == RETURN_DICTIONARY["invalid_foldlabel"]
 
     def test_invalid_foldlabel_is_logged_to_file(self, tmp_path):
         config = make_config(tmp_path)
         compute_mask_mod = types.ModuleType("compute_mask")
-        compute_mask_mod.compute_mask = MagicMock(
-            side_effect=RuntimeError("too many simple surfaces")
-        )
+        compute_mask_mod.compute_mask = MagicMock(side_effect=RuntimeError("too many simple surfaces"))
         with patch.dict(sys.modules, deep_folding_modules(compute_mask=compute_mask_mod)):
             list(SerialRunner()(config))
         log_path = Path(config.mask_dir) / "invalid_subjects.log"
@@ -238,7 +234,7 @@ class TestSerialRunner:
         compute_mask_mod = types.ModuleType("compute_mask")
         compute_mask_mod.compute_mask = raise_chained
         with patch.dict(sys.modules, deep_folding_modules(compute_mask=compute_mask_mod)):
-            (_, results), = list(SerialRunner()(config))
+            ((_, results),) = list(SerialRunner()(config))
         assert results["S.C."] == RETURN_DICTIONARY["invalid_foldlabel"]
 
     def test_brainvisa_dir_is_added_to_sys_path(self, tmp_path):
@@ -265,9 +261,7 @@ class TestBufferedRunner:
             {"subject": "sub01", "dir": dirs[0], "graph_file": patterns[0], "side": side},
             {"subject": "sub02", "dir": dirs[0], "graph_file": patterns[0], "side": side},
         ]
-        subjects_mod.select_subjects_int_if_list_of_dict = lambda subs, _all, nb: (
-            subs if nb == -1 else subs[:nb]
-        )
+        subjects_mod.select_subjects_int_if_list_of_dict = lambda subs, _all, nb: subs if nb == -1 else subs[:nb]
         return deep_folding_modules(**{"cortical_tiles.brainvisa.utils.subjects": subjects_mod})
 
     def _patch_workers(self, monkeypatch, load=None, compute=None, mask_dir=None):
@@ -292,7 +286,7 @@ class TestBufferedRunner:
         self._patch_workers(monkeypatch)
         config = make_config(tmp_path, sulci={"S.C.", "S.Or."})
         with patch.dict(sys.modules, subjects_modules):
-            (side, results), = list(BufferedRunner(1)(config))
+            ((side, results),) = list(BufferedRunner(1)(config))
         assert side == "L"
         assert results == {"S.C.": RETURN_DICTIONARY["ok"], "S.Or.": RETURN_DICTIONARY["ok"]}
 
@@ -315,9 +309,7 @@ class TestBufferedRunner:
         assert "1 mask file(s) missing" in out
         assert "MISSING: S.C._left.nii.gz" in out
 
-    def test_subject_without_graph_is_warned_and_dropped(
-        self, tmp_path, monkeypatch, subjects_modules, capsys
-    ):
+    def test_subject_without_graph_is_warned_and_dropped(self, tmp_path, monkeypatch, subjects_modules, capsys):
         def load(sub, sulci_full_set, voxel_size_tuple, brainvisa_dir):
             if sub["subject"] == "sub02":
                 return sub["subject"], None
@@ -329,9 +321,7 @@ class TestBufferedRunner:
             list(BufferedRunner(1)(config))
         assert "no graph for sub02, skipped" in capsys.readouterr().out
 
-    def test_verbose_reports_per_subject_and_per_sulcus_details(
-        self, tmp_path, monkeypatch, subjects_modules, capsys
-    ):
+    def test_verbose_reports_per_subject_and_per_sulcus_details(self, tmp_path, monkeypatch, subjects_modules, capsys):
         self._patch_workers(monkeypatch)
         config = make_config(tmp_path)
         with patch.dict(sys.modules, subjects_modules):
@@ -353,7 +343,7 @@ class TestBufferedRunner:
         mask_file.parent.mkdir(parents=True)
         mask_file.touch()
         with patch.dict(sys.modules, subjects_modules):
-            (_, results), = list(BufferedRunner(1)(config))
+            ((_, results),) = list(BufferedRunner(1)(config))
         assert computed == []
         assert results == {"S.C.": RETURN_DICTIONARY["skipped"]}
 
@@ -376,22 +366,18 @@ class TestBufferedRunner:
             list(BufferedRunner(1)(config))
         assert computed == ["S.C._left"]
 
-    def test_compute_phase_failure_marks_all_sulci_failed(
-        self, tmp_path, monkeypatch, subjects_modules
-    ):
+    def test_compute_phase_failure_marks_all_sulci_failed(self, tmp_path, monkeypatch, subjects_modules):
         def compute(*args, **kwargs):
             raise RuntimeError("worker pool died")
 
         self._patch_workers(monkeypatch, compute=compute)
         config = make_config(tmp_path, sulci={"S.C.", "S.Or."})
         with patch.dict(sys.modules, subjects_modules):
-            (_, results), = list(BufferedRunner(1)(config))
+            ((_, results),) = list(BufferedRunner(1)(config))
         assert all(v.startswith("failed: ") for v in results.values())
         assert "worker pool died" in results["S.C."]
 
-    def test_public_use_flag_is_forwarded_to_the_worker(
-        self, tmp_path, monkeypatch, subjects_modules
-    ):
+    def test_public_use_flag_is_forwarded_to_the_worker(self, tmp_path, monkeypatch, subjects_modules):
         seen = {}
 
         def compute(sf, per_subject_voxels, voxel_size_tuple, md, side, _bv_dir, public_use):
@@ -404,9 +390,7 @@ class TestBufferedRunner:
             list(BufferedRunner(1)(config))
         assert seen["public_use"] is True
 
-    def test_graph_pattern_includes_path_to_graph_supervised(
-        self, tmp_path, monkeypatch, subjects_modules
-    ):
+    def test_graph_pattern_includes_path_to_graph_supervised(self, tmp_path, monkeypatch, subjects_modules):
         seen = {}
 
         def load(sub, *args, **kwargs):
@@ -417,9 +401,7 @@ class TestBufferedRunner:
         config = make_config(tmp_path)
         with patch.dict(sys.modules, subjects_modules):
             list(BufferedRunner(1)(config))
-        assert seen["graph_file"] == (
-            "%(subject)s/" + config.path_to_graph_supervised + "/%(side)s%(subject)s*.arg"
-        )
+        assert seen["graph_file"] == ("%(subject)s/" + config.path_to_graph_supervised + "/%(side)s%(subject)s*.arg")
 
     def test_both_sides_are_processed(self, tmp_path, monkeypatch, subjects_modules):
         self._patch_workers(monkeypatch)

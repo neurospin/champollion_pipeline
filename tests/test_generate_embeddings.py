@@ -511,9 +511,7 @@ class TestRegionsFilter:
 
     def test_regions_multiple(self):
         script = GenerateEmbeddings()
-        args = script.parse_args(
-            ["/m", "/d", "--regions", "SC-sylv_left", "SC-sylv_right", "FIP-FIPPoCinf_left"]
-        )
+        args = script.parse_args(["/m", "/d", "--regions", "SC-sylv_left", "SC-sylv_right", "FIP-FIPPoCinf_left"])
         assert args.regions == ["SC-sylv_left", "SC-sylv_right", "FIP-FIPPoCinf_left"]
 
     def test_make_regions_tmpdir_creates_symlinks(self, tmp_path):
@@ -522,9 +520,7 @@ class TestRegionsFilter:
         (tmp_path / "other_region").mkdir()
 
         script = GenerateEmbeddings()
-        script.args = script.parse_args(
-            [str(tmp_path), "/d", "--regions", "SC-sylv_left", "SC-sylv_right"]
-        )
+        script.args = script.parse_args([str(tmp_path), "/d", "--regions", "SC-sylv_left", "SC-sylv_right"])
 
         tmpdir = script._make_regions_tmpdir(str(tmp_path))
         try:
@@ -541,9 +537,7 @@ class TestRegionsFilter:
         (tmp_path / "SC-sylv_left").mkdir()
 
         script = GenerateEmbeddings()
-        script.args = script.parse_args(
-            [str(tmp_path), "/d", "--regions", "SC-sylv_left", "nonexistent_region"]
-        )
+        script.args = script.parse_args([str(tmp_path), "/d", "--regions", "SC-sylv_left", "nonexistent_region"])
 
         with pytest.raises(FileNotFoundError, match="nonexistent_region"):
             script._make_regions_tmpdir(str(tmp_path))

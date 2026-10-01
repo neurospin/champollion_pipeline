@@ -236,9 +236,7 @@ class TestGenerateSulcalGraphSnapshot:
     def test_explicit_quaternion_is_used(self, tmp_path):
         a = self._anatomist()
         with patch.dict(sys.modules, anatomist_modules(a)):
-            generate_sulcal_graph_snapshot(
-                "/graph.arg", str(tmp_path / "s.png"), view_quaternion=(1, 0, 0, 0)
-            )
+            generate_sulcal_graph_snapshot("/graph.arg", str(tmp_path / "s.png"), view_quaternion=(1, 0, 0, 0))
         assert a.createWindow.return_value.camera.call_args.kwargs["view_quaternion"] == (1, 0, 0, 0)
 
     def test_existing_mesh_is_added_as_transparent_surface(self, tmp_path):
@@ -246,18 +244,14 @@ class TestGenerateSulcalGraphSnapshot:
         mesh = tmp_path / "Lwhite.gii"
         mesh.touch()
         with patch.dict(sys.modules, anatomist_modules(a)):
-            generate_sulcal_graph_snapshot(
-                "/graph.arg", str(tmp_path / "s.png"), mesh_path=str(mesh)
-            )
+            generate_sulcal_graph_snapshot("/graph.arg", str(tmp_path / "s.png"), mesh_path=str(mesh))
         assert a.loadObject.call_count == 2
         a.loadObject.return_value.setMaterial.assert_called_with(diffuse=[0.8, 0.8, 0.8, 0.37])
 
     def test_missing_mesh_is_ignored(self, tmp_path):
         a = self._anatomist()
         with patch.dict(sys.modules, anatomist_modules(a)):
-            generate_sulcal_graph_snapshot(
-                "/graph.arg", str(tmp_path / "s.png"), mesh_path=str(tmp_path / "nope.gii")
-            )
+            generate_sulcal_graph_snapshot("/graph.arg", str(tmp_path / "s.png"), mesh_path=str(tmp_path / "nope.gii"))
         assert a.loadObject.call_count == 1
 
     def test_existing_anatomist_instance_is_reused(self, tmp_path):
@@ -410,27 +404,21 @@ class TestGenerateTilesSnapshot:
         )
         crops = self._crops(tmp_path)
         with patch.dict(sys.modules, modules):
-            generate_tiles_snapshot(
-                str(crops), str(tmp_path / "tiles.png"), champollion_data_root=str(data_root)
-            )
+            generate_tiles_snapshot(str(crops), str(tmp_path / "tiles.png"), champollion_data_root=str(data_root))
         assert gs.ICBM_MESH_DIR_FALLBACK in capsys.readouterr().out
 
     def test_extension_defaults_to_png(self, tmp_path, env):
         modules, _, data_root, _ = env
         crops = self._crops(tmp_path, hemis=("L",))
         with patch.dict(sys.modules, modules):
-            snaps = generate_tiles_snapshot(
-                str(crops), str(tmp_path / "tiles"), champollion_data_root=str(data_root)
-            )
+            snaps = generate_tiles_snapshot(str(crops), str(tmp_path / "tiles"), champollion_data_root=str(data_root))
         assert snaps == [str(tmp_path / "tiles_left.png")]
 
     def test_nomenclature_object_is_released(self, tmp_path, env):
         modules, a, data_root, _ = env
         crops = self._crops(tmp_path, hemis=("L",))
         with patch.dict(sys.modules, modules):
-            generate_tiles_snapshot(
-                str(crops), str(tmp_path / "tiles.png"), champollion_data_root=str(data_root)
-            )
+            generate_tiles_snapshot(str(crops), str(tmp_path / "tiles.png"), champollion_data_root=str(data_root))
         assert a.deleteObjects.call_args.args[0] == [a.toAObject.return_value]
 
 
@@ -466,9 +454,7 @@ class TestGenerateUmapSnapshot:
     def test_plot_is_written_per_region(self, tmp_path, umap_inputs):
         embeddings, reference = umap_inputs
         with patch("joblib.load", return_value=self._model()):
-            snaps = generate_umap_snapshot(
-                str(embeddings), str(reference), str(tmp_path / "umap.png")
-            )
+            snaps = generate_umap_snapshot(str(embeddings), str(reference), str(tmp_path / "umap.png"))
         assert snaps == [str(tmp_path / "umap_SOr_left.png")]
         assert osp.exists(snaps[0])
 
@@ -499,9 +485,7 @@ class TestGenerateUmapSnapshot:
     def test_region_filter_excludes_other_regions(self, tmp_path, umap_inputs):
         embeddings, reference = umap_inputs
         with patch("joblib.load", return_value=self._model()):
-            snaps = generate_umap_snapshot(
-                str(embeddings), str(reference), str(tmp_path / "u.png"), regions=["Other"]
-            )
+            snaps = generate_umap_snapshot(str(embeddings), str(reference), str(tmp_path / "u.png"), regions=["Other"])
         assert snaps == []
 
     def test_unrecognized_filename_is_reported(self, tmp_path, capsys):
@@ -589,9 +573,7 @@ class TestRunSulcalStep:
         (folds / "Lsulci.arg").touch()
 
         script = self._script(tmp_path, ["--morphologist_dir", str(morpho)])
-        with patch.object(
-            gs, "generate_sulcal_graph_snapshot", side_effect=RuntimeError("no display")
-        ):
+        with patch.object(gs, "generate_sulcal_graph_snapshot", side_effect=RuntimeError("no display")):
             assert script._run_sulcal((800, 600)) == []
         assert "Error processing" in capsys.readouterr().out
 

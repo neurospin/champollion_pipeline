@@ -381,8 +381,7 @@ class GenerateEmbeddings(ScriptBuilder):
             )
             .add_flag(
                 "--legacy",
-                "Use deep_folding-2025 as the derivatives folder. "
-                "Shorthand for --cortical_version deep_folding-2025.",
+                "Use deep_folding-2025 as the derivatives folder. Shorthand for --cortical_version deep_folding-2025.",
             )
             .add_optional_argument(
                 "--masks-version",
@@ -408,8 +407,7 @@ class GenerateEmbeddings(ScriptBuilder):
             )
             .add_optional_argument(
                 "--output",
-                "Output base directory override. Defaults to "
-                "{parent_of_datasets_root}/{dataset_name}embeddings/.",
+                "Output base directory override. Defaults to {parent_of_datasets_root}/{dataset_name}embeddings/.",
                 default=None,
             )
             .add_optional_argument(
@@ -599,9 +597,9 @@ class GenerateEmbeddings(ScriptBuilder):
             self.args.models_path = tmpdir
 
         script_dir = dirname(abspath(__file__))
-        evaluate_script = abspath(join(
-            script_dir, "..", "..", "external", "champollion_V1", "champollion", "evaluate.py"
-        ))
+        evaluate_script = abspath(
+            join(script_dir, "..", "..", "external", "champollion_V1", "champollion", "evaluate.py")
+        )
 
         datasets_root = self.args.datasets_root.rstrip("/")
         output_base = self.args.output or join(
@@ -766,9 +764,7 @@ class GenerateEmbeddings(ScriptBuilder):
             segment = os.path.dirname(segment)
         return os.path.basename(model_path)
 
-    def _run_per_region(
-        self, evaluate_script: str, crops_2mm_dir: str, output_base: str
-    ) -> int:
+    def _run_per_region(self, evaluate_script: str, crops_2mm_dir: str, output_base: str) -> int:
         """Invoke champollion/evaluate.py for each region in models_path.
 
         Every region is attempted even after a failure. Returns the first non-zero
@@ -803,11 +799,18 @@ class GenerateEmbeddings(ScriptBuilder):
             if exists(saving_path):
                 os.remove(saving_path)
 
-            cmd = [sys.executable, evaluate_script,
-                   "-m", model_path,
-                   "-sk", skels_path,
-                   "-i", subjects_path,
-                   "-s", saving_path]
+            cmd = [
+                sys.executable,
+                evaluate_script,
+                "-m",
+                model_path,
+                "-sk",
+                skels_path,
+                "-i",
+                subjects_path,
+                "-s",
+                saving_path,
+            ]
 
             print(f"\n[Region {region}]")
             code = self.execute_command(cmd, shell=False)

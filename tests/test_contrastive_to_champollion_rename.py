@@ -88,11 +88,7 @@ class TestPutTogetherEmbeddingsRename:
 class TestTrainChampollionRename:
     def test_module_dir_constant_targets_champollion_package(self):
         """train_champollion.py's champollion checkout dir constant is renamed."""
-        lines = [
-            ln
-            for ln in _code_lines(_read(PKG / "train_champollion.py"))
-            if "champollion_V1" in ln and "=" in ln
-        ]
+        lines = [ln for ln in _code_lines(_read(PKG / "train_champollion.py")) if "champollion_V1" in ln and "=" in ln]
         assert lines, "no champollion_V1 directory constant found in train_champollion.py"
         assignment = lines[0]
         assert '"champollion_V1", "champollion"' in assignment, (

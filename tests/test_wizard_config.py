@@ -58,9 +58,7 @@ class TestWizardConfig:
     def test_training_environment_exists(self, pixi_config):
         """``[environments]`` declares a ``training`` environment."""
         environments = pixi_config.get("environments", {})
-        assert "training" in environments, (
-            f"[environments] defines no 'training' key; found {sorted(environments)}"
-        )
+        assert "training" in environments, f"[environments] defines no 'training' key; found {sorted(environments)}"
 
     def test_training_env_uses_embeddings_feature(self, pixi_config):
         """The ``training`` environment is built from the ``embeddings`` feature."""

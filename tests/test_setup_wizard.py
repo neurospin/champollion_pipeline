@@ -59,9 +59,7 @@ class TestSetupWizardScript:
 
     def test_wizard_checks_pixi_installed(self):
         src = WIZARD.read_text()
-        assert "pixi" in src and ("shutil.which" in src or "command" in src), (
-            "wizard does not check for pixi binary"
-        )
+        assert "pixi" in src and ("shutil.which" in src or "command" in src), "wizard does not check for pixi binary"
 
     def test_wizard_dry_run_exits_without_running(self):
         """--dry-run must not call subprocess.run on any pixi command."""
@@ -115,9 +113,7 @@ class TestInstallSh:
 
     def test_install_sh_checks_pixi(self):
         src = INSTALL_SH.read_text()
-        assert "command -v pixi" in src or "which pixi" in src, (
-            "install.sh does not check for pixi binary"
-        )
+        assert "command -v pixi" in src or "which pixi" in src, "install.sh does not check for pixi binary"
 
     def test_install_sh_exits_1_if_no_pixi(self):
         src = INSTALL_SH.read_text()
