@@ -37,14 +37,15 @@ def _imported_top_level_packages(module_path):
     tree = ast.parse(source, filename=str(module_path))
 
     for node in ast.walk(tree):
-        segment = ast.get_source_segment(source, node)
         if isinstance(node, ast.Import):
+            segment = ast.get_source_segment(source, node)
             for alias in node.names:
                 yield node.lineno, segment, alias.name.split(".")[0]
         elif isinstance(node, ast.ImportFrom):
             # A relative import (level > 0) names a package inside this
             # project, never the submodule, so it is out of scope.
             if node.level == 0 and node.module:
+                segment = ast.get_source_segment(source, node)
                 yield node.lineno, segment, node.module.split(".")[0]
 
 

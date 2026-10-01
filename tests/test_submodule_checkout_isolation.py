@@ -36,6 +36,7 @@ CHECKOUTS = (
     REPO_ROOT / "external" / "cortical_tiles",
 )
 EXERCISED_MODULE = "tests/test_generate_champollion_config_internals.py"
+pytestmark = pytest.mark.serial  # noqa: V107
 
 
 def _git_paths(checkout, *ls_files_args):
