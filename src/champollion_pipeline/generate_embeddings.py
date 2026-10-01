@@ -769,7 +769,11 @@ class GenerateEmbeddings(ScriptBuilder):
     def _run_per_region(
         self, evaluate_script: str, crops_2mm_dir: str, output_base: str
     ) -> int:
-        """Invoke champollion/evaluate.py for each region in models_path."""
+        """Invoke champollion/evaluate.py for each region in models_path.
+
+        Every region is attempted even after a failure. Returns the first non-zero
+        evaluate code, or 0 when all evaluated regions succeed.
+        """
         models_path = self.args.models_path
         region_dirs = self._find_region_model_dirs(models_path)
 
@@ -778,7 +782,8 @@ class GenerateEmbeddings(ScriptBuilder):
 
         print(f"\nGenerating embeddings for {len(region_dirs)} regions → {output_base}")
 
-        last_result = 0
+        failed_regions: list[str] = []
+        first_failure = 0
         for model_path in region_dirs:
             region = self._resolve_region_name(model_path, models_path)
             side = "L" if region.endswith("_left") else "R"
@@ -794,6 +799,9 @@ class GenerateEmbeddings(ScriptBuilder):
 
             self._ensure_ckpt(model_path)
             os.makedirs(os.path.dirname(saving_path), exist_ok=True)
+            # A recompute must never leave the previous run's output behind.
+            if exists(saving_path):
+                os.remove(saving_path)
 
             cmd = [sys.executable, evaluate_script,
                    "-m", model_path,
@@ -802,9 +810,16 @@ class GenerateEmbeddings(ScriptBuilder):
                    "-s", saving_path]
 
             print(f"\n[Region {region}]")
-            last_result = self.execute_command(cmd, shell=False)
+            code = self.execute_command(cmd, shell=False)
+            if code != 0:
+                failed_regions.append(region)
+                first_failure = first_failure or code
+                if exists(saving_path):
+                    os.remove(saving_path)
 
-        return last_result
+        if failed_regions:
+            print(f"\n[FAILED] {len(failed_regions)} region(s) failed: {', '.join(failed_regions)}")
+        return first_failure
 
     def _run_cka_test(self, output_base: str) -> None:
         """Run CKA coherence test on the generated embeddings."""
