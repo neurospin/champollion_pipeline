@@ -26,6 +26,11 @@ Coverage configuration (TASK-130):
 - REQ-CTILESTEST-26 — that file's ``[run] data_file`` resolves to the
   pipeline-root ``.coverage``.
 
+Coverage threshold (TASK-119):
+
+- REQ-CTILESTEST-167 — that task passes ``--cov-fail-under`` exactly once,
+  with the integer value 85 (user decision 2026-10-01).
+
 The pipeline ``test`` task scope guard (TASK-115 scope item c) is already
 REQ-CHAMPTEST-04, tested in ``tests/test_champollion_v1_test_harness.py``.
 
@@ -306,4 +311,22 @@ class TestCorticalTilesCoverageDataFile:
         resolved = (cwd / expanded).resolve()
         assert resolved == (REPO_ROOT / ".coverage").resolve(), (
             f"[run] data_file {raw!r} resolves from {cwd} to {resolved}; expected {REPO_ROOT / '.coverage'}"
+        )
+
+
+COVERAGE_FAIL_UNDER = 85
+
+
+@pytest.mark.smoke
+class TestCorticalTilesCoverageThreshold:
+    """REQ-CTILESTEST-167."""
+
+    def test_task_enforces_85_percent_coverage_floor(self, pixi_config):
+        _, argv = _cortical_tiles_invocation(pixi_config)
+        values = _option_values(argv, "--cov-fail-under")
+        assert len(values) == 1, (
+            f"{TASK_NAME} must pass exactly one --cov-fail-under (REQ-CTILESTEST-167); got {values!r}"
+        )
+        assert values[0] == str(COVERAGE_FAIL_UNDER), (
+            f"--cov-fail-under must be the integer {COVERAGE_FAIL_UNDER} (REQ-CTILESTEST-167); got {values[0]!r}"
         )
