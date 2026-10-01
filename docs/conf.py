@@ -54,6 +54,7 @@ napoleon_google_docstring = True
 napoleon_numpy_docstring = True
 
 intersphinx_mapping = {
-    "python": ("https://docs.python.org/3", None),
+    # Vendored inventory: the strict build must not need network access.
+    "python": ("https://docs.python.org/3", "_intersphinx/python3-objects.inv"),
 }
 intersphinx_timeout = 5
