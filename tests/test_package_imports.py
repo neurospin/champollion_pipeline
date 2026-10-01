@@ -61,7 +61,7 @@ def reload_with_blocked_submodules(blocked):
         builtins.__import__ = real_import
 
 
-@pytest.fixture
+@pytest.fixture  # noqa: V103
 def restore_package():
     """Reload the package normally after a test has degraded it."""
     yield
@@ -90,21 +90,24 @@ class TestPackageExports:
 class TestGuardedImports:
     """Test the ImportError fallbacks for partial environments."""
 
-    def test_package_still_imports_when_every_submodule_fails(self, restore_package):
+    @pytest.mark.usefixtures("restore_package")
+    def test_package_still_imports_when_every_submodule_fails(self):
         reload_with_blocked_submodules(set(GUARDED_SUBMODULES))
         assert champollion_pipeline.__version__
 
     @pytest.mark.parametrize(
         "submodule,class_name", list(zip(GUARDED_SUBMODULES, EXPORTED_CLASSES))
     )
-    def test_single_failing_submodule_is_tolerated(self, restore_package, submodule, class_name):
+    @pytest.mark.usefixtures("restore_package")
+    def test_single_failing_submodule_is_tolerated(self, submodule, class_name):
         reload_with_blocked_submodules({submodule})
         # The package imported successfully even though this one script did not.
         assert champollion_pipeline.__version__
         others = [c for c in EXPORTED_CLASSES if c != class_name]
         assert all(hasattr(champollion_pipeline, c) for c in others)
 
-    def test_package_recovers_after_a_degraded_reload(self, restore_package):
+    @pytest.mark.usefixtures("restore_package")
+    def test_package_recovers_after_a_degraded_reload(self):
         reload_with_blocked_submodules(set(GUARDED_SUBMODULES))
         importlib.reload(champollion_pipeline)
         assert all(hasattr(champollion_pipeline, c) for c in EXPORTED_CLASSES)

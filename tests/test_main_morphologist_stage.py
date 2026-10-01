@@ -35,8 +35,8 @@ def main_module():
 def _stage_args(main_module, bids, parallel=None):
     """Run GenerateMorphologistGraphsStage.execute() and return the args passed to parse_args()."""
     config = main_module.PipelineConfig()
-    config.dataset.input_path = "/input"
-    config.dataset.morphologist_graphs = "/output"
+    config.dataset.input_path = "/input"  # noqa: V101
+    config.dataset.morphologist_graphs = "/output"  # noqa: V101
     config.dataset.bids = bids
     if parallel is not None:
         config.parallel = parallel

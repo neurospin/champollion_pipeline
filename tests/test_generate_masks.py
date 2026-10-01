@@ -269,7 +269,7 @@ class TestComputeOneSulcus:
     def test_returns_failed_string_on_exception(self, tmp_path):
         """Exception inside worker is caught and returned as 'failed: …'."""
         modules, _, mock_cm, _ = _mock_aims_env()
-        mock_cm.initialize_mask.side_effect = RuntimeError("boom")
+        mock_cm.initialize_mask.side_effect = RuntimeError("boom")  # noqa: V101
         with patch.dict(sys.modules, modules):
             result = _compute_one_sulcus(
                 self.SULCUS,
@@ -318,11 +318,11 @@ class TestLoadAndExtractSubject:
 
     def _mock_graph(self, mock_aims, vertices=()):
         mock_graph = MagicMock()
-        mock_graph.__getitem__ = MagicMock(return_value=[2.0, 2.0, 2.0, 1.0])
+        mock_graph.__getitem__ = MagicMock(return_value=[2.0, 2.0, 2.0, 1.0])  # noqa: V101
         mock_graph.vertices.return_value = list(vertices)
         mock_aims.read.return_value = mock_graph
         mock_transform = MagicMock()
-        mock_transform.transform.side_effect = lambda c: c
+        mock_transform.transform.side_effect = lambda c: c  # noqa: V101
         mock_aims.GraphManip.getICBM2009cTemplateTransform.return_value = mock_transform
 
     def test_missing_graph_file_returns_none(self, tmp_path):
@@ -361,7 +361,7 @@ class TestLoadAndExtractSubject:
         def make_vertex(name):
             v = MagicMock()
             mock_bucket = MagicMock()
-            mock_bucket.__getitem__ = MagicMock(return_value={(0, 0, 0): None})
+            mock_bucket.__getitem__ = MagicMock(return_value={(0, 0, 0): None})  # noqa: V101
 
             def _get(k):
                 if k == "name":
@@ -370,7 +370,7 @@ class TestLoadAndExtractSubject:
                     return mock_bucket
                 return None
 
-            v.get.side_effect = _get
+            v.get.side_effect = _get  # noqa: V101
             return v
 
         modules, mock_aims, _, _ = _mock_aims_env()
@@ -509,7 +509,7 @@ class TestNjobsAutoBuffered:
         runner_called = []
 
         mock_runner = MagicMock()
-        mock_runner.side_effect = lambda config: runner_called.append(True) or iter([])
+        mock_runner.side_effect = lambda config: runner_called.append(True) or iter([])  # noqa: V101
 
         with (
             patch.dict(sys.modules, self._bv_modules(2)),
@@ -564,7 +564,7 @@ class TestVoxStrOutputPath:
             return iter([])
 
         mock_runner = MagicMock()
-        mock_runner.side_effect = fake_runner_call
+        mock_runner.side_effect = fake_runner_call  # noqa: V101
 
         with (
             patch.dict(sys.modules, self._bv_modules()),
@@ -605,7 +605,7 @@ class TestVoxStrOutputPath:
             return iter([])
 
         mock_runner = MagicMock()
-        mock_runner.side_effect = fake_runner_call
+        mock_runner.side_effect = fake_runner_call  # noqa: V101
 
         with (
             patch.dict(sys.modules, self._bv_modules()),

@@ -185,7 +185,7 @@ class TestRunMethod:
 
     @patch("champollion_pipeline.generate_morphologist_graphs.chdir")
     @patch("champollion_pipeline.generate_morphologist_graphs.getcwd", return_value="/original/dir")
-    def test_run_changes_directory(self, mock_getcwd, mock_chdir, temp_dir):
+    def test_run_changes_directory(self, _mock_getcwd, mock_chdir, temp_dir):
         """Test that run changes to input directory."""
         script = GenerateMorphologistGraphs()
         script.parse_args([temp_dir, temp_dir])
