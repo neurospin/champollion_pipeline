@@ -27,6 +27,8 @@ from champollion_pipeline.utils.lib import CORTICAL_TILES_VERSION
 
 # Add champollion to path for CKA imports
 _SCRIPT_DIR = dirname(abspath(__file__))
+_CONVERTED_CKPT_NAME = "best_model.ckpt"
+_WEIGHTS_FILE_NAME = "best_model_weights.pt"
 _CHAMPOLLION_DIR = abspath(join(_SCRIPT_DIR, "..", "..", "external", "champollion_V1"))
 if _CHAMPOLLION_DIR not in sys.path:
     sys.path.insert(0, _CHAMPOLLION_DIR)
@@ -648,25 +650,67 @@ class GenerateEmbeddings(ScriptBuilder):
         return base
 
     def _ensure_ckpt(self, model_path: str) -> None:
-        """Wrap best_model_weights.pt into a Lightning .ckpt if no .ckpt already exists.
+        """Keep a Lightning .ckpt in sync with best_model_weights.pt (content-idempotent).
 
         evaluate.py globs for logs/lightning_logs/version_0/checkpoints/*.ckpt.
-        HF models ship logs/best_model_weights.pt instead, so we convert on first use.
-        Idempotent: skips conversion if a .ckpt is already present.
+        HF models ship logs/best_model_weights.pt instead, so it is converted to
+        best_model.ckpt. A converted ckpt whose weights differ from the current
+        best_model_weights.pt (e.g. after an HF model update) is rewritten; a matching
+        one is left untouched. Native Lightning ckpts of locally trained models are
+        never touched.
         """
         ckpt_dir = Path(model_path) / "logs" / "lightning_logs" / "version_0" / "checkpoints"
-        if list(ckpt_dir.glob("*.ckpt")):
+        if self._has_native_ckpt(ckpt_dir):
             return
-        pt_path = Path(model_path) / "logs" / "best_model_weights.pt"
+        pt_path = Path(model_path) / "logs" / _WEIGHTS_FILE_NAME
         if not pt_path.exists():
             return
+        state_dict = self._load_weights_state_dict(pt_path)
+        ckpt_path = ckpt_dir / _CONVERTED_CKPT_NAME
+        existed = ckpt_path.exists()
+        if existed:
+            current = self._load_converted_state_dict(ckpt_path)
+            if current is not None and self._is_same_state_dict(current, state_dict):
+                return
         ckpt_dir.mkdir(parents=True, exist_ok=True)
+        torch.save({"state_dict": state_dict, "epoch": 0, "global_step": 0}, str(ckpt_path))
+        action = "Refreshed stale" if existed else "Converted"
+        print(f"  {action} {pt_path} → {ckpt_path}")
+
+    @staticmethod
+    def _has_native_ckpt(ckpt_dir: Path) -> bool:
+        """True if ckpt_dir holds any .ckpt other than the converted one."""
+        if not ckpt_dir.is_dir():
+            return False
+        return any(p.name != _CONVERTED_CKPT_NAME for p in ckpt_dir.glob("*.ckpt"))
+
+    @staticmethod
+    def _load_weights_state_dict(pt_path: Path) -> dict:
+        """Load best_model_weights.pt, unwrapping a top-level state_dict if present."""
         loaded = torch.load(str(pt_path), map_location="cpu")
-        state_dict = loaded["state_dict"] if isinstance(loaded, dict) and "state_dict" in loaded else loaded
-        ckpt = {"state_dict": state_dict, "epoch": 0, "global_step": 0}
-        ckpt_path = ckpt_dir / "best_model.ckpt"
-        torch.save(ckpt, str(ckpt_path))
-        print(f"  Converted {pt_path} → {ckpt_path}")
+        return loaded["state_dict"] if isinstance(loaded, dict) and "state_dict" in loaded else loaded
+
+    @staticmethod
+    def _load_converted_state_dict(ckpt_path: Path) -> dict | None:
+        """Return the state_dict of a converted ckpt, or None if it has none."""
+        loaded = torch.load(str(ckpt_path), map_location="cpu")
+        if isinstance(loaded, dict) and isinstance(loaded.get("state_dict"), dict):
+            return loaded["state_dict"]
+        return None
+
+    @staticmethod
+    def _is_same_state_dict(left: dict, right: dict) -> bool:
+        """True if both state_dicts have the same keys and equal values."""
+        if left.keys() != right.keys():
+            return False
+        for key, value in left.items():
+            other = right[key]
+            if isinstance(value, torch.Tensor) and isinstance(other, torch.Tensor):
+                if not torch.equal(value, other):
+                    return False
+            elif value != other:
+                return False
+        return True
 
     def _find_region_model_dirs(self, models_path: str) -> list[str]:
         """Return every directory, at any depth under models_path, that directly
