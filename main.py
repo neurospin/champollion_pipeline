@@ -201,6 +201,8 @@ class ConfigLoader:
             "stages": config.stages,
             "dependencies": config.dependencies,
             "mode": config.mode,
+            "n_workers": config.n_workers,
+            "worker_timeout": config.worker_timeout,
             "stop_on_error": config.stop_on_error,
             "verbose": config.verbose,
             "log_level": config.log_level,
