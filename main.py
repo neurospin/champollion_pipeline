@@ -939,27 +939,15 @@ Examples:
     return parser.parse_args()
 
 
-def main() -> int:
-    """Main entry point for the pipeline."""
-    check_for_updates()
-    args = parse_arguments()
+def _apply_cli_overrides(config: PipelineConfig, args: argparse.Namespace, *, from_default: bool) -> None:
+    """Apply command-line argument overrides to a PipelineConfig in place.
 
-    # Generate config template if requested
-    if args.generate_config:
-        config = create_default_config()
-        ConfigLoader.save_to_yaml(config, args.generate_config)
-        print(f"✅ Configuration template generated: {args.generate_config}")
-        return 0
-
-    # Load configuration
-    if args.config:
-        print(f"Loading configuration from: {args.config}")
-        config = ConfigLoader.load_from_yaml(args.config)
-    else:
-        print("Using default configuration")
-        config = create_default_config()
-
-    # Apply command-line overrides
+    ``from_default`` must be ``True`` when *config* was produced by
+    :func:`create_default_config` (no ``--config`` file was supplied) and
+    ``False`` when it was loaded from a YAML file.  The flag gates the
+    REQ-DEFROOT dataset-root re-derivation that must only fire for the
+    default config (REQ-DEFROOT-03/04).
+    """
     if args.stages:
         # Disable all stages, then enable specified ones
         for stage in config.stages:
@@ -973,7 +961,7 @@ def main() -> int:
 
     if args.dataset_name:
         config.dataset.name = args.dataset_name
-        if not args.config:
+        if from_default:
             # Default config only: re-derive the root for the new name (REQ-DEFROOT-03).
             # A --config YAML datasets_root is never rewritten (REQ-DEFROOT-04).
             config.dataset.datasets_root = str(Path(config.data_path) / config.dataset.name)
@@ -994,6 +982,31 @@ def main() -> int:
         config.n_workers = args.n_workers
     if args.worker_timeout is not None:
         config.worker_timeout = args.worker_timeout
+
+
+def main() -> int:
+    """Main entry point for the pipeline."""
+    check_for_updates()
+    args = parse_arguments()
+
+    # Generate config template if requested
+    if args.generate_config:
+        config = create_default_config()
+        _apply_cli_overrides(config, args, from_default=True)
+        ConfigLoader.save_to_yaml(config, args.generate_config)
+        print(f"✅ Configuration template generated: {args.generate_config}")
+        return 0
+
+    # Load configuration
+    if args.config:
+        print(f"Loading configuration from: {args.config}")
+        config = ConfigLoader.load_from_yaml(args.config)
+    else:
+        print("Using default configuration")
+        config = create_default_config()
+
+    # Apply command-line overrides
+    _apply_cli_overrides(config, args, from_default=not args.config)
 
     # Run pipeline
     if config.mode == "streaming":
