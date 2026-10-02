@@ -466,6 +466,9 @@ class GenerateChampollionConfigStage(PipelineStage):
         return result
 
 
+_HF_REPO_ID_REQUIRED = "hf_enabled requires dataset.hf_repo_id"
+
+
 @contextmanager
 def _scoped_env(name: str, value: Optional[str]) -> Iterator[None]:
     """Set env var *name* to *value* for the duration of the block, then restore.
@@ -490,7 +493,13 @@ class GenerateEmbeddingsStage(PipelineStage):
     """Stage for generating embeddings."""
 
     def validate(self) -> bool:
-        """Validate that models and data exist."""
+        """Validate that the model source is usable."""
+        dataset = self.config.dataset
+        if dataset.hf_enabled:
+            if not dataset.hf_repo_id:
+                self.logger.error(_HF_REPO_ID_REQUIRED)
+                return False
+            return True
         models_path = Path(self.config.models_path)
         if not models_path.exists():
             self.logger.error(f"Models path does not exist: {models_path}")
@@ -504,7 +513,7 @@ class GenerateEmbeddingsStage(PipelineStage):
             return StageResult(
                 stage_name=self.name,
                 success=False,
-                message="hf_enabled requires dataset.hf_repo_id",
+                message=_HF_REPO_ID_REQUIRED,
                 return_code=1,
             )
         self.log_start()
