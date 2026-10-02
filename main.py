@@ -973,6 +973,10 @@ def main() -> int:
 
     if args.dataset_name:
         config.dataset.name = args.dataset_name
+        if not args.config:
+            # Default config only: re-derive the root for the new name (REQ-DEFROOT-03).
+            # A --config YAML datasets_root is never rewritten (REQ-DEFROOT-04).
+            config.dataset.datasets_root = str(Path(config.data_path) / config.dataset.name)
 
     if args.models_path:
         config.models_path = args.models_path
