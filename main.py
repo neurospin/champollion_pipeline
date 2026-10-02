@@ -99,7 +99,7 @@ class DatasetConfig:
     hf_repo_id: Optional[str] = None
     hf_token: Optional[str] = None
 
-    # External dataset config path (for datasets not in champollion_V1/contrastive/configs)
+    # Unused: no stage reads it. Kept so existing YAML files that set it still load.
     config_path: Optional[str] = None
 
     # CPU mode (disable CUDA)
@@ -846,7 +846,7 @@ def create_default_config() -> PipelineConfig:
         outputs_path=str(root_path / "outputs"),
         champollion_v1_path=str(root_path / "external" / "champollion_V1"),
     )
-    config.dataset.datasets_root = str(Path(config.champollion_v1_path) / "contrastive" / "configs" / "dataset")
+    config.dataset.datasets_root = str(Path(config.data_path) / config.dataset.name)
     return config
 
 
