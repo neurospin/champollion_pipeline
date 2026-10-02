@@ -33,6 +33,7 @@ from typing import Dict, Iterator, List, Optional
 import yaml
 from champollion_utils.update_check import check_for_updates
 
+from champollion_pipeline.derivatives_layout import CHAMPOLLION_DERIVATIVES_FOLDER
 from champollion_pipeline.generate_champollion_config import GenerateChampollionConfig
 from champollion_pipeline.generate_embeddings import GenerateEmbeddings
 from champollion_pipeline.generate_morphologist_graphs import GenerateMorphologistGraphs
@@ -552,6 +553,11 @@ class GenerateEmbeddingsStage(PipelineStage):
         return result
 
 
+def _compute_combined_embeddings_dir(datasets_root: str) -> Path:
+    """Return <datasets_root>/derivatives/champollion_V1/embeddings (pure, no I/O, O(1))."""
+    return Path(datasets_root) / "derivatives" / CHAMPOLLION_DERIVATIVES_FOLDER / "embeddings"
+
+
 class PutTogetherEmbeddingsStage(PipelineStage):
     """Stage for combining embeddings."""
 
@@ -568,10 +574,13 @@ class PutTogetherEmbeddingsStage(PipelineStage):
         self.log_start()
         try:
             self.logger.info("Putting together embeddings...")
-            args = [
-                str(self.config.dataset.embeddings_path),
-                f"--output_path={self.config.dataset.cortical_tiles_output or self.config.outputs_path}",
-            ]
+            dataset = self.config.dataset
+            output_path = (
+                _compute_combined_embeddings_dir(dataset.datasets_root)
+                if dataset.datasets_root
+                else (dataset.cortical_tiles_output or self.config.outputs_path)
+            )
+            args = [str(dataset.embeddings_path), f"--output_path={output_path}"]
             script = PutTogetherEmbeddings()
             script.parse_args(args)
             return_code = script.run()
@@ -612,8 +621,11 @@ class GenerateSnapshotsStage(PipelineStage):
 
             args = [f"--output_dir={self.config.dataset.snapshots_path}"]
 
-            if self.config.dataset.embeddings_path:
-                args.append(f"--embeddings_dir={self.config.dataset.embeddings_path}")
+            dataset = self.config.dataset
+            if dataset.datasets_root:
+                args.append(f"--embeddings_dir={_compute_combined_embeddings_dir(dataset.datasets_root)}")
+            elif dataset.embeddings_path:
+                args.append(f"--embeddings_dir={dataset.embeddings_path}")
             if self.config.dataset.morphologist_graphs:
                 args.append(f"--morphologist_dir={self.config.dataset.morphologist_graphs}")
             if self.config.dataset.crops_path:

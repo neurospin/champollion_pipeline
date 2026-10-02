@@ -150,6 +150,31 @@ class TestPutTogetherEmbeddingsStageArgv:
         assert namespace.embeddings_source == "/data/MYDATASETembeddings"
 
 
+_COMBINED_EMBEDDINGS_SUBDIR = Path("derivatives") / "champollion_V1" / "embeddings"
+
+
+@pytest.mark.unit
+class TestCombinedEmbeddingsLocationArgv:
+    """REQ-COMBOUT-01/02: combine writes, and snapshots reads, <datasets_root>/derivatives/champollion_V1/embeddings."""
+
+    def test_combine_output_path_is_datasets_root_derivatives_embeddings(self, main_module):
+        """REQ-COMBOUT-01: combine --output_path is datasets_root/derivatives/champollion_V1/embeddings."""
+        config = _base_config(main_module)
+        config.dataset.embeddings_path = "/data/MYDATASETembeddings"  # noqa: V101
+        argv = _captured_argv(main_module, "PutTogetherEmbeddingsStage", "PutTogetherEmbeddings", config)
+        namespace = _parse_with_real_parser(PutTogetherEmbeddings, argv)
+        assert Path(namespace.output_path) == Path("/data/MYDATASET") / _COMBINED_EMBEDDINGS_SUBDIR
+
+    def test_snapshots_embeddings_dir_is_datasets_root_derivatives_embeddings(self, main_module):
+        """REQ-COMBOUT-02: snapshots --embeddings_dir is datasets_root/derivatives/champollion_V1/embeddings."""
+        config = _base_config(main_module)
+        config.dataset.embeddings_path = "/data/MYDATASETembeddings"  # noqa: V101
+        argv = _captured_argv(main_module, "GenerateSnapshotsStage", "GenerateSnapshots", config)
+        namespace = _parse_with_real_parser(GenerateSnapshots, argv)
+        assert namespace.embeddings_dir is not None, f"no --embeddings_dir in {argv!r}"
+        assert Path(namespace.embeddings_dir) == Path("/data/MYDATASET") / _COMBINED_EMBEDDINGS_SUBDIR
+
+
 @pytest.mark.unit
 class TestOtherStagesArgv:
     """REQ-STAGEARGV-07: the four remaining stages' argv parses with the receiving script's parser."""
