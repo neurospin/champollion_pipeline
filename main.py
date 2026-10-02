@@ -236,7 +236,8 @@ class ConfigLoader:
                 "short_name": config.dataset.short_name,
                 "hf_enabled": config.dataset.hf_enabled,
                 "hf_repo_id": config.dataset.hf_repo_id,
-                "hf_token": config.dataset.hf_token,
+                # hf_token is a secret: never written (REQ-HFTOKEN-01).
+                # Supply it via the HF_TOKEN environment variable.
                 "config_path": config.dataset.config_path,
                 "cpu": config.dataset.cpu,
                 "bids": config.dataset.bids,
@@ -247,6 +248,10 @@ class ConfigLoader:
 
         with open(output_path, "w") as f:
             yaml.safe_dump(config_dict, f, default_flow_style=False, sort_keys=False)
+        if config.dataset.hf_token:
+            print(
+                f"Note: dataset.hf_token not written to {output_path}; set the HF_TOKEN environment variable instead."
+            )
 
 
 # ====================== Pipeline Stage Strategy Pattern ======================
