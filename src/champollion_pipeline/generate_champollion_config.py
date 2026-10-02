@@ -229,12 +229,13 @@ class GenerateChampollionConfig(ScriptBuilder):
             default_yaml = join(configs_root, "dataset_localization", localization_name)
             self._write_localization_yaml(default_yaml, dataset_folder)
 
-        # Warn if stale in-checkout dataset configs would shadow the newly generated ones.
+        # Warn if stale in-checkout dataset configs exist; they are now only a fallback
+        # for regions absent from configs_root, but their presence is worth flagging as clutter.
         stale = self._find_checkout_dataset_configs(champollion_loc)
         if stale:
             print(
-                f"Notice: stale in-checkout dataset configs at {stale} take precedence over "
-                f"{configs_root} in train_champollion.py; delete them."
+                f"Notice: stale in-checkout dataset configs at {stale} are now a fallback "
+                f"(only used for regions not found in {configs_root}); consider deleting them."
             )
 
         return result
