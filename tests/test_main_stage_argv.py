@@ -138,6 +138,28 @@ class TestGenerateEmbeddingsStageArgv:
 
 
 @pytest.mark.unit
+class TestEmbeddingsRegionsArgv:
+    """REQ-EMBREGIONS-01: dataset.regions (cortical_tiles names) reach GenerateEmbeddings as model names."""
+
+    def test_regions_forwarded_as_model_names_both_hemispheres(self, main_module):
+        """REQ-EMBREGIONS-01: each region -> dots removed + _left and + _right, exactly, in --regions."""
+        config = _base_config(main_module)
+        config.dataset.regions = ["S.C.-sylv.", "F.I.P.-F.I.P.Po.C.inf.", "Lobule_parietal_sup."]  # noqa: V101
+        namespace = _embeddings_namespace(main_module, config)
+        assert namespace.regions is not None, "GenerateEmbeddingsStage passed no --regions"
+        assert sorted(namespace.regions) == sorted(
+            [
+                "SC-sylv_left",
+                "SC-sylv_right",
+                "FIP-FIPPoCinf_left",
+                "FIP-FIPPoCinf_right",
+                "Lobule_parietal_sup_left",
+                "Lobule_parietal_sup_right",
+            ]
+        )
+
+
+@pytest.mark.unit
 class TestPutTogetherEmbeddingsStageArgv:
     """PutTogetherEmbeddingsStage argv vs PutTogetherEmbeddings' real parser."""
 

@@ -33,7 +33,11 @@ from typing import Dict, Iterator, List, Optional
 import yaml
 from champollion_utils.update_check import check_for_updates
 
-from champollion_pipeline.derivatives_layout import CHAMPOLLION_DERIVATIVES_FOLDER
+from champollion_pipeline.derivatives_layout import (
+    CHAMPOLLION_DERIVATIVES_FOLDER,
+    HEMISPHERES,
+    compute_region_model_name,
+)
 from champollion_pipeline.generate_champollion_config import GenerateChampollionConfig
 from champollion_pipeline.generate_embeddings import GenerateEmbeddings
 from champollion_pipeline.generate_morphologist_graphs import GenerateMorphologistGraphs
@@ -532,6 +536,8 @@ class GenerateEmbeddingsStage(PipelineStage):
                 args.append("--overwrite")
             if dataset.cpu:
                 args.append("--cpu")
+            if dataset.regions:
+                args.extend(["--regions", *_compute_embeddings_region_names(dataset.regions)])
 
             script = GenerateEmbeddings()
             script.parse_args(args)
@@ -556,6 +562,12 @@ class GenerateEmbeddingsStage(PipelineStage):
 def _compute_combined_embeddings_dir(datasets_root: str) -> Path:
     """Return <datasets_root>/derivatives/champollion_V1/embeddings (pure, no I/O, O(1))."""
     return Path(datasets_root) / "derivatives" / CHAMPOLLION_DERIVATIVES_FOLDER / "embeddings"
+
+
+def _compute_embeddings_region_names(regions: List[str]) -> List[str]:
+    """Return both hemispheres' model names for each distinct region, in input order. O(n)."""
+    distinct_regions = dict.fromkeys(regions)
+    return [compute_region_model_name(region, hemisphere) for region in distinct_regions for hemisphere in HEMISPHERES]
 
 
 class PutTogetherEmbeddingsStage(PipelineStage):
