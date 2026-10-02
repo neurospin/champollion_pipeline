@@ -25,28 +25,25 @@ import logging
 import os
 import sys
 from abc import ABC, abstractmethod
+from contextlib import contextmanager
 from dataclasses import dataclass, field
 from pathlib import Path
-from typing import Dict, List, Optional
+from typing import Dict, Iterator, List, Optional
 
 import yaml
 from champollion_utils.update_check import check_for_updates
 
-# Add src to path for imports
+from champollion_pipeline.generate_champollion_config import GenerateChampollionConfig
+from champollion_pipeline.generate_embeddings import GenerateEmbeddings
+from champollion_pipeline.generate_morphologist_graphs import GenerateMorphologistGraphs
+from champollion_pipeline.generate_snapshots import GenerateSnapshots
+from champollion_pipeline.put_together_embeddings import PutTogetherEmbeddings
+from champollion_pipeline.run_cortical_tiles import RunCorticalTiles
+
+# Add src to path for imports – still needed for the optional file_indexer.pipeline_checks
+# import below and the lazy parallel_runner import in streaming mode.
 pipeline_src = Path(__file__).parent / "src"
 sys.path.insert(0, str(pipeline_src))
-
-# Import pipeline scripts
-try:
-    from generate_champollion_config import GenerateChampollionConfig
-    from generate_embeddings import GenerateEmbeddings
-    from generate_morphologist_graphs import GenerateMorphologistGraphs
-    from generate_snapshots import GenerateSnapshots
-    from put_together_embeddings import PutTogetherEmbeddings
-    from run_cortical_tiles import RunCorticalTiles
-except ImportError as e:
-    print(f"Warning: Could not import pipeline scripts: {e}")
-    print("Some stages may not be available.")
 
 try:
     from file_indexer.pipeline_checks import SubjectEligibilityChecker, build_output_report
@@ -464,6 +461,26 @@ class GenerateChampollionConfigStage(PipelineStage):
         return result
 
 
+@contextmanager
+def _scoped_env(name: str, value: Optional[str]) -> Iterator[None]:
+    """Set env var *name* to *value* for the duration of the block, then restore.
+
+    A no-op when *value* is falsy.
+    """
+    if not value:
+        yield
+        return
+    previous = os.environ.get(name)
+    os.environ[name] = value
+    try:
+        yield
+    finally:
+        if previous is None:
+            os.environ.pop(name, None)
+        else:
+            os.environ[name] = previous
+
+
 class GenerateEmbeddingsStage(PipelineStage):
     """Stage for generating embeddings."""
 
@@ -477,78 +494,33 @@ class GenerateEmbeddingsStage(PipelineStage):
 
     def execute(self) -> StageResult:
         """Execute embeddings generation."""
+        dataset = self.config.dataset
+        if dataset.hf_enabled and not dataset.hf_repo_id:
+            return StageResult(
+                stage_name=self.name,
+                success=False,
+                message="hf_enabled requires dataset.hf_repo_id",
+                return_code=1,
+            )
         self.log_start()
         try:
             self.logger.info("Generating embeddings and training classifiers...")
 
-            # Build arguments from config
-            args = [
-                str(self.config.models_path),
-                self.config.dataset.dataset_localization,
-                self.config.dataset.datasets_root,
-                self.config.dataset.short_name,
-            ]
+            models_path = dataset.hf_repo_id if dataset.hf_enabled else str(self.config.models_path)
+            args = [models_path, dataset.datasets_root]
 
-            # Add datasets
-            args.append("--datasets")
-            args.extend(self.config.dataset.datasets)
-
-            # Add labels
-            args.append("--labels")
-            args.extend(self.config.dataset.labels)
-
-            # Add optional parameters
-            args.append(f"--classifier_name={self.config.dataset.classifier_name}")
-
-            if self.config.dataset.overwrite:
+            if dataset.embeddings_path:
+                args.append(f"--output={dataset.embeddings_path}")
+            if dataset.overwrite:
                 args.append("--overwrite")
-            if self.config.dataset.embeddings_only:
-                args.append("--embeddings_only")
-            if self.config.dataset.use_best_model:
-                args.append("--use_best_model")
-
-            # Add subsets
-            args.append("--subsets")
-            args.extend(self.config.dataset.subsets)
-
-            # Add epochs
-            args.append("--epochs")
-            for epoch in self.config.dataset.epochs:
-                epoch_str = "None" if epoch is None else str(epoch)
-                args.append(epoch_str)
-
-            args.append(f"--split={self.config.dataset.split}")
-            args.append(f"--cv={self.config.dataset.cv}")
-
-            if self.config.dataset.splits_basedir:
-                args.append(f"--splits_basedir={self.config.dataset.splits_basedir}")
-
-            if self.config.dataset.idx_region_evaluation is not None:
-                args.append(f"--idx_region_evaluation={self.config.dataset.idx_region_evaluation}")
-
-            if self.config.verbose:
-                args.append("--verbose")
-
-            # HuggingFace parameters
-            if self.config.dataset.hf_enabled:
-                args.append("--population_source=huggingface")
-                args.append(f"--population_source_path={self.config.dataset.hf_repo_id}")
-                if self.config.dataset.hf_token:
-                    args.append(f"--hf_token={self.config.dataset.hf_token}")
-
-            # External config path for dataset configs
-            if self.config.dataset.config_path:
-                args.append(f"--config_path={self.config.dataset.config_path}")
-
-            # CPU mode
-            if self.config.dataset.cpu:
+            if dataset.cpu:
                 args.append("--cpu")
-
-            self.logger.debug(f"Arguments: {args}")
 
             script = GenerateEmbeddings()
             script.parse_args(args)
-            return_code = script.run()
+            hf_token = dataset.hf_token if dataset.hf_enabled else None
+            with _scoped_env("HF_TOKEN", hf_token):
+                return_code = script.run()
 
             result = StageResult(
                 stage_name=self.name,
@@ -581,7 +553,7 @@ class PutTogetherEmbeddingsStage(PipelineStage):
         try:
             self.logger.info("Putting together embeddings...")
             args = [
-                f"--embeddings_subpath={self.config.dataset.embeddings_path or 'champollion_V1'}",
+                str(self.config.dataset.embeddings_path),
                 f"--output_path={self.config.dataset.cortical_tiles_output or self.config.outputs_path}",
             ]
             script = PutTogetherEmbeddings()
