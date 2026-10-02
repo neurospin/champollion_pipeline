@@ -19,7 +19,7 @@ from os.path import abspath, dirname, exists, join
 import numpy as np
 from champollion_utils.script_builder import ScriptBuilder
 
-from champollion_pipeline.derivatives_layout import compute_champollion_configs_root
+from champollion_pipeline.derivatives_layout import compute_champollion_configs_root, compute_region_model_name
 from champollion_pipeline.utils.lib import DERIVATIVES_FOLDER, find_dataset_folder
 
 # Get the script's directory for reliable path resolution
@@ -121,7 +121,7 @@ class GenerateChampollionConfig(ScriptBuilder):
                     continue
                 sx, sy, sz = size
                 side_long = "left" if side == "L" else "right"
-                dataset_name = f"{crop_name.replace('.', '')}_{side_long}"
+                dataset_name = compute_region_model_name(crop_name, side_long)
                 filedata = (
                     ref.replace("REPLACE_CROP_NAME", crop_name)
                     .replace("REPLACE_DATASET", dataset_name)
