@@ -48,8 +48,8 @@ scripts/staging/
 # Sphinx build output
 docs/_build/
 
-# ELM task ledger (local repo, no remote)
-elm/
+# ALM ledger (.alm/, its own local repo, no remote)
+.alm/
 
 # Claude Code session state
 .claude/
