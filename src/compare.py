@@ -47,9 +47,16 @@ from scipy.stats import wasserstein_distance as _wasserstein_1d
 
 try:
     from soma import aims
-except ImportError:
-    print("ERROR: PyAIMS (soma.aims) is not available in this environment.")
-    sys.exit(1)
+except ImportError as _aims_import_error:
+    aims = None
+    _AIMS_IMPORT_ERROR: "ImportError | None" = _aims_import_error
+else:
+    _AIMS_IMPORT_ERROR = None
+
+_AIMS_UNAVAILABLE_MESSAGE = (
+    "ERROR: PyAIMS (soma.aims) is not available in this environment; "
+    "the masks, cortical_tiles and databases subcommands require it."
+)
 
 
 # --------------------------------------------------------------------------- #
@@ -364,6 +371,9 @@ class Compare(ScriptBuilder):
     # ---------------------------------------------------------------------- #
 
     def run(self) -> int:
+        if aims is None:
+            print(f"{_AIMS_UNAVAILABLE_MESSAGE} ({_AIMS_IMPORT_ERROR})", file=sys.stderr)
+            return 1
         if self.args.mode == "masks":
             return self._run_masks()
         if self.args.mode == "cortical_tiles":
