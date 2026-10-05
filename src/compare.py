@@ -36,6 +36,7 @@ Usage
 import argparse
 import csv
 import json
+import math
 import os
 import sys
 from os.path import abspath, dirname, join
@@ -52,6 +53,8 @@ except ImportError as _aims_import_error:
     _AIMS_IMPORT_ERROR: "ImportError | None" = _aims_import_error
 else:
     _AIMS_IMPORT_ERROR = None
+
+ONE_SIDE_EMPTY_BUCKET = "one_side_empty"
 
 _AIMS_UNAVAILABLE_MESSAGE = (
     "ERROR: PyAIMS (soma.aims) is not available in this environment; "
@@ -94,10 +97,15 @@ def wasserstein_distance(a: np.ndarray, b: np.ndarray) -> float:
     """Approximate 3-D Wasserstein distance (in voxels) via axis-marginals.
 
     Projects each 3-D map onto X, Y, Z, computes 1-D Wasserstein distances,
-    then combines as Euclidean norm. Returns 0.0 when both maps are empty.
+    then combines as Euclidean norm. Returns 0.0 when both maps are empty and
+    math.inf when exactly one is empty (no finite cost moves mass onto nothing).
     """
-    if a.sum() == 0.0 and b.sum() == 0.0:
+    is_a_empty = a.sum() == 0.0
+    is_b_empty = b.sum() == 0.0
+    if is_a_empty and is_b_empty:
         return 0.0
+    if is_a_empty or is_b_empty:
+        return math.inf
     d_sq = 0.0
     for axis in range(3):
         other = tuple(i for i in range(3) if i != axis)
@@ -121,7 +129,20 @@ def bucket_label(value: float, step: float) -> str:
 
 
 def sort_buckets(b: dict) -> dict:
-    return dict(sorted(b.items(), key=lambda kv: float(kv[0].split("-")[0])))
+    return dict(sorted(b.items(), key=_compute_bucket_sort_key))
+
+
+def _compute_bucket_sort_key(item) -> tuple[bool, float]:
+    """Order numeric buckets by lower bound and put the one-side-empty bucket last."""
+    label = item[0]
+    if label == ONE_SIDE_EMPTY_BUCKET:
+        return (True, 0.0)
+    return (False, float(label.split("-")[0]))
+
+
+def _normalize_distance_for_json(distance: float) -> float | None:
+    """Map an infinite distance to None so the report stays strict JSON."""
+    return None if math.isinf(distance) else distance
 
 
 def visualise_mask_diffs(diffs: dict, masks_a: dict, masks_b: dict) -> None:
@@ -435,8 +456,10 @@ class Compare(ScriptBuilder):
 
             if use_wass:
                 dist = wasserstein_distance(arr_a, arr_b)
-                distances[name] = round(dist, 3)
-                wass_buckets.setdefault(bucket_label(dist, step), []).append(name)
+                is_one_side_empty = math.isinf(dist)
+                distances[name] = dist if is_one_side_empty else round(dist, 3)
+                bucket = ONE_SIDE_EMPTY_BUCKET if is_one_side_empty else bucket_label(dist, step)
+                wass_buckets.setdefault(bucket, []).append(name)
 
             if use_diff:
                 d = voxel_diff(arr_a, arr_b)
@@ -463,7 +486,9 @@ class Compare(ScriptBuilder):
 
         if use_wass:
             report["wasserstein_by_bucket"] = sort_buckets(wass_buckets)
-            report["wasserstein_per_mask"] = dict(sorted(distances.items(), key=lambda kv: -kv[1]))
+            report["wasserstein_per_mask"] = {
+                name: _normalize_distance_for_json(d) for name, d in sorted(distances.items(), key=lambda kv: -kv[1])
+            }
 
         if use_diff:
             report["diff_by_bucket"] = sort_buckets(diff_buckets)
@@ -475,7 +500,7 @@ class Compare(ScriptBuilder):
         out_path = Path(self.args.output)
         out_path.parent.mkdir(parents=True, exist_ok=True)
         with open(out_path, "w") as f:
-            json.dump(report, f, indent=2)
+            json.dump(report, f, indent=2, allow_nan=False)
         print(f"\nReport written to: {out_path}")
         if self.args.xor_dir:
             print(f"XOR images written to: {self.args.xor_dir}")

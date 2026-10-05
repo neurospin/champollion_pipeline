@@ -130,9 +130,6 @@ class TestWassersteinDistance:
     def test_diagonal_shift(self):
         assert wasserstein_distance(_point_volume((0, 0, 0)), _point_volume((1, 1, 0))) == pytest.approx(np.sqrt(2.0))
 
-    def test_one_empty_map_skips_axes(self):
-        assert wasserstein_distance(_point_volume((1, 1, 1)), np.zeros((4, 4, 4))) == 0.0
-
 
 class TestBucketLabel:
     def test_integer_step(self):
