@@ -433,7 +433,7 @@ class Compare(ScriptBuilder):
 
         print(f"Masks in set_a:      {len(masks_a)}")
         print(f"Masks in set_b:      {len(masks_b)}")
-        print(f"Common (compared):   {len(common)}")
+        print(f"Common:              {len(common)}")
         print(f"Only in set_a:       {len(only_a)}")
         print(f"Only in set_b:       {len(only_b)}")
 
@@ -445,6 +445,7 @@ class Compare(ScriptBuilder):
         diff_buckets: dict[str, list] = {}
         distances: dict[str, float] = {}
         diffs: dict[str, dict] = {}
+        skipped_shape_mismatch: dict[str, dict[str, list[int]]] = {}
 
         for name in common:
             arr_a = load_mask_vol(masks_a[name])
@@ -452,6 +453,10 @@ class Compare(ScriptBuilder):
 
             if arr_a.shape != arr_b.shape:
                 print(f"WARNING: shape mismatch for {name}: {arr_a.shape} vs {arr_b.shape}, skipping.")
+                skipped_shape_mismatch[name] = {
+                    "shape_a": [int(n) for n in arr_a.shape],
+                    "shape_b": [int(n) for n in arr_b.shape],
+                }
                 continue
 
             if use_wass:
@@ -470,6 +475,10 @@ class Compare(ScriptBuilder):
                 out_xor = str(Path(self.args.xor_dir) / name)
                 save_xor_vol(masks_a[name], arr_a, arr_b, out_xor)
 
+        total_compared = len(common) - len(skipped_shape_mismatch)
+        print(f"Compared:            {total_compared}")
+        print(f"Skipped (shape mismatch): {len(skipped_shape_mismatch)}")
+
         report = {
             "mode": self.args.mode,
             "set_a": str(dir_a),
@@ -477,6 +486,8 @@ class Compare(ScriptBuilder):
             "metric": self.args.metric,
             "summary": {
                 "total_common": len(common),
+                "total_compared": total_compared,
+                "skipped_shape_mismatch": skipped_shape_mismatch,
                 "only_in_set_a": only_a,
                 "only_in_set_b": only_b,
             },
