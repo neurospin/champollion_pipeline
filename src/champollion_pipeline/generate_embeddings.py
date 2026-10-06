@@ -746,6 +746,11 @@ class GenerateEmbeddings(ScriptBuilder):
         finally:
             shutil.rmtree(root, ignore_errors=True)
 
+    @staticmethod
+    def _ckpt_candidates(model_dir: str) -> list[str]:
+        """Return the .ckpt files evaluate.py globs in model_dir's version_0, sorted by name."""
+        return sorted(glob.glob(join(model_dir, "logs", "lightning_logs", "version_0", "checkpoints", "*.ckpt")))
+
     def _weights_source(self, model_path: str) -> str | None:
         """Return the user-dir weights file evaluate.py ends up using, or None."""
         ckpts = glob.glob(model_path + "/logs/lightning_logs/version_0/checkpoints/*.ckpt")
@@ -891,8 +896,19 @@ class GenerateEmbeddings(ScriptBuilder):
                     if getattr(self.args, "use_last_checkpoint", False) and not self._uses_native_ckpt(model_path)
                     else ""
                 )
-                weights = self._weights_source(model_path) or "<none found>"
+                candidates = self._ckpt_candidates(eval_model_path)
+                if len(candidates) > 1:
+                    weights = ", ".join(candidates)
+                else:
+                    weights = self._weights_source(model_path) or "<none found>"
                 print(f"\n[Region {region}] weights: {weights}{ignored}")
+                if len(candidates) > 1:
+                    print(
+                        f"[Region {region}] WARNING: {len(candidates)} checkpoints in "
+                        f"{eval_model_path}/logs/lightning_logs/version_0/checkpoints; "
+                        "evaluate.py loads the first of an unsorted glob, so the one used "
+                        "depends on filesystem order"
+                    )
                 code = self.execute_command(cmd, shell=False)
             if code != 0:
                 failed_regions.append(region)
