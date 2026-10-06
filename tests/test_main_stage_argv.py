@@ -114,13 +114,12 @@ class TestGenerateEmbeddingsStageArgv:
         assert namespace.output == "/data/MYDATASETembeddings"
 
     def test_boolean_toggles_argv_parses_with_overwrite_and_cpu(self, main_module):
-        """REQ-STAGEARGV-04: verbose/overwrite/cpu/embeddings_only/use_best_model true -> parses; overwrite, cpu set."""
+        """REQ-STAGEARGV-09: verbose/overwrite/cpu/embeddings_only true -> parses; overwrite, cpu set."""
         config = _base_config(main_module)
         config.verbose = True  # noqa: V101
         config.dataset.overwrite = True
         config.dataset.cpu = True
         config.dataset.embeddings_only = True  # noqa: V101
-        config.dataset.use_best_model = True  # noqa: V101
         namespace = _embeddings_namespace(main_module, config)
         assert namespace.overwrite is True
         assert namespace.cpu is True

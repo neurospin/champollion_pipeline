@@ -60,6 +60,13 @@ except ImportError:
 # ====================== Configuration Management ======================
 
 
+# Dataset config keys that no longer exist; old YAML files still carrying them load with a warning.
+_REMOVED_DATASET_KEYS = {
+    "use_best_model": "it had no effect; best_model_weights.pt is now used by default, "
+    "set dataset.use_last_checkpoint: true to use the native Lightning checkpoint instead",
+}
+
+
 @dataclass
 class DatasetConfig:
     """Configuration for dataset processing."""
@@ -90,7 +97,7 @@ class DatasetConfig:
     classifier_name: str = "svm"
     overwrite: bool = False
     embeddings_only: bool = False
-    use_best_model: bool = False
+    use_last_checkpoint: bool = False
     subsets: List[str] = field(default_factory=lambda: ["full"])
     epochs: List[Optional[int]] = field(default_factory=lambda: [None])
     split: str = "random"
@@ -186,6 +193,12 @@ class ConfigLoader:
         """Convert dictionary to PipelineConfig object."""
         # Extract dataset config
         dataset_dict = config_dict.pop("dataset", {})
+        for key, hint in _REMOVED_DATASET_KEYS.items():
+            if key in dataset_dict:
+                dataset_dict.pop(key)
+                logging.getLogger("champollion_pipeline").warning(
+                    "Ignoring removed config key dataset.%s: %s", key, hint
+                )
         dataset_config = DatasetConfig(**dataset_dict)
 
         # Create pipeline config
@@ -233,7 +246,7 @@ class ConfigLoader:
                 "classifier_name": config.dataset.classifier_name,
                 "overwrite": config.dataset.overwrite,
                 "embeddings_only": config.dataset.embeddings_only,
-                "use_best_model": config.dataset.use_best_model,
+                "use_last_checkpoint": config.dataset.use_last_checkpoint,
                 "subsets": config.dataset.subsets,
                 "epochs": config.dataset.epochs,
                 "split": config.dataset.split,
@@ -536,6 +549,8 @@ class GenerateEmbeddingsStage(PipelineStage):
                 args.append("--overwrite")
             if dataset.cpu:
                 args.append("--cpu")
+            if dataset.use_last_checkpoint:
+                args.append("--use_last_checkpoint")
             if dataset.regions:
                 args.extend(["--regions", *_compute_embeddings_region_names(dataset.regions)])
 
