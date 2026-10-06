@@ -216,6 +216,7 @@ _AIMS_UNAVAILABLE_MESSAGE = (
 
 _EMBEDDINGS_SUFFIX = "_embeddings.csv"
 _HEMI_BY_SIDE = {"L": "left", "R": "right"}
+_SIDE_CHOICES = ("L", "R", "both")
 _EMBEDDINGS_ID_COLUMN = "ID"
 _EMB_BASE_COLUMNS = ["region", "side", "subject", "knn_overlap"]
 _EMB_UMAP_COLUMNS = ["umap_a_x", "umap_a_y", "umap_b_x", "umap_b_y", "displacement"]
@@ -1424,7 +1425,7 @@ class Compare(ScriptBuilder):
         )
         crops_p.add_argument(
             "--side",
-            choices=["L", "R", "both"],
+            choices=_SIDE_CHOICES,
             default="both",
             help="Hemisphere side(s) to compare. Default: both.",
         )
@@ -1448,7 +1449,9 @@ class Compare(ScriptBuilder):
         db_p.add_argument("--path_to_graph_b", required=True, help="Relative sub-path for campaign B.")
         db_p.add_argument("--label_a", default="A", help="Name for campaign A.")
         db_p.add_argument("--label_b", default="B", help="Name for campaign B.")
-        db_p.add_argument("--side", default="both", help="Hemisphere side: L, R, or both.")
+        db_p.add_argument(
+            "--side", choices=_SIDE_CHOICES, default="both", help="Hemisphere side(s) to compare: L, R or both."
+        )
         db_p.add_argument("--masks_a", default=None, help="Mask directory for campaign A. Optional.")
         db_p.add_argument("--masks_b", default=None, help="Mask directory for campaign B. Optional.")
         db_p.add_argument("--output", default="db_comparison.csv", help="Output CSV file path.")
@@ -1469,7 +1472,7 @@ class Compare(ScriptBuilder):
             "--regions", nargs="+", default=None, help="Region names to compare. Default: regions in both sets."
         )
         emb_p.add_argument(
-            "--side", choices=["L", "R", "both"], default="both", help="Hemisphere side(s) to compare. Default: both."
+            "--side", choices=_SIDE_CHOICES, default="both", help="Hemisphere side(s) to compare. Default: both."
         )
         emb_p.add_argument("--k", type=int, default=15, help="k for kNN overlap. Default: 15.")
         emb_p.add_argument("--njobs", type=int, default=1, help="Joblib workers over region/side pairs. Default: 1.")
