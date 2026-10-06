@@ -1935,13 +1935,16 @@ class Compare(ScriptBuilder):
             for row in rows:
                 row.update(mask_lookup.get(row["sulcus"], {}))
 
+        if not rows:
+            print(f"\nNo sulcus rows found for {la} vs {lb}; no CSV written.")
+            return 0
+
         output_path = abspath(self.args.output)
         os.makedirs(dirname(output_path) or ".", exist_ok=True)
-        if rows:
-            with open(output_path, "w", newline="") as f:
-                writer = csv.DictWriter(f, fieldnames=list(rows[0].keys()))
-                writer.writeheader()
-                writer.writerows(rows)
+        with open(output_path, "w", newline="") as f:
+            writer = csv.DictWriter(f, fieldnames=list(rows[0].keys()))
+            writer.writeheader()
+            writer.writerows(rows)
 
         print(f"\nSulci with biggest voxel-density difference ({lb}/{la}):\n")
         print(
