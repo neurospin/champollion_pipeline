@@ -111,7 +111,9 @@ import csv
 import json
 import math
 import os
+import subprocess
 import sys
+import tempfile
 from os.path import abspath, dirname, join
 from pathlib import Path
 
@@ -129,6 +131,38 @@ else:
     _AIMS_IMPORT_ERROR = None
 
 ONE_SIDE_EMPTY_BUCKET = "one_side_empty"
+VIEWER_TOP_K = 5
+
+# Anatomist viewer, run in a fresh Python subprocess (clean QApplication).
+# Reads the viewer entries (name, path_a, path_b, path_xor) as JSON from sys.argv[1].
+_VIEWER_SCRIPT = """\
+import json, sys
+import anatomist.direct.api as ana
+from soma.qt_gui.qt_backend import Qt
+
+VIEWS = ("Axial", "Sagittal", "Coronal")
+entries = json.loads(sys.argv[1])
+a = ana.Anatomist()
+alive = []
+for i, e in enumerate(entries, 1):
+    print(f"[{i}/{len(entries)}] {e['name']}: set_a grey, set_b violet, XOR red")
+    va, vb, vx = (a.loadObject(e[k]) for k in ("path_a", "path_b", "path_xor"))
+    va.setPalette("B-W LINEAR")
+    vb.setPalette("VIOLET-lfusion")
+    vx.setPalette("RED TEMPERATURE")
+    fusion = a.fusionObjects([va, vb, vx], method="Fusion2DMethod")
+    block = a.createWindowsBlock(3)
+    windows = [a.createWindow(view, block=block) for view in VIEWS]
+    for w in windows:
+        w.addObjects([fusion])
+    a.linkWindows(windows)
+    alive.extend([va, vb, vx, fusion, block, *windows])
+qt_app = Qt.QApplication.instance()
+if qt_app is None:
+    sys.exit("ERROR: no Qt application after creating Anatomist; cannot run the viewer.")
+print("Anatomist ready. Close all windows to exit.")
+qt_app.exec_()
+"""
 
 _AIMS_UNAVAILABLE_MESSAGE = (
     "ERROR: PyAIMS (soma.aims) is not available in this environment; "
@@ -219,87 +253,93 @@ def _normalize_distance_for_json(distance: float) -> float | None:
     return None if math.isinf(distance) else distance
 
 
-def visualise_mask_diffs(diffs: dict, masks_a: dict, masks_b: dict) -> None:
-    """Open an interactive Anatomist session for changed mask pairs.
+def _compute_top_changed_masks(scores: dict[str, float], top_k: int) -> list[str]:
+    """Return up to top_k mask names with a positive score, highest first (inf first)."""
+    changed = [(name, score) for name, score in scores.items() if score > 0]
+    return [name for name, _score in sorted(changed, key=lambda kv: -kv[1])[:top_k]]
 
-    For each of the 5 most-changed mask pairs, opens three Axial windows:
-      - A: set_a volume  → grey palette   (B-W LINEAR)
-      - B: set_b volume  → violet palette  (VIOLET-lfusion)
-      - XOR: diff volume → red palette    (RED TEMPERATURE, binary 0/1)
 
-    Spawns a fresh Python subprocess so Anatomist gets a clean QApplication
-    with no pre-existing Qt state from the calling process (e.g. VS Code).
-    XOR volumes are written to temp NIfTI files passed to the subprocess.
+def _has_usable_display() -> bool:
+    """True when a display is set and Qt is not forced to the offscreen platform."""
+    if os.environ.get("QT_QPA_PLATFORM") == "offscreen":
+        return False
+    return bool(os.environ.get("DISPLAY") or os.environ.get("WAYLAND_DISPLAY"))
+
+
+def _make_viewer_entries(names: list, masks_a: dict, masks_b: dict, xor_root: Path) -> list[dict]:
+    """Build the viewer entries, in rank order, with XOR files under xor_root."""
+    return [
+        {"name": name, "path_a": masks_a[name], "path_b": masks_b[name], "path_xor": str(xor_root / name)}
+        for name in names
+    ]
+
+
+def _save_temp_xor_vols(names: list, masks_a: dict, masks_b: dict, xor_root: Path) -> None:
+    """Write one XOR volume per mask under xor_root, mirroring the mask names."""
+    for name in names:
+        arr_a = load_mask_vol(masks_a[name])
+        arr_b = load_mask_vol(masks_b[name])
+        save_xor_vol(masks_a[name], arr_a, arr_b, str(xor_root / name))
+
+
+def _launch_viewer(entries: list[dict]) -> int:
+    """Run the Anatomist viewer subprocess; return 1 (stderr note) if it exits non-zero."""
+    rc = subprocess.run([sys.executable, "-c", _VIEWER_SCRIPT, json.dumps(entries)], check=False).returncode
+    if rc != 0:
+        print(f"ERROR: Anatomist viewer exited with return code {rc}.", file=sys.stderr)
+        return 1
+    return 0
+
+
+def visualise_mask_diffs(
+    scores: dict[str, float],
+    masks_a: dict,
+    masks_b: dict,
+    xor_dir: "str | Path | None" = None,
+    top_k: int = VIEWER_TOP_K,
+) -> int:
+    """Open an interactive Anatomist viewer on the most-changed mask pairs.
+
+    Shows the 5 most-changed masks by default (top_k), ranked by score:
+    changed voxel count, or Wasserstein distance (inf, one side empty, first).
+    Each mask is shown as a fusion of set_a (grey), set_b (violet) and their
+    XOR (red) in linked Axial, Sagittal and Coronal windows. XOR files come
+    from xor_dir when given, otherwise from save_xor_vol outputs in a
+    temporary directory removed afterwards.
+
+    Prerequisites: Anatomist and a usable display; without a display the
+    viewer is skipped with a note on stderr. The viewer runs in a fresh Python
+    subprocess so Anatomist gets a clean QApplication.
+
+    Args:
+        scores: mask name -> ranking score (0 = unchanged, not shown).
+        masks_a: mask name -> set_a NIfTI path.
+        masks_b: mask name -> set_b NIfTI path.
+        xor_dir: directory holding already-written XOR files, or None.
+        top_k: maximum number of masks to show.
+
+    Returns:
+        0 when the viewer ran, nothing changed or it was skipped; 1 when the
+        viewer exited non-zero. Ranking costs O(n log n) in len(scores).
     """
-    import json
-    import subprocess
-    import sys
-    import tempfile
-
-    changed = {n: d for n, d in diffs.items() if d["changed"] > 0}
-    if not changed:
+    names = _compute_top_changed_masks(scores, top_k)
+    if not names:
         print("No changed masks to visualise.")
-        return
-
-    top5 = sorted(changed.items(), key=lambda kv: -kv[1]["changed"])[:5]
-    print(f"\nOpening Anatomist for {len(changed)} changed mask(s) (showing up to 5 most changed)…")
-
-    tmp_files: list = []
-    entries: list = []
-
-    for name, _info in top5:
-        path_a = masks_a[name]
-        path_b = masks_b[name]
-
-        vol_a_aims = aims.read(path_a)
-        arr_a = np.asarray(vol_a_aims, dtype=np.float64).squeeze()
-        arr_b = np.asarray(aims.read(path_b), dtype=np.float64).squeeze()
-        xor = (arr_a != arr_b).astype(np.int16)
-        if xor.ndim == 3:
-            xor = xor[..., np.newaxis]
-        vol_xor = aims.Volume(xor)
-        vol_xor.copyHeaderFrom(vol_a_aims.header())
-        tmp = tempfile.NamedTemporaryFile(suffix=".nii.gz", delete=False)
-        tmp.close()
-        aims.write(vol_xor, tmp.name)
-        tmp_files.append(tmp.name)
-        entries.append({"path_a": path_a, "path_b": path_b, "path_xor": tmp.name, "name": name})
-
-    _VIEWER = """\
-import json, sys
-import anatomist.direct.api as ana
-from soma.qt_gui.qt_backend import Qt
-
-entries = json.loads(sys.argv[1])
-a = ana.Anatomist()
-block = a.createWindowsBlock(3)
-alive = []
-for e in entries:
-    va  = a.loadObject(e['path_a'])
-    vb  = a.loadObject(e['path_b'])
-    vx  = a.loadObject(e['path_xor'])
-    va.setPalette('B-W LINEAR')
-    vb.setPalette('VIOLET-lfusion')
-    vx.setPalette('RED TEMPERATURE')
-    wa = a.createWindow('Axial', block=block)
-    wb = a.createWindow('Axial', block=block)
-    wx = a.createWindow('Axial', block=block)
-    wa.addObjects([va]); wb.addObjects([vb]); wx.addObjects([vx])
-    alive.extend([va, vb, vx, wa, wb, wx])
-print('Anatomist ready. Close all windows to exit.')
-qt_app = Qt.QApplication.instance()
-if qt_app is not None:
-    qt_app.exec_()
-"""
-
-    try:
-        subprocess.run(
-            [sys.executable, "-c", _VIEWER, json.dumps(entries)],
-            check=False,
+        return 0
+    if not _has_usable_display():
+        print(
+            "Skipping --visualisation: no usable display (DISPLAY/WAYLAND_DISPLAY unset or QT_QPA_PLATFORM=offscreen).",
+            file=sys.stderr,
         )
-    finally:
-        for f in tmp_files:
-            Path(f).unlink(missing_ok=True)
+        return 0
+
+    print(f"\nOpening Anatomist for the {len(names)} most-changed mask(s)...")
+    if xor_dir is not None:
+        return _launch_viewer(_make_viewer_entries(names, masks_a, masks_b, Path(xor_dir)))
+    with tempfile.TemporaryDirectory(prefix="compare_xor_") as tmp:
+        xor_root = Path(tmp)
+        _save_temp_xor_vols(names, masks_a, masks_b, xor_root)
+        return _launch_viewer(_make_viewer_entries(names, masks_a, masks_b, xor_root))
 
 
 def save_xor_vol(ref_path: str, a: np.ndarray, b: np.ndarray, out_path: str) -> None:
@@ -776,9 +816,14 @@ class Compare(ScriptBuilder):
             "--visualisation",
             action="store_true",
             default=False,
-            help="Open an interactive Anatomist session showing all changed "
-            "mask triplets (set_a=grey, set_b=violet, XOR=white) fused "
-            "in Axial/Sagittal/Coronal views. Requires Anatomist.",
+            help="Open an interactive Anatomist viewer on the 5 most changed masks, ranked by "
+            "changed voxels (--metric diff/both) or by Wasserstein distance (--metric "
+            "wasserstein). Each mask is shown as a fusion of set_a (grey), set_b (violet) "
+            "and their XOR (red) in linked Axial, Sagittal and Coronal windows. XOR files "
+            "come from --xor_dir when given, otherwise from a temporary directory removed "
+            "afterwards. Requires Anatomist and a usable display (DISPLAY or "
+            "WAYLAND_DISPLAY set, QT_QPA_PLATFORM not offscreen); skipped otherwise. Exits 1 "
+            "if the viewer fails.",
         )
 
         # ── masks subcommand ───────────────────────────────────────────────
@@ -1096,16 +1141,10 @@ class Compare(ScriptBuilder):
             unchanged = sum(1 for d in diffs.values() if d["changed"] == 0)
             print(f"Unchanged masks: {unchanged}/{len(diffs)}")
 
-        if self.args.visualisation:
-            # Use diff counts if available, otherwise synthesise from wasserstein results
-            vis_diffs = (
-                diffs
-                if use_diff
-                else {n: {"changed": 1, "added": 0, "removed": 0} for n in distances if distances[n] > 0}
-            )
-            visualise_mask_diffs(vis_diffs, masks_a, masks_b)
-
-        return 0
+        if not self.args.visualisation:
+            return 0
+        scores = {name: d["changed"] for name, d in diffs.items()} if use_diff else distances
+        return visualise_mask_diffs(scores, masks_a, masks_b, xor_dir=self.args.xor_dir)
 
     # ---------------------------------------------------------------------- #
     # Database comparison mode

@@ -10,6 +10,7 @@ dependencies are injected as stub modules, so nothing touches real data.
 
 import csv
 import json
+import subprocess
 import sys
 import types
 from argparse import Namespace
@@ -175,14 +176,19 @@ class TestSaveXorVol:
 
 
 class TestVisualiseMaskDiffs:
+    # Updated for REQ-COMPARE-45/47/49: visualise_mask_diffs takes a scores dict
+    # (mask name -> ranking score), returns an exit code, and skips without a display.
     def test_no_changed_masks_returns_early(self, monkeypatch, capsys):
         run = MagicMock()
         monkeypatch.setattr("subprocess.run", run)
-        visualise_mask_diffs({"m": {"changed": 0}}, {}, {})
+        assert visualise_mask_diffs({"m": 0.0}, {}, {}) == 0
         assert "No changed masks to visualise." in capsys.readouterr().out
         run.assert_not_called()
 
     def test_spawns_viewer_for_top_changed_masks(self, tmp_path, monkeypatch):
+        monkeypatch.setenv("DISPLAY", ":99")
+        monkeypatch.delenv("WAYLAND_DISPLAY", raising=False)
+        monkeypatch.delenv("QT_QPA_PLATFORM", raising=False)
         names = [f"m{i}.nii.gz" for i in range(7)]
         objects = {}
         masks_a, masks_b = {}, {}
@@ -193,11 +199,11 @@ class TestVisualiseMaskDiffs:
             masks_a[name], masks_b[name] = pa, pb
         fake = _FakeAims(objects)
         monkeypatch.setattr(compare, "aims", fake)
-        run = MagicMock()
+        run = MagicMock(return_value=subprocess.CompletedProcess(args=[], returncode=0))
         monkeypatch.setattr("subprocess.run", run)
 
-        diffs = {name: {"changed": i + 1} for i, name in enumerate(names)}
-        visualise_mask_diffs(diffs, masks_a, masks_b)
+        scores = {name: float(i + 1) for i, name in enumerate(names)}
+        assert visualise_mask_diffs(scores, masks_a, masks_b) == 0
 
         run.assert_called_once()
         entries = json.loads(run.call_args.args[0][3])
@@ -479,10 +485,17 @@ class TestCompareNiftiMasks:
         assert report["mask_pattern"] == "*mask_skeleton.nii.gz"
         assert list(report["diffs_per_mask"]) == [rel]
 
+    # Updated for REQ-COMPARE-45: visualise_mask_diffs receives ranking scores
+    # (changed-voxel counts for diff, Wasserstein distances for wasserstein).
     def test_visualisation_uses_diff_counts(self, mask_sets, tmp_path, monkeypatch):
         dir_a, dir_b = mask_sets
         seen = {}
-        monkeypatch.setattr(compare, "visualise_mask_diffs", lambda diffs, _ma, _mb: seen.update({"diffs": diffs}))
+
+        def _fake(scores, _ma, _mb, *_args, **_kwargs):
+            seen["scores"] = scores
+            return 0
+
+        monkeypatch.setattr(compare, "visualise_mask_diffs", _fake)
         script = _make_script(
             [
                 "masks",
@@ -496,12 +509,17 @@ class TestCompareNiftiMasks:
             ]
         )
         assert script.run() == 0
-        assert seen["diffs"]["L/shared.nii.gz"]["changed"] == 2
+        assert seen["scores"]["L/shared.nii.gz"] == 2
 
-    def test_visualisation_synthesises_from_wasserstein(self, mask_sets, tmp_path, monkeypatch):
+    def test_visualisation_ranks_by_wasserstein_distance(self, mask_sets, tmp_path, monkeypatch):
         dir_a, dir_b = mask_sets
         seen = {}
-        monkeypatch.setattr(compare, "visualise_mask_diffs", lambda diffs, _ma, _mb: seen.update({"diffs": diffs}))
+
+        def _fake(scores, _ma, _mb, *_args, **_kwargs):
+            seen["scores"] = scores
+            return 0
+
+        monkeypatch.setattr(compare, "visualise_mask_diffs", _fake)
         script = _make_script(
             [
                 "masks",
@@ -517,7 +535,7 @@ class TestCompareNiftiMasks:
             ]
         )
         assert script.run() == 0
-        assert seen["diffs"] == {"L/shared.nii.gz": {"changed": 1, "added": 0, "removed": 0}}
+        assert seen["scores"] == {"L/shared.nii.gz": pytest.approx(2.0)}
 
 
 # ---------------------------------------------------------------------------
