@@ -44,6 +44,7 @@ from pathlib import Path
 
 import numpy as np
 from champollion_utils.script_builder import ScriptBuilder
+from joblib import Parallel, delayed
 from scipy.stats import wasserstein_distance as _wasserstein_1d
 
 try:
@@ -58,7 +59,7 @@ ONE_SIDE_EMPTY_BUCKET = "one_side_empty"
 
 _AIMS_UNAVAILABLE_MESSAGE = (
     "ERROR: PyAIMS (soma.aims) is not available in this environment; "
-    "the masks, cortical_tiles and databases subcommands require it."
+    "the masks, cortical_tiles, databases and crops subcommands require it."
 )
 
 
@@ -245,6 +246,281 @@ def save_xor_vol(ref_path: str, a: np.ndarray, b: np.ndarray, out_path: str) -> 
 
 
 # --------------------------------------------------------------------------- #
+# Crop-set comparison (crops mode)
+# --------------------------------------------------------------------------- #
+
+_CROPS_CSV_COLUMNS = ["region", "side", "subject", "n_a", "n_b", "kept", "lost", "gained", "pct_lost", "dice", "shift"]
+_CROP_INFO_ABSENT = frozenset({"no_mask_cropped", "no_transformation"})
+
+
+def _load_crop_set(set_dir: Path, region: str, side: str, input_type: str) -> "tuple[np.ndarray, list[str]] | None":
+    """Load .npy crop array and subject list for one region/side.
+
+    Returns (array, subjects) where array has shape (n_subjects, x, y, z, 1),
+    or None if either file is missing.
+    """
+    mask_dir = set_dir / region / "mask"
+    npy_path = mask_dir / f"{side}{input_type}.npy"
+    csv_path = mask_dir / f"{side}{input_type}_subject.csv"
+    if not npy_path.is_file() or not csv_path.is_file():
+        return None
+    arr = np.load(str(npy_path), mmap_mode="r")
+    subjects: list[str] = []
+    with open(csv_path, newline="") as f:
+        reader = csv.reader(f)
+        next(reader)  # skip header
+        for row in reader:
+            if row:
+                subjects.append(str(row[0]))
+    return arr, subjects
+
+
+def _read_crop_header(set_dir: Path, region: str, side: str) -> "dict | None":
+    """Read the PyAIMS header of mask/{side}mask_cropped.nii.gz.
+
+    Returns a dict with voxel_size (3 floats), referentials (list[str]) and
+    transformations (list of np.ndarray 4x4, row-major); transformations key
+    absent when the header has none.  Returns None when the file is missing or
+    Finder.check() returns False.
+    """
+    path = set_dir / region / "mask" / f"{side}mask_cropped.nii.gz"
+    if not path.is_file():
+        return None
+    finder = aims.Finder()
+    if not finder.check(str(path)):
+        return None
+    raw = finder.header()
+    result: dict = {
+        "voxel_size": raw["voxel_size"][:3],
+        "referentials": list(raw["referentials"]),
+    }
+    if "transformations" in raw:
+        result["transformations"] = [np.asarray(list(t), dtype=float).reshape(4, 4) for t in raw["transformations"]]
+    return result
+
+
+def _compute_crop_offset(
+    header_a: "dict | None", header_b: "dict | None"
+) -> "tuple[tuple[int, int, int] | None, str | None]":
+    """Compute the integer voxel offset between two crop sets from AIMS headers.
+
+    Returns (offset, None) on success or (None, reason) on failure.
+    Checks proceed in the order defined by the contract.
+    """
+    if header_a is None or header_b is None:
+        return None, "no_mask_cropped"
+    if "transformations" not in header_a or "transformations" not in header_b:
+        return None, "no_transformation"
+    refs_a = header_a["referentials"]
+    refs_b_set = set(header_b["referentials"])
+    common_ref = next((r for r in refs_a if r in refs_b_set), None)
+    if common_ref is None:
+        return None, "referential_differs"
+    idx_a = refs_a.index(common_ref)
+    idx_b = header_b["referentials"].index(common_ref)
+    T_a = header_a["transformations"][idx_a]
+    T_b = header_b["transformations"][idx_b]
+    vs_a = np.array(header_a["voxel_size"][:3], dtype=float)
+    vs_b = np.array(header_b["voxel_size"][:3], dtype=float)
+    if not np.allclose(vs_a, vs_b):
+        return None, "voxel_size_differs"
+    R_a = T_a[:3, :3]
+    diag_r = np.diag(R_a)
+    if not (np.all(diag_r != 0) and np.allclose(R_a, np.diag(np.sign(diag_r)))):
+        return None, "non_axis_aligned"
+    R_b = T_b[:3, :3]
+    if not np.allclose(R_a, R_b):
+        return None, "transformations_differ"
+    t_a = T_a[:3, 3]
+    t_b = T_b[:3, 3]
+    off = diag_r * (t_b - t_a) / vs_a
+    if not np.allclose(off, np.round(off)):
+        return None, "non_integer_offset"
+    return tuple(int(x) for x in np.round(off)), None
+
+
+def _compute_union_grid(
+    shape_a, shape_b, offset
+) -> "tuple[tuple[int, int, int], tuple[int, int, int], tuple[int, int, int]]":
+    """Compute union grid dimensions and positions for two crops with a voxel offset.
+
+    Returns (union_shape, pos_a, pos_b).  Identity when offset is (0,0,0) and
+    shapes match.
+    """
+    lo = tuple(min(0, offset[i]) for i in range(3))
+    hi = tuple(max(shape_a[i], offset[i] + shape_b[i]) for i in range(3))
+    union_shape = tuple(hi[i] - lo[i] for i in range(3))
+    pos_a = tuple(-lo[i] for i in range(3))
+    pos_b = tuple(offset[i] - lo[i] for i in range(3))
+    return union_shape, pos_a, pos_b
+
+
+def _embed_in_union_grid(
+    vol: np.ndarray, position: "tuple[int, int, int]", union_shape: "tuple[int, int, int]"
+) -> np.ndarray:
+    """Place a bool volume at position inside a zero-filled union_shape array."""
+    result = np.zeros(union_shape, dtype=bool)
+    sx, sy, sz = vol.shape[0], vol.shape[1], vol.shape[2]
+    px, py, pz = position
+    result[px : px + sx, py : py + sy, pz : pz + sz] = vol.astype(bool)
+    return result
+
+
+def _compare_subject_crops(crop_a: np.ndarray, crop_b: np.ndarray) -> dict:
+    """Compute per-subject voxel metrics from two aligned bool volumes.
+
+    Returns n_a, n_b, kept, lost, gained, pct_lost, dice, shift.
+    """
+    n_a = int(crop_a.sum())
+    n_b = int(crop_b.sum())
+    kept = int((crop_a & crop_b).sum())
+    lost = int((crop_a & ~crop_b).sum())
+    gained = int((~crop_a & crop_b).sum())
+    pct_lost = 100.0 * lost / n_a if n_a else 0.0
+    dice = 2.0 * kept / (n_a + n_b) if (n_a + n_b) else 1.0
+    shift = wasserstein_distance(crop_a.astype(np.float64), crop_b.astype(np.float64))
+    return {
+        "n_a": n_a,
+        "n_b": n_b,
+        "kept": kept,
+        "lost": lost,
+        "gained": gained,
+        "pct_lost": pct_lost,
+        "dice": dice,
+        "shift": shift,
+    }
+
+
+def _summarise_region(
+    rows: list, shape_a, shape_b, offset: "tuple[int, int, int] | None", top_k: int, only_in_a: int, only_in_b: int
+) -> dict:
+    """Build the summary.json regions entry for one compared region/side."""
+    pct_list = [r["pct_lost"] for r in rows]
+    dice_list = [r["dice"] for r in rows]
+    subjects_changed = sum(1 for r in rows if r["lost"] > 0 or r["gained"] > 0)
+    subjects_emptied = sum(1 for r in rows if r["n_a"] > 0 and r["n_b"] == 0)
+    top_lost = sorted(rows, key=lambda r: (-r["pct_lost"], -r["lost"], r["subject"]))[:top_k]
+    return {
+        "n_subjects_compared": len(rows),
+        "only_in_a": only_in_a,
+        "only_in_b": only_in_b,
+        "subjects_changed": subjects_changed,
+        "pct_lost_mean": round(float(np.mean(pct_list)), 4),
+        "pct_lost_p95": round(float(np.percentile(pct_list, 95)), 4),
+        "pct_lost_max": round(float(np.max(pct_list)), 4),
+        "dice_mean": round(float(np.mean(dice_list)), 4),
+        "dice_min": round(float(np.min(dice_list)), 4),
+        "subjects_emptied": subjects_emptied,
+        "top_lost": [
+            {"subject": r["subject"], "pct_lost": round(r["pct_lost"], 6), "lost": r["lost"]} for r in top_lost
+        ],
+        "crop_shape_a": [int(x) for x in shape_a],
+        "crop_shape_b": [int(x) for x in shape_b],
+        "alignment_offset_vox": list(offset) if offset is not None else None,
+    }
+
+
+def _compare_region_side(
+    set_a: Path, set_b: Path, region: str, side: str, input_type: str, top_k: int, explicit: bool
+) -> dict:
+    """Compare one region/side across two crop sets.
+
+    Returns {"key", "region", "side", "rows", "summary", "skipped"}.
+    """
+    key = f"{region}/{side}"
+
+    result_a = _load_crop_set(set_a, region, side, input_type)
+    result_b = _load_crop_set(set_b, region, side, input_type)
+
+    def _skip(reason, arr_a=None, arr_b=None):
+        entry: dict = {"region": region, "side": side, "reason": reason}
+        if arr_a is not None and arr_b is not None:
+            entry["shape_a"] = [int(x) for x in arr_a.shape[1:4]]
+            entry["shape_b"] = [int(x) for x in arr_b.shape[1:4]]
+        return {"key": key, "region": region, "side": side, "rows": [], "summary": None, "skipped": entry}
+
+    if result_a is None and result_b is None:
+        if explicit:
+            return _skip("missing_in_a_and_b")
+        return {"key": key, "region": region, "side": side, "rows": [], "summary": None, "skipped": None}
+    if result_a is None:
+        return _skip("missing_in_a")
+    if result_b is None:
+        return _skip("missing_in_b")
+
+    arr_a, subjects_a = result_a
+    arr_b, subjects_b = result_b
+
+    if arr_a.shape[0] != len(subjects_a) or arr_b.shape[0] != len(subjects_b):
+        return _skip("subject_csv_mismatch", arr_a, arr_b)
+
+    shape_a = arr_a.shape[1:4]
+    shape_b = arr_b.shape[1:4]
+
+    header_a = _read_crop_header(set_a, region, side)
+    header_b = _read_crop_header(set_b, region, side)
+    offset, reason = _compute_crop_offset(header_a, header_b)
+
+    if offset is None:
+        if reason in _CROP_INFO_ABSENT:
+            if shape_a != shape_b:
+                return _skip(reason, arr_a, arr_b)
+            print(f"WARNING: {key}: {reason}, comparing directly (equal shapes {shape_a}).")
+        else:
+            return _skip(reason, arr_a, arr_b)
+
+    # Build alignment
+    if offset is not None:
+        union_shape, pos_a, pos_b = _compute_union_grid(shape_a, shape_b, offset)
+    else:
+        union_shape = shape_a
+        pos_a = pos_b = None
+
+    # Pair subjects by ID, preserving set A order
+    index_b = {s: j for j, s in enumerate(subjects_b)}
+    n_common = 0
+    for s in subjects_a:
+        if s in index_b:
+            n_common += 1
+
+    only_in_a = len(subjects_a) - n_common
+    only_in_b = len(subjects_b) - n_common
+
+    if n_common == 0:
+        return _skip("no_common_subjects", arr_a, arr_b)
+
+    rows: list[dict] = []
+    for i, subj in enumerate(subjects_a):
+        if subj not in index_b:
+            continue
+        j = index_b[subj]
+        vol_a = np.asarray(arr_a[i]).reshape(shape_a) != 0
+        vol_b = np.asarray(arr_b[j]).reshape(shape_b) != 0
+        if offset is not None:
+            vol_a = _embed_in_union_grid(vol_a, pos_a, union_shape)
+            vol_b = _embed_in_union_grid(vol_b, pos_b, union_shape)
+        metrics = _compare_subject_crops(vol_a, vol_b)
+        metrics["subject"] = subj
+        rows.append(metrics)
+
+    summary = _summarise_region(rows, shape_a, shape_b, offset, top_k, only_in_a, only_in_b)
+    return {"key": key, "region": region, "side": side, "rows": rows, "summary": summary, "skipped": None}
+
+
+def _list_crop_regions(set_a: Path, set_b: Path, regions: "list[str] | None") -> list:
+    """Return the region list to compare.
+
+    When regions is None, returns the sorted intersection of region directories
+    present in both sets.  Otherwise returns the given list unchanged.
+    """
+    if regions is not None:
+        return list(regions)
+    dirs_a = {p.name for p in set_a.iterdir() if p.is_dir()}
+    dirs_b = {p.name for p in set_b.iterdir() if p.is_dir()}
+    return sorted(dirs_a & dirs_b)
+
+
+# --------------------------------------------------------------------------- #
 # Database-mode module-level workers (must be picklable for joblib)
 # --------------------------------------------------------------------------- #
 
@@ -364,6 +640,37 @@ class Compare(ScriptBuilder):
             help="Glob pattern for mask files inside each region's mask/ folder.",
         )
 
+        # ── crops subcommand ──────────────────────────────────────────────
+        crops_p = subparsers.add_parser(
+            "crops",
+            help="Compare two cortical_tiles crops/2mm directories (.npy crop sets).",
+            formatter_class=argparse.ArgumentDefaultsHelpFormatter,
+        )
+        crops_p.add_argument("--set_a", required=True, help="Path to the first crops/2mm directory.")
+        crops_p.add_argument("--set_b", required=True, help="Path to the second crops/2mm directory.")
+        crops_p.add_argument(
+            "--output", default="crops_comparison", help="Output directory. Default: crops_comparison."
+        )
+        crops_p.add_argument(
+            "--input_type",
+            default="skeleton",
+            help="Reads mask/{side}{input_type}.npy and _subject.csv. Default: skeleton.",
+        )
+        crops_p.add_argument(
+            "--regions",
+            nargs="+",
+            default=None,
+            help="Region names to compare. Default: intersection of region dirs in both sets.",
+        )
+        crops_p.add_argument(
+            "--side",
+            choices=["L", "R", "both"],
+            default="both",
+            help="Hemisphere side(s) to compare. Default: both.",
+        )
+        crops_p.add_argument("--top_k", type=int, default=5, help="Length of top_lost list. Default: 5.")
+        crops_p.add_argument("--njobs", type=int, default=1, help="Joblib workers over region/side pairs. Default: 1.")
+
         # ── databases subcommand ───────────────────────────────────────────
         db_p = subparsers.add_parser(
             "databases",
@@ -401,8 +708,96 @@ class Compare(ScriptBuilder):
             return self._run_cortical_tiles()
         if self.args.mode == "databases":
             return self._run_databases()
+        if self.args.mode == "crops":
+            return self._run_crops()
         print(f"ERROR: unknown mode '{self.args.mode}'")
         return 1
+
+    # ---------------------------------------------------------------------- #
+    # Crops comparison mode
+    # ---------------------------------------------------------------------- #
+
+    def _run_crops(self) -> int:
+        """Run the crops comparison subcommand."""
+        set_a = Path(self.args.set_a)
+        set_b = Path(self.args.set_b)
+        if not set_a.is_dir():
+            print(f"ERROR: --set_a is not a directory: {set_a}", file=sys.stderr)
+            return 1
+        if not set_b.is_dir():
+            print(f"ERROR: --set_b is not a directory: {set_b}", file=sys.stderr)
+            return 1
+
+        out_dir = Path(self.args.output)
+        out_dir.mkdir(parents=True, exist_ok=True)
+
+        sides = ["L", "R"] if self.args.side == "both" else [self.args.side]
+        regions = _list_crop_regions(set_a, set_b, self.args.regions)
+        explicit = self.args.regions is not None
+
+        pairs = [(region, side) for region in regions for side in sides]
+
+        results = Parallel(n_jobs=self.args.njobs)(
+            delayed(_compare_region_side)(set_a, set_b, region, side, self.args.input_type, self.args.top_k, explicit)
+            for region, side in pairs
+        )
+
+        all_rows: list[dict] = []
+        regions_summary: dict = {}
+        skipped_list: list[dict] = []
+
+        for result in results:
+            key = result["key"]
+            region_name = result["region"]
+            side_name = result["side"]
+            if result["skipped"] is not None:
+                skipped_list.append(result["skipped"])
+                print(f"SKIP  {key}: {result['skipped']['reason']}")
+            if result["summary"] is not None:
+                regions_summary[key] = result["summary"]
+                s = result["summary"]
+                print(
+                    f"  {key}: n={s['n_subjects_compared']} "
+                    f"changed={s['subjects_changed']} "
+                    f"pct_lost_mean={s['pct_lost_mean']:.4f} "
+                    f"dice_min={s['dice_min']:.4f}"
+                )
+            for row in result["rows"]:
+                all_rows.append(
+                    {
+                        "region": region_name,
+                        "side": side_name,
+                        "subject": row["subject"],
+                        "n_a": row["n_a"],
+                        "n_b": row["n_b"],
+                        "kept": row["kept"],
+                        "lost": row["lost"],
+                        "gained": row["gained"],
+                        "pct_lost": round(row["pct_lost"], 6),
+                        "dice": round(row["dice"], 6),
+                        "shift": "inf" if math.isinf(row["shift"]) else round(row["shift"], 6),
+                    }
+                )
+
+        csv_path = out_dir / "per_subject.csv"
+        with open(csv_path, "w", newline="") as f:
+            writer = csv.DictWriter(f, fieldnames=_CROPS_CSV_COLUMNS)
+            writer.writeheader()
+            writer.writerows(all_rows)
+
+        summary = {
+            "set_a": str(set_a.resolve()),
+            "set_b": str(set_b.resolve()),
+            "input_type": self.args.input_type,
+            "regions": regions_summary,
+            "skipped": skipped_list,
+        }
+        json_path = out_dir / "summary.json"
+        with open(json_path, "w") as f:
+            json.dump(summary, f, indent=2, allow_nan=False)
+
+        print(f"Wrote {csv_path} and {json_path}")
+        return 0
 
     # ---------------------------------------------------------------------- #
     # Mask comparison modes
