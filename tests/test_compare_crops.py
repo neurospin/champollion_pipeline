@@ -23,13 +23,17 @@ shape mismatch skipped), REQ-COMPARE-21 (headerless equal shapes compared
 directly), REQ-COMPARE-23/24/25 (skip ``reason`` for header skips),
 REQ-COMPARE-26 (input missing in one set), REQ-COMPARE-27/28 (input missing in
 both sets), REQ-COMPARE-29 (subject CSV mismatch), REQ-COMPARE-30 (no common
-subjects). REQ-COMPARE-22 (no soma.aims) lives in test_compare_without_aims.py.
+subjects), REQ-COMPARE-38..43 (--xor_dir XOR files), REQ-COMPARE-44
+(--input_type choices). REQ-COMPARE-22 (no soma.aims) lives in
+test_compare_without_aims.py.
 
 All fixtures are synthetic: crops are written with numpy, ``mask_cropped.nii.gz``
 is an empty placeholder file, and ``compare.aims`` is replaced by a fake whose
-``Finder`` serves the header registered for each placeholder path. No nibabel.
+``Finder`` serves the header registered for each placeholder path and whose
+``Volume`` / ``write`` record each written XOR volume and header. No nibabel.
 """
 
+import copy
 import csv
 import json
 import os
@@ -79,16 +83,50 @@ class _FakeFinder:
         return self._header
 
 
+# Real path of each file written through the fake ``aims.write`` ->
+# (numpy array of the written volume, deep copy of its header dict).
+_WRITTEN = {}
+
+
+class _FakeVolume:
+    """Minimal ``aims.Volume``: built from a numpy array, mutable dict header."""
+
+    def __init__(self, arr=None, *args, **kwargs):
+        if not isinstance(arr, np.ndarray) or args:
+            raise TypeError("fake aims.Volume only supports aims.Volume(numpy_array)")
+        self._arr = np.array(arr)
+        self._header = {}
+
+    def header(self):
+        return self._header
+
+    def copyHeaderFrom(self, header):
+        self._header.update(copy.deepcopy(dict(header)))
+
+    def __array__(self, dtype=None, copy=None):
+        return self._arr if dtype is None else self._arr.astype(dtype)
+
+
+def _fake_write(obj, path, *args, **kwargs):
+    """Minimal ``aims.write``: creates the file (parent must exist) and records it."""
+    Path(path).touch()
+    _WRITTEN[_key(path)] = (np.array(obj._arr), copy.deepcopy(dict(obj.header())))
+
+
 class _FakeAims:
     Finder = _FakeFinder
+    Volume = _FakeVolume
+    write = staticmethod(_fake_write)
 
 
 @pytest.fixture(autouse=True)
 def fake_aims(monkeypatch):
     _HEADERS.clear()
+    _WRITTEN.clear()
     monkeypatch.setattr(compare, "aims", _FakeAims())
     yield
     _HEADERS.clear()
+    _WRITTEN.clear()
 
 
 def _header(translation=(0.0, 0.0, 0.0), rotation=_MINUS_I, vs=_VS, referentials=(_REFERENTIAL,)):
@@ -806,3 +844,220 @@ class TestCropsSkipsNoCommonSubjects:
 
     def test_region_side_is_not_compared(self, no_common_subject_sets):
         _assert_not_compared(_run_crops(no_common_subject_sets))
+
+
+# --------------------------------------------------------------------------- #
+# REQ-COMPARE-38..43: --xor_dir per-subject XOR files
+# --------------------------------------------------------------------------- #
+
+# Output contract: <xor_dir>/<region>/<side>/<subject>_xor.nii.gz (PyAIMS,
+# header-aligned region/side) or <subject>_xor.npy (numpy, compared without a
+# header check). The XOR lives on the comparison grid (1 = voxel differs).
+
+
+def _xor_dir(tmp_path):
+    return tmp_path / "xor"
+
+
+def _xor_subjects(xor_dir, region=_REGION, side="L"):
+    """Subjects with an XOR file in <xor_dir>/<region>/<side>/ (any extension)."""
+    side_dir = Path(xor_dir) / region / side
+    if not side_dir.is_dir():
+        return set()
+    return {p.name.split("_xor.")[0] for p in side_dir.iterdir() if "_xor." in p.name}
+
+
+def _written(path):
+    """(array, header) recorded by the fake aims.write for path; trailing singleton 4th axis dropped."""
+    key = _key(path)
+    assert key in _WRITTEN, f"aims.write was not called for {path}; written: {sorted(_WRITTEN)}"
+    arr, header = _WRITTEN[key]
+    if arr.ndim == 4 and arr.shape[3] == 1:
+        arr = arr[..., 0]
+    return arr, header
+
+
+def _matrix(transformation):
+    return np.asarray(list(transformation), dtype=float).reshape(4, 4)
+
+
+# Negative-offset fixture: A (4,4,4), B (4,4,6), offset (-1,0,-2), vs 2 mm.
+# Union grid: lo (-1,0,-2), shape (5,4,6), pos_a (1,0,2), pos_b (0,0,0).
+#   A (0,0,0) -> union (1,0,2)   A (1,0,2) -> union (2,0,4)
+#   B (0,0,0) -> union (0,0,0)   B (2,0,4) -> union (2,0,4)   (kept)
+# XOR = union (0,0,0) and (1,0,2). Without the shift, A and B would both mark (0,0,0).
+_NEG_SHAPE_A = (4, 4, 4)
+_NEG_SHAPE_B = (4, 4, 6)
+_NEG_OFFSET = (-1, 0, -2)
+_NEG_LO = (-1, 0, -2)
+_NEG_UNION = (5, 4, 6)
+_NEG_T_A = (6.0, -22.0, 84.0)
+_NEG_XOR_VOXELS = [(0, 0, 0), (1, 0, 2)]
+
+
+def _write_negative_offset_sets(tmp_path, rotation=_MINUS_I):
+    diag = np.diag(np.asarray(rotation, dtype=float))
+    # offset = diag(R) (t_b - t_a) / vs  ->  t_b = t_a + diag(R) * offset * vs
+    t_b = tuple(float(x) for x in np.asarray(_NEG_T_A) + diag * np.asarray(_NEG_OFFSET) * _VS)
+    _write_crops(
+        tmp_path / "a",
+        _REGION,
+        "L",
+        ["s1"],
+        [[(0, 0, 0), (1, 0, 2)]],
+        _NEG_SHAPE_A,
+        header=_header(translation=_NEG_T_A, rotation=rotation),
+    )
+    _write_crops(
+        tmp_path / "b",
+        _REGION,
+        "L",
+        ["s1"],
+        [[(0, 0, 0), (2, 0, 4)]],
+        _NEG_SHAPE_B,
+        header=_header(translation=t_b, rotation=rotation),
+    )
+    return tmp_path
+
+
+def _nii_path(xor_dir, subject, region=_REGION, side="L"):
+    return Path(xor_dir) / region / side / f"{subject}_xor.nii.gz"
+
+
+def _npy_path(xor_dir, subject, region=_REGION, side="L"):
+    return Path(xor_dir) / region / side / f"{subject}_xor.npy"
+
+
+@pytest.mark.unit
+class TestCropsXorSubjects:
+    """REQ-COMPARE-38: XOR files exactly for the summary.json top_lost subjects."""
+
+    def test_xor_files_written_for_top_lost_subjects_only(self, metrics_sets):
+        xor_dir = _xor_dir(metrics_sets)
+        out = _run_crops(metrics_sets, "--top_k", "2", "--xor_dir", str(xor_dir))
+        top_lost = [e["subject"] for e in _read_summary(out)["regions"][f"{_REGION}/L"]["top_lost"]]
+
+        assert top_lost == ["s3", "s1"]
+        assert _xor_subjects(xor_dir) == {"s3", "s1"}
+
+    def test_xor_files_follow_top_k(self, metrics_sets):
+        xor_dir = _xor_dir(metrics_sets)
+        _run_crops(metrics_sets, "--top_k", "1", "--xor_dir", str(xor_dir))
+
+        assert _xor_subjects(xor_dir) == {"s3"}
+
+
+@pytest.mark.unit
+class TestCropsXorNiftiOutput:
+    """REQ-COMPARE-39: header-aligned region/side -> <subject>_xor.nii.gz via aims.write."""
+
+    def test_header_aligned_xor_written_with_pyaims_as_nii_gz(self, tmp_path):
+        _write_negative_offset_sets(tmp_path)
+        xor_dir = _xor_dir(tmp_path)
+        out = _run_crops(tmp_path, "--xor_dir", str(xor_dir))
+        path = _nii_path(xor_dir, "s1")
+
+        assert _read_summary(out)["regions"][f"{_REGION}/L"]["alignment_offset_vox"] == list(_NEG_OFFSET)
+        assert path.is_file()
+        _written(path)
+
+
+@pytest.mark.unit
+class TestCropsXorNpyOutput:
+    """REQ-COMPARE-40: compared without header check -> <subject>_xor.npy via numpy."""
+
+    def test_headerless_xor_written_with_numpy_as_npy(self, tmp_path):
+        _write_crops(tmp_path / "a", _REGION, "L", ["s1"], [[(0, 0, 0), (1, 1, 1)]], _SHAPE, header=None)
+        _write_crops(tmp_path / "b", _REGION, "L", ["s1"], [[(1, 1, 1), (2, 0, 0)]], _SHAPE, header=None)
+        xor_dir = _xor_dir(tmp_path)
+        out = _run_crops(tmp_path, "--xor_dir", str(xor_dir))
+        path = _npy_path(xor_dir, "s1")
+
+        assert _read_summary(out)["regions"][f"{_REGION}/L"]["alignment_offset_vox"] is None
+        assert path.is_file()
+        np.load(path)
+        assert _WRITTEN == {}
+        assert not _nii_path(xor_dir, "s1").exists()
+
+
+@pytest.mark.unit
+class TestCropsXorContent:
+    """REQ-COMPARE-41: XOR on the comparison grid, 1 where aligned A and B differ, else 0."""
+
+    def test_union_grid_xor_marks_differing_voxels(self, tmp_path):
+        _write_negative_offset_sets(tmp_path)
+        xor_dir = _xor_dir(tmp_path)
+        _run_crops(tmp_path, "--xor_dir", str(xor_dir))
+        arr, _ = _written(_nii_path(xor_dir, "s1"))
+        expected = _bool_volume(_NEG_UNION, _NEG_XOR_VOXELS).astype(int)
+
+        assert arr.shape == _NEG_UNION
+        assert np.array_equal(np.asarray(arr).astype(int), expected)
+
+    def test_direct_comparison_xor_marks_differing_voxels(self, tmp_path):
+        _write_crops(tmp_path / "a", _REGION, "L", ["s1"], [[(0, 0, 0), (1, 1, 1)]], _SHAPE, header=None)
+        _write_crops(tmp_path / "b", _REGION, "L", ["s1"], [[(1, 1, 1), (2, 0, 0)]], _SHAPE, header=None)
+        xor_dir = _xor_dir(tmp_path)
+        _run_crops(tmp_path, "--xor_dir", str(xor_dir))
+        arr = np.load(_npy_path(xor_dir, "s1"))
+        expected = _bool_volume(_SHAPE, [(0, 0, 0), (2, 0, 0)]).astype(int)
+
+        assert arr.shape == _SHAPE
+        assert np.array_equal(arr.astype(int), expected)
+
+
+@pytest.mark.unit
+class TestCropsXorHeader:
+    """REQ-COMPARE-42/43: XOR .nii.gz header = set A voxel size, union-origin transformation."""
+
+    def test_xor_header_voxel_size_from_set_a(self, tmp_path):
+        _write_negative_offset_sets(tmp_path)
+        xor_dir = _xor_dir(tmp_path)
+        _run_crops(tmp_path, "--xor_dir", str(xor_dir))
+        _, header = _written(_nii_path(xor_dir, "s1"))
+
+        assert "voxel_size" in header
+        assert [float(v) for v in list(header["voxel_size"])[:3]] == [_VS, _VS, _VS]
+
+    @pytest.mark.parametrize("rotation", [_MINUS_I, _PLUS_I], ids=["minus_identity", "plus_identity"])
+    def test_xor_header_transformation_translated_to_union_origin(self, tmp_path, rotation):
+        _write_negative_offset_sets(tmp_path, rotation=rotation)
+        xor_dir = _xor_dir(tmp_path)
+        _run_crops(tmp_path, "--xor_dir", str(xor_dir))
+        _, header = _written(_nii_path(xor_dir, "s1"))
+        r = np.asarray(rotation, dtype=float)
+        expected = np.eye(4)
+        expected[:3, :3] = r
+        # union voxel u is set A voxel u + lo: t_union = t_a + R (lo * vs)
+        expected[:3, 3] = np.asarray(_NEG_T_A) + r @ (np.asarray(_NEG_LO, dtype=float) * _VS)
+
+        assert list(header.get("referentials", [])) == [_REFERENTIAL]
+        assert len(header["transformations"]) == 1
+        assert np.allclose(_matrix(header["transformations"][0]), expected)
+
+
+# --------------------------------------------------------------------------- #
+# REQ-COMPARE-44: --input_type restricted to cortical_tiles .npy stems
+# --------------------------------------------------------------------------- #
+
+_CORTICAL_TILES_STEMS = ["skeleton", "label", "extremities", "distmap", "distbottom"]
+
+
+def _parse_crops(tmp_path, *extra):
+    return Compare().parse_args(["crops", "--set_a", str(tmp_path / "a"), "--set_b", str(tmp_path / "b"), *extra])
+
+
+@pytest.mark.unit
+class TestCropsInputTypeChoices:
+    """REQ-COMPARE-44: --input_type outside skeleton/label/extremities/distmap/distbottom is a usage error."""
+
+    @pytest.mark.parametrize("value", ["foldlabel", "skeletons", "mask_cropped"])
+    def test_rejects_input_type_outside_cortical_tiles_stems(self, tmp_path, value):
+        with pytest.raises(SystemExit) as excinfo:
+            _parse_crops(tmp_path, "--input_type", value)
+
+        assert excinfo.value.code == 2
+
+    @pytest.mark.parametrize("value", _CORTICAL_TILES_STEMS)
+    def test_accepts_cortical_tiles_stems(self, tmp_path, value):
+        assert _parse_crops(tmp_path, "--input_type", value).input_type == value

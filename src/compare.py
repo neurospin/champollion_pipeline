@@ -50,11 +50,13 @@ Crops comparison (crops)
   Options:
     --set_a, --set_b  crops/2mm directories to compare (required).
     --output          output directory (default: crops_comparison).
-    --input_type      crop file stem (default: skeleton).
+    --input_type      crop file stem: skeleton, label, extremities, distmap or
+                      distbottom (default: skeleton).
     --regions         region names (default: region dirs present in both sets).
     --side            L, R or both (default: both).
     --top_k           length of each top_lost list (default: 5).
     --njobs           joblib workers over region/side pairs (default: 1).
+    --xor_dir         optional directory for per-subject XOR files (default: none).
 
   Outputs, written into --output:
     per_subject.csv  one row per region, side and common subject. Columns:
@@ -72,6 +74,14 @@ Crops comparison (crops)
                      check).
                      skipped is a list of entries with keys region, side,
                      reason and, when both crops loaded, shape_a, shape_b.
+
+  XOR files, written into --xor_dir when given:
+    one file per top_lost subject of each compared region/side, at
+    <xor_dir>/<region>/<side>/<subject>_xor.nii.gz (PyAIMS, when
+    alignment_offset_vox is a list: set A voxel size and referentials,
+    transformation moved to the union-grid origin) or <subject>_xor.npy
+    (numpy, when alignment_offset_vox is null); 1 = voxel differs, 0 = same,
+    on the grid the subject was compared on.
 
   Skip reasons (summary.json skipped entries):
     missing_in_a            .npy or _subject.csv absent in set A only.
@@ -314,6 +324,7 @@ def save_xor_vol(ref_path: str, a: np.ndarray, b: np.ndarray, out_path: str) -> 
 
 _CROPS_CSV_COLUMNS = ["region", "side", "subject", "n_a", "n_b", "kept", "lost", "gained", "pct_lost", "dice", "shift"]
 _CROP_INFO_ABSENT = frozenset({"no_mask_cropped", "no_transformation"})
+_CROPS_INPUT_TYPES = ("skeleton", "label", "extremities", "distmap", "distbottom")
 
 
 def _load_crop_set(set_dir: Path, region: str, side: str, input_type: str) -> "tuple[np.ndarray, list[str]] | None":
@@ -429,6 +440,76 @@ def _embed_in_union_grid(
     return result
 
 
+_XOR_DTYPE = np.int16
+
+
+def _compute_aligned_pair(
+    row_a: np.ndarray, row_b: np.ndarray, alignment: "dict | None"
+) -> "tuple[np.ndarray, np.ndarray]":
+    """Reshape mmap rows and optionally embed both in the union grid.
+
+    row_a / row_b have shape (x, y, z, 1) (mmap rows from the crop arrays).
+    alignment is None for direct comparison (equal shapes) or a dict with
+    keys pos_a, pos_b and union_shape for header-aligned comparison.
+    """
+    vol_a = np.asarray(row_a).reshape(row_a.shape[:3]) != 0
+    vol_b = np.asarray(row_b).reshape(row_b.shape[:3]) != 0
+    if alignment is not None:
+        vol_a = _embed_in_union_grid(vol_a, alignment["pos_a"], alignment["union_shape"])
+        vol_b = _embed_in_union_grid(vol_b, alignment["pos_b"], alignment["union_shape"])
+    return vol_a, vol_b
+
+
+def _compute_crop_xor(vol_a: np.ndarray, vol_b: np.ndarray) -> np.ndarray:
+    """Return (vol_a != vol_b) as int16; 3-D, shape of the comparison grid."""
+    return (vol_a != vol_b).astype(_XOR_DTYPE)
+
+
+def _make_crop_xor_header(header_a: dict, lo: "tuple[int, int, int]") -> dict:
+    """Build the XOR volume header shifted to the union-grid origin.
+
+    header_a is _read_crop_header's dict (voxel_size 3 floats, referentials
+    list[str], transformations list of 4x4 np arrays).  lo = -pos_a, i.e. the
+    minimum corner of the union grid in set A voxel coordinates (negative or
+    zero per axis).  Each transformation T is updated so that
+    T_u[:3, 3] = T[:3, 3] + T[:3, :3] @ (lo * vs); rotation and last row
+    are unchanged.
+    """
+    vs = np.asarray(header_a["voxel_size"][:3], dtype=float)
+    shift_mm = np.asarray(lo, dtype=float) * vs
+    transformations_out = []
+    for T in header_a["transformations"]:
+        T_u = T.copy()
+        T_u[:3, 3] = T[:3, 3] + T[:3, :3] @ shift_mm
+        transformations_out.append([float(x) for x in T_u.ravel()])
+    return {
+        "voxel_size": [float(v) for v in vs] + [1.0],
+        "referentials": list(header_a["referentials"]),
+        "transformations": transformations_out,
+    }
+
+
+def _save_crop_xor(xor: np.ndarray, side_dir: Path, subject: str, xor_header: "dict | None") -> Path:
+    """Write a 3-D XOR array to side_dir (caller must ensure it exists).
+
+    xor_header None  -> numpy .npy (no geometry available).
+    xor_header given -> aims.Volume 4-D int16 written as <subject>_xor.nii.gz.
+    Returns the written path.
+    """
+    if xor_header is None:
+        out = side_dir / f"{subject}_xor.npy"
+        np.save(out, xor)
+        return out
+    out = side_dir / f"{subject}_xor.nii.gz"
+    vol = aims.Volume(xor[..., np.newaxis])
+    hdr = vol.header()
+    hdr["voxel_size"] = xor_header["voxel_size"]
+    hdr["referentials"] = xor_header["referentials"]
+    hdr["transformations"] = xor_header["transformations"]
+    aims.write(vol, str(out))
+    return out
+
+
 def _compare_subject_crops(crop_a: np.ndarray, crop_b: np.ndarray) -> dict:
     """Compute per-subject voxel metrics from two aligned bool volumes.
 
@@ -484,7 +565,14 @@ def _summarise_region(
 
 
 def _compare_region_side(
-    set_a: Path, set_b: Path, region: str, side: str, input_type: str, top_k: int, explicit: bool
+    set_a: Path,
+    set_b: Path,
+    region: str,
+    side: str,
+    input_type: str,
+    top_k: int,
+    explicit: bool,
+    xor_dir: "Path | None" = None,
 ) -> dict:
     """Compare one region/side across two crop sets.
 
@@ -535,9 +623,12 @@ def _compare_region_side(
     # Build alignment
     if offset is not None:
         union_shape, pos_a, pos_b = _compute_union_grid(shape_a, shape_b, offset)
+        alignment: "dict | None" = {"pos_a": pos_a, "pos_b": pos_b, "union_shape": union_shape}
+        lo: "tuple[int, int, int]" = tuple(-p for p in pos_a)
     else:
         union_shape = shape_a
         pos_a = pos_b = None
+        alignment = None
 
     # Pair subjects by ID, preserving set A order
     index_b = {s: j for j, s in enumerate(subjects_b)}
@@ -552,21 +643,29 @@ def _compare_region_side(
     if n_common == 0:
         return _skip("no_common_subjects", arr_a, arr_b)
 
+    pair_index: dict = {}
     rows: list[dict] = []
     for i, subj in enumerate(subjects_a):
         if subj not in index_b:
             continue
         j = index_b[subj]
-        vol_a = np.asarray(arr_a[i]).reshape(shape_a) != 0
-        vol_b = np.asarray(arr_b[j]).reshape(shape_b) != 0
-        if offset is not None:
-            vol_a = _embed_in_union_grid(vol_a, pos_a, union_shape)
-            vol_b = _embed_in_union_grid(vol_b, pos_b, union_shape)
+        pair_index[subj] = (i, j)
+        vol_a, vol_b = _compute_aligned_pair(arr_a[i], arr_b[j], alignment)
         metrics = _compare_subject_crops(vol_a, vol_b)
         metrics["subject"] = subj
         rows.append(metrics)
 
     summary = _summarise_region(rows, shape_a, shape_b, offset, top_k, only_in_a, only_in_b)
+
+    if xor_dir is not None and summary["top_lost"]:
+        side_dir = xor_dir / region / side
+        side_dir.mkdir(parents=True, exist_ok=True)
+        xor_header = None if offset is None else _make_crop_xor_header(header_a, lo)
+        for entry in summary["top_lost"]:
+            i, j = pair_index[entry["subject"]]
+            vol_a, vol_b = _compute_aligned_pair(arr_a[i], arr_b[j], alignment)
+            _save_crop_xor(_compute_crop_xor(vol_a, vol_b), side_dir, entry["subject"], xor_header)
+
     return {"key": key, "region": region, "side": side, "rows": rows, "summary": summary, "skipped": None}
 
 
@@ -716,8 +815,14 @@ class Compare(ScriptBuilder):
         )
         crops_p.add_argument(
             "--input_type",
+            choices=_CROPS_INPUT_TYPES,
             default="skeleton",
             help="Reads mask/{side}{input_type}.npy and _subject.csv. Default: skeleton.",
+        )
+        crops_p.add_argument(
+            "--xor_dir",
+            default=None,
+            help="Optional directory for per-subject XOR files of the top_lost subjects.",
         )
         crops_p.add_argument(
             "--regions",
@@ -797,11 +902,14 @@ class Compare(ScriptBuilder):
         sides = ["L", "R"] if self.args.side == "both" else [self.args.side]
         regions = _list_crop_regions(set_a, set_b, self.args.regions)
         explicit = self.args.regions is not None
+        xor_dir = Path(self.args.xor_dir) if self.args.xor_dir else None
 
         pairs = [(region, side) for region in regions for side in sides]
 
         results = Parallel(n_jobs=self.args.njobs)(
-            delayed(_compare_region_side)(set_a, set_b, region, side, self.args.input_type, self.args.top_k, explicit)
+            delayed(_compare_region_side)(
+                set_a, set_b, region, side, self.args.input_type, self.args.top_k, explicit, xor_dir=xor_dir
+            )
             for region, side in pairs
         )
 
@@ -860,6 +968,8 @@ class Compare(ScriptBuilder):
             json.dump(summary, f, indent=2, allow_nan=False)
 
         print(f"Wrote {csv_path} and {json_path}")
+        if xor_dir is not None:
+            print(f"XOR files written under: {xor_dir}")
         return 0
 
     # ---------------------------------------------------------------------- #
