@@ -15,6 +15,7 @@ import glob
 import json
 import os
 import os.path as osp
+import re
 import sys
 
 import numpy as np
@@ -26,6 +27,14 @@ ICBM_MESH_DIR_FALLBACK = (
     "morphologist_templates/icbm152/"
     "mni_icbm152_nlin_asym_09c/t1mri/default_acquisition/"
     "default_analysis/segmentation/mesh"
+)
+
+# Embeddings CSV names accepted by UMAP discovery, tried in order (first match wins).
+_EMBEDDING_CSV_PATTERNS = (
+    # _{region}--{hemi}--{model}_embeddings.csv
+    re.compile(r"^_(?P<region>.+?)--(?P<hemi>left|right)--(?P<suffix>.+)_embeddings\.csv$"),
+    # {region}_{hemi}_embeddings.csv (combine stage) and {region}_{hemi}_{suffix}_embeddings.csv
+    re.compile(r"^(?P<region>.+?)_(?P<hemi>left|right)(?:_(?P<suffix>.+))?_embeddings\.csv$"),
 )
 
 
@@ -443,29 +452,25 @@ def _detect_hemi(graph_path):
 def _parse_embedding_csv_name(name):
     """Parse (region, hemi) from an embeddings CSV filename.
 
-    Handles both old and new naming conventions:
-      - Old: {region}_{hemi}_{id}_embeddings.csv
-      - New: _{region}--{hemi}--{model}_embeddings.csv
+    Accepted naming conventions:
+      - Combine stage: {region}_{hemi}_embeddings.csv
+      - Suffixed: {region}_{hemi}_{suffix}_embeddings.csv
+      - Model: _{region}--{hemi}--{model}_embeddings.csv
+
+    The region is the text before the first ``_left``/``_right`` hemisphere token
+    and is kept unchanged (hyphens, underscores and dots), except that ``--`` is
+    rewritten to ``_`` in the model naming. Region names must therefore not
+    contain ``_left_``/``_right_`` or end with ``_left``/``_right``.
 
     Returns (region, hemi) or (None, None) if not parseable.
     """
-    import re
-
-    if not name.endswith("_embeddings.csv"):
-        return None, None
-
-    # Single regex to match both formats:
-    # - Optional leading _
-    # - Region: any chars except separator
-    # - Separator: _ or --
-    # - Hemisphere: left or right
-    # - Separator: _ or --
-    # - ID/model: any chars
-    pattern = r"^_?(.*?)(?:--|_)((?:left|right))(?:--|_).*_embeddings\.csv$"
-    match = re.match(pattern, name)
-    if match:
-        region = match.group(1).replace("--", "_")
-        return region, match.group(2)
+    for index, pattern in enumerate(_EMBEDDING_CSV_PATTERNS):
+        match = pattern.match(name)
+        if match:
+            region = match.group("region")
+            if index == 0:
+                region = region.replace("--", "_")
+            return region, match.group("hemi")
     return None, None
 
 
