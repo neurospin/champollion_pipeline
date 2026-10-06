@@ -436,7 +436,8 @@ champollion_pipeline/
 │       ├── train_champollion.py
 │       ├── generate_masks.py
 │       ├── prune_failed_subjects.py
-│       └── purge_subject.py
+│       ├── purge_subject.py
+│       └── generate_labelling_qc.py
 ├── data/                       # Created by install-all; not committed
 └── pixi.toml
 ```
@@ -457,6 +458,7 @@ Installing the package provides these entry points, declared in
 | `champollion-train` | `train_champollion.py` | Optional — train a `champollion_V1` encoder for one sulcal region |
 | `champollion-prune` | `prune_failed_subjects.py` | Maintenance — delete cortical_tiles outputs for QC-failing subjects |
 | `champollion-purge` | `purge_subject.py` | Maintenance — delete all cortical_tiles derivatives for one subject |
+| `champollion-labelling-qc` | `generate_labelling_qc.py` | QC — flag subjects whose Morphologist labelled graphs (e.g. `deepcnn_session_auto`) are missing, so the whole-brain ventricle step will fail for them |
 
 `generate_masks.py` also ships in the package but declares no console script.
 

@@ -55,3 +55,8 @@ try:
     from .generate_masks import GenerateMasks
 except ImportError:
     pass
+
+try:
+    from .generate_labelling_qc import GenerateLabellingQC
+except ImportError:
+    pass
