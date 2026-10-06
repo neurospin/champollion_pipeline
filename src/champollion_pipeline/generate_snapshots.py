@@ -21,6 +21,12 @@ import sys
 import numpy as np
 from champollion_utils.script_builder import ScriptBuilder
 
+# Hint printed when the tiles snapshot cannot find the region graphs under the data root
+REGION_GRAPH_ROOT_HINT = (
+    "  Pass --champollion_data_root <dir> (or set CHAMPOLLION_DATA_ROOT before launch) "
+    "to a directory containing mask/2mm/regions/meshes/."
+)
+
 # Fallback path for ICBM152 meshes (used when BrainVISA resource lookup fails)
 ICBM_MESH_DIR_FALLBACK = (
     "/neurospin/dico/data/bv_databases/templates/"
@@ -288,6 +294,7 @@ def generate_tiles_snapshot(crops_dir, output_path, size=(800, 600), level=1, ch
         graph_path = osp.join(regions_graph_dir, f"{side}regions_model_{level}.arg")
         if not osp.exists(graph_path):
             print(f"  Region graph not found: {graph_path}")
+            print(REGION_GRAPH_ROOT_HINT)
             continue
 
         reg_graph = a.loadObject(graph_path)

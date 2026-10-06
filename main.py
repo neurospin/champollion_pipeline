@@ -123,6 +123,7 @@ class DatasetConfig:
     # Snapshots parameters
     snapshots_path: str = ""
     reference_data_path: str = ""
+    champollion_data_root: Optional[str] = None
 
 
 @dataclass
@@ -263,6 +264,7 @@ class ConfigLoader:
                 "bids": config.dataset.bids,
                 "snapshots_path": config.dataset.snapshots_path,
                 "reference_data_path": config.dataset.reference_data_path,
+                "champollion_data_root": config.dataset.champollion_data_root,
             },
         }
 
@@ -659,6 +661,8 @@ class GenerateSnapshotsStage(PipelineStage):
                 args.append(f"--cortical_tiles_dir={self.config.dataset.crops_path}")
             if self.config.dataset.reference_data_path:
                 args.append(f"--reference_data_dir={self.config.dataset.reference_data_path}")
+            if self.config.dataset.champollion_data_root:
+                args.append(f"--champollion_data_root={self.config.dataset.champollion_data_root}")
 
             script = GenerateSnapshots()
             script.parse_args(args)
