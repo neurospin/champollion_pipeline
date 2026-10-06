@@ -109,15 +109,16 @@ class TestLoadMaskVol:
         assert arr.dtype == np.float64
 
 
+# Updated for REQ-COMPARE-86: voxel_diff also returns "value_changed".
 class TestVoxelDiff:
     def test_identical_volumes(self):
         a = np.ones((2, 2, 2))
-        assert voxel_diff(a, a.copy()) == {"changed": 0, "added": 0, "removed": 0}
+        assert voxel_diff(a, a.copy()) == {"changed": 0, "added": 0, "removed": 0, "value_changed": 0}
 
     def test_added_and_removed(self):
         a = np.array([[[1.0, 0.0]]])
         b = np.array([[[0.0, 1.0]]])
-        assert voxel_diff(a, b) == {"changed": 2, "added": 1, "removed": 1}
+        assert voxel_diff(a, b) == {"changed": 2, "added": 1, "removed": 1, "value_changed": 0}
 
 
 class TestWassersteinDistance:
@@ -396,7 +397,13 @@ class TestCompareNiftiMasks:
         assert report["metric"] == "diff"
         assert report["summary"]["total_common"] == 1
         assert report["summary"]["only_in_set_a"] == ["L/only_a.nii.gz"]
-        assert report["diffs_per_mask"]["L/shared.nii.gz"] == {"changed": 2, "added": 1, "removed": 1}
+        # Updated for REQ-COMPARE-88: diffs_per_mask entries carry "value_changed".
+        assert report["diffs_per_mask"]["L/shared.nii.gz"] == {
+            "changed": 2,
+            "added": 1,
+            "removed": 1,
+            "value_changed": 0,
+        }
         assert "mask_pattern" not in report
         assert "wasserstein_per_mask" not in report
 

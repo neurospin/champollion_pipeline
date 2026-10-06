@@ -243,9 +243,11 @@ def voxel_diff(a: np.ndarray, b: np.ndarray) -> dict:
     """Count voxels that changed between two mask volumes.
 
     Returns:
-      changed  – total voxels where a[i] != b[i]
-      added    – voxels that went from 0 in a to nonzero in b
-      removed  – voxels that went from nonzero in a to 0 in b
+      changed        – total voxels where a[i] != b[i]
+      added          – voxels that went from 0 in a to nonzero in b
+      removed        – voxels that went from nonzero in a to 0 in b
+      value_changed  – voxels nonzero in both a and b whose values differ
+    Invariant: changed == added + removed + value_changed.
     """
     a_nz = a != 0
     b_nz = b != 0
@@ -253,6 +255,7 @@ def voxel_diff(a: np.ndarray, b: np.ndarray) -> dict:
         "changed": int(np.sum(a != b)),
         "added": int(np.sum(~a_nz & b_nz)),
         "removed": int(np.sum(a_nz & ~b_nz)),
+        "value_changed": int(np.sum(a_nz & b_nz & (a != b))),
     }
 
 
