@@ -37,6 +37,7 @@ champollion-snapshots = "champollion_pipeline.generate_snapshots:main"
 champollion-train = "champollion_pipeline.train_champollion:main"
 champollion-prune = "champollion_pipeline.prune_failed_subjects:main"
 champollion-purge = "champollion_pipeline.purge_subject:main"
+champollion-labelling-qc = "champollion_pipeline.generate_labelling_qc:main"
 
 [tool.setuptools.packages.find]
 where = ["src"]
