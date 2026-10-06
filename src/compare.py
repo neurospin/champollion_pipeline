@@ -283,6 +283,17 @@ def wasserstein_distance(a: np.ndarray, b: np.ndarray) -> float:
     return float(np.sqrt(d_sq))
 
 
+def _positive_finite_float(value: str) -> float:
+    """argparse type: parse value as a finite float greater than zero."""
+    try:
+        number = float(value)
+    except ValueError:
+        number = math.nan
+    if not math.isfinite(number) or number <= 0:
+        raise argparse.ArgumentTypeError(f"must be a positive finite number, got {value!r}")
+    return number
+
+
 def bucket_label(value: float, step: float) -> str:
     low = (value // step) * step
     high = low + step
@@ -1351,7 +1362,10 @@ class Compare(ScriptBuilder):
             help="Comparison metric. Default: diff.",
         )
         mask_parent.add_argument(
-            "--bucket_step", type=float, default=1.0, help="Bucket width for the summary table (in voxels). Default: 1."
+            "--bucket_step",
+            type=_positive_finite_float,
+            default=1.0,
+            help="Bucket width for the summary table, in voxels; a finite number > 0. Default: 1.",
         )
         mask_parent.add_argument(
             "--xor_dir",
