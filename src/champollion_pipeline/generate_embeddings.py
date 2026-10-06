@@ -376,6 +376,12 @@ class GenerateEmbeddings(ScriptBuilder):
             .add_flag("--profiling", "Enable Python profiling (cProfile).")
             .add_flag("--run-cka", "Run CKA coherence test after embeddings.")
             .add_flag("--no-cache", "Force re-extraction of archive (ignore cache).")
+            .add_flag(
+                "--use_last_checkpoint",
+                "Evaluate each region with the native Lightning checkpoint in "
+                "logs/lightning_logs/version_0/checkpoints/ instead of logs/best_model_weights.pt. "
+                "Regions with no native checkpoint there still use best_model_weights.pt.",
+            )
             .add_optional_argument(
                 "--cortical_version",
                 f"Derivatives folder name (e.g. 'cortical_tiles-2027'). "
@@ -711,15 +717,24 @@ class GenerateEmbeddings(ScriptBuilder):
         self._save_converted_ckpt(self._load_weights_state_dict(pt_path), ckpt_dir / _CONVERTED_CKPT_NAME)
         return str(mirror)
 
+    def _uses_native_ckpt(self, model_path: str) -> bool:
+        """True when --use_last_checkpoint applies: the flag is set and version_0 holds a native ckpt."""
+        ckpt_dir = Path(model_path) / "logs" / "lightning_logs" / "version_0" / "checkpoints"
+        return getattr(self.args, "use_last_checkpoint", False) and self._has_native_ckpt(ckpt_dir)
+
     @contextlib.contextmanager
     def _evaluation_model_dir(self, model_path: str) -> Iterator[str]:
         """Yield the directory to pass to evaluate.py as -m.
 
-        With best_model_weights.pt beside a native ckpt (any version_<n>), a temporary
-        mirror holding only .hydra and the converted best weights is yielded and removed
-        afterwards, so the user's model dir is never modified. Otherwise _ensure_ckpt
-        runs in place and model_path itself is yielded.
+        With --use_last_checkpoint and a native ckpt in version_0, model_path itself is
+        yielded untouched. With best_model_weights.pt beside a native ckpt (any
+        version_<n>), a temporary mirror holding only .hydra and the converted best
+        weights is yielded and removed afterwards, so the user's model dir is never
+        modified. Otherwise _ensure_ckpt runs in place and model_path itself is yielded.
         """
+        if self._uses_native_ckpt(model_path):
+            yield model_path
+            return
         pt_path = Path(model_path) / "logs" / _WEIGHTS_FILE_NAME
         if not pt_path.exists() or not self._has_any_native_ckpt(model_path):
             self._ensure_ckpt(model_path)
@@ -733,10 +748,12 @@ class GenerateEmbeddings(ScriptBuilder):
 
     def _weights_source(self, model_path: str) -> str | None:
         """Return the user-dir weights file evaluate.py ends up using, or None."""
+        ckpts = glob.glob(model_path + "/logs/lightning_logs/version_0/checkpoints/*.ckpt")
+        if self._uses_native_ckpt(model_path):
+            return ckpts[0]
         pt_path = join(model_path, "logs", _WEIGHTS_FILE_NAME)
         if exists(pt_path):
             return pt_path
-        ckpts = glob.glob(model_path + "/logs/lightning_logs/version_0/checkpoints/*.ckpt")
         return ckpts[0] if ckpts else None
 
     @staticmethod
@@ -869,7 +886,13 @@ class GenerateEmbeddings(ScriptBuilder):
                     saving_path,
                 ]
 
-                print(f"\n[Region {region}] weights: {self._weights_source(model_path) or '<none found>'}")
+                ignored = (
+                    " (no native checkpoint in version_0; --use_last_checkpoint ignored)"
+                    if getattr(self.args, "use_last_checkpoint", False) and not self._uses_native_ckpt(model_path)
+                    else ""
+                )
+                weights = self._weights_source(model_path) or "<none found>"
+                print(f"\n[Region {region}] weights: {weights}{ignored}")
                 code = self.execute_command(cmd, shell=False)
             if code != 0:
                 failed_regions.append(region)

@@ -317,6 +317,7 @@ When using Hugging Face, models are cached in `data/{dataset}/derivatives/champo
 | `--cpu` | Force CPU usage (disable CUDA) |
 | `--overwrite` | Recompute embeddings that already exist on disk |
 | `--no-cache` | Force re-extraction of the archive (ignore cache) |
+| `--use_last_checkpoint` | Evaluate with the native Lightning checkpoint (`logs/lightning_logs/version_0/checkpoints/*.ckpt`) instead of `logs/best_model_weights.pt`. Regions without a native checkpoint still use best weights. Pipeline config: `dataset.use_last_checkpoint: true`. |
 | `--run-cka` | Run CKA coherence test after embeddings |
 | `--cortical_version` | Override the cortical tiles derivatives folder name (default: `cortical_tiles-2026`) |
 | `--legacy` | Shorthand for `--cortical_version deep_folding-2025` (for older datasets) |
