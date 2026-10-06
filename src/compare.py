@@ -1295,9 +1295,11 @@ def _get_subject_voxel_counts(sub, brainvisa_dir):
         _sys.path.insert(0, brainvisa_dir)
     from soma import aims  # noqa: PLC0415
 
-    matches = _glob.glob(join(sub["dir"], sub["graph_file"]))
+    matches = sorted(_glob.glob(join(sub["dir"], sub["graph_file"])))
     if not matches:
         return sub["subject"], None
+    if len(matches) > 1:
+        print(f"WARNING: {len(matches)} graphs match subject {sub['subject']}; using {matches[0]}")
 
     graph = aims.read(matches[0])
     counts: dict = {}
