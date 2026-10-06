@@ -412,6 +412,7 @@ pixi run champollion-snapshots \
 | `--sulcal-only` / `--tiles-only` / `--umap-only` | Generate only one snapshot type |
 | `--width` / `--height` | Snapshot dimensions (default: 800×600) |
 | `--tiles_level` | Cortical tiles level to visualize |
+| `--champollion_data_root` | Directory containing `mask/2mm/regions/meshes/` for tile snapshots (default: cortical_tiles config, overridable via `CHAMPOLLION_DATA_ROOT`). Pipeline config: `dataset.champollion_data_root`. |
 
 </details>
 

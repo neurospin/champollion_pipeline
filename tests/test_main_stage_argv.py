@@ -272,3 +272,25 @@ class TestMainImportsStageScripts:
         """REQ-STAGEARGV-08: loading main.py prints no 'Could not import pipeline scripts' warning."""
         _, output = loaded_main_report
         assert "Could not import pipeline scripts" not in output
+
+
+@pytest.mark.unit
+class TestSnapshotsChampollionDataRootArgv:
+    """REQ-TILESROOT-02: dataset.champollion_data_root in the config file reaches --champollion_data_root."""
+
+    def test_config_file_champollion_data_root_forwarded(self, main_module, tmp_path):
+        """REQ-TILESROOT-02: YAML dataset.champollion_data_root -> snapshots --champollion_data_root."""
+        config_file = tmp_path / "pipeline.yaml"
+        config_file.write_text(
+            "models_path: /models\n"
+            "outputs_path: /outputs\n"
+            "dataset:\n"
+            "  datasets_root: /data/MYDATASET\n"
+            "  crops_path: /crops\n"
+            "  snapshots_path: /snapshots\n"
+            "  champollion_data_root: /data/champollion_root\n"
+        )
+        config = main_module.ConfigLoader.load_from_yaml(str(config_file))
+        argv = _captured_argv(main_module, "GenerateSnapshotsStage", "GenerateSnapshots", config)
+        namespace = _parse_with_real_parser(GenerateSnapshots, argv)
+        assert namespace.champollion_data_root == "/data/champollion_root", f"argv was {argv!r}"
