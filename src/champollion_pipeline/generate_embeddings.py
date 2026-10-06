@@ -5,7 +5,9 @@ Wrapper script to generate sulcal embeddings per region.
 Calls champollion/evaluate.py for each region in models_path.
 """
 
+import contextlib
 import cProfile
+import glob
 import gzip
 import os
 import pstats
@@ -15,6 +17,7 @@ import tarfile
 import tempfile
 import warnings
 from abc import ABC, abstractmethod
+from collections.abc import Iterator
 from io import StringIO
 from os.path import abspath, dirname, exists, join
 from pathlib import Path
@@ -670,8 +673,7 @@ class GenerateEmbeddings(ScriptBuilder):
             current = self._load_converted_state_dict(ckpt_path)
             if current is not None and self._is_same_state_dict(current, state_dict):
                 return
-        ckpt_dir.mkdir(parents=True, exist_ok=True)
-        torch.save({"state_dict": state_dict, "epoch": 0, "global_step": 0}, str(ckpt_path))
+        self._save_converted_ckpt(state_dict, ckpt_path)
         action = "Refreshed stale" if existed else "Converted"
         print(f"  {action} {pt_path} → {ckpt_path}")
 
@@ -681,6 +683,61 @@ class GenerateEmbeddings(ScriptBuilder):
         if not ckpt_dir.is_dir():
             return False
         return any(p.name != _CONVERTED_CKPT_NAME for p in ckpt_dir.glob("*.ckpt"))
+
+    @staticmethod
+    def _has_any_native_ckpt(model_path: str) -> bool:
+        """True if any logs/lightning_logs/version_*/checkpoints/ dir holds a native ckpt."""
+        lightning_logs = Path(model_path) / "logs" / "lightning_logs"
+        return any(
+            GenerateEmbeddings._has_native_ckpt(ckpt_dir) for ckpt_dir in lightning_logs.glob("version_*/checkpoints")
+        )
+
+    @staticmethod
+    def _save_converted_ckpt(state_dict: dict, ckpt_path: Path) -> None:
+        """Write state_dict as a converted Lightning ckpt (the only owner of its shape)."""
+        ckpt_path.parent.mkdir(parents=True, exist_ok=True)
+        torch.save({"state_dict": state_dict, "epoch": 0, "global_step": 0}, str(ckpt_path))
+
+    def _build_best_weights_mirror(self, model_path: str, pt_path: Path, root: str) -> str:
+        """Build <root>/<region dir name> holding the region's .hydra (symlink) and one
+        converted ckpt made from pt_path. Never writes under model_path.
+        """
+        mirror = Path(root) / os.path.basename(os.path.normpath(model_path))
+        mirror.mkdir()
+        hydra_dir = join(model_path, ".hydra")
+        if exists(hydra_dir):
+            os.symlink(abspath(hydra_dir), mirror / ".hydra")
+        ckpt_dir = mirror / "logs" / "lightning_logs" / "version_0" / "checkpoints"
+        self._save_converted_ckpt(self._load_weights_state_dict(pt_path), ckpt_dir / _CONVERTED_CKPT_NAME)
+        return str(mirror)
+
+    @contextlib.contextmanager
+    def _evaluation_model_dir(self, model_path: str) -> Iterator[str]:
+        """Yield the directory to pass to evaluate.py as -m.
+
+        With best_model_weights.pt beside a native ckpt (any version_<n>), a temporary
+        mirror holding only .hydra and the converted best weights is yielded and removed
+        afterwards, so the user's model dir is never modified. Otherwise _ensure_ckpt
+        runs in place and model_path itself is yielded.
+        """
+        pt_path = Path(model_path) / "logs" / _WEIGHTS_FILE_NAME
+        if not pt_path.exists() or not self._has_any_native_ckpt(model_path):
+            self._ensure_ckpt(model_path)
+            yield model_path
+            return
+        root = tempfile.mkdtemp(prefix="champollion_eval_")
+        try:
+            yield self._build_best_weights_mirror(model_path, pt_path, root)
+        finally:
+            shutil.rmtree(root, ignore_errors=True)
+
+    def _weights_source(self, model_path: str) -> str | None:
+        """Return the user-dir weights file evaluate.py ends up using, or None."""
+        pt_path = join(model_path, "logs", _WEIGHTS_FILE_NAME)
+        if exists(pt_path):
+            return pt_path
+        ckpts = glob.glob(model_path + "/logs/lightning_logs/version_0/checkpoints/*.ckpt")
+        return ckpts[0] if ckpts else None
 
     @staticmethod
     def _load_weights_state_dict(pt_path: Path) -> dict:
@@ -793,27 +850,27 @@ class GenerateEmbeddings(ScriptBuilder):
                 print(f"  [SKIP] {region} — already exists (--overwrite to recompute)")
                 continue
 
-            self._ensure_ckpt(model_path)
-            os.makedirs(os.path.dirname(saving_path), exist_ok=True)
-            # A recompute must never leave the previous run's output behind.
-            if exists(saving_path):
-                os.remove(saving_path)
+            with self._evaluation_model_dir(model_path) as eval_model_path:
+                os.makedirs(os.path.dirname(saving_path), exist_ok=True)
+                # A recompute must never leave the previous run's output behind.
+                if exists(saving_path):
+                    os.remove(saving_path)
 
-            cmd = [
-                sys.executable,
-                evaluate_script,
-                "-m",
-                model_path,
-                "-sk",
-                skels_path,
-                "-i",
-                subjects_path,
-                "-s",
-                saving_path,
-            ]
+                cmd = [
+                    sys.executable,
+                    evaluate_script,
+                    "-m",
+                    eval_model_path,
+                    "-sk",
+                    skels_path,
+                    "-i",
+                    subjects_path,
+                    "-s",
+                    saving_path,
+                ]
 
-            print(f"\n[Region {region}]")
-            code = self.execute_command(cmd, shell=False)
+                print(f"\n[Region {region}] weights: {self._weights_source(model_path) or '<none found>'}")
+                code = self.execute_command(cmd, shell=False)
             if code != 0:
                 failed_regions.append(region)
                 first_failure = first_failure or code
