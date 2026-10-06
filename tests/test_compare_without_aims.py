@@ -10,7 +10,8 @@ ImportError). The remote update check is disabled in the child so no test
 touches the network.
 
 Requirements: REQ-COMPARE-01 (import succeeds), REQ-COMPARE-02 (mask/database
-subcommands exit non-zero), REQ-COMPARE-03 (error message on stderr).
+subcommands exit non-zero), REQ-COMPARE-03 (error message on stderr),
+REQ-COMPARE-22 (crops subcommand exits non-zero naming soma.aims on stderr).
 """
 
 import subprocess
@@ -18,6 +19,7 @@ import sys
 import textwrap
 from pathlib import Path
 
+import numpy as np
 import pytest
 
 _REPO_ROOT = Path(__file__).resolve().parent.parent
@@ -147,5 +149,42 @@ class TestCompareSubcommandsWithoutAims:
 
         assert "soma.aims" in result.stderr, (
             f"`compare.py {mode}` without soma.aims did not name soma.aims on stderr\n"
+            f"stdout: {result.stdout!r}\nstderr: {result.stderr!r}"
+        )
+
+
+def _crops_argv(tmp_path: Path) -> list:
+    # A minimal, otherwise comparable crop set (numpy only), so the only reason
+    # to fail is the missing PyAIMS.
+    for name in ("set_a", "set_b"):
+        mask_dir = tmp_path / name / "S.C.-sylv." / "mask"
+        mask_dir.mkdir(parents=True, exist_ok=True)
+        np.save(mask_dir / "Lskeleton.npy", np.zeros((1, 2, 2, 2, 1), dtype=np.int16))
+        (mask_dir / "Lskeleton_subject.csv").write_text("Subject\ns1\n")
+    return [
+        "crops",
+        "--set_a",
+        str(tmp_path / "set_a"),
+        "--set_b",
+        str(tmp_path / "set_b"),
+        "--output",
+        str(tmp_path / "crops_out"),
+        "--njobs",
+        "1",
+    ]
+
+
+@pytest.mark.unit
+class TestCropsWithoutAims:
+    """REQ-COMPARE-22: `compare.py crops` fails loudly when soma.aims cannot be imported."""
+
+    def test_crops_exits_non_zero_naming_soma_aims_on_stderr(self, tmp_path):
+        result = _run_compare(_crops_argv(tmp_path), tmp_path)
+
+        assert result.returncode != 0, (
+            f"`compare.py crops` without soma.aims exited 0\nstdout: {result.stdout!r}\nstderr: {result.stderr!r}"
+        )
+        assert "soma.aims" in result.stderr, (
+            "`compare.py crops` without soma.aims did not name soma.aims on stderr\n"
             f"stdout: {result.stdout!r}\nstderr: {result.stderr!r}"
         )
