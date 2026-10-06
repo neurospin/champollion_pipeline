@@ -397,15 +397,54 @@ class TestGenerateTilesSnapshot:
         assert snaps == []
         assert "ICBM mesh not found" in capsys.readouterr().out
 
-    def test_fallback_mesh_dir_used_when_resource_lookup_fails(self, tmp_path, env, capsys):
-        modules, _, data_root, _ = env
+    @staticmethod
+    def _fail_icbm_lookup(modules):
+        """Make the BrainVISA resource lookup return None for the ICBM152 mesh dir."""
         modules["soma.aims"].carto.Paths.findResourceFile.side_effect = (  # noqa: V101
             lambda *args, **kwargs: None if "icbm152" in args[0] else "/nomenclature.hie"
         )
+
+    def test_fallback_meshes_loaded_when_resource_lookup_fails(self, tmp_path, env, monkeypatch):
+        """REQ-MESHFALLBACK-01 — fallback dir is used, independent of the host filesystem.
+
+        ICBM_MESH_DIR_FALLBACK is redirected to a tmp_path directory holding both
+        hemisphere meshes, so the outcome no longer depends on /neurospin being mounted.
+        """
+        modules, a, data_root, _ = env
+        self._fail_icbm_lookup(modules)
+        fallback = tmp_path / "fallback_mesh"
+        fallback.mkdir()
+        for side in ("L", "R"):
+            (fallback / f"mni_icbm152_nlin_asym_09c_{side}hemi.gii").touch()
+        monkeypatch.setattr(gs, "ICBM_MESH_DIR_FALLBACK", str(fallback))
         crops = self._crops(tmp_path)
         with patch.dict(sys.modules, modules):
-            generate_tiles_snapshot(str(crops), str(tmp_path / "tiles.png"), champollion_data_root=str(data_root))
-        assert gs.ICBM_MESH_DIR_FALLBACK in capsys.readouterr().out
+            snaps = generate_tiles_snapshot(
+                str(crops), str(tmp_path / "tiles.png"), champollion_data_root=str(data_root)
+            )
+        assert snaps == [str(tmp_path / "tiles_left.png"), str(tmp_path / "tiles_right.png")]
+        loaded = [c.args[0] for c in a.loadObject.call_args_list]
+        for side in ("L", "R"):
+            assert osp.join(str(fallback), f"mni_icbm152_nlin_asym_09c_{side}hemi.gii") in loaded
+
+    def test_missing_fallback_mesh_reported_with_fallback_path(self, tmp_path, env, monkeypatch, capsys):
+        """REQ-MESHFALLBACK-02 — absent fallback mesh is reported with its path and skipped.
+
+        ICBM_MESH_DIR_FALLBACK is redirected to a tmp_path directory that does not
+        exist, so the outcome no longer depends on /neurospin being unmounted.
+        """
+        modules, _, data_root, _ = env
+        self._fail_icbm_lookup(modules)
+        fallback = tmp_path / "absent_fallback_mesh"
+        monkeypatch.setattr(gs, "ICBM_MESH_DIR_FALLBACK", str(fallback))
+        crops = self._crops(tmp_path, hemis=("L",))
+        with patch.dict(sys.modules, modules):
+            snaps = generate_tiles_snapshot(
+                str(crops), str(tmp_path / "tiles.png"), champollion_data_root=str(data_root)
+            )
+        assert snaps == []
+        expected = osp.join(str(fallback), "mni_icbm152_nlin_asym_09c_Lhemi.gii")
+        assert f"ICBM mesh not found: {expected}" in capsys.readouterr().out
 
     def test_extension_defaults_to_png(self, tmp_path, env):
         modules, _, data_root, _ = env
