@@ -243,6 +243,8 @@ def fake_soma_aims(monkeypatch):
     def _install(objects):
         fake = _FakeAims(objects)
         monkeypatch.setattr(sys.modules["soma"], "aims", fake)
+        # compare binds aims at import time: patch its module-level name too
+        monkeypatch.setattr(compare, "aims", fake)
         return fake
 
     return _install
@@ -562,6 +564,11 @@ def stub_deep_folding(monkeypatch):
             ("cortical_tiles.brainvisa.utils.subjects", subjects_mod),
         ]:
             monkeypatch.setitem(sys.modules, name, mod)
+        # REQ-COMPARE-92: once the import sits at the module top, the stub must
+        # also replace the name already bound on compare (no-op before then).
+        monkeypatch.setattr(
+            compare, "get_all_subjects_as_dictionary", subjects_mod.get_all_subjects_as_dictionary, raising=False
+        )
         return subjects_mod
 
     return _install
