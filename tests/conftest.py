@@ -4,10 +4,12 @@
 Pytest configuration and fixtures for champollion_pipeline tests.
 """
 
+import logging
 import os
 import shutil
 import sys
 import tempfile
+import threading
 from unittest.mock import MagicMock
 
 import pytest
@@ -45,3 +47,29 @@ def reset_cwd():
     original_cwd = os.getcwd()
     yield
     os.chdir(original_cwd)
+
+
+@pytest.fixture(autouse=True)  # noqa: V103
+def restore_logging_and_excepthooks():
+    """Restore the root logger handlers and level and the exception hooks after each test.
+
+    Code under test may call champollion_utils.init_process() (e.g. through
+    ScriptBuilder.main()), which configures the root logger and replaces
+    sys.excepthook and threading.excepthook for the whole process.
+    """
+    root = logging.getLogger()
+    handlers = root.handlers[:]
+    level = root.level
+    excepthook = sys.excepthook
+    thread_excepthook = threading.excepthook
+    yield
+    for handler in root.handlers[:]:
+        if handler not in handlers:
+            root.removeHandler(handler)
+            handler.close()
+    for handler in handlers:
+        if handler not in root.handlers:
+            root.addHandler(handler)
+    root.setLevel(level)
+    sys.excepthook = excepthook
+    threading.excepthook = thread_excepthook
