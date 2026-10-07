@@ -16,6 +16,7 @@ import sys
 
 import pytest
 
+import compare
 from compare import _get_subject_voxel_counts
 
 SUBJECT = "subj-alpha"
@@ -70,6 +71,8 @@ def install(monkeypatch):
         graphs = {PATH_A: _graph_with_count(1), PATH_B: _graph_with_count(2), PATH_C: _graph_with_count(3)}
         fake = _FakeAims(graphs)
         monkeypatch.setattr(sys.modules["soma"], "aims", fake)
+        # compare binds aims at import time: patch its module-level name too
+        monkeypatch.setattr(compare, "aims", fake)
         return fake
 
     return _install
