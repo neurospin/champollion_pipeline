@@ -143,6 +143,7 @@ Embeddings comparison (embeddings)
 
 import argparse
 import csv
+import glob
 import json
 import math
 import os
@@ -156,7 +157,7 @@ from pathlib import Path
 import joblib
 import numpy as np
 from champollion_utils.script_builder import ScriptBuilder
-from joblib import Parallel, delayed
+from joblib import Parallel, cpu_count, delayed
 from matplotlib.figure import Figure
 from scipy.linalg import orthogonal_procrustes
 from scipy.stats import spearmanr
@@ -170,6 +171,14 @@ except ImportError as _aims_import_error:
     _AIMS_IMPORT_ERROR: "ImportError | None" = _aims_import_error
 else:
     _AIMS_IMPORT_ERROR = None
+
+try:
+    from cortical_tiles.brainvisa.utils.subjects import get_all_subjects_as_dictionary
+except ImportError as _cortical_tiles_import_error:
+    get_all_subjects_as_dictionary = None
+    _CORTICAL_TILES_IMPORT_ERROR: "ImportError | None" = _cortical_tiles_import_error
+else:
+    _CORTICAL_TILES_IMPORT_ERROR = None
 
 ONE_SIDE_EMPTY_BUCKET = "one_side_empty"
 VIEWER_TOP_K = 5
@@ -1291,14 +1300,10 @@ def _list_crop_regions(set_a: Path, set_b: Path, regions: "list[str] | None") ->
 
 def _get_subject_voxel_counts(sub, brainvisa_dir):
     """Worker: load one graph and return (subject_name, {sulcus: voxel_count})."""
-    import glob as _glob
-    import sys as _sys
+    if brainvisa_dir not in sys.path:
+        sys.path.insert(0, brainvisa_dir)
 
-    if brainvisa_dir not in _sys.path:
-        _sys.path.insert(0, brainvisa_dir)
-    from soma import aims  # noqa: PLC0415
-
-    matches = sorted(_glob.glob(join(sub["dir"], sub["graph_file"])))
+    matches = sorted(glob.glob(join(sub["dir"], sub["graph_file"])))
     if not matches:
         return sub["subject"], None
     if len(matches) > 1:
@@ -1321,15 +1326,11 @@ def _get_subject_voxel_counts(sub, brainvisa_dir):
 
 def _mask_stats(mask_dir: str, brainvisa_dir: str) -> dict:
     """Return {relative_path: (max, sum, nonzero)} for all masks in mask_dir."""
-    import glob as _g
-    import sys as _s
-
-    if brainvisa_dir not in _s.path:
-        _s.path.insert(0, brainvisa_dir)
-    from soma import aims  # noqa: PLC0415
+    if brainvisa_dir not in sys.path:
+        sys.path.insert(0, brainvisa_dir)
 
     stats = {}
-    for path in sorted(_g.glob(join(mask_dir, "*/*.nii.gz"))):
+    for path in sorted(glob.glob(join(mask_dir, "*/*.nii.gz"))):
         rel = os.path.relpath(path, mask_dir)
         arr = np.asarray(aims.read(path))
         stats[rel] = (int(arr.max()), int(arr.sum()), int(np.count_nonzero(arr)))
@@ -1838,8 +1839,10 @@ class Compare(ScriptBuilder):
     # ---------------------------------------------------------------------- #
 
     def _load_database(self, path_to_graph, sides, subjects_dir, njobs, brainvisa_dir) -> dict:
-        from cortical_tiles.brainvisa.utils.subjects import get_all_subjects_as_dictionary
-        from joblib import Parallel, delayed
+        if get_all_subjects_as_dictionary is None:
+            raise ImportError(
+                "The databases subcommand requires cortical_tiles (pixi environment with the cortical-tiles feature)"
+            ) from _CORTICAL_TILES_IMPORT_ERROR
 
         all_data: dict = {}
         for side in sides:
@@ -1861,8 +1864,6 @@ class Compare(ScriptBuilder):
         return all_data
 
     def _run_databases(self) -> int:
-        from joblib import cpu_count
-
         brainvisa_dir = abspath(
             join(dirname(__file__), "..", "external", "cortical_tiles", "cortical_tiles", "brainvisa")
         )
