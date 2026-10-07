@@ -10,6 +10,8 @@ from os.path import exists, join
 
 from champollion_utils.script_builder import ScriptBuilder
 
+from champollion_pipeline.process_setup import init_pipeline_process
+
 
 class PutTogetherEmbeddings(ScriptBuilder):
     """Collect per-region embeddings from {dataset}embeddings/ into a single folder."""
@@ -58,6 +60,7 @@ class PutTogetherEmbeddings(ScriptBuilder):
 
 def main():
     """Main entry point."""
+    init_pipeline_process()
     script = PutTogetherEmbeddings()
     return script.build().print_args().run()
 

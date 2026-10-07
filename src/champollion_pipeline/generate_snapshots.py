@@ -21,6 +21,8 @@ import sys
 import numpy as np
 from champollion_utils.script_builder import ScriptBuilder
 
+from champollion_pipeline.process_setup import init_pipeline_process
+
 # Hint printed when the tiles snapshot cannot find the region graphs under the data root
 REGION_GRAPH_ROOT_HINT = (
     "  Pass --champollion_data_root <dir> (or set CHAMPOLLION_DATA_ROOT before launch) "
@@ -681,6 +683,7 @@ class GenerateSnapshots(ScriptBuilder):
 
 
 def main():
+    init_pipeline_process()
     script = GenerateSnapshots()
     return script.build().print_args().run()
 

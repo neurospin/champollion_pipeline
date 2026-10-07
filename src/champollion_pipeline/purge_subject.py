@@ -17,6 +17,8 @@ import numpy as np
 import pandas as pd
 from champollion_utils.script_builder import ScriptBuilder
 
+from champollion_pipeline.process_setup import init_pipeline_process
+
 
 class PurgeSubject(ScriptBuilder):
     """Remove all cortical_tiles derivatives for one subject."""
@@ -142,6 +144,7 @@ class PurgeSubject(ScriptBuilder):
 
 
 def main():
+    init_pipeline_process()
     script = PurgeSubject()
     return script.build().print_args().run()
 

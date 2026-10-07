@@ -26,6 +26,7 @@ from urllib.parse import urlparse
 import torch
 from champollion_utils.script_builder import ScriptBuilder
 
+from champollion_pipeline.process_setup import init_pipeline_process
 from champollion_pipeline.utils.lib import CORTICAL_TILES_VERSION
 
 # Add champollion to path for CKA imports
@@ -944,6 +945,7 @@ class GenerateEmbeddings(ScriptBuilder):
 
 def main():
     """Main entry point."""
+    init_pipeline_process()
     script = GenerateEmbeddings()
     return script.build().print_args().run()
 

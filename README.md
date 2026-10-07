@@ -439,6 +439,7 @@ champollion_pipeline/
 │       ├── generate_masks.py
 │       ├── prune_failed_subjects.py
 │       ├── purge_subject.py
+│       ├── process_setup.py
 │       └── generate_labelling_qc.py
 ├── data/                       # Created by install-all; not committed
 └── pixi.toml

@@ -18,6 +18,8 @@ from collections import Counter
 from champollion_utils.script_builder import ScriptBuilder
 from joblib import Parallel, delayed
 
+from champollion_pipeline.process_setup import init_pipeline_process
+
 # ---------------------------------------------------------------------------
 # Constants
 # ---------------------------------------------------------------------------
@@ -261,6 +263,7 @@ class GenerateLabellingQC(ScriptBuilder):
 
 def main() -> int:
     """Run the labelling QC script."""
+    init_pipeline_process()
     return GenerateLabellingQC().build().print_args().run()
 
 
