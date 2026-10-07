@@ -42,6 +42,7 @@ from champollion_pipeline.generate_champollion_config import GenerateChampollion
 from champollion_pipeline.generate_embeddings import GenerateEmbeddings
 from champollion_pipeline.generate_morphologist_graphs import GenerateMorphologistGraphs
 from champollion_pipeline.generate_snapshots import GenerateSnapshots
+from champollion_pipeline.process_setup import init_pipeline_process
 from champollion_pipeline.put_together_embeddings import PutTogetherEmbeddings
 from champollion_pipeline.run_cortical_tiles import RunCorticalTiles
 
@@ -313,6 +314,10 @@ class PipelineStage(ABC):
         self.logger.info(f"Starting stage: {self.name}")
         self.logger.info(f"{'=' * 60}")
 
+    def log_failure(self):
+        """Log the exception being handled as this stage's failure, with its traceback."""
+        self.logger.fail(f"Stage {self.name} failed", exc_info=True, stacklevel=2)
+
     def log_end(self, result: StageResult):
         """Log stage end."""
         status = "✅ SUCCESS" if result.success else "❌ FAILED"
@@ -367,7 +372,7 @@ class GenerateMorphologistGraphsStage(PipelineStage):
                 return_code=return_code,
             )
         except Exception as e:
-            self.logger.exception(f"Exception in {self.name}")
+            self.log_failure()
             result = StageResult(stage_name=self.name, success=False, message=f"Failed: {str(e)}", return_code=1)
 
         self.log_end(result)
@@ -421,7 +426,7 @@ class RunCorticalTilesStage(PipelineStage):
                 return_code=return_code,
             )
         except Exception as e:
-            self.logger.exception(f"Exception in {self.name}")
+            self.log_failure()
             result = StageResult(stage_name=self.name, success=False, message=f"Failed: {str(e)}", return_code=1)
 
         self.log_end(result)
@@ -481,7 +486,7 @@ class GenerateChampollionConfigStage(PipelineStage):
                 return_code=return_code,
             )
         except Exception as e:
-            self.logger.exception(f"Exception in {self.name}")
+            self.log_failure()
             result = StageResult(stage_name=self.name, success=False, message=f"Failed: {str(e)}", return_code=1)
 
         self.log_end(result)
@@ -569,7 +574,7 @@ class GenerateEmbeddingsStage(PipelineStage):
                 return_code=return_code,
             )
         except Exception as e:
-            self.logger.exception(f"Exception in {self.name}")
+            self.log_failure()
             result = StageResult(stage_name=self.name, success=False, message=f"Failed: {str(e)}", return_code=1)
 
         self.log_end(result)
@@ -621,7 +626,7 @@ class PutTogetherEmbeddingsStage(PipelineStage):
                 return_code=return_code,
             )
         except Exception as e:
-            self.logger.exception(f"Exception in {self.name}")
+            self.log_failure()
             result = StageResult(stage_name=self.name, success=False, message=f"Failed: {str(e)}", return_code=1)
 
         self.log_end(result)
@@ -675,7 +680,7 @@ class GenerateSnapshotsStage(PipelineStage):
                 return_code=return_code,
             )
         except Exception as e:
-            self.logger.exception(f"Exception in {self.name}")
+            self.log_failure()
             result = StageResult(
                 stage_name=self.name,
                 success=False,
@@ -714,14 +719,8 @@ class PipelineOrchestrator:
         logger = logging.getLogger("champollion_pipeline")
         logger.setLevel(getattr(logging, self.config.log_level))
         logger.handlers = []  # Clear existing handlers
-
-        # Console handler
-        if self.config.log_to_console:
-            console_handler = logging.StreamHandler()
-            console_handler.setLevel(logging.INFO)
-            formatter = logging.Formatter("%(asctime)s - %(levelname)s - %(message)s")
-            console_handler.setFormatter(formatter)
-            logger.addHandler(console_handler)
+        # Console output goes through the root logger's unified handlers (init_pipeline_process)
+        logger.propagate = self.config.log_to_console
 
         # File handler
         if self.config.log_to_file:
@@ -1031,6 +1030,7 @@ def _apply_cli_overrides(config: PipelineConfig, args: argparse.Namespace, *, fr
 
 def main() -> int:
     """Main entry point for the pipeline."""
+    init_pipeline_process()
     check_for_updates()
     args = parse_arguments()
 

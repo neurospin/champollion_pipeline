@@ -30,6 +30,7 @@ from cortical_tiles.brainvisa import add_left_and_right_volumes, remove_ventricl
 from joblib import cpu_count
 from soma import aims
 
+from champollion_pipeline.process_setup import init_pipeline_process
 from champollion_pipeline.utils.cortical_tiles_config import CorticalTilesConfigFactory, versioned_crops_exist
 from champollion_pipeline.utils.lib import DERIVATIVES_FOLDER
 
@@ -338,6 +339,7 @@ class RunCorticalTiles(ScriptBuilder):
 
 def main():
     """Main entry point."""
+    init_pipeline_process()
     script = RunCorticalTiles()
     return script.build().print_args().run()
 

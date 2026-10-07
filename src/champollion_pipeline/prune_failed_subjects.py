@@ -16,6 +16,7 @@ from pathlib import Path
 import pandas as pd
 from champollion_utils.script_builder import ScriptBuilder
 
+from champollion_pipeline.process_setup import init_pipeline_process
 from champollion_pipeline.utils.lib import DERIVATIVES_FOLDER
 
 
@@ -124,6 +125,7 @@ class PruneFailedSubjects(ScriptBuilder):
 
 
 def main():
+    init_pipeline_process()
     script = PruneFailedSubjects()
     return script.build().print_args().run()
 

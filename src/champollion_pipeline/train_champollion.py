@@ -12,6 +12,7 @@ from os.path import abspath, dirname, exists, isdir, join
 from champollion_utils.script_builder import ScriptBuilder
 
 from champollion_pipeline.derivatives_layout import compute_champollion_configs_root
+from champollion_pipeline.process_setup import init_pipeline_process
 
 _SCRIPT_DIR = dirname(abspath(__file__))
 _CONTRASTIVE_DIR = abspath(join(_SCRIPT_DIR, "..", "..", "external", "champollion_V1", "champollion"))
@@ -213,6 +214,7 @@ class TrainChampollion(ScriptBuilder):
 
 def main():
     """Main entry point."""
+    init_pipeline_process()
     script = TrainChampollion()
     return script.build().print_args().run()
 

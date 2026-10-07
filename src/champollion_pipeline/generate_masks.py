@@ -13,6 +13,8 @@ from os.path import abspath, dirname, exists, join
 
 from champollion_utils.script_builder import ScriptBuilder
 
+from champollion_pipeline.process_setup import detach_frozen_root_handlers
+
 # Default regions — same 28 as generate_sulcal_regions.py
 _REGIONS_DEFAULT = [
     "S.C.-sylv.",
@@ -585,6 +587,7 @@ class GenerateMasks(ScriptBuilder):
 
 def main():
     """Main entry point."""
+    detach_frozen_root_handlers()
     script = GenerateMasks()
     return script.main()
 

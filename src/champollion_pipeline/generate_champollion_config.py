@@ -20,6 +20,7 @@ import numpy as np
 from champollion_utils.script_builder import ScriptBuilder
 
 from champollion_pipeline.derivatives_layout import compute_champollion_configs_root, compute_region_model_name
+from champollion_pipeline.process_setup import init_pipeline_process
 from champollion_pipeline.utils.lib import DERIVATIVES_FOLDER, find_dataset_folder
 
 # Get the script's directory for reliable path resolution
@@ -243,6 +244,7 @@ class GenerateChampollionConfig(ScriptBuilder):
 
 def main():
     """Main entry point."""
+    init_pipeline_process()
     script = GenerateChampollionConfig()
     return script.build().print_args().run()
 

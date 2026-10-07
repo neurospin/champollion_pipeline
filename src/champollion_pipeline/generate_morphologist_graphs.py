@@ -9,6 +9,8 @@ from os.path import basename, isfile, join, splitext
 
 from champollion_utils.script_builder import ScriptBuilder
 
+from champollion_pipeline.process_setup import init_pipeline_process
+
 
 class GenerateMorphologistGraphs(ScriptBuilder):
     """Script for generating graphs with morphologist."""
@@ -100,6 +102,7 @@ class GenerateMorphologistGraphs(ScriptBuilder):
 
 def main():
     """Main entry point."""
+    init_pipeline_process()
     script = GenerateMorphologistGraphs()
     return script.build().print_args().run()
 
