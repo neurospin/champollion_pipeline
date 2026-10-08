@@ -26,7 +26,11 @@ from urllib.parse import urlparse
 import torch
 from champollion_utils.script_builder import ScriptBuilder
 
-from champollion_pipeline.derivatives_layout import DEFAULT_MASKS_VERSION, compute_region_embeddings_dir
+from champollion_pipeline.derivatives_layout import (
+    DEFAULT_MASKS_VERSION,
+    compute_models_cache_dir,
+    compute_region_embeddings_dir,
+)
 from champollion_pipeline.process_setup import init_pipeline_process
 from champollion_pipeline.utils.lib import CORTICAL_TILES_VERSION
 
@@ -39,6 +43,27 @@ if _CHAMPOLLION_DIR not in sys.path:
     sys.path.insert(0, _CHAMPOLLION_DIR)
 
 from champollion.metrics.cka_coherence import test_models_coherence_from_directory  # noqa: E402
+
+
+def ensure_models_cache_dir(cache_dir: str) -> str:
+    """Create the models cache directory if needed and check it is writable.
+
+    Args:
+        cache_dir: absolute path of the models cache directory.
+
+    Returns:
+        cache_dir, unchanged.
+
+    Raises:
+        OSError: naming cache_dir, when it cannot be created or is not writable.
+    """
+    try:
+        os.makedirs(cache_dir, exist_ok=True)
+    except OSError as err:
+        raise OSError(f"Cannot create models cache directory {cache_dir}: {err}") from err
+    if not os.access(cache_dir, os.W_OK):
+        raise OSError(f"Models cache directory {cache_dir} is not writable")
+    return cache_dir
 
 
 class ModelFetchStrategy(ABC):
@@ -484,21 +509,9 @@ class GenerateEmbeddings(ScriptBuilder):
         Returns:
             Local path to the models
         """
-        # Define extraction directory (where to store downloaded/extracted)
-        # Use data/{datasets_root}/derivatives/champollion_V1/models_cache
-        script_dir = dirname(abspath(__file__))
-        data_dir = join(
-            script_dir,
-            "..",
-            "..",
-            "data",
-            self.args.datasets_root.lstrip("/"),
-            "derivatives",
-            "champollion_V1",
-            "models_cache",
-        )
-        extract_to = abspath(data_dir)
-        os.makedirs(extract_to, exist_ok=True)
+        # Downloaded/extracted models are cached inside the dataset tree:
+        # <datasets_root>/derivatives/champollion_V1/models_cache
+        extract_to = ensure_models_cache_dir(compute_models_cache_dir(self.args.datasets_root))
 
         # Get no_cache flag (force re-extraction)
         no_cache = getattr(self.args, "no_cache", False)

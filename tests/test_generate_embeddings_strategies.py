@@ -385,13 +385,17 @@ class TestInteractiveFallbackStrategy:
 class TestFetchModels:
     """Test GenerateEmbeddings.fetch_models strategy dispatch."""
 
+    @pytest.fixture(autouse=True)  # noqa: V105 - autouse fixture, used by pytest
+    def _dataset_root(self, tmp_path):
+        """Writable datasets_root, so fetch_models can create <root>/derivatives/champollion_V1/models_cache."""
+        self.root = tmp_path / "TEST01"
+
     def _script(self, argv_extra=None):
-        return make_script(["/models", "/data/TEST01"] + (argv_extra or []))
+        return make_script(["/models", str(self.root)] + (argv_extra or []))
 
     def test_huggingface_strategy_wins_for_repo_ids(self):
         script = self._script()
         with (
-            patch.object(ge.os, "makedirs"),
             patch.object(ge.HuggingFaceStrategy, "fetch", return_value="/hf/path") as fetch,
         ):
             assert script.fetch_models("neurospin/Champollion_V1") == "/hf/path"
@@ -400,7 +404,6 @@ class TestFetchModels:
     def test_masks_version_is_passed_as_hf_subfolder(self):
         script = self._script(["--masks-version", "canonical_25"])
         with (
-            patch.object(ge.os, "makedirs"),
             patch.object(ge, "HuggingFaceStrategy", wraps=ge.HuggingFaceStrategy) as cls,
         ):
             cls.return_value = MagicMock(can_handle=MagicMock(return_value=True), fetch=MagicMock(return_value="/hf"))
@@ -412,7 +415,6 @@ class TestFetchModels:
         models = tmp_path / "models"
         models.mkdir()
         with (
-            patch.object(ge.os, "makedirs"),
             patch.object(ge.HuggingFaceStrategy, "can_handle", return_value=True),
             patch.object(ge.HuggingFaceStrategy, "fetch", side_effect=RuntimeError("offline")),
         ):
@@ -421,7 +423,6 @@ class TestFetchModels:
     def test_remote_archive_strategy_is_used_for_urls(self):
         script = self._script()
         with (
-            patch.object(ge.os, "makedirs"),
             patch.object(ge.RemoteArchiveStrategy, "fetch", return_value="/remote") as fetch,
         ):
             assert script.fetch_models("https://example.com/m.tar.gz") == "/remote"
@@ -430,7 +431,6 @@ class TestFetchModels:
     def test_remote_failure_falls_through_to_interactive_fallback(self):
         script = self._script()
         with (
-            patch.object(ge.os, "makedirs"),
             patch.object(ge.RemoteArchiveStrategy, "fetch", side_effect=RuntimeError("404")),
             patch.object(ge.InteractiveFallbackStrategy, "fetch", return_value="/asked") as ask,
         ):
@@ -442,15 +442,13 @@ class TestFetchModels:
         models = tmp_path / "models"
         models.mkdir()
         monkeypatch.chdir(tmp_path)
-        with patch.object(ge.os, "makedirs"):
-            assert script.fetch_models("models") == str(models)
+        assert script.fetch_models("models") == str(models)
 
     def test_local_strategy_failure_falls_back_to_interactive(self, tmp_path):
         script = self._script()
         models = tmp_path / "models"
         models.mkdir()
         with (
-            patch.object(ge.os, "makedirs"),
             patch.object(ge.LocalPathStrategy, "fetch", side_effect=OSError("permission denied")),
             patch.object(ge.InteractiveFallbackStrategy, "fetch", return_value="/asked") as ask,
         ):
@@ -459,18 +457,14 @@ class TestFetchModels:
 
     def test_extract_dir_is_under_models_cache(self):
         script = self._script()
-        with (
-            patch.object(ge.os, "makedirs") as makedirs,
-            patch.object(ge.InteractiveFallbackStrategy, "fetch", return_value="/asked"),
-        ):
+        with patch.object(ge.InteractiveFallbackStrategy, "fetch", return_value="/asked") as ask:
             script.fetch_models("/definitely/missing")
-        extract_to = makedirs.call_args.args[0]
-        assert extract_to.endswith("data/data/TEST01/derivatives/champollion_V1/models_cache")
+        expected = os.path.abspath(str(self.root / "derivatives" / "champollion_V1" / "models_cache"))
+        assert ask.call_args.args[1] == expected
 
     def test_no_cache_flag_is_forwarded(self):
         script = self._script(["--no-cache"])
         with (
-            patch.object(ge.os, "makedirs"),
             patch.object(ge.InteractiveFallbackStrategy, "fetch", return_value="/asked") as ask,
         ):
             script.fetch_models("/definitely/missing")

@@ -18,6 +18,7 @@ CONFIGS_SUBFOLDER = "configs"
 REGION_EMBEDDINGS_SUBFOLDER = "region_embeddings"
 COMBINED_EMBEDDINGS_SUBFOLDER = "embeddings"
 SNAPSHOTS_SUBFOLDER = "snapshots"
+MODELS_CACHE_SUBFOLDER = "models_cache"
 HEMISPHERES = ("left", "right")
 
 
@@ -97,6 +98,20 @@ def compute_snapshots_dir(datasets_root: str, masks_version: str) -> str:  # noq
     Complexity: O(1).
     """
     return join(compute_masks_version_dir(datasets_root, masks_version), SNAPSHOTS_SUBFOLDER)
+
+
+def compute_models_cache_dir(datasets_root: str) -> str:
+    """Return where downloaded or extracted models are cached for a dataset.
+
+    Args:
+        datasets_root: dataset root directory (the one holding ``derivatives/``).
+
+    Returns:
+        abspath(<datasets_root>/derivatives/champollion_V1/models_cache)
+
+    Complexity: O(1).
+    """
+    return abspath(join(datasets_root, DERIVATIVES_DIRNAME, CHAMPOLLION_DERIVATIVES_FOLDER, MODELS_CACHE_SUBFOLDER))
 
 
 def compute_region_model_name(region: str, hemisphere: str) -> str:
