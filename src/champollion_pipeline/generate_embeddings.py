@@ -26,6 +26,7 @@ from urllib.parse import urlparse
 import torch
 from champollion_utils.script_builder import ScriptBuilder
 
+from champollion_pipeline.derivatives_layout import DEFAULT_MASKS_VERSION, compute_region_embeddings_dir
 from champollion_pipeline.process_setup import init_pipeline_process
 from champollion_pipeline.utils.lib import CORTICAL_TILES_VERSION
 
@@ -402,7 +403,7 @@ class GenerateEmbeddings(ScriptBuilder):
             .add_optional_argument(
                 "--masks",
                 "Cortical tiles mask version used as crops subdirectory (e.g. 'canonical_25').",
-                default="canonical_25",
+                default=DEFAULT_MASKS_VERSION,
             )
             .add_argument(
                 "--regions",
@@ -417,7 +418,8 @@ class GenerateEmbeddings(ScriptBuilder):
             )
             .add_optional_argument(
                 "--output",
-                "Output base directory override. Defaults to {parent_of_datasets_root}/{dataset_name}embeddings/.",
+                "Output base directory override. "
+                "Defaults to {datasets_root}/derivatives/champollion_V1/{masks}/region_embeddings/.",
                 default=None,
             )
             .add_optional_argument(
@@ -612,9 +614,7 @@ class GenerateEmbeddings(ScriptBuilder):
         )
 
         datasets_root = self.args.datasets_root.rstrip("/")
-        output_base = self.args.output or join(
-            os.path.dirname(datasets_root), os.path.basename(datasets_root) + "embeddings"
-        )
+        output_base = self.args.output or compute_region_embeddings_dir(datasets_root, self.args.masks)
 
         crops_2mm_dir = self._get_crops_2mm_dir(datasets_root)
 
