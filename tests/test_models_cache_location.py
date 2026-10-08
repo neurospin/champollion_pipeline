@@ -41,7 +41,7 @@ def make_script(datasets_root, extra_argv=None):
     return script
 
 
-@pytest.fixture(autouse=True)
+@pytest.fixture(autouse=True)  # noqa: V103 - autouse fixture, used by pytest
 def keep_legacy_cache_out_of_repo(tmp_path, monkeypatch):
     """Point the module's __file__ into tmp_path.
 
