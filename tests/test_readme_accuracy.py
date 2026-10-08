@@ -190,6 +190,81 @@ def _flags_in_text(text: str) -> set[str]:
     return set(re.findall(r"--[A-Za-z][A-Za-z0-9_-]*", text))
 
 
+EMBEDDINGS_COMMAND_RE = re.compile(r"(?<![\w.-])(?:champollion-embeddings|generate_embeddings\.py)(?![\w.-])")
+# A shell continuation as written in README: a trailing backslash, optionally followed by an inline comment.
+CONTINUATION_RE = re.compile(r"\\\s*(?:#.*)?$")
+SHELL_OPERATOR_RE = re.compile(r"\s(?:&&|\|\||\||;)\s")
+
+
+def _shell_code(line: str) -> str:
+    """``line`` without its shell comment (a whole comment line, or a ``#`` tail after whitespace)."""
+    if line.lstrip().startswith("#"):
+        return ""
+    return re.sub(r"(?:^|\s)#.*$", "", line)
+
+
+def _embeddings_invocation_flags(text: str, *, is_code: bool = False) -> set[str]:
+    """``--flag`` tokens of every embeddings-command invocation inside the fenced code blocks of ``text``.
+
+    An invocation starts on a fenced-code line whose shell code (comments dropped) names
+    ``champollion-embeddings`` (bare or via ``pixi run``) or ``generate_embeddings.py``; it runs
+    through the backslash-continued lines that follow, and stops at a shell operator
+    (``&&``, ``||``, ``|``, ``;``). Commands that are not the embeddings script (``rsync``,
+    ``tar``, ...) and prose are ignored, so their own options are never collected.
+    ``is_code=True`` treats the whole of ``text`` as code (an already-extracted fenced block body).
+    """
+    flags: set[str] = set()
+    in_fence = is_code
+    continuing = False
+    for line in text.splitlines():
+        if line.lstrip().startswith("```"):
+            in_fence = not in_fence
+            continuing = False
+            continue
+        if not in_fence:
+            continue
+        code = _shell_code(line)
+        if continuing:
+            part = code
+        else:
+            m = EMBEDDINGS_COMMAND_RE.search(code)
+            if not m:
+                continue
+            part = code[m.end() :]
+        op = SHELL_OPERATOR_RE.search(part)
+        if op:
+            part = part[: op.start()]
+        flags |= _flags_in_text(part)
+        continuing = op is None and bool(CONTINUATION_RE.search(line))
+    return flags
+
+
+def _options_table_flags(section: str) -> set[str]:
+    """``--flag`` tokens of the rows of every Markdown table in ``section`` whose header's first cell is ``Option``."""
+    flags: set[str] = set()
+    in_table = False
+    for line in section.splitlines():
+        stripped = line.strip()
+        if not stripped.startswith("|"):
+            in_table = False
+            continue
+        if re.match(r"^\|\s*Option\s*\|", stripped):
+            in_table = True
+            continue
+        if in_table:
+            flags |= _flags_in_text(stripped)
+    return flags
+
+
+def _documented_embeddings_flags(quickstart_step: str, section: str) -> set[str]:
+    """Embeddings flags README documents: embeddings-command invocations plus the section's options table."""
+    return (
+        _embeddings_invocation_flags(quickstart_step, is_code=True)
+        | _embeddings_invocation_flags(section)
+        | _options_table_flags(section)
+    )
+
+
 def _real_option_strings(builder_cls) -> set[str]:
     """Every option string (``--foo``) declared on a ``ScriptBuilder`` subclass's parser.
 
@@ -208,16 +283,59 @@ class TestEmbeddingsCLIMatchesReadme:
     def _documented_flags(self) -> set[str]:
         quickstart = _quickstart_step(4)  # "# 4. Generate embeddings ..."
         section = _section_block(r"5\. Generate Embeddings")
-        return _flags_in_text(quickstart) | _flags_in_text(section)
+        return _documented_embeddings_flags(quickstart, section)
 
     def test_documented_flags_exist_in_real_parser(self):
-        """Every ``--flag`` shown for the embeddings step must be a real generate_embeddings.py argument."""
+        """Every ``--flag`` passed to the embeddings command, or listed in section 5's options table,
+        must be a real generate_embeddings.py argument.
+
+        Only embeddings-command invocations (``champollion-embeddings`` / ``generate_embeddings.py``,
+        with their backslash-continued lines) and the options table are scanned: other commands shown
+        in section 5 (e.g. ``rsync``/``tar --exclude`` in the models_cache note) are not embeddings flags.
+        """
         documented = self._documented_flags()
+        assert documented, "no embeddings flags found in README quickstart step 4 or section 5 (scope helper broken?)"
         real = _real_option_strings(GenerateEmbeddings)
         bogus = sorted(documented - real)
         assert not bogus, (
             f"README documents embeddings flags that do not exist in generate_embeddings.py's argparse: {bogus}"
         )
+
+    def test_flag_scope_catches_misspelled_embeddings_flag_and_ignores_other_commands(self):
+        """Self-check of the flag scope on a synthetic section: a misspelled embeddings flag (in an
+        invocation, a continued line, or the options table) is collected; rsync/tar options and prose are not."""
+        section = (
+            "Prose mentioning `--prose-only` and `rsync --exclude`.\n"
+            "```bash\n"
+            "pixi run champollion-embeddings \\\n"
+            "    neurospin/Champollion_V1 \\      # model source; --comment-only\n"
+            "    --maks canonical_25\n"
+            "python generate_embeddings.py src root --cpuu && rsync -a --exclude models_cache a/ b/\n"
+            "rsync -a --exclude 'derivatives/champollion_V1/models_cache/' /data/myproject/ backup:/x/\n"
+            "tar --exclude='*/models_cache' -czf ds.tar.gz /data/myproject\n"
+            "```\n"
+            "| Option | Description |\n"
+            "|--------|-------------|\n"
+            "| `--overwirte` | Recompute; see also `--masks` |\n"
+            "\n"
+            "| Source | Example value |\n"
+            "|--------|---------------|\n"
+            "| Archive | `--not-a-flag-table` |\n"
+        )
+        documented = _documented_embeddings_flags("", section)
+        assert documented == {"--maks", "--cpuu", "--overwirte", "--masks"}, documented
+        quickstart_step = (
+            "# 4. Generate embeddings\n"
+            "pixi run champollion-embeddings \\\n"
+            "    neurospin/Champollion_V1 \\      # model source\n"
+            "    --regons S.C.-sylv._left\n"
+            "\n"
+            "# 5. Combine embeddings\n"
+            "pixi run champollion-combine dir/ --output_path out/\n"
+        )
+        assert _documented_embeddings_flags(quickstart_step, "") == {"--regons"}
+        real = _real_option_strings(GenerateEmbeddings)
+        assert {"--maks", "--cpuu", "--overwirte", "--regons"}.isdisjoint(real)
 
     def test_output_path_does_not_use_stale_split_named_subfolder(self):
         """generate_embeddings.py writes {output_base}/{region}/full_embeddings.csv, no {run}_{split}_embeddings/."""
