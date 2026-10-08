@@ -453,6 +453,12 @@ class GenerateEmbeddings(ScriptBuilder):
                 "{crops}/<crop>/mask/{L|R}skeleton_subject.csv next to its skeleton.",
                 default=None,
             )
+            .add_optional_argument(
+                "--models-cache",
+                "Models cache directory; relative paths resolve against the cwd. "
+                "Defaults to <datasets_root>/derivatives/champollion_V1/models_cache.",
+                default=None,
+            )
         )
 
     def _make_regions_tmpdir(self, models_path: str) -> str:
@@ -493,6 +499,13 @@ class GenerateEmbeddings(ScriptBuilder):
         if patched:
             print(f"Patched {patched} YAML file(s): derivatives folder → {target_folder}")
 
+    def _compute_extract_dir(self) -> str:
+        """Return the absolute models cache dir: --models-cache if given, else the dataset-tree default."""
+        override = getattr(self.args, "models_cache", None)
+        if override is not None:
+            return abspath(override)
+        return compute_models_cache_dir(self.args.datasets_root)
+
     def fetch_models(self, models_path):
         """
         Fetch models using strategy pattern.
@@ -509,9 +522,9 @@ class GenerateEmbeddings(ScriptBuilder):
         Returns:
             Local path to the models
         """
-        # Downloaded/extracted models are cached inside the dataset tree:
-        # <datasets_root>/derivatives/champollion_V1/models_cache
-        extract_to = ensure_models_cache_dir(compute_models_cache_dir(self.args.datasets_root))
+        # Downloaded/extracted models are cached under --models-cache, or inside
+        # the dataset tree: <datasets_root>/derivatives/champollion_V1/models_cache
+        extract_to = ensure_models_cache_dir(self._compute_extract_dir())
 
         # Get no_cache flag (force re-extraction)
         no_cache = getattr(self.args, "no_cache", False)
