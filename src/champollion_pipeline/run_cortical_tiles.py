@@ -87,6 +87,13 @@ class RunCorticalTiles(ScriptBuilder):
                 f"for whole-brain removal (e.g. '0_auto'). Default: {LABELLING_SESSION_DEFAULT}.",
                 default=LABELLING_SESSION_DEFAULT,
             )
+            .add_optional_argument(
+                "--skel-seed",
+                "Skeleton seed forwarded to generate_sulcal_regions.py as --skel_seed; "
+                "overrides skel_seed in the derivatives pipeline_loop_2mm.json.",
+                default=None,
+                type_=int,
+            )
             .add_flag("--overwrite", "Re-generate crops even if they already exist for this mask version.")
             .add_flag(
                 "--bids",
@@ -276,6 +283,9 @@ class RunCorticalTiles(ScriptBuilder):
 
         if self.args.sk_qc_path:
             cmd.extend(["--sk_qc_path", self.args.sk_qc_path])
+
+        if self.args.skel_seed is not None:
+            cmd.extend(["--skel_seed", str(self.args.skel_seed)])
 
         input_types = self.args.input_types or list(INPUT_TYPES_DEFAULT)
         cmd.extend(["-y", *input_types])
