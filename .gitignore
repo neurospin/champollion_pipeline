@@ -66,3 +66,6 @@ install_report_*.txt
 
 # Analysis output CSVs (e.g. run_cka.py results), not source
 scripts/*.csv
+
+# Written by alm (ALM 6) for an in-repo .alm/; our .alm/ is its own git repo, where the rule lives.
+/.gitattributes
