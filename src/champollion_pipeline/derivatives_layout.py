@@ -11,8 +11,13 @@ sides cannot drift apart.
 
 from os.path import abspath, join
 
+DERIVATIVES_DIRNAME = "derivatives"
 CHAMPOLLION_DERIVATIVES_FOLDER = "champollion_V1"
+DEFAULT_MASKS_VERSION = "canonical_25"
 CONFIGS_SUBFOLDER = "configs"
+REGION_EMBEDDINGS_SUBFOLDER = "region_embeddings"
+COMBINED_EMBEDDINGS_SUBFOLDER = "embeddings"
+SNAPSHOTS_SUBFOLDER = "snapshots"
 HEMISPHERES = ("left", "right")
 
 
@@ -29,7 +34,69 @@ def compute_champollion_configs_root(dataset_parent: str, dataset: str) -> str:
 
     Complexity: O(1).
     """
-    return abspath(join(dataset_parent, dataset, "derivatives", CHAMPOLLION_DERIVATIVES_FOLDER, CONFIGS_SUBFOLDER))
+    return abspath(
+        join(dataset_parent, dataset, DERIVATIVES_DIRNAME, CHAMPOLLION_DERIVATIVES_FOLDER, CONFIGS_SUBFOLDER)
+    )
+
+
+def compute_masks_version_dir(datasets_root: str, masks_version: str) -> str:
+    """Return the champollion_V1 directory of one mask version inside a dataset.
+
+    Args:
+        datasets_root: dataset root directory (the one holding ``derivatives/``).
+        masks_version: cortical_tiles mask version (e.g. "canonical_25").
+
+    Returns:
+        <datasets_root>/derivatives/champollion_V1/<masks_version>
+
+    Complexity: O(1).
+    """
+    return join(datasets_root, DERIVATIVES_DIRNAME, CHAMPOLLION_DERIVATIVES_FOLDER, masks_version)
+
+
+def compute_region_embeddings_dir(datasets_root: str, masks_version: str) -> str:
+    """Return the per-region embeddings directory (stage 4 output, stage 5 input).
+
+    Args:
+        datasets_root: dataset root directory.
+        masks_version: cortical_tiles mask version.
+
+    Returns:
+        <datasets_root>/derivatives/champollion_V1/<masks_version>/region_embeddings
+
+    Complexity: O(1).
+    """
+    return join(compute_masks_version_dir(datasets_root, masks_version), REGION_EMBEDDINGS_SUBFOLDER)
+
+
+def compute_combined_embeddings_dir(datasets_root: str, masks_version: str) -> str:  # noqa: V103 - used by main.py
+    """Return the combined embeddings directory (stage 5 output, stage 6 input).
+
+    Args:
+        datasets_root: dataset root directory.
+        masks_version: cortical_tiles mask version.
+
+    Returns:
+        <datasets_root>/derivatives/champollion_V1/<masks_version>/embeddings
+
+    Complexity: O(1).
+    """
+    return join(compute_masks_version_dir(datasets_root, masks_version), COMBINED_EMBEDDINGS_SUBFOLDER)
+
+
+def compute_snapshots_dir(datasets_root: str, masks_version: str) -> str:  # noqa: V103 - used by main.py
+    """Return the default snapshots directory (stage 6 output).
+
+    Args:
+        datasets_root: dataset root directory.
+        masks_version: cortical_tiles mask version.
+
+    Returns:
+        <datasets_root>/derivatives/champollion_V1/<masks_version>/snapshots
+
+    Complexity: O(1).
+    """
+    return join(compute_masks_version_dir(datasets_root, masks_version), SNAPSHOTS_SUBFOLDER)
 
 
 def compute_region_model_name(region: str, hemisphere: str) -> str:

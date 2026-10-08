@@ -48,16 +48,16 @@ pixi run champollion-embeddings \
 pixi run champollion-combine \
     --path_models /data/myproject/derivatives/champollion_V1/models_cache/Champollion_V1/ \
     --embeddings_subpath my_run_random_embeddings/full_embeddings.csv \
-    --output_path /data/myproject/derivatives/champollion_V1/embeddings/
+    --output_path /data/myproject/derivatives/champollion_V1/canonical_25/embeddings/
 ```
 
 ## Stage 6 — Generate Visualization Snapshots
 
 ```bash
 pixi run champollion-snapshots \
-    --embeddings_dir /data/myproject/derivatives/champollion_V1/embeddings/ \
+    --embeddings_dir /data/myproject/derivatives/champollion_V1/canonical_25/embeddings/ \
     --reference_data_dir reference_data/ \
-    --output_dir /data/myproject/derivatives/champollion_V1/snapshots/
+    --output_dir /data/myproject/derivatives/champollion_V1/canonical_25/snapshots/
 ```
 
 ## Running Tests

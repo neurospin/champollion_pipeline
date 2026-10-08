@@ -45,16 +45,16 @@ pixi run champollion-embeddings \
     --masks canonical_25            # crops mask version (must match step 2)
 
 # 5. Combine embeddings
-#    # Collects the per-region CSVs from {dataset}embeddings/ into a single output directory
+#    # Collects the per-region CSVs from region_embeddings/ into a single output directory
 pixi run champollion-combine \
-    /data/myprojectembeddings \  # {dataset}embeddings/ dir written by step 4
-    --output_path /data/myproject/derivatives/champollion_V1/embeddings/ # destination for combined CSVs
+    /data/myproject/derivatives/champollion_V1/canonical_25/region_embeddings/ \  # region_embeddings/ dir written by step 4
+    --output_path /data/myproject/derivatives/champollion_V1/canonical_25/embeddings/ # destination for combined CSVs
 
 # 6. Generate visualization snapshots
 pixi run champollion-snapshots \
-    --embeddings_dir /data/myproject/derivatives/champollion_V1/embeddings/ \  # step 5 output
+    --embeddings_dir /data/myproject/derivatives/champollion_V1/canonical_25/embeddings/ \  # step 5 output
     --reference_data_dir /data/myproject/reference_data/ \                     # pre-trained UMAP models (not shipped, see below)
-    --output_dir /data/myproject/derivatives/champollion_V1/snapshots/         # where to write images
+    --output_dir /data/myproject/derivatives/champollion_V1/canonical_25/snapshots/         # where to write images
 ```
 
 The sections below explain each step in detail.
@@ -285,9 +285,11 @@ pixi run champollion-embeddings \
 
 Each region fold writes a `full_embeddings.csv` (one row per subject, columns = embedding dimensions) under:
 ```
-{parent_of_datasets_root}/{dataset_name}embeddings/{region}/full_embeddings.csv
+{datasets_root}/derivatives/champollion_V1/{masks}/region_embeddings/{region}/full_embeddings.csv
 ```
 Override this location with `--output`.
+Earlier versions wrote this output to a sibling `*embeddings` directory next to the dataset root; those
+outputs are not found automatically, so pass that directory explicitly to `champollion-combine` or re-run this step.
 
 To re-run on an existing dataset, add `--overwrite`.
 
@@ -312,7 +314,7 @@ When using Hugging Face, models are cached in `data/{dataset}/derivatives/champo
 | `--masks-version` | Mask version subfolder to download from Hugging Face (e.g. `canonical_25`). Ignored when `models_path` is a local directory. |
 | `--masks` | Cortical tiles mask version used as the crops subdirectory (default: `canonical_25`) |
 | `--regions` | Restrict to specific region names (space-separated). Default: all regions found in `models_path`. |
-| `--output` | Output base directory override. Default: `{parent_of_datasets_root}/{dataset_name}embeddings/`. |
+| `--output` | Output base directory override. Default: `{datasets_root}/derivatives/champollion_V1/{masks}/region_embeddings/`. |
 | `--subjects` | Path to subjects CSV with a `Subject` column. Default: `{datasets_root}/participants.tsv`. |
 | `--cpu` | Force CPU usage (disable CUDA) |
 | `--overwrite` | Recompute embeddings that already exist on disk |
@@ -333,8 +335,8 @@ Collect the per-region embedding CSVs into a single output directory:
 
 ```bash
 pixi run champollion-combine \
-    /data/myprojectembeddings \  # {dataset}embeddings/ dir written by step 5
-    --output_path /data/myproject/derivatives/champollion_V1/embeddings/  # destination for the combined CSVs
+    /data/myproject/derivatives/champollion_V1/canonical_25/region_embeddings/ \  # region_embeddings/ dir written by step 5
+    --output_path /data/myproject/derivatives/champollion_V1/canonical_25/embeddings/  # destination for the combined CSVs
 ```
 
 This copies each region's `full_embeddings.csv` to `{output_path}/{region}_embeddings.csv`.
@@ -342,7 +344,7 @@ This copies each region's `full_embeddings.csv` to `{output_path}/{region}_embed
 **Verify** the CSV files were created (one per region):
 
 ```bash
-ls /data/myproject/derivatives/champollion_V1/embeddings/*.csv | wc -l
+ls /data/myproject/derivatives/champollion_V1/canonical_25/embeddings/*.csv | wc -l
 ```
 
 ---
@@ -353,9 +355,9 @@ Generate visualizations: sulcal graph meshes, cortical tile masks, and UMAP scat
 
 ```bash
 pixi run champollion-snapshots \
-    --embeddings_dir /data/myproject/derivatives/champollion_V1/embeddings/ \  # step 6 output
+    --embeddings_dir /data/myproject/derivatives/champollion_V1/canonical_25/embeddings/ \  # step 6 output
     --reference_data_dir /data/myproject/reference_data/ \                     # pre-trained UMAP models (not shipped — see below)
-    --output_dir /data/myproject/derivatives/champollion_V1/snapshots/          # where to write images
+    --output_dir /data/myproject/derivatives/champollion_V1/canonical_25/snapshots/          # where to write images
 ```
 
 Add `--morphologist_dir` and `--cortical_tiles_dir` to also generate mesh and mask snapshots:
@@ -364,9 +366,9 @@ Add `--morphologist_dir` and `--cortical_tiles_dir` to also generate mesh and ma
 pixi run champollion-snapshots \
     --morphologist_dir /data/myproject/derivatives/morphologist-6.0/ \          # for sulcal graph mesh snapshots
     --cortical_tiles_dir /data/myproject/derivatives/cortical_tiles-2026/crops/canonical_25/2mm/ \  # for tile mask snapshots
-    --embeddings_dir /data/myproject/derivatives/champollion_V1/embeddings/ \
+    --embeddings_dir /data/myproject/derivatives/champollion_V1/canonical_25/embeddings/ \
     --reference_data_dir /data/myproject/reference_data/ \
-    --output_dir /data/myproject/derivatives/champollion_V1/snapshots/
+    --output_dir /data/myproject/derivatives/champollion_V1/canonical_25/snapshots/
 ```
 
 Use `--sulcal-only`, `--tiles-only`, or `--umap-only` to generate only one snapshot type.

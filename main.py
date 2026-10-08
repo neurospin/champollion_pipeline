@@ -34,9 +34,12 @@ import yaml
 from champollion_utils.update_check import check_for_updates
 
 from champollion_pipeline.derivatives_layout import (
-    CHAMPOLLION_DERIVATIVES_FOLDER,
+    DEFAULT_MASKS_VERSION,
     HEMISPHERES,
+    compute_combined_embeddings_dir,
+    compute_region_embeddings_dir,
     compute_region_model_name,
+    compute_snapshots_dir,
 )
 from champollion_pipeline.generate_champollion_config import GenerateChampollionConfig
 from champollion_pipeline.generate_embeddings import GenerateEmbeddings
@@ -93,6 +96,7 @@ class DatasetConfig:
     path_to_graph: str = "t1mri/default_acquisition/default_analysis/folds/3.3/base"
     path_sk_with_hull: str = "t1mri/default_acquisition/default_analysis/segmentation/mesh"
     sk_qc_path: str = ""
+    masks_version: str = DEFAULT_MASKS_VERSION
 
     # Embeddings parameters
     classifier_name: str = "svm"
@@ -244,6 +248,7 @@ class ConfigLoader:
                 "path_to_graph": config.dataset.path_to_graph,
                 "path_sk_with_hull": config.dataset.path_sk_with_hull,
                 "sk_qc_path": config.dataset.sk_qc_path,
+                "masks_version": config.dataset.masks_version,
                 "regions": config.dataset.regions,
                 "classifier_name": config.dataset.classifier_name,
                 "overwrite": config.dataset.overwrite,
@@ -403,6 +408,7 @@ class RunCorticalTilesStage(PipelineStage):
                 f"--path_to_graph={self.config.dataset.path_to_graph}",
                 f"--path_sk_with_hull={self.config.dataset.path_sk_with_hull}",
                 f"--njobs={self.config.dataset.njobs}",
+                f"--masks={self.config.dataset.masks_version}",
             ]
 
             if self.config.dataset.sk_qc_path:
@@ -473,7 +479,11 @@ class GenerateChampollionConfigStage(PipelineStage):
         try:
             self.logger.info("Generating Champollion configuration...")
 
-            args = [str(self.config.dataset.crops_path), f"--dataset={self.config.dataset.name}"]
+            args = [
+                str(self.config.dataset.crops_path),
+                f"--dataset={self.config.dataset.name}",
+                f"--masks={self.config.dataset.masks_version}",
+            ]
 
             script = GenerateChampollionConfig()
             script.parse_args(args)
@@ -548,10 +558,13 @@ class GenerateEmbeddingsStage(PipelineStage):
             self.logger.info("Generating embeddings and training classifiers...")
 
             models_path = dataset.hf_repo_id if dataset.hf_enabled else str(self.config.models_path)
-            args = [models_path, dataset.datasets_root]
+            args = [models_path, dataset.datasets_root, f"--masks={dataset.masks_version}"]
+            if dataset.hf_enabled:
+                args.append(f"--masks-version={dataset.masks_version}")
 
-            if dataset.embeddings_path:
-                args.append(f"--output={dataset.embeddings_path}")
+            region_embeddings_dir = _compute_region_embeddings_source(dataset)
+            if region_embeddings_dir:
+                args.append(f"--output={region_embeddings_dir}")
             if dataset.overwrite:
                 args.append("--overwrite")
             if dataset.cpu:
@@ -581,9 +594,30 @@ class GenerateEmbeddingsStage(PipelineStage):
         return result
 
 
-def _compute_combined_embeddings_dir(datasets_root: str) -> Path:
-    """Return <datasets_root>/derivatives/champollion_V1/embeddings (pure, no I/O, O(1))."""
-    return Path(datasets_root) / "derivatives" / CHAMPOLLION_DERIVATIVES_FOLDER / "embeddings"
+def _compute_region_embeddings_source(dataset: DatasetConfig) -> str:
+    """Return the per-region embeddings directory shared by stage 4 (output) and stage 5 (input).
+
+    An explicit embeddings_path wins; otherwise the versioned default under datasets_root;
+    otherwise "" (no default can be derived). Pure, no I/O, O(1).
+    """
+    if dataset.embeddings_path:
+        return dataset.embeddings_path
+    if dataset.datasets_root:
+        return compute_region_embeddings_dir(dataset.datasets_root, dataset.masks_version)
+    return ""
+
+
+def _compute_snapshots_output_dir(dataset: DatasetConfig) -> str:
+    """Return the stage 6 output directory.
+
+    An explicit snapshots_path wins; otherwise the versioned default under datasets_root;
+    otherwise "". Pure, no I/O, O(1).
+    """
+    if dataset.snapshots_path:
+        return dataset.snapshots_path
+    if dataset.datasets_root:
+        return compute_snapshots_dir(dataset.datasets_root, dataset.masks_version)
+    return ""
 
 
 def _compute_embeddings_region_names(regions: List[str]) -> List[str]:
@@ -597,7 +631,7 @@ class PutTogetherEmbeddingsStage(PipelineStage):
 
     def validate(self) -> bool:
         """Validate that embeddings exist."""
-        embeddings_path = Path(self.config.dataset.embeddings_path)
+        embeddings_path = Path(_compute_region_embeddings_source(self.config.dataset))
         if not embeddings_path.exists():
             self.logger.error(f"Embeddings path does not exist: {embeddings_path}")
             return False
@@ -610,11 +644,11 @@ class PutTogetherEmbeddingsStage(PipelineStage):
             self.logger.info("Putting together embeddings...")
             dataset = self.config.dataset
             output_path = (
-                _compute_combined_embeddings_dir(dataset.datasets_root)
+                Path(compute_combined_embeddings_dir(dataset.datasets_root, dataset.masks_version))
                 if dataset.datasets_root
                 else (dataset.cortical_tiles_output or self.config.outputs_path)
             )
-            args = [str(dataset.embeddings_path), f"--output_path={output_path}"]
+            args = [_compute_region_embeddings_source(dataset), f"--output_path={output_path}"]
             script = PutTogetherEmbeddings()
             script.parse_args(args)
             return_code = script.run()
@@ -638,8 +672,8 @@ class GenerateSnapshotsStage(PipelineStage):
 
     def validate(self) -> bool:
         """Validate that embeddings exist and output path is set."""
-        if not self.config.dataset.snapshots_path:
-            self.logger.error("snapshots_path must be set in config")
+        if not self.config.dataset.snapshots_path and not self.config.dataset.datasets_root:
+            self.logger.error("snapshots_path or datasets_root must be set in config")
             return False
         embeddings_path = Path(self.config.dataset.embeddings_path)
         if self.config.dataset.embeddings_path and not embeddings_path.exists():
@@ -653,11 +687,11 @@ class GenerateSnapshotsStage(PipelineStage):
         try:
             self.logger.info("Generating visualization snapshots...")
 
-            args = [f"--output_dir={self.config.dataset.snapshots_path}"]
-
             dataset = self.config.dataset
+            args = [f"--output_dir={_compute_snapshots_output_dir(dataset)}"]
             if dataset.datasets_root:
-                args.append(f"--embeddings_dir={_compute_combined_embeddings_dir(dataset.datasets_root)}")
+                combined_dir = compute_combined_embeddings_dir(dataset.datasets_root, dataset.masks_version)
+                args.append(f"--embeddings_dir={combined_dir}")
             elif dataset.embeddings_path:
                 args.append(f"--embeddings_dir={dataset.embeddings_path}")
             if self.config.dataset.morphologist_graphs:
