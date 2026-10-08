@@ -327,6 +327,17 @@ When using Hugging Face, models are cached in `data/{dataset}/derivatives/champo
 
 </details>
 
+### Excluding `models_cache/` from dataset sync and archives
+
+Downloaded and extracted models are cached inside the dataset tree, under `{datasets_root}/derivatives/champollion_V1/models_cache/`. The cache is multi-GB and regenerable (the next embeddings run re-creates it), so leave it out when you sync or archive the dataset:
+
+```bash
+rsync -a --exclude='/derivatives/champollion_V1/models_cache/' /data/myproject/ backup-host:/data/myproject/
+tar --exclude='derivatives/champollion_V1/models_cache' -czf myproject.tar.gz -C /data myproject
+```
+
+For a read-only dataset, pass `--models-cache PATH` to `champollion-embeddings` to keep the cache outside the dataset tree.
+
 ---
 
 ## 6. Combine Embeddings
