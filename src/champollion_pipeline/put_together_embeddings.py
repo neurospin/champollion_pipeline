@@ -14,7 +14,11 @@ from champollion_pipeline.process_setup import init_pipeline_process
 
 
 class PutTogetherEmbeddings(ScriptBuilder):
-    """Collect per-region embeddings from {dataset}embeddings/ into a single folder."""
+    """Collect per-region embeddings into a single folder.
+
+    Reads the per-region directory written by generate_embeddings (stage 4),
+    <datasets_root>/derivatives/champollion_V1/<masks>/region_embeddings by default.
+    """
 
     def __init__(self):
         super().__init__(
@@ -25,7 +29,10 @@ class PutTogetherEmbeddings(ScriptBuilder):
             self.add_argument(
                 "embeddings_source",
                 type=str,
-                help="Path to the {dataset}embeddings/ directory produced by generate_embeddings.",
+                help=(
+                    "Per-region embeddings directory produced by generate_embeddings, by default "
+                    "<datasets_root>/derivatives/champollion_V1/<masks>/region_embeddings."
+                ),
             ).add_required_argument("--output_path", "Folder where collected embeddings will be written.")
         )
 
