@@ -97,6 +97,7 @@ class DatasetConfig:
     path_sk_with_hull: str = "t1mri/default_acquisition/default_analysis/segmentation/mesh"
     sk_qc_path: str = ""
     masks_version: str = DEFAULT_MASKS_VERSION
+    skel_seed: Optional[int] = None  # None: the skel_seed in <derivatives>/pipeline_loop_2mm.json
 
     # Embeddings parameters
     classifier_name: str = "svm"
@@ -250,6 +251,7 @@ class ConfigLoader:
                 "path_sk_with_hull": config.dataset.path_sk_with_hull,
                 "sk_qc_path": config.dataset.sk_qc_path,
                 "masks_version": config.dataset.masks_version,
+                "skel_seed": config.dataset.skel_seed,
                 "regions": config.dataset.regions,
                 "classifier_name": config.dataset.classifier_name,
                 "overwrite": config.dataset.overwrite,
@@ -412,6 +414,9 @@ class RunCorticalTilesStage(PipelineStage):
                 f"--njobs={self.config.dataset.njobs}",
                 f"--masks={self.config.dataset.masks_version}",
             ]
+
+            if self.config.dataset.skel_seed is not None:
+                args.append(f"--skel-seed={self.config.dataset.skel_seed}")
 
             if self.config.dataset.sk_qc_path:
                 args.append(f"--sk_qc_path={self.config.dataset.sk_qc_path}")
