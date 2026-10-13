@@ -5,6 +5,7 @@ Wrapper script to generate sulcal embeddings per region.
 Calls champollion/evaluate.py for each region in models_path.
 """
 
+import argparse
 import contextlib
 import cProfile
 import glob
@@ -38,11 +39,23 @@ from champollion_pipeline.utils.lib import CORTICAL_TILES_VERSION
 _SCRIPT_DIR = dirname(abspath(__file__))
 _CONVERTED_CKPT_NAME = "best_model.ckpt"
 _WEIGHTS_FILE_NAME = "best_model_weights.pt"
+DEFAULT_CHECKPOINT_EPOCH = 80
 _CHAMPOLLION_DIR = abspath(join(_SCRIPT_DIR, "..", "..", "external", "champollion_V1"))
 if _CHAMPOLLION_DIR not in sys.path:
     sys.path.insert(0, _CHAMPOLLION_DIR)
 
 from champollion.metrics.cka_coherence import test_models_coherence_from_directory  # noqa: E402
+
+
+def _parse_non_negative_int(value: str) -> int:
+    """argparse type: an integer >= 0 (Lightning numbers epochs from 0)."""
+    try:
+        number = int(value)
+    except ValueError as err:
+        raise argparse.ArgumentTypeError(f"must be a non-negative integer, got {value!r}") from err
+    if number < 0:
+        raise argparse.ArgumentTypeError(f"must be a non-negative integer, got {value!r}")
+    return number
 
 
 def ensure_models_cache_dir(cache_dir: str) -> str:
@@ -408,6 +421,13 @@ class GenerateEmbeddings(ScriptBuilder):
                 "Evaluate each region with the native Lightning checkpoint in "
                 "logs/lightning_logs/version_0/checkpoints/ instead of logs/best_model_weights.pt. "
                 "Regions with no native checkpoint there still use best_model_weights.pt.",
+            )
+            .add_optional_argument(
+                "--checkpoint-epoch",
+                "Training epoch N (0-based) of the Lightning checkpoint epoch=N-step=*.ckpt to evaluate each region "
+                "with. Default: 80.",
+                default=DEFAULT_CHECKPOINT_EPOCH,
+                type_=_parse_non_negative_int,
             )
             .add_optional_argument(
                 "--cortical_version",
