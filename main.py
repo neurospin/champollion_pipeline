@@ -103,6 +103,7 @@ class DatasetConfig:
     overwrite: bool = False
     embeddings_only: bool = False
     use_last_checkpoint: bool = False
+    models_cache: Optional[str] = None  # None: <datasets_root>/derivatives/champollion_V1/models_cache
     subsets: List[str] = field(default_factory=lambda: ["full"])
     epochs: List[Optional[int]] = field(default_factory=lambda: [None])
     split: str = "random"
@@ -254,6 +255,7 @@ class ConfigLoader:
                 "overwrite": config.dataset.overwrite,
                 "embeddings_only": config.dataset.embeddings_only,
                 "use_last_checkpoint": config.dataset.use_last_checkpoint,
+                "models_cache": config.dataset.models_cache,
                 "subsets": config.dataset.subsets,
                 "epochs": config.dataset.epochs,
                 "split": config.dataset.split,
@@ -571,6 +573,8 @@ class GenerateEmbeddingsStage(PipelineStage):
                 args.append("--cpu")
             if dataset.use_last_checkpoint:
                 args.append("--use_last_checkpoint")
+            if dataset.models_cache is not None:
+                args.append(f"--models-cache={dataset.models_cache}")
             if dataset.regions:
                 args.extend(["--regions", *_compute_embeddings_region_names(dataset.regions)])
 
