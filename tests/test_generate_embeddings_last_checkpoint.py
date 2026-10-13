@@ -118,12 +118,13 @@ class TestUseLastCheckpointFlag:
 
 
 class TestLastCheckpointPassesRegionDir:
-    """REQ-LASTCKPT-04: with the flag, -m is the region model dir itself (no best-weights mirror)."""
+    """REQ-LASTCKPT-04, narrowed by REQ-LASTCKPT-BDRABCZUK-AC61C02AAC6F: with the flag and no epoch-N
+    checkpoint, -m is the region model dir itself (no best-weights mirror)."""
 
     def test_region_dir_is_model_arg_with_last_epoch_native_ckpt(self, tmp_path):
         model_dir = make_model_dir(tmp_path)
         write_weights(model_dir, BEST_STATE)
-        write_native_ckpt(model_dir, "epoch=80-step=106272.ckpt", NATIVE_STATE)
+        write_native_ckpt(model_dir, "epoch=79-step=104960.ckpt", NATIVE_STATE)
 
         fake = run_region_with_flag(tmp_path)
 
@@ -132,7 +133,7 @@ class TestLastCheckpointPassesRegionDir:
     def test_region_dir_is_model_arg_with_wrapped_best_weights(self, tmp_path):
         model_dir = make_model_dir(tmp_path)
         write_weights(model_dir, BEST_STATE, wrapped=True)
-        write_native_ckpt(model_dir, "epoch=80-step=106272.ckpt", NATIVE_STATE)
+        write_native_ckpt(model_dir, "epoch=79-step=104960.ckpt", NATIVE_STATE)
 
         fake = run_region_with_flag(tmp_path)
 
