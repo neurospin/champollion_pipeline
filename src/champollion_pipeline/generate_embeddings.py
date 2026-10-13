@@ -12,6 +12,7 @@ import glob
 import gzip
 import os
 import pstats
+import re
 import shutil
 import sys
 import tarfile
@@ -40,6 +41,9 @@ _SCRIPT_DIR = dirname(abspath(__file__))
 _CONVERTED_CKPT_NAME = "best_model.ckpt"
 _WEIGHTS_FILE_NAME = "best_model_weights.pt"
 DEFAULT_CHECKPOINT_EPOCH = 80
+_EPOCH_CKPT_PATTERN = r"epoch={epoch}-step=(?P<step>\d+)\.ckpt"
+_VERSION_DIR_PATTERN = re.compile(r"version_(?P<index>\d+)")
+_MIRROR_PREFIX = "champollion_eval_"
 _CHAMPOLLION_DIR = abspath(join(_SCRIPT_DIR, "..", "..", "external", "champollion_V1"))
 if _CHAMPOLLION_DIR not in sys.path:
     sys.path.insert(0, _CHAMPOLLION_DIR)
@@ -751,9 +755,10 @@ class GenerateEmbeddings(ScriptBuilder):
         ckpt_path.parent.mkdir(parents=True, exist_ok=True)
         torch.save({"state_dict": state_dict, "epoch": 0, "global_step": 0}, str(ckpt_path))
 
-    def _build_best_weights_mirror(self, model_path: str, pt_path: Path, root: str) -> str:
-        """Build <root>/<region dir name> holding the region's .hydra (symlink) and one
-        converted ckpt made from pt_path. Never writes under model_path.
+    @staticmethod
+    def _new_mirror(model_path: str, root: str) -> tuple[str, Path]:
+        """Create <root>/<region dir name> with the region's .hydra (symlink) and an empty
+        logs/lightning_logs/version_0/checkpoints/; return (mirror, ckpt_dir). Never writes under model_path.
         """
         mirror = Path(root) / os.path.basename(os.path.normpath(model_path))
         mirror.mkdir()
@@ -761,8 +766,48 @@ class GenerateEmbeddings(ScriptBuilder):
         if exists(hydra_dir):
             os.symlink(abspath(hydra_dir), mirror / ".hydra")
         ckpt_dir = mirror / "logs" / "lightning_logs" / "version_0" / "checkpoints"
+        ckpt_dir.mkdir(parents=True)
+        return str(mirror), ckpt_dir
+
+    @staticmethod
+    @contextlib.contextmanager
+    def _temporary_mirror_root() -> Iterator[str]:
+        """A temporary directory for an evaluation mirror, removed on exit (symlinks are not followed)."""
+        root = tempfile.mkdtemp(prefix=_MIRROR_PREFIX)
+        try:
+            yield root
+        finally:
+            shutil.rmtree(root, ignore_errors=True)
+
+    def _build_best_weights_mirror(self, model_path: str, pt_path: Path, root: str) -> str:
+        """Mirror holding the region's .hydra and one ckpt converted from pt_path."""
+        mirror, ckpt_dir = self._new_mirror(model_path, root)
         self._save_converted_ckpt(self._load_weights_state_dict(pt_path), ckpt_dir / _CONVERTED_CKPT_NAME)
-        return str(mirror)
+        return mirror
+
+    @staticmethod
+    def _build_epoch_ckpt_mirror(model_path: str, ckpt: Path, root: str) -> str:
+        """Mirror holding the region's .hydra and a symlink to the epoch-N checkpoint, under its own name."""
+        mirror, ckpt_dir = GenerateEmbeddings._new_mirror(model_path, root)
+        os.symlink(abspath(ckpt), ckpt_dir / ckpt.name)
+        return mirror
+
+    @staticmethod
+    def _compute_ckpt_rank(ckpt: Path, step: int) -> tuple[int, int, str]:
+        """Sort key: step, then version_<n> index (-1 if unparsable), then path text."""
+        match = _VERSION_DIR_PATTERN.fullmatch(ckpt.parent.parent.name)
+        return step, int(match["index"]) if match else -1, str(ckpt)
+
+    def _find_epoch_ckpt(self, model_path: str) -> Path | None:
+        """The epoch-N checkpoint (N = --checkpoint-epoch) of any version_*/checkpoints/, highest step first."""
+        pattern = re.compile(_EPOCH_CKPT_PATTERN.format(epoch=self.args.checkpoint_epoch))
+        lightning_logs = Path(model_path) / "logs" / "lightning_logs"
+        ranked = []
+        for ckpt in lightning_logs.glob("version_*/checkpoints/*.ckpt"):
+            match = pattern.fullmatch(ckpt.name)
+            if match:
+                ranked.append((self._compute_ckpt_rank(ckpt, int(match["step"])), ckpt))
+        return max(ranked)[1] if ranked else None
 
     def _uses_native_ckpt(self, model_path: str) -> bool:
         """True when --use_last_checkpoint applies: the flag is set and version_0 holds a native ckpt."""
@@ -771,14 +816,19 @@ class GenerateEmbeddings(ScriptBuilder):
 
     @contextlib.contextmanager
     def _evaluation_model_dir(self, model_path: str) -> Iterator[str]:
-        """Yield the directory to pass to evaluate.py as -m.
+        """Yield the directory to pass to evaluate.py as -m, in this order:
 
-        With --use_last_checkpoint and a native ckpt in version_0, model_path itself is
-        yielded untouched. With best_model_weights.pt beside a native ckpt (any
-        version_<n>), a temporary mirror holding only .hydra and the converted best
-        weights is yielded and removed afterwards, so the user's model dir is never
-        modified. Otherwise _ensure_ckpt runs in place and model_path itself is yielded.
+        1. an epoch-N checkpoint exists (any version_*): a temporary mirror holding .hydra and only
+           that checkpoint, removed afterwards (whatever --use_last_checkpoint says);
+        2. --use_last_checkpoint and a native ckpt in version_0: model_path itself;
+        3. no best_model_weights.pt, or no native ckpt anywhere: _ensure_ckpt in place, model_path itself;
+        4. otherwise: a temporary mirror holding .hydra and the converted best weights.
         """
+        epoch_ckpt = self._find_epoch_ckpt(model_path)
+        if epoch_ckpt is not None:
+            with self._temporary_mirror_root() as root:
+                yield self._build_epoch_ckpt_mirror(model_path, epoch_ckpt, root)
+            return
         if self._uses_native_ckpt(model_path):
             yield model_path
             return
@@ -787,11 +837,16 @@ class GenerateEmbeddings(ScriptBuilder):
             self._ensure_ckpt(model_path)
             yield model_path
             return
-        root = tempfile.mkdtemp(prefix="champollion_eval_")
-        try:
+        with self._temporary_mirror_root() as root:
             yield self._build_best_weights_mirror(model_path, pt_path, root)
-        finally:
-            shutil.rmtree(root, ignore_errors=True)
+
+    def _compute_ignored_flag_suffix(self, model_path: str) -> str:
+        """Log suffix when --use_last_checkpoint is set but has no effect (no epoch-N ckpt, no version_0 ckpt)."""
+        if not getattr(self.args, "use_last_checkpoint", False):
+            return ""
+        if self._find_epoch_ckpt(model_path) is not None or self._uses_native_ckpt(model_path):
+            return ""
+        return " (no native checkpoint in version_0; --use_last_checkpoint ignored)"
 
     @staticmethod
     def _ckpt_candidates(model_dir: str) -> list[str]:
@@ -800,6 +855,9 @@ class GenerateEmbeddings(ScriptBuilder):
 
     def _weights_source(self, model_path: str) -> str | None:
         """Return the user-dir weights file evaluate.py ends up using, or None."""
+        epoch_ckpt = self._find_epoch_ckpt(model_path)
+        if epoch_ckpt is not None:
+            return str(epoch_ckpt)
         ckpts = glob.glob(model_path + "/logs/lightning_logs/version_0/checkpoints/*.ckpt")
         if self._uses_native_ckpt(model_path):
             return ckpts[0]
@@ -938,11 +996,7 @@ class GenerateEmbeddings(ScriptBuilder):
                     saving_path,
                 ]
 
-                ignored = (
-                    " (no native checkpoint in version_0; --use_last_checkpoint ignored)"
-                    if getattr(self.args, "use_last_checkpoint", False) and not self._uses_native_ckpt(model_path)
-                    else ""
-                )
+                ignored = self._compute_ignored_flag_suffix(model_path)
                 candidates = self._ckpt_candidates(eval_model_path)
                 if len(candidates) > 1:
                     weights = ", ".join(candidates)

@@ -1,7 +1,10 @@
 #!/usr/bin/env python3
 """
-Embeddings use logs/best_model_weights.pt when a region model directory holds it,
-even next to a native Lightning checkpoint (REQ-CKPTREFRESH-04..08, TASK-176).
+Embeddings use logs/best_model_weights.pt when a region model directory holds it
+and no epoch-N checkpoint, even next to native Lightning checkpoints of other
+epochs (REQ-CKPTREFRESH-04..08, TASK-176; 04 and 08 narrowed by
+REQ-CKPTREFRESH-BDRABCZUK-C3A61FF4691F / -848B0881CAE3). Regions holding an
+epoch-N checkpoint: tests/test_generate_embeddings_epoch_checkpoint.py.
 
 evaluate.py (champollion_V1, frozen) loads
 glob('<model>/logs/lightning_logs/version_0/checkpoints/*.ckpt')[0] and
@@ -148,21 +151,21 @@ class TestEvaluateUsesBestWeights:
     """REQ-CKPTREFRESH-04: evaluate.py sees exactly one .ckpt, equal to best_model_weights.pt."""
 
     def test_last_epoch_native_ckpt_beside_best_weights(self, tmp_path):
-        """HF canonical_25 / Jean-Zay models_canonical_25 layout (epoch=80 last-epoch ckpt)."""
+        """Native ckpt of another epoch than N beside best weights (no epoch-N checkpoint)."""
         model_dir = make_model_dir(tmp_path)
         write_weights(model_dir, BEST_STATE)
-        write_native_ckpt(model_dir, "epoch=80-step=106272.ckpt", NATIVE_STATE)
+        write_native_ckpt(model_dir, "epoch=79-step=104960.ckpt", NATIVE_STATE)
 
         fake = run_region(tmp_path)
 
         assert_evaluate_sees_only(fake.calls[0], BEST_STATE)
 
     def test_stale_aborted_run_ckpt_in_version_0_and_full_run_in_version_1(self, tmp_path):
-        """train_champollion --overwrite after an aborted run (TASK-149 healthcheck layout)."""
+        """train_champollion --overwrite after an aborted run (TASK-149 layout), no epoch-N checkpoint."""
         model_dir = make_model_dir(tmp_path)
         write_weights(model_dir, BEST_STATE)
         write_native_ckpt(model_dir, "epoch=2-step=3936.ckpt", OLD_STATE, version=0)
-        write_native_ckpt(model_dir, "epoch=80-step=106272.ckpt", NATIVE_STATE, version=1)
+        write_native_ckpt(model_dir, "epoch=79-step=104960.ckpt", NATIVE_STATE, version=1)
 
         fake = run_region(tmp_path)
 
@@ -171,7 +174,7 @@ class TestEvaluateUsesBestWeights:
     def test_native_ckpt_beside_wrapped_best_weights(self, tmp_path):
         model_dir = make_model_dir(tmp_path)
         write_weights(model_dir, BEST_STATE, wrapped=True)
-        write_native_ckpt(model_dir, "epoch=80-step=106272.ckpt", NATIVE_STATE)
+        write_native_ckpt(model_dir, "epoch=79-step=104960.ckpt", NATIVE_STATE)
 
         fake = run_region(tmp_path)
 
@@ -180,7 +183,7 @@ class TestEvaluateUsesBestWeights:
     def test_native_and_stale_converted_ckpt_beside_best_weights(self, tmp_path):
         model_dir = make_model_dir(tmp_path)
         write_weights(model_dir, BEST_STATE)
-        write_native_ckpt(model_dir, "epoch=80-step=106272.ckpt", NATIVE_STATE)
+        write_native_ckpt(model_dir, "epoch=79-step=104960.ckpt", NATIVE_STATE)
         write_converted_ckpt(model_dir, OLD_STATE)
 
         fake = run_region(tmp_path)
@@ -274,22 +277,9 @@ class TestUserModelDirUnchanged:
         assert snapshot_tree(model_dir) == before
 
 
-# --------------------------------------------------------------------------- #
-# REQ-CKPTREFRESH-07
-# --------------------------------------------------------------------------- #
-
-
-class TestNativeOnlyModelDirPassedAsIs:
-    """REQ-CKPTREFRESH-07: without best_model_weights.pt, -m is the region model dir itself."""
-
-    def test_native_ckpt_only(self, tmp_path):
-        model_dir = make_model_dir(tmp_path)
-        write_native_ckpt(model_dir, "epoch=80-step=106272.ckpt", NATIVE_STATE)
-
-        fake = run_region(tmp_path)
-
-        assert fake.calls[0]["model_arg"] == str(model_dir)
-        assert_evaluate_sees_only(fake.calls[0], NATIVE_STATE)
+# REQ-CKPTREFRESH-07 (-m is the region model dir itself without best weights) was
+# superseded by REQ-EPOCHSEL-BDRABCZUK-D80BDF703B49: see
+# tests/test_generate_embeddings_epoch_checkpoint.py.
 
 
 # --------------------------------------------------------------------------- #
@@ -319,7 +309,7 @@ class TestWeightsFileLogged:
     def test_best_weights_named_when_native_ckpt_present(self, tmp_path, capsys):
         model_dir = make_model_dir(tmp_path)
         weights = write_weights(model_dir, BEST_STATE)
-        write_native_ckpt(model_dir, "epoch=80-step=106272.ckpt", NATIVE_STATE)
+        write_native_ckpt(model_dir, "epoch=79-step=104960.ckpt", NATIVE_STATE)
 
         run_region(tmp_path)
 
