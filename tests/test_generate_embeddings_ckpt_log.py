@@ -25,7 +25,6 @@ from tests.test_generate_embeddings_best_weights import (
     REGION,
     FakeEvaluate,
     make_model_dir,
-    write_converted_ckpt,
     write_native_ckpt,
     write_weights,
 )
@@ -49,20 +48,6 @@ def last_checkpoint_two_native(model_dir: Path) -> tuple[list[str], list[Path]]:
     first = write_native_ckpt(model_dir, "epoch=78-step=103648.ckpt", OLD_STATE)
     second = write_native_ckpt(model_dir, "epoch=79-step=104960.ckpt", NATIVE_STATE)
     return [LAST_CKPT_FLAG], [first, second]
-
-
-def two_native_no_best_weights(model_dir: Path) -> tuple[list[str], list[Path]]:
-    """Locally trained model without best_model_weights.pt: -m is the region dir."""
-    first = write_native_ckpt(model_dir, "epoch=78-step=103648.ckpt", OLD_STATE)
-    second = write_native_ckpt(model_dir, "epoch=79-step=104960.ckpt", NATIVE_STATE)
-    return [], [first, second]
-
-
-def native_and_leftover_converted(model_dir: Path) -> tuple[list[str], list[Path]]:
-    """TASK-144 layout: native epoch ckpt beside a leftover converted best_model.ckpt."""
-    native = write_native_ckpt(model_dir, "epoch=79-step=104960.ckpt", NATIVE_STATE)
-    converted = write_converted_ckpt(model_dir, BEST_STATE)
-    return [], [native, converted]
 
 
 def best_weights_mirror_over_two_native(model_dir: Path) -> tuple[list[str], list[Path]]:
@@ -91,8 +76,6 @@ def last_checkpoint_one_native(model_dir: Path) -> tuple[list[str], list[Path]]:
 
 SEVERAL_CKPT_LAYOUTS = [
     pytest.param(last_checkpoint_two_native, id="last_checkpoint_two_native"),
-    pytest.param(two_native_no_best_weights, id="two_native_no_best_weights"),
-    pytest.param(native_and_leftover_converted, id="native_and_leftover_converted"),
 ]
 
 ONE_CKPT_LAYOUTS = [

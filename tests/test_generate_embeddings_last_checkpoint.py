@@ -26,7 +26,6 @@ from tests.test_generate_embeddings_best_weights import (
     NATIVE_STATE,
     REGION,
     FakeEvaluate,
-    assert_evaluate_sees_only,
     lines_naming,
     make_model_dir,
     snapshot_tree,
@@ -279,19 +278,6 @@ class TestLoadRejectsOtherUnknownDatasetKey:
 # --------------------------------------------------------------------------- #
 # REQ-LASTCKPT-11 / 12: flag with best weights and no native ckpt in version_0
 # --------------------------------------------------------------------------- #
-
-
-class TestLastCheckpointFallsBackToBestWeights:
-    """REQ-LASTCKPT-11: with the flag and no native ckpt in version_0, -m is the region dir holding the best weights."""
-
-    def test_region_dir_is_model_arg_holding_converted_best_weights(self, tmp_path):
-        model_dir = make_model_dir(tmp_path)
-        write_weights(model_dir, BEST_STATE)
-
-        fake = run_region_with_flag(tmp_path)
-
-        assert fake.calls[0]["model_arg"] == str(model_dir)
-        assert_evaluate_sees_only(fake.calls[0], BEST_STATE)
 
 
 class TestLastCheckpointIgnoredLogged:

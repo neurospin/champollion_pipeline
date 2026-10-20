@@ -742,14 +742,6 @@ class GenerateEmbeddings(ScriptBuilder):
         return any(p.name != _CONVERTED_CKPT_NAME for p in ckpt_dir.glob("*.ckpt"))
 
     @staticmethod
-    def _has_any_native_ckpt(model_path: str) -> bool:
-        """True if any logs/lightning_logs/version_*/checkpoints/ dir holds a native ckpt."""
-        lightning_logs = Path(model_path) / "logs" / "lightning_logs"
-        return any(
-            GenerateEmbeddings._has_native_ckpt(ckpt_dir) for ckpt_dir in lightning_logs.glob("version_*/checkpoints")
-        )
-
-    @staticmethod
     def _save_converted_ckpt(state_dict: dict, ckpt_path: Path) -> None:
         """Write state_dict as a converted Lightning ckpt (the only owner of its shape)."""
         ckpt_path.parent.mkdir(parents=True, exist_ok=True)
@@ -814,6 +806,32 @@ class GenerateEmbeddings(ScriptBuilder):
         ckpt_dir = Path(model_path) / "logs" / "lightning_logs" / "version_0" / "checkpoints"
         return getattr(self.args, "use_last_checkpoint", False) and self._has_native_ckpt(ckpt_dir)
 
+    def _has_region_weights(self, model_path: str) -> bool:
+        """True when the region has an epoch-N checkpoint or logs/best_model_weights.pt."""
+        return (
+            self._find_epoch_ckpt(model_path) is not None or (Path(model_path) / "logs" / _WEIGHTS_FILE_NAME).exists()
+        )
+
+    def _uses_best_weights_stand_in(self, model_path: str) -> bool:
+        """True when best_model_weights.pt stands in for the missing epoch-N checkpoint."""
+        if self._find_epoch_ckpt(model_path) is not None or self._uses_native_ckpt(model_path):
+            return False
+        return (Path(model_path) / "logs" / _WEIGHTS_FILE_NAME).exists()
+
+    def _check_region_weights(self, region_dirs: list[str], models_path: str) -> None:
+        """Raise ValueError naming every region with neither an epoch-N checkpoint nor best weights."""
+        missing = list(
+            dict.fromkeys(
+                self._resolve_region_name(d, models_path) for d in region_dirs if not self._has_region_weights(d)
+            )
+        )
+        if missing:
+            raise ValueError(
+                f"No weights for {len(missing)} region(s): {', '.join(missing)}. Each region model "
+                f"directory needs logs/best_model_weights.pt or an epoch={self.args.checkpoint_epoch}-step=*.ckpt "
+                "checkpoint under logs/lightning_logs/version_*/checkpoints/; no region was evaluated."
+            )
+
     @contextlib.contextmanager
     def _evaluation_model_dir(self, model_path: str) -> Iterator[str]:
         """Yield the directory to pass to evaluate.py as -m, in this order:
@@ -821,8 +839,9 @@ class GenerateEmbeddings(ScriptBuilder):
         1. an epoch-N checkpoint exists (any version_*): a temporary mirror holding .hydra and only
            that checkpoint, removed afterwards (whatever --use_last_checkpoint says);
         2. --use_last_checkpoint and a native ckpt in version_0: model_path itself;
-        3. no best_model_weights.pt, or no native ckpt anywhere: _ensure_ckpt in place, model_path itself;
-        4. otherwise: a temporary mirror holding .hydra and the converted best weights.
+        3. no best_model_weights.pt: model_path itself, nothing written (the stage fails fast before this);
+        4. otherwise: a temporary mirror holding .hydra and the converted best weights, which stand in
+           for the missing epoch-N checkpoint.
         """
         epoch_ckpt = self._find_epoch_ckpt(model_path)
         if epoch_ckpt is not None:
@@ -833,8 +852,7 @@ class GenerateEmbeddings(ScriptBuilder):
             yield model_path
             return
         pt_path = Path(model_path) / "logs" / _WEIGHTS_FILE_NAME
-        if not pt_path.exists() or not self._has_any_native_ckpt(model_path):
-            self._ensure_ckpt(model_path)
+        if not pt_path.exists():
             yield model_path
             return
         with self._temporary_mirror_root() as root:
@@ -959,6 +977,7 @@ class GenerateEmbeddings(ScriptBuilder):
 
         if not region_dirs:
             raise ValueError(f"No region model directories (containing logs/) found under {models_path}")
+        self._check_region_weights(region_dirs, models_path)
 
         print(f"\nGenerating embeddings for {len(region_dirs)} regions → {output_base}")
 
@@ -1003,6 +1022,12 @@ class GenerateEmbeddings(ScriptBuilder):
                 else:
                     weights = self._weights_source(model_path) or "<none found>"
                 print(f"\n[Region {region}] weights: {weights}{ignored}")
+                if self._uses_best_weights_stand_in(model_path):
+                    epoch = self.args.checkpoint_epoch
+                    print(
+                        f"[Region {region}] WARNING: no epoch={epoch} checkpoint; "
+                        f"best_model_weights.pt stands in for epoch {epoch} (interim)"
+                    )
                 if len(candidates) > 1:
                     print(
                         f"[Region {region}] WARNING: {len(candidates)} checkpoints in "
