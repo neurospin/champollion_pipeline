@@ -304,7 +304,7 @@ You can point to different model sources:
 | Local archive | `/path/to/models.tar.gz` |
 | Remote archive URL | `https://example.com/models.tar.gz` |
 
-When using Hugging Face, models are cached in `data/{dataset}/derivatives/champollion_V1/models_cache/`. Pass the cached path directly on subsequent runs to avoid network checks. Use `--no-cache` to force a full re-download.
+Downloaded and extracted models are cached in `{datasets_root}/derivatives/champollion_V1/models_cache/` by default (override with `--models-cache`). Pass the cached path directly on subsequent runs to avoid network checks. Use `--no-cache` to force a full re-download.
 
 <details>
 <summary>All options</summary>
@@ -319,6 +319,7 @@ When using Hugging Face, models are cached in `data/{dataset}/derivatives/champo
 | `--cpu` | Force CPU usage (disable CUDA) |
 | `--overwrite` | Recompute embeddings that already exist on disk |
 | `--no-cache` | Force re-extraction of the archive (ignore cache) |
+| `--models-cache` | Directory for downloaded and extracted models. Default: `{datasets_root}/derivatives/champollion_V1/models_cache/`. A relative path resolves against the current working directory. Pipeline config: `dataset.models_cache`. |
 | `--use_last_checkpoint` | Evaluate with the native Lightning checkpoint (`logs/lightning_logs/version_0/checkpoints/*.ckpt`) instead of `logs/best_model_weights.pt`. Regions without a native checkpoint still use best weights. Pipeline config: `dataset.use_last_checkpoint: true`. |
 | `--run-cka` | Run CKA coherence test after embeddings |
 | `--cortical_version` | Override the cortical tiles derivatives folder name (default: `cortical_tiles-2026`) |
