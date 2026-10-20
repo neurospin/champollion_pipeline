@@ -188,6 +188,12 @@ sub-002         0   Motion artefact
 pixi run champollion-cortical-tiles ... --sk_qc_path /path/to/qc.tsv
 ```
 
+### Skeleton seed
+
+Crop generation re-skeletonizes each subject at 2 mm, and that step is random. Its seed comes from the `skel_seed` key of `{output}/pipeline_loop_2mm.json`; the shipped template sets it to 42 and is copied to `{output}/` only when no copy exists there. Two runs with the same input and the same skeleton seed produce identical crops.
+
+Datasets whose crops were built before the `skel_seed` key existed used clock-seeded skeletons: their crops, and the embeddings computed from them, differ from those of a seeded run. Regenerate them (with `--overwrite`) before comparing them with new runs.
+
 ### Mask versions
 
 | Version | Description |
@@ -212,6 +218,7 @@ Pass `--masks canonical_25` (or another version) to override the default.
 | `--skip-distbottom` | Deprecated — distbottom is already skipped by default. Cannot be combined with `--with-distbottom`. |
 | `--masks` | Mask version tag |
 | `--regions` | Restrict to specific sulcal regions (space-separated) |
+| `--skel-seed` | Skeleton seed for the 2 mm re-skeletonization. Without the option, the `skel_seed` key of `{output}/pipeline_loop_2mm.json` sets the seed. Pipeline config: `dataset.skel_seed`; null (the default) leaves the `pipeline_loop_2mm.json` value in effect. |
 | `--labelling_session` | Morphologist labelling session whose labelled graphs locate the ventricle for whole-brain removal (e.g. `0_auto`). Default: `deepcnn_session_auto`. |
 | `--overwrite` | Regenerate crops even if crops for the requested mask version already exist; without it the run stops instead. Also removes legacy unversioned `crops/2mm/` crops when they conflict with versioned ones. |
 
