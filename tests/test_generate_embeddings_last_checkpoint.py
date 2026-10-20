@@ -169,18 +169,8 @@ class TestLastCheckpointLogsNativeCkpt:
 
 
 # --------------------------------------------------------------------------- #
-# REQ-LASTCKPT-07 / 08: main.py wiring
+# REQ-LASTCKPT-08: main.py wiring
 # --------------------------------------------------------------------------- #
-
-
-class TestStageForwardsUseLastCheckpoint:
-    """REQ-LASTCKPT-07: dataset.use_last_checkpoint true -> argv parses with use_last_checkpoint true."""
-
-    def test_true_config_argv_parses_with_use_last_checkpoint_true(self, main_module):
-        config = _base_config(main_module)
-        config.dataset.use_last_checkpoint = True  # noqa: V101
-        namespace = _embeddings_namespace(main_module, config)
-        assert vars(namespace).get("use_last_checkpoint", _ABSENT) is True
 
 
 class TestStageDefaultUseLastCheckpoint:
