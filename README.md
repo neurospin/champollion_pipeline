@@ -188,6 +188,12 @@ sub-002         0   Motion artefact
 pixi run champollion-cortical-tiles ... --sk_qc_path /path/to/qc.tsv
 ```
 
+### Skeleton seed
+
+Crop generation re-skeletonizes each subject at 2 mm, and that step is random. Its seed comes from the `skel_seed` key of `{output}/pipeline_loop_2mm.json`; the shipped template sets it to 42 and is copied to `{output}/` only when no copy exists there. Two runs with the same input and the same skeleton seed produce identical crops.
+
+Datasets whose crops were built before the `skel_seed` key existed used clock-seeded skeletons: their crops, and the embeddings computed from them, differ from those of a seeded run. Regenerate them (with `--overwrite`) before comparing them with new runs.
+
 ### Mask versions
 
 | Version | Description |
@@ -212,6 +218,7 @@ Pass `--masks canonical_25` (or another version) to override the default.
 | `--skip-distbottom` | Deprecated — distbottom is already skipped by default. Cannot be combined with `--with-distbottom`. |
 | `--masks` | Mask version tag |
 | `--regions` | Restrict to specific sulcal regions (space-separated) |
+| `--skel-seed` | Skeleton seed for the 2 mm re-skeletonization. Without the option, the `skel_seed` key of `{output}/pipeline_loop_2mm.json` sets the seed. Pipeline config: `dataset.skel_seed`; null (the default) leaves the `pipeline_loop_2mm.json` value in effect. |
 | `--labelling_session` | Morphologist labelling session whose labelled graphs locate the ventricle for whole-brain removal (e.g. `0_auto`). Default: `deepcnn_session_auto`. |
 | `--overwrite` | Regenerate crops even if crops for the requested mask version already exist; without it the run stops instead. Also removes legacy unversioned `crops/2mm/` crops when they conflict with versioned ones. |
 
@@ -304,7 +311,7 @@ You can point to different model sources:
 | Local archive | `/path/to/models.tar.gz` |
 | Remote archive URL | `https://example.com/models.tar.gz` |
 
-When using Hugging Face, models are cached in `data/{dataset}/derivatives/champollion_V1/models_cache/`. Pass the cached path directly on subsequent runs to avoid network checks. Use `--no-cache` to force a full re-download.
+Downloaded and extracted models are cached in `{datasets_root}/derivatives/champollion_V1/models_cache/` by default (override with `--models-cache`). Pass the cached path directly on subsequent runs to avoid network checks. Use `--no-cache` to force a full re-download.
 
 <details>
 <summary>All options</summary>
@@ -319,6 +326,7 @@ When using Hugging Face, models are cached in `data/{dataset}/derivatives/champo
 | `--cpu` | Force CPU usage (disable CUDA) |
 | `--overwrite` | Recompute embeddings that already exist on disk |
 | `--no-cache` | Force re-extraction of the archive (ignore cache) |
+| `--models-cache` | Directory for downloaded and extracted models. Default: `{datasets_root}/derivatives/champollion_V1/models_cache/`. A relative path resolves against the current working directory. Pipeline config: `dataset.models_cache`. |
 | `--use_last_checkpoint` | Evaluate with the native Lightning checkpoint (`logs/lightning_logs/version_0/checkpoints/*.ckpt`) instead of `logs/best_model_weights.pt`. Regions without a native checkpoint still use best weights. Pipeline config: `dataset.use_last_checkpoint: true`. |
 | `--run-cka` | Run CKA coherence test after embeddings |
 | `--cortical_version` | Override the cortical tiles derivatives folder name (default: `cortical_tiles-2026`) |
