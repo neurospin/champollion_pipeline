@@ -450,8 +450,9 @@ class GenerateEmbeddings(ScriptBuilder):
             )
             .add_optional_argument(
                 "--masks",
-                "Cortical tiles mask version used as crops subdirectory (e.g. 'canonical_25').",
-                default=DEFAULT_MASKS_VERSION,
+                "Cortical tiles mask version used as crops subdirectory (e.g. 'canonical_25'). "
+                "Defaults to the --model-version value when given, else canonical_25.",
+                default=None,
             )
             .add_argument(
                 "--regions",
@@ -533,6 +534,7 @@ class GenerateEmbeddings(ScriptBuilder):
         """Parse args, then resolve the deprecated --masks-version alias into model_version."""
         parsed = super().parse_args(args)
         self._resolve_model_version_alias()
+        self._resolve_masks_default()
         return parsed
 
     def _resolve_model_version_alias(self) -> None:
@@ -553,6 +555,12 @@ class GenerateEmbeddings(ScriptBuilder):
             stacklevel=2,
         )
         self.args.model_version = alias
+
+    def _resolve_masks_default(self) -> None:
+        """Fill --masks when it was not given: the model version if set, else DEFAULT_MASKS_VERSION."""
+        if self.args.masks is None:
+            model_version = self.args.model_version
+            self.args.masks = model_version if model_version is not None else DEFAULT_MASKS_VERSION
 
     def fetch_models(self, models_path):
         """
