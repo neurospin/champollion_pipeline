@@ -52,4 +52,8 @@ markers = [
     "unit: fast unit tests",
     "integration: slower integration tests",
     "smoke: minimal smoke tests",
+    "serial: must not run concurrently with other tests (excluded from xdist; run by test-parallel's second pass)",
 ]
+
+[tool.vulture]
+paths = ["src", "tests"]
