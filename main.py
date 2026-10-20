@@ -23,6 +23,7 @@ Usage:
 import argparse
 import logging
 import os
+import re
 import sys
 from abc import ABC, abstractmethod
 from contextlib import contextmanager
@@ -50,7 +51,7 @@ from champollion_pipeline.put_together_embeddings import PutTogetherEmbeddings
 from champollion_pipeline.run_cortical_tiles import RunCorticalTiles
 
 # Add src to path for imports – still needed for the optional file_indexer.pipeline_checks
-# import below and the lazy parallel_runner import in streaming mode.
+# and parallel_runner imports below.
 pipeline_src = Path(__file__).parent / "src"
 sys.path.insert(0, str(pipeline_src))
 
@@ -59,6 +60,13 @@ try:
 except ImportError:
     SubjectEligibilityChecker = None
     build_output_report = None
+
+_PARALLEL_RUNNER_IMPORT_ERROR: Optional[str] = None
+try:
+    from parallel_runner import run_parallel_pipeline
+except ImportError as e:
+    run_parallel_pipeline = None
+    _PARALLEL_RUNNER_IMPORT_ERROR = str(e)
 
 
 # ====================== Configuration Management ======================
@@ -452,16 +460,14 @@ class RunCorticalTilesStage(PipelineStage):
         return d if d and os.path.exists(d) else None
 
     def required_file_patterns(self) -> List[str]:
-        import re as _re
-
         side = "R"
         g = self.config.dataset.path_to_graph
         s = self.config.dataset.path_sk_with_hull
         if self.config.dataset.bids:
             # scan_id.path_prefix already includes the session directory;
             # strip the leading ses-XXX/ segment so patterns are session-relative.
-            g = _re.sub(r"^ses-[^/]*/+", "", g)
-            s = _re.sub(r"^ses-[^/]*/+", "", s)
+            g = re.sub(r"^ses-[^/]*/+", "", g)
+            s = re.sub(r"^ses-[^/]*/+", "", s)
         return [
             f"{g}/{side}*.arg",
             f"{s}/{side}*.nii.gz",
@@ -1106,10 +1112,8 @@ def main() -> int:
                 file=sys.stderr,
             )
             return 1
-        try:
-            from parallel_runner import run_parallel_pipeline
-        except ImportError as e:
-            print(f"Error: could not import parallel_runner: {e}", file=sys.stderr)
+        if run_parallel_pipeline is None:
+            print(f"Error: could not import parallel_runner: {_PARALLEL_RUNNER_IMPORT_ERROR}", file=sys.stderr)
             return 1
         subjects_dir = config.dataset.input_path or config.dataset.morphologist_graphs
         output_dir = config.outputs_path

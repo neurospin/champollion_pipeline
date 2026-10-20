@@ -22,12 +22,16 @@ Usage
 """
 
 import csv
+import glob
 import os
 import sys
 from os.path import abspath, dirname, join
 
 import numpy as np
 from champollion_utils.script_builder import ScriptBuilder
+from cortical_tiles.brainvisa.utils.subjects import get_all_subjects_as_dictionary
+from joblib import Parallel, cpu_count, delayed
+from soma import aims
 
 # --------------------------------------------------------------------------- #
 # Parallel workers (must be module-level for joblib pickling)
@@ -40,14 +44,10 @@ def _get_subject_voxel_counts(sub, brainvisa_dir):
     Counts voxels across aims_ss, aims_bottom, aims_other buckets (native space).
     Returns (sub_name, None) if no graph file found.
     """
-    import glob as _glob
-    import sys as _sys
+    if brainvisa_dir not in sys.path:
+        sys.path.insert(0, brainvisa_dir)
 
-    if brainvisa_dir not in _sys.path:
-        _sys.path.insert(0, brainvisa_dir)
-    from soma import aims  # noqa: PLC0415
-
-    matches = _glob.glob(_join(sub["dir"], sub["graph_file"]))
+    matches = glob.glob(_join(sub["dir"], sub["graph_file"]))
     if not matches:
         return sub["subject"], None
 
@@ -67,9 +67,7 @@ def _get_subject_voxel_counts(sub, brainvisa_dir):
 
 
 def _join(*args):
-    from os.path import join as _j
-
-    return _j(*args)
+    return join(*args)
 
 
 # --------------------------------------------------------------------------- #
@@ -79,15 +77,11 @@ def _join(*args):
 
 def _mask_stats(mask_dir: str, brainvisa_dir: str) -> dict:
     """Return {relative_path: (max, sum, nonzero)} for all masks in mask_dir."""
-    import glob as _g
-    import sys as _s
-
-    if brainvisa_dir not in _s.path:
-        _s.path.insert(0, brainvisa_dir)
-    from soma import aims  # noqa: PLC0415
+    if brainvisa_dir not in sys.path:
+        sys.path.insert(0, brainvisa_dir)
 
     stats = {}
-    for path in sorted(_g.glob(join(mask_dir, "*/*.nii.gz"))):
+    for path in sorted(glob.glob(join(mask_dir, "*/*.nii.gz"))):
         rel = os.path.relpath(path, mask_dir)
         arr = np.asarray(aims.read(path))
         nz = int(np.count_nonzero(arr))
@@ -140,9 +134,6 @@ class CompareDatabases(ScriptBuilder):
 
     def _load_database(self, path_to_graph, sides, subjects_dir, njobs, brainvisa_dir) -> dict:
         """Return {subject: {sulcus: voxel_count}} for all subjects found."""
-        from cortical_tiles.brainvisa.utils.subjects import get_all_subjects_as_dictionary
-        from joblib import Parallel, delayed
-
         all_data: dict = {}
         for side in sides:
             pattern = "%(subject)s/" + path_to_graph + "/%(side)s%(subject)s*.arg"
@@ -165,8 +156,6 @@ class CompareDatabases(ScriptBuilder):
     # ---------------------------------------------------------------------- #
 
     def run(self):
-        from joblib import cpu_count
-
         brainvisa_dir = abspath(
             join(dirname(__file__), "..", "external", "cortical_tiles", "cortical_tiles", "brainvisa")
         )

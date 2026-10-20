@@ -9,7 +9,6 @@ Unit tests for generate_masks.py:
 """
 
 import json
-import sys
 from unittest.mock import MagicMock, patch
 
 import numpy as np
@@ -46,9 +45,9 @@ class _FakeMask:
 def _mock_aims_env(fake_mask=None):
     """Return (modules_dict, mock_aims, mock_compute_mask, fake_mask).
 
-    Injects fake soma.aims and compute_mask into sys.modules so that the
-    lazy imports inside _compute_one_sulcus / _load_and_extract_subject
-    find mocks instead of the real PyAIMS library.
+    The mocks replace the names generate_masks binds at import time
+    (aims, initialize_mask, write_mask) through _patched_masks_module(modules),
+    so the workers never touch the real PyAIMS library.
     """
     if fake_mask is None:
         fake_mask = _FakeMask()
@@ -61,6 +60,17 @@ def _mock_aims_env(fake_mask=None):
         "compute_mask": mock_compute_mask,
     }
     return modules, mock_aims, mock_compute_mask, fake_mask
+
+
+def _patched_masks_module(modules):
+    """Patch the PyAIMS and compute_mask names bound in generate_masks with the mocks of _mock_aims_env."""
+    compute_mask_mod = modules["compute_mask"]
+    return patch.multiple(
+        "champollion_pipeline.generate_masks",
+        aims=modules["soma.aims"],
+        initialize_mask=compute_mask_mod.initialize_mask,
+        write_mask=compute_mask_mod.write_mask,
+    )
 
 
 def _two_subject_voxels(sulcus="S.C._left"):
@@ -163,7 +173,7 @@ class TestComputeOneSulcus:
     def test_public_use_false_creates_sample_dir(self, tmp_path):
         """public_use=False: per-subject subdirectory is created."""
         modules, mock_aims, _, _ = _mock_aims_env()
-        with patch.dict(sys.modules, modules):
+        with _patched_masks_module(modules):
             _compute_one_sulcus(
                 self.SULCUS,
                 _two_subject_voxels(),
@@ -178,7 +188,7 @@ class TestComputeOneSulcus:
     def test_public_use_true_skips_sample_dir(self, tmp_path):
         """public_use=True: per-subject subdirectory is NOT created."""
         modules, mock_aims, _, _ = _mock_aims_env()
-        with patch.dict(sys.modules, modules):
+        with _patched_masks_module(modules):
             _compute_one_sulcus(
                 self.SULCUS,
                 _two_subject_voxels(),
@@ -193,7 +203,7 @@ class TestComputeOneSulcus:
     def test_public_use_false_calls_aims_write_per_subject(self, tmp_path):
         """public_use=False: aims.write called once per subject."""
         modules, mock_aims, _, _ = _mock_aims_env()
-        with patch.dict(sys.modules, modules):
+        with _patched_masks_module(modules):
             _compute_one_sulcus(
                 self.SULCUS,
                 _two_subject_voxels(),
@@ -208,7 +218,7 @@ class TestComputeOneSulcus:
     def test_public_use_true_never_calls_aims_write(self, tmp_path):
         """public_use=True: aims.write is never called."""
         modules, mock_aims, _, _ = _mock_aims_env()
-        with patch.dict(sys.modules, modules):
+        with _patched_masks_module(modules):
             _compute_one_sulcus(
                 self.SULCUS,
                 _two_subject_voxels(),
@@ -224,7 +234,7 @@ class TestComputeOneSulcus:
         """write_mask is called for both public_use=True and False."""
         for flag in (False, True):
             modules, _, mock_cm, _ = _mock_aims_env()
-            with patch.dict(sys.modules, modules):
+            with _patched_masks_module(modules):
                 _compute_one_sulcus(
                     self.SULCUS,
                     _two_subject_voxels(),
@@ -240,7 +250,7 @@ class TestComputeOneSulcus:
         """Pre-existing side directory (EEXIST race) does not cause failure."""
         (tmp_path / "L").mkdir()  # simulate another thread already created it
         modules, _, _, _ = _mock_aims_env()
-        with patch.dict(sys.modules, modules):
+        with _patched_masks_module(modules):
             result = _compute_one_sulcus(
                 self.SULCUS,
                 {},
@@ -255,7 +265,7 @@ class TestComputeOneSulcus:
     def test_returns_ok_on_success(self, tmp_path):
         """Worker returns the string 'ok' on success."""
         modules, _, _, _ = _mock_aims_env()
-        with patch.dict(sys.modules, modules):
+        with _patched_masks_module(modules):
             result = _compute_one_sulcus(
                 self.SULCUS,
                 {},
@@ -270,7 +280,7 @@ class TestComputeOneSulcus:
         """Exception inside worker is caught and returned as 'failed: …'."""
         modules, _, mock_cm, _ = _mock_aims_env()
         mock_cm.initialize_mask.side_effect = RuntimeError("boom")  # noqa: V101
-        with patch.dict(sys.modules, modules):
+        with _patched_masks_module(modules):
             result = _compute_one_sulcus(
                 self.SULCUS,
                 {},
@@ -286,7 +296,7 @@ class TestComputeOneSulcus:
         """Both subjects' voxel positions appear in the aggregate array."""
         fake_mask = _FakeMask()
         modules, _, _, _ = _mock_aims_env(fake_mask)
-        with patch.dict(sys.modules, modules):
+        with _patched_masks_module(modules):
             _compute_one_sulcus(
                 self.SULCUS,
                 _two_subject_voxels(),
@@ -328,7 +338,7 @@ class TestLoadAndExtractSubject:
     def test_missing_graph_file_returns_none(self, tmp_path):
         """No matching .arg file → returns (sub_name, None)."""
         modules, _, _, _ = _mock_aims_env()
-        with patch.dict(sys.modules, modules):
+        with _patched_masks_module(modules):
             with patch("glob.glob", return_value=[]):
                 name, data = _load_and_extract_subject(
                     self._sub(tmp_path),
@@ -344,7 +354,7 @@ class TestLoadAndExtractSubject:
         modules, mock_aims, _, _ = _mock_aims_env()
         self._mock_graph(mock_aims)
         graph_path = [str(tmp_path / "sub01.arg")]
-        with patch.dict(sys.modules, modules):
+        with _patched_masks_module(modules):
             with patch("glob.glob", return_value=graph_path):
                 name, data = _load_and_extract_subject(
                     self._sub(tmp_path),
@@ -379,7 +389,7 @@ class TestLoadAndExtractSubject:
             vertices=[make_vertex("S.C._left"), make_vertex("OTHER._left")],
         )
         graph_path = [str(tmp_path / "sub01.arg")]
-        with patch.dict(sys.modules, modules):
+        with _patched_masks_module(modules):
             with patch("glob.glob", return_value=graph_path):
                 _, data = _load_and_extract_subject(
                     self._sub(tmp_path),
@@ -395,7 +405,7 @@ class TestLoadAndExtractSubject:
         modules, mock_aims, _, _ = _mock_aims_env()
         self._mock_graph(mock_aims)
         graph_path = [str(tmp_path / "sub01.arg")]
-        with patch.dict(sys.modules, modules):
+        with _patched_masks_module(modules):
             with patch("glob.glob", return_value=graph_path):
                 _, data = _load_and_extract_subject(
                     self._sub(tmp_path),
@@ -444,18 +454,6 @@ class TestPublicUseFlag:
 
 
 class TestNjobsAutoBuffered:
-    def _bv_modules(self, njobs=4):
-        """sys.modules patch dict covering the cortical_tiles parallel util."""
-        mock_parallel = MagicMock()
-        mock_parallel.define_njobs.return_value = njobs
-        return {
-            "compute_mask": MagicMock(),
-            "cortical_tiles": MagicMock(),
-            "cortical_tiles.brainvisa": MagicMock(),
-            "cortical_tiles.brainvisa.utils": MagicMock(),
-            "cortical_tiles.brainvisa.utils.parallel": mock_parallel,
-        }
-
     def test_njobs_prints_auto_buffered_message(self, tmp_path, capsys):
         """--njobs without --buffered prints the auto-enable notice."""
         gm = GenerateMasks()
@@ -478,7 +476,7 @@ class TestNjobsAutoBuffered:
         mock_runner = MagicMock()
         mock_runner.return_value = iter([])
         with (
-            patch.dict(sys.modules, self._bv_modules(4)),
+            patch("champollion_pipeline.generate_masks.define_njobs", return_value=4),
             patch("champollion_pipeline.generate_masks.get_sulci_for_regions", return_value=set()),
             patch("champollion_pipeline.generate_masks.MaskRunner.create", return_value=mock_runner),
         ):
@@ -512,7 +510,7 @@ class TestNjobsAutoBuffered:
         mock_runner.side_effect = lambda config: runner_called.append(True) or iter([])  # noqa: V101
 
         with (
-            patch.dict(sys.modules, self._bv_modules(2)),
+            patch("champollion_pipeline.generate_masks.define_njobs", return_value=2),
             patch("champollion_pipeline.generate_masks.get_sulci_for_regions", return_value=set()),
             patch("champollion_pipeline.generate_masks.MaskRunner.create", return_value=mock_runner),
         ):
@@ -527,17 +525,6 @@ class TestNjobsAutoBuffered:
 
 
 class TestVoxStrOutputPath:
-    def _bv_modules(self, njobs=1):
-        mock_parallel = MagicMock()
-        mock_parallel.define_njobs.return_value = njobs
-        return {
-            "compute_mask": MagicMock(),
-            "cortical_tiles": MagicMock(),
-            "cortical_tiles.brainvisa": MagicMock(),
-            "cortical_tiles.brainvisa.utils": MagicMock(),
-            "cortical_tiles.brainvisa.utils.parallel": mock_parallel,
-        }
-
     def test_vox_str_uses_mm_suffix(self, tmp_path):
         """mask_dir in RunConfig contains '2mm', not '2.0'."""
         gm = GenerateMasks()
@@ -567,7 +554,7 @@ class TestVoxStrOutputPath:
         mock_runner.side_effect = fake_runner_call  # noqa: V101
 
         with (
-            patch.dict(sys.modules, self._bv_modules()),
+            patch("champollion_pipeline.generate_masks.define_njobs", return_value=1),
             patch("champollion_pipeline.generate_masks.get_sulci_for_regions", return_value=set()),
             patch("champollion_pipeline.generate_masks.MaskRunner.create", return_value=mock_runner),
         ):
@@ -608,7 +595,7 @@ class TestVoxStrOutputPath:
         mock_runner.side_effect = fake_runner_call  # noqa: V101
 
         with (
-            patch.dict(sys.modules, self._bv_modules()),
+            patch("champollion_pipeline.generate_masks.define_njobs", return_value=1),
             patch("champollion_pipeline.generate_masks.get_sulci_for_regions", return_value=set()),
             patch("champollion_pipeline.generate_masks.MaskRunner.create", return_value=mock_runner),
         ):

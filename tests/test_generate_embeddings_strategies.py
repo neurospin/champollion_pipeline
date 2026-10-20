@@ -228,7 +228,7 @@ class TestHuggingFaceStrategy:
         assert os.environ["SSL_CERT_FILE"] == "/my/bundle.pem"
 
     def test_missing_huggingface_hub_raises_import_error(self, tmp_path):
-        with patch.dict(sys.modules, {"huggingface_hub": None}):
+        with patch.object(ge, "huggingface_hub", None):
             with pytest.raises(ImportError, match="huggingface_hub is required"):
                 HuggingFaceStrategy().fetch("neurospin/X", str(tmp_path))
 

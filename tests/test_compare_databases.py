@@ -59,6 +59,8 @@ def fake_aims(monkeypatch):
     def _install(objects):
         fake = _FakeAims(objects)
         monkeypatch.setattr(sys.modules["soma"], "aims", fake)
+        # compare_databases binds aims at import time: patch its module-level name too
+        monkeypatch.setattr(compare_databases, "aims", fake)
         return fake
 
     return _install
@@ -78,6 +80,10 @@ def stub_deep_folding(monkeypatch):
             ("cortical_tiles.brainvisa.utils.subjects", subjects_mod),
         ]:
             monkeypatch.setitem(sys.modules, name, mod)
+        # compare_databases binds the helper at import time: patch its module-level name too
+        monkeypatch.setattr(
+            compare_databases, "get_all_subjects_as_dictionary", subjects_mod.get_all_subjects_as_dictionary
+        )
         return subjects_mod
 
     return _install
