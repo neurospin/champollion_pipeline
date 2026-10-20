@@ -184,7 +184,7 @@ Two loss functions are supported (configured via `mode`):
 
 ### Inference (`generate_embeddings.py` / `src/generate_embeddings.py`)
 
-1. Loads the trained model from `best_model.pt` (or a HuggingFace repo / local archive).
+1. Loads each region's trained model from the Lightning checkpoint `epoch=N-step=*.ckpt` (N = `--checkpoint-epoch`, default 80, 0-based) under `logs/lightning_logs/version_*/checkpoints/`, from a HuggingFace repo, local directory or archive; as an interim stand-in, `logs/best_model_weights.pt` is used for a region lacking that checkpoint, with a WARNING.
 2. Instantiates `DataModule_Evaluation` — same `.npy` loading, no augmentation, full dataset.
 3. Runs a forward pass through the **backbone only** (projection head is discarded).
 4. Saves one `full_embeddings.csv` per region/hemisphere:

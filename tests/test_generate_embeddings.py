@@ -14,6 +14,13 @@ from champollion_pipeline.generate_embeddings import GenerateEmbeddings, Hugging
 from champollion_pipeline.utils.lib import CORTICAL_TILES_VERSION
 
 
+def make_region_logs(model_dir) -> None:
+    """Create model_dir/logs/ holding an epoch=80 checkpoint, so the region has weights to evaluate."""
+    ckpt_dir = model_dir / "logs" / "lightning_logs" / "version_0" / "checkpoints"
+    ckpt_dir.mkdir(parents=True)
+    (ckpt_dir / "epoch=80-step=1.ckpt").write_text("placeholder")
+
+
 class TestGenerateEmbeddingsInit:
     """Test initialization."""
 
@@ -72,8 +79,8 @@ class TestPerRegionInvocation:
         """_run_per_region calls execute_command once per region directory."""
         models_dir = tmp_path / "models"
         models_dir.mkdir()
-        (models_dir / "SC-sylv_left" / "logs").mkdir(parents=True)
-        (models_dir / "SC-sylv_right" / "logs").mkdir(parents=True)
+        make_region_logs(models_dir / "SC-sylv_left")
+        make_region_logs(models_dir / "SC-sylv_right")
 
         script = GenerateEmbeddings()
         script.args = script.parse_args([str(models_dir), str(tmp_path)])
@@ -97,7 +104,7 @@ class TestPerRegionInvocation:
         """_run_per_region skips a region when output CSV already exists."""
         models_dir = tmp_path / "models"
         models_dir.mkdir()
-        (models_dir / "SC-sylv_left" / "logs").mkdir(parents=True)
+        make_region_logs(models_dir / "SC-sylv_left")
         out = tmp_path / "out" / "SC-sylv_left"
         out.mkdir(parents=True)
         (out / "full_embeddings.csv").write_text("existing")
@@ -119,7 +126,7 @@ class TestPerRegionInvocation:
         """_run_per_region runs even when output exists if --overwrite is set."""
         models_dir = tmp_path / "models"
         models_dir.mkdir()
-        (models_dir / "SC-sylv_left" / "logs").mkdir(parents=True)
+        make_region_logs(models_dir / "SC-sylv_left")
         out = tmp_path / "out" / "SC-sylv_left"
         out.mkdir(parents=True)
         (out / "full_embeddings.csv").write_text("existing")
@@ -151,14 +158,14 @@ class TestModelDiscovery:
     @staticmethod
     def _make_model(path):
         """Create a directory shaped like a real Champollion model fold."""
-        (path / "logs").mkdir(parents=True)
+        make_region_logs(path)
         (path / ".hydra").mkdir(parents=True)
         (path / ".hydra" / "config.yaml").write_text("model: {}\n")
         return path
 
     @staticmethod
     def _collect_model_args(script, tmp_path):
-        """Run _run_per_region with execute_command stubbed; return the `-m` values."""
+        """Run _run_per_region with execute_command stubbed; return the `-m` names (mirrors named after region dirs)."""
         executed = []
 
         def fake_execute(cmd, **kwargs):
@@ -172,7 +179,7 @@ class TestModelDiscovery:
                 output_base=str(tmp_path / "out"),
             )
 
-        return {os.path.realpath(cmd[cmd.index("-m") + 1]) for cmd in executed}
+        return {os.path.basename(cmd[cmd.index("-m") + 1]) for cmd in executed}
 
     def test_discovery_descends_into_mask_version_parent_directory(self, tmp_path):
         """Nested per-region model folds under a mask-version parent are each run."""
@@ -186,7 +193,7 @@ class TestModelDiscovery:
 
         model_args = self._collect_model_args(script, tmp_path)
 
-        assert model_args == {os.path.realpath(str(left)), os.path.realpath(str(right))}
+        assert model_args == {left.name, right.name}
 
     def test_discovery_ignores_directory_without_logs_marker(self, tmp_path):
         """A stray `.cache/` leftover carries no `logs/`, so it is not a region."""
@@ -199,7 +206,7 @@ class TestModelDiscovery:
 
         model_args = self._collect_model_args(script, tmp_path)
 
-        assert model_args == {os.path.realpath(str(real))}
+        assert model_args == {real.name}
 
     @pytest.mark.unit
     def test_discovery_skips_dot_directory_subtree(self, tmp_path):
@@ -237,8 +244,8 @@ class TestRegionNameResolution:
     the checkpoint), so `_run_per_region` must not take that directory's own
     basename as the region name.
 
-    Fixtures create `logs/` only (no `best_model_weights.pt`) so `_ensure_ckpt`
-    stays a no-op and never tries to `torch.load` a placeholder file.
+    Fixtures create `logs/` holding only an epoch=80 checkpoint, which `-m` mirrors
+    without loading it.
     """
 
     CROP_DIR = "S.T.s.br."
@@ -269,7 +276,7 @@ class TestRegionNameResolution:
         models_dir = tmp_path / "models_cache" / "Champollion_V1"
         region_dir = models_dir / self.REGION
         model_dir = region_dir / self.FOLD if nested else region_dir
-        (model_dir / "logs").mkdir(parents=True)
+        make_region_logs(model_dir)
         crops = tmp_path / "crops"
         (crops / self.CROP_DIR / "mask").mkdir(parents=True)
         out = tmp_path / "out"
@@ -303,12 +310,12 @@ class TestRegionNameResolution:
         assert cmd[cmd.index("-s") + 1] == os.path.join(str(out), self.REGION, "full_embeddings.csv")
 
     def test_nested_hf_layout_model_path_is_fold_directory(self, tmp_path):
-        """Nested fold-hash layout: `-m` still points at the fold dir holding `logs/`."""
+        """Nested fold-hash layout: `-m` is named after the fold dir holding `logs/`."""
         script, crops, out = self._setup(tmp_path, nested=True)
 
         cmd = self._run(script, crops, out)
 
-        assert cmd[cmd.index("-m") + 1].endswith(os.path.join(self.REGION, self.FOLD))
+        assert os.path.basename(cmd[cmd.index("-m") + 1]) == self.FOLD
 
     def test_flat_layout_paths_unchanged(self, tmp_path):
         """Regression guard: flat `<Region>_<side>/logs/` layout resolves the same paths."""
@@ -783,81 +790,6 @@ class TestPixiTaskPaths:
 
 
 @pytest.mark.unit
-class TestEnsureCkptShape:
-    """REQ-CKPTSHAPE-01 — `_ensure_ckpt` must not double-wrap an already-wrapped `.pt`.
-
-    Real `logs/best_model_weights.pt` files ship as Lightning-style
-    `{"state_dict": {...<backbones.0.encoder.*> weights...}}` dicts. Wrapping one
-    again yields `{"state_dict": {"state_dict": {...}}}`, so
-    `external/champollion_V1/champollion/evaluate.py`'s prefix filter over
-    `checkpoint["state_dict"]` sees only the literal key `"state_dict"` and
-    `model.load_state_dict({})` raises `RuntimeError: Missing key(s)`.
-    """
-
-    ENCODER_KEYS = (
-        "backbones.0.encoder.layer1.0.weight",
-        "backbones.0.encoder.layer1.0.bias",
-    )
-
-    @staticmethod
-    def _make_model_dir(tmp_path, payload):
-        """Write `logs/best_model_weights.pt` holding `payload`; return the model dir."""
-        import torch
-
-        model_dir = tmp_path / "canonical_corrected_26_1" / "SsP-SPaint_left"
-        (model_dir / "logs").mkdir(parents=True)
-        torch.save(payload, str(model_dir / "logs" / "best_model_weights.pt"))
-        return model_dir
-
-    @staticmethod
-    def _load_converted_ckpt(model_dir):
-        """Load the `.ckpt` `_ensure_ckpt` was expected to produce."""
-        import torch
-
-        ckpt_path = model_dir / "logs" / "lightning_logs" / "version_0" / "checkpoints" / "best_model.ckpt"
-        assert ckpt_path.exists(), f"_ensure_ckpt produced no checkpoint at {ckpt_path}"
-        return torch.load(str(ckpt_path), map_location="cpu", weights_only=False)
-
-    def _weights(self):
-        import torch
-
-        return {key: torch.zeros(2) for key in self.ENCODER_KEYS}
-
-    def test_already_wrapped_pt_is_not_wrapped_again(self, tmp_path):
-        """A `{"state_dict": ...}`-shaped `.pt` converts to a ckpt with no nested wrap."""
-        model_dir = self._make_model_dir(tmp_path, {"state_dict": self._weights()})
-
-        script = GenerateEmbeddings()
-        script._ensure_ckpt(str(model_dir))
-
-        ckpt = self._load_converted_ckpt(model_dir)
-        assert "state_dict" not in ckpt["state_dict"], (
-            "ckpt['state_dict'] is itself wrapped in another 'state_dict' key; "
-            "evaluate.py's prefix filter will match nothing"
-        )
-
-    def test_already_wrapped_pt_keeps_encoder_keys_at_top_level(self, tmp_path):
-        """The converted ckpt exposes the real `backbones.0.encoder.*` keys directly."""
-        model_dir = self._make_model_dir(tmp_path, {"state_dict": self._weights()})
-
-        script = GenerateEmbeddings()
-        script._ensure_ckpt(str(model_dir))
-
-        ckpt = self._load_converted_ckpt(model_dir)
-        assert set(ckpt["state_dict"]) == set(self.ENCODER_KEYS)
-
-    def test_bare_state_dict_pt_is_still_wrapped_once(self, tmp_path):
-        """A `.pt` holding bare weights (no `state_dict` key) is still wrapped exactly once."""
-        model_dir = self._make_model_dir(tmp_path, self._weights())
-
-        script = GenerateEmbeddings()
-        script._ensure_ckpt(str(model_dir))
-
-        ckpt = self._load_converted_ckpt(model_dir)
-        assert set(ckpt["state_dict"]) == set(self.ENCODER_KEYS)
-
-
-@pytest.mark.unit
 class TestPerRegionSubjectsFile:
     """REQ-EMBEDLABEL-01 — each region's `-i` is that region's own crop subjects CSV.
 
@@ -884,7 +816,7 @@ class TestPerRegionSubjectsFile:
 
         models_dir = tmp_path / "models"
         for name in self.MODEL_NAMES:
-            (models_dir / name / "logs").mkdir(parents=True)
+            make_region_logs(models_dir / name)
 
         script = GenerateEmbeddings()
         script.parse_args([str(models_dir), str(datasets_root), "--output", str(tmp_path / "out")])

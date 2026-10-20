@@ -42,7 +42,7 @@ from champollion_pipeline.derivatives_layout import (
     compute_snapshots_dir,
 )
 from champollion_pipeline.generate_champollion_config import GenerateChampollionConfig
-from champollion_pipeline.generate_embeddings import GenerateEmbeddings
+from champollion_pipeline.generate_embeddings import DEFAULT_CHECKPOINT_EPOCH, GenerateEmbeddings
 from champollion_pipeline.generate_morphologist_graphs import GenerateMorphologistGraphs
 from champollion_pipeline.generate_snapshots import GenerateSnapshots
 from champollion_pipeline.process_setup import init_pipeline_process
@@ -66,8 +66,10 @@ except ImportError:
 
 # Dataset config keys that no longer exist; old YAML files still carrying them load with a warning.
 _REMOVED_DATASET_KEYS = {
-    "use_best_model": "it had no effect; best_model_weights.pt is now used by default, "
-    "set dataset.use_last_checkpoint: true to use the native Lightning checkpoint instead",
+    "use_best_model": "it had no effect; set dataset.checkpoint_epoch to choose the training epoch whose "
+    "checkpoint is evaluated",
+    "use_last_checkpoint": "replaced by dataset.checkpoint_epoch (training epoch N, 0-based, of the Lightning "
+    "checkpoint epoch=N-step=*.ckpt to evaluate; default 80)",
 }
 
 
@@ -97,12 +99,14 @@ class DatasetConfig:
     path_sk_with_hull: str = "t1mri/default_acquisition/default_analysis/segmentation/mesh"
     sk_qc_path: str = ""
     masks_version: str = DEFAULT_MASKS_VERSION
+    skel_seed: Optional[int] = None  # None: the skel_seed in <derivatives>/pipeline_loop_2mm.json
 
     # Embeddings parameters
     classifier_name: str = "svm"
     overwrite: bool = False
     embeddings_only: bool = False
-    use_last_checkpoint: bool = False
+    checkpoint_epoch: int = DEFAULT_CHECKPOINT_EPOCH
+    models_cache: Optional[str] = None  # None: <datasets_root>/derivatives/champollion_V1/models_cache
     subsets: List[str] = field(default_factory=lambda: ["full"])
     epochs: List[Optional[int]] = field(default_factory=lambda: [None])
     split: str = "random"
@@ -249,11 +253,13 @@ class ConfigLoader:
                 "path_sk_with_hull": config.dataset.path_sk_with_hull,
                 "sk_qc_path": config.dataset.sk_qc_path,
                 "masks_version": config.dataset.masks_version,
+                "skel_seed": config.dataset.skel_seed,
                 "regions": config.dataset.regions,
                 "classifier_name": config.dataset.classifier_name,
                 "overwrite": config.dataset.overwrite,
                 "embeddings_only": config.dataset.embeddings_only,
-                "use_last_checkpoint": config.dataset.use_last_checkpoint,
+                "checkpoint_epoch": config.dataset.checkpoint_epoch,
+                "models_cache": config.dataset.models_cache,
                 "subsets": config.dataset.subsets,
                 "epochs": config.dataset.epochs,
                 "split": config.dataset.split,
@@ -410,6 +416,9 @@ class RunCorticalTilesStage(PipelineStage):
                 f"--njobs={self.config.dataset.njobs}",
                 f"--masks={self.config.dataset.masks_version}",
             ]
+
+            if self.config.dataset.skel_seed is not None:
+                args.append(f"--skel-seed={self.config.dataset.skel_seed}")
 
             if self.config.dataset.sk_qc_path:
                 args.append(f"--sk_qc_path={self.config.dataset.sk_qc_path}")
@@ -569,8 +578,9 @@ class GenerateEmbeddingsStage(PipelineStage):
                 args.append("--overwrite")
             if dataset.cpu:
                 args.append("--cpu")
-            if dataset.use_last_checkpoint:
-                args.append("--use_last_checkpoint")
+            args.append(f"--checkpoint-epoch={dataset.checkpoint_epoch}")
+            if dataset.models_cache is not None:
+                args.append(f"--models-cache={dataset.models_cache}")
             if dataset.regions:
                 args.extend(["--regions", *_compute_embeddings_region_names(dataset.regions)])
 

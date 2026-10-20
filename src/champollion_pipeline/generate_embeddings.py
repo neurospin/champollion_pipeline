@@ -5,12 +5,14 @@ Wrapper script to generate sulcal embeddings per region.
 Calls champollion/evaluate.py for each region in models_path.
 """
 
+import argparse
 import contextlib
 import cProfile
 import glob
 import gzip
 import os
 import pstats
+import re
 import shutil
 import sys
 import tarfile
@@ -38,11 +40,26 @@ from champollion_pipeline.utils.lib import CORTICAL_TILES_VERSION
 _SCRIPT_DIR = dirname(abspath(__file__))
 _CONVERTED_CKPT_NAME = "best_model.ckpt"
 _WEIGHTS_FILE_NAME = "best_model_weights.pt"
+DEFAULT_CHECKPOINT_EPOCH = 80
+_EPOCH_CKPT_PATTERN = r"epoch={epoch}-step=(?P<step>\d+)\.ckpt"
+_VERSION_DIR_PATTERN = re.compile(r"version_(?P<index>\d+)")
+_MIRROR_PREFIX = "champollion_eval_"
 _CHAMPOLLION_DIR = abspath(join(_SCRIPT_DIR, "..", "..", "external", "champollion_V1"))
 if _CHAMPOLLION_DIR not in sys.path:
     sys.path.insert(0, _CHAMPOLLION_DIR)
 
 from champollion.metrics.cka_coherence import test_models_coherence_from_directory  # noqa: E402
+
+
+def _parse_non_negative_int(value: str) -> int:
+    """argparse type: an integer >= 0 (Lightning numbers epochs from 0)."""
+    try:
+        number = int(value)
+    except ValueError as err:
+        raise argparse.ArgumentTypeError(f"must be a non-negative integer, got {value!r}") from err
+    if number < 0:
+        raise argparse.ArgumentTypeError(f"must be a non-negative integer, got {value!r}")
+    return number
 
 
 def ensure_models_cache_dir(cache_dir: str) -> str:
@@ -403,11 +420,12 @@ class GenerateEmbeddings(ScriptBuilder):
             .add_flag("--profiling", "Enable Python profiling (cProfile).")
             .add_flag("--run-cka", "Run CKA coherence test after embeddings.")
             .add_flag("--no-cache", "Force re-extraction of archive (ignore cache).")
-            .add_flag(
-                "--use_last_checkpoint",
-                "Evaluate each region with the native Lightning checkpoint in "
-                "logs/lightning_logs/version_0/checkpoints/ instead of logs/best_model_weights.pt. "
-                "Regions with no native checkpoint there still use best_model_weights.pt.",
+            .add_optional_argument(
+                "--checkpoint-epoch",
+                "Training epoch N (0-based) of the Lightning checkpoint epoch=N-step=*.ckpt to evaluate each region "
+                "with. Default: 80.",
+                default=DEFAULT_CHECKPOINT_EPOCH,
+                type_=_parse_non_negative_int,
             )
             .add_optional_argument(
                 "--cortical_version",
@@ -683,57 +701,16 @@ class GenerateEmbeddings(ScriptBuilder):
                         return dname
         return base
 
-    def _ensure_ckpt(self, model_path: str) -> None:
-        """Keep a Lightning .ckpt in sync with best_model_weights.pt (content-idempotent).
-
-        evaluate.py globs for logs/lightning_logs/version_0/checkpoints/*.ckpt.
-        HF models ship logs/best_model_weights.pt instead, so it is converted to
-        best_model.ckpt. A converted ckpt whose weights differ from the current
-        best_model_weights.pt (e.g. after an HF model update) is rewritten; a matching
-        one is left untouched. Native Lightning ckpts of locally trained models are
-        never touched.
-        """
-        ckpt_dir = Path(model_path) / "logs" / "lightning_logs" / "version_0" / "checkpoints"
-        if self._has_native_ckpt(ckpt_dir):
-            return
-        pt_path = Path(model_path) / "logs" / _WEIGHTS_FILE_NAME
-        if not pt_path.exists():
-            return
-        state_dict = self._load_weights_state_dict(pt_path)
-        ckpt_path = ckpt_dir / _CONVERTED_CKPT_NAME
-        existed = ckpt_path.exists()
-        if existed:
-            current = self._load_converted_state_dict(ckpt_path)
-            if current is not None and self._is_same_state_dict(current, state_dict):
-                return
-        self._save_converted_ckpt(state_dict, ckpt_path)
-        action = "Refreshed stale" if existed else "Converted"
-        print(f"  {action} {pt_path} → {ckpt_path}")
-
-    @staticmethod
-    def _has_native_ckpt(ckpt_dir: Path) -> bool:
-        """True if ckpt_dir holds any .ckpt other than the converted one."""
-        if not ckpt_dir.is_dir():
-            return False
-        return any(p.name != _CONVERTED_CKPT_NAME for p in ckpt_dir.glob("*.ckpt"))
-
-    @staticmethod
-    def _has_any_native_ckpt(model_path: str) -> bool:
-        """True if any logs/lightning_logs/version_*/checkpoints/ dir holds a native ckpt."""
-        lightning_logs = Path(model_path) / "logs" / "lightning_logs"
-        return any(
-            GenerateEmbeddings._has_native_ckpt(ckpt_dir) for ckpt_dir in lightning_logs.glob("version_*/checkpoints")
-        )
-
     @staticmethod
     def _save_converted_ckpt(state_dict: dict, ckpt_path: Path) -> None:
         """Write state_dict as a converted Lightning ckpt (the only owner of its shape)."""
         ckpt_path.parent.mkdir(parents=True, exist_ok=True)
         torch.save({"state_dict": state_dict, "epoch": 0, "global_step": 0}, str(ckpt_path))
 
-    def _build_best_weights_mirror(self, model_path: str, pt_path: Path, root: str) -> str:
-        """Build <root>/<region dir name> holding the region's .hydra (symlink) and one
-        converted ckpt made from pt_path. Never writes under model_path.
+    @staticmethod
+    def _new_mirror(model_path: str, root: str) -> tuple[str, Path]:
+        """Create <root>/<region dir name> with the region's .hydra (symlink) and an empty
+        logs/lightning_logs/version_0/checkpoints/; return (mirror, ckpt_dir). Never writes under model_path.
         """
         mirror = Path(root) / os.path.basename(os.path.normpath(model_path))
         mirror.mkdir()
@@ -741,51 +718,106 @@ class GenerateEmbeddings(ScriptBuilder):
         if exists(hydra_dir):
             os.symlink(abspath(hydra_dir), mirror / ".hydra")
         ckpt_dir = mirror / "logs" / "lightning_logs" / "version_0" / "checkpoints"
-        self._save_converted_ckpt(self._load_weights_state_dict(pt_path), ckpt_dir / _CONVERTED_CKPT_NAME)
-        return str(mirror)
+        ckpt_dir.mkdir(parents=True)
+        return str(mirror), ckpt_dir
 
-    def _uses_native_ckpt(self, model_path: str) -> bool:
-        """True when --use_last_checkpoint applies: the flag is set and version_0 holds a native ckpt."""
-        ckpt_dir = Path(model_path) / "logs" / "lightning_logs" / "version_0" / "checkpoints"
-        return getattr(self.args, "use_last_checkpoint", False) and self._has_native_ckpt(ckpt_dir)
-
+    @staticmethod
     @contextlib.contextmanager
-    def _evaluation_model_dir(self, model_path: str) -> Iterator[str]:
-        """Yield the directory to pass to evaluate.py as -m.
-
-        With --use_last_checkpoint and a native ckpt in version_0, model_path itself is
-        yielded untouched. With best_model_weights.pt beside a native ckpt (any
-        version_<n>), a temporary mirror holding only .hydra and the converted best
-        weights is yielded and removed afterwards, so the user's model dir is never
-        modified. Otherwise _ensure_ckpt runs in place and model_path itself is yielded.
-        """
-        if self._uses_native_ckpt(model_path):
-            yield model_path
-            return
-        pt_path = Path(model_path) / "logs" / _WEIGHTS_FILE_NAME
-        if not pt_path.exists() or not self._has_any_native_ckpt(model_path):
-            self._ensure_ckpt(model_path)
-            yield model_path
-            return
-        root = tempfile.mkdtemp(prefix="champollion_eval_")
+    def _temporary_mirror_root() -> Iterator[str]:
+        """A temporary directory for an evaluation mirror, removed on exit (symlinks are not followed)."""
+        root = tempfile.mkdtemp(prefix=_MIRROR_PREFIX)
         try:
-            yield self._build_best_weights_mirror(model_path, pt_path, root)
+            yield root
         finally:
             shutil.rmtree(root, ignore_errors=True)
 
+    def _build_best_weights_mirror(self, model_path: str, pt_path: Path, root: str) -> str:
+        """Mirror holding the region's .hydra and one ckpt converted from pt_path."""
+        mirror, ckpt_dir = self._new_mirror(model_path, root)
+        self._save_converted_ckpt(self._load_weights_state_dict(pt_path), ckpt_dir / _CONVERTED_CKPT_NAME)
+        return mirror
+
     @staticmethod
-    def _ckpt_candidates(model_dir: str) -> list[str]:
-        """Return the .ckpt files evaluate.py globs in model_dir's version_0, sorted by name."""
-        return sorted(glob.glob(join(model_dir, "logs", "lightning_logs", "version_0", "checkpoints", "*.ckpt")))
+    def _build_epoch_ckpt_mirror(model_path: str, ckpt: Path, root: str) -> str:
+        """Mirror holding the region's .hydra and a symlink to the epoch-N checkpoint, under its own name."""
+        mirror, ckpt_dir = GenerateEmbeddings._new_mirror(model_path, root)
+        os.symlink(abspath(ckpt), ckpt_dir / ckpt.name)
+        return mirror
+
+    @staticmethod
+    def _compute_ckpt_rank(ckpt: Path, step: int) -> tuple[int, int, str]:
+        """Sort key: step, then version_<n> index (-1 if unparsable), then path text."""
+        match = _VERSION_DIR_PATTERN.fullmatch(ckpt.parent.parent.name)
+        return step, int(match["index"]) if match else -1, str(ckpt)
+
+    def _find_epoch_ckpt(self, model_path: str) -> Path | None:
+        """The epoch-N checkpoint (N = --checkpoint-epoch) of any version_*/checkpoints/, highest step first."""
+        pattern = re.compile(_EPOCH_CKPT_PATTERN.format(epoch=self.args.checkpoint_epoch))
+        lightning_logs = Path(model_path) / "logs" / "lightning_logs"
+        ranked = []
+        for ckpt in lightning_logs.glob("version_*/checkpoints/*.ckpt"):
+            match = pattern.fullmatch(ckpt.name)
+            if match:
+                ranked.append((self._compute_ckpt_rank(ckpt, int(match["step"])), ckpt))
+        return max(ranked)[1] if ranked else None
+
+    def _has_region_weights(self, model_path: str) -> bool:
+        """True when the region has an epoch-N checkpoint or logs/best_model_weights.pt."""
+        return (
+            self._find_epoch_ckpt(model_path) is not None or (Path(model_path) / "logs" / _WEIGHTS_FILE_NAME).exists()
+        )
+
+    def _uses_best_weights_stand_in(self, model_path: str) -> bool:
+        """True when best_model_weights.pt stands in for the missing epoch-N checkpoint."""
+        if self._find_epoch_ckpt(model_path) is not None:
+            return False
+        return (Path(model_path) / "logs" / _WEIGHTS_FILE_NAME).exists()
+
+    def _check_region_weights(self, region_dirs: list[str], models_path: str) -> None:
+        """Raise ValueError naming every region with neither an epoch-N checkpoint nor best weights."""
+        missing = list(
+            dict.fromkeys(
+                self._resolve_region_name(d, models_path) for d in region_dirs if not self._has_region_weights(d)
+            )
+        )
+        if missing:
+            raise ValueError(
+                f"No weights for {len(missing)} region(s): {', '.join(missing)}. Each region model "
+                f"directory needs logs/best_model_weights.pt or an epoch={self.args.checkpoint_epoch}-step=*.ckpt "
+                "checkpoint under logs/lightning_logs/version_*/checkpoints/; no region was evaluated."
+            )
+
+    @contextlib.contextmanager
+    def _evaluation_model_dir(self, model_path: str) -> Iterator[str]:
+        """Yield the directory to pass to evaluate.py as -m, in this order:
+
+        1. an epoch-N checkpoint exists (any version_*): a temporary mirror holding .hydra and only
+           that checkpoint, removed afterwards;
+        2. no best_model_weights.pt: model_path itself, nothing written (the stage fails fast before this);
+        3. otherwise: a temporary mirror holding .hydra and the converted best weights, which stand in
+           for the missing epoch-N checkpoint.
+        """
+        epoch_ckpt = self._find_epoch_ckpt(model_path)
+        if epoch_ckpt is not None:
+            with self._temporary_mirror_root() as root:
+                yield self._build_epoch_ckpt_mirror(model_path, epoch_ckpt, root)
+            return
+        pt_path = Path(model_path) / "logs" / _WEIGHTS_FILE_NAME
+        if not pt_path.exists():
+            yield model_path
+            return
+        with self._temporary_mirror_root() as root:
+            yield self._build_best_weights_mirror(model_path, pt_path, root)
 
     def _weights_source(self, model_path: str) -> str | None:
         """Return the user-dir weights file evaluate.py ends up using, or None."""
-        ckpts = glob.glob(model_path + "/logs/lightning_logs/version_0/checkpoints/*.ckpt")
-        if self._uses_native_ckpt(model_path):
-            return ckpts[0]
+        epoch_ckpt = self._find_epoch_ckpt(model_path)
+        if epoch_ckpt is not None:
+            return str(epoch_ckpt)
         pt_path = join(model_path, "logs", _WEIGHTS_FILE_NAME)
         if exists(pt_path):
             return pt_path
+        ckpts = glob.glob(model_path + "/logs/lightning_logs/version_0/checkpoints/*.ckpt")
         return ckpts[0] if ckpts else None
 
     @staticmethod
@@ -793,28 +825,6 @@ class GenerateEmbeddings(ScriptBuilder):
         """Load best_model_weights.pt, unwrapping a top-level state_dict if present."""
         loaded = torch.load(str(pt_path), map_location="cpu")
         return loaded["state_dict"] if isinstance(loaded, dict) and "state_dict" in loaded else loaded
-
-    @staticmethod
-    def _load_converted_state_dict(ckpt_path: Path) -> dict | None:
-        """Return the state_dict of a converted ckpt, or None if it has none."""
-        loaded = torch.load(str(ckpt_path), map_location="cpu")
-        if isinstance(loaded, dict) and isinstance(loaded.get("state_dict"), dict):
-            return loaded["state_dict"]
-        return None
-
-    @staticmethod
-    def _is_same_state_dict(left: dict, right: dict) -> bool:
-        """True if both state_dicts have the same keys and equal values."""
-        if left.keys() != right.keys():
-            return False
-        for key, value in left.items():
-            other = right[key]
-            if isinstance(value, torch.Tensor) and isinstance(other, torch.Tensor):
-                if not torch.equal(value, other):
-                    return False
-            elif value != other:
-                return False
-        return True
 
     def _find_region_model_dirs(self, models_path: str) -> list[str]:
         """Return every directory, at any depth under models_path, that directly
@@ -881,6 +891,7 @@ class GenerateEmbeddings(ScriptBuilder):
 
         if not region_dirs:
             raise ValueError(f"No region model directories (containing logs/) found under {models_path}")
+        self._check_region_weights(region_dirs, models_path)
 
         print(f"\nGenerating embeddings for {len(region_dirs)} regions → {output_base}")
 
@@ -918,23 +929,13 @@ class GenerateEmbeddings(ScriptBuilder):
                     saving_path,
                 ]
 
-                ignored = (
-                    " (no native checkpoint in version_0; --use_last_checkpoint ignored)"
-                    if getattr(self.args, "use_last_checkpoint", False) and not self._uses_native_ckpt(model_path)
-                    else ""
-                )
-                candidates = self._ckpt_candidates(eval_model_path)
-                if len(candidates) > 1:
-                    weights = ", ".join(candidates)
-                else:
-                    weights = self._weights_source(model_path) or "<none found>"
-                print(f"\n[Region {region}] weights: {weights}{ignored}")
-                if len(candidates) > 1:
+                weights = self._weights_source(model_path) or "<none found>"
+                print(f"\n[Region {region}] weights: {weights}")
+                if self._uses_best_weights_stand_in(model_path):
+                    epoch = self.args.checkpoint_epoch
                     print(
-                        f"[Region {region}] WARNING: {len(candidates)} checkpoints in "
-                        f"{eval_model_path}/logs/lightning_logs/version_0/checkpoints; "
-                        "evaluate.py loads the first of an unsorted glob, so the one used "
-                        "depends on filesystem order"
+                        f"[Region {region}] WARNING: no epoch={epoch} checkpoint; "
+                        f"best_model_weights.pt stands in for epoch {epoch} (interim)"
                     )
                 code = self.execute_command(cmd, shell=False)
             if code != 0:
