@@ -22,10 +22,12 @@ MARKER = "<<fake-evaluate-done>>"
 
 
 def make_models(tmp_path: Path, regions: list[str]) -> Path:
-    """Create a flat models dir with one <region>/logs/ per region."""
+    """Create a flat models dir with one <region>/logs/ per region, each holding an epoch=80 checkpoint."""
     models = tmp_path / "models"
     for region in regions:
-        (models / region / "logs").mkdir(parents=True)
+        ckpt_dir = models / region / "logs" / "lightning_logs" / "version_0" / "checkpoints"
+        ckpt_dir.mkdir(parents=True)
+        (ckpt_dir / "epoch=80-step=1.ckpt").write_text("placeholder")
     return models
 
 

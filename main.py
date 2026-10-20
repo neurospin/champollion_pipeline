@@ -42,7 +42,7 @@ from champollion_pipeline.derivatives_layout import (
     compute_snapshots_dir,
 )
 from champollion_pipeline.generate_champollion_config import GenerateChampollionConfig
-from champollion_pipeline.generate_embeddings import GenerateEmbeddings
+from champollion_pipeline.generate_embeddings import DEFAULT_CHECKPOINT_EPOCH, GenerateEmbeddings
 from champollion_pipeline.generate_morphologist_graphs import GenerateMorphologistGraphs
 from champollion_pipeline.generate_snapshots import GenerateSnapshots
 from champollion_pipeline.process_setup import init_pipeline_process
@@ -66,8 +66,10 @@ except ImportError:
 
 # Dataset config keys that no longer exist; old YAML files still carrying them load with a warning.
 _REMOVED_DATASET_KEYS = {
-    "use_best_model": "it had no effect; best_model_weights.pt is now used by default, "
-    "set dataset.use_last_checkpoint: true to use the native Lightning checkpoint instead",
+    "use_best_model": "it had no effect; set dataset.checkpoint_epoch to choose the training epoch whose "
+    "checkpoint is evaluated",
+    "use_last_checkpoint": "replaced by dataset.checkpoint_epoch (training epoch N, 0-based, of the Lightning "
+    "checkpoint epoch=N-step=*.ckpt to evaluate; default 80)",
 }
 
 
@@ -103,7 +105,7 @@ class DatasetConfig:
     classifier_name: str = "svm"
     overwrite: bool = False
     embeddings_only: bool = False
-    use_last_checkpoint: bool = False
+    checkpoint_epoch: int = DEFAULT_CHECKPOINT_EPOCH
     models_cache: Optional[str] = None  # None: <datasets_root>/derivatives/champollion_V1/models_cache
     subsets: List[str] = field(default_factory=lambda: ["full"])
     epochs: List[Optional[int]] = field(default_factory=lambda: [None])
@@ -256,7 +258,7 @@ class ConfigLoader:
                 "classifier_name": config.dataset.classifier_name,
                 "overwrite": config.dataset.overwrite,
                 "embeddings_only": config.dataset.embeddings_only,
-                "use_last_checkpoint": config.dataset.use_last_checkpoint,
+                "checkpoint_epoch": config.dataset.checkpoint_epoch,
                 "models_cache": config.dataset.models_cache,
                 "subsets": config.dataset.subsets,
                 "epochs": config.dataset.epochs,
@@ -576,8 +578,7 @@ class GenerateEmbeddingsStage(PipelineStage):
                 args.append("--overwrite")
             if dataset.cpu:
                 args.append("--cpu")
-            if dataset.use_last_checkpoint:
-                args.append("--use_last_checkpoint")
+            args.append(f"--checkpoint-epoch={dataset.checkpoint_epoch}")
             if dataset.models_cache is not None:
                 args.append(f"--models-cache={dataset.models_cache}")
             if dataset.regions:

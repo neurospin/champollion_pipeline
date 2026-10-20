@@ -21,7 +21,6 @@ from unittest.mock import MagicMock, patch
 import numpy as np
 import pandas as pd
 import pytest
-import torch
 
 from champollion_pipeline import generate_embeddings as ge
 from champollion_pipeline.generate_embeddings import (
@@ -33,6 +32,14 @@ from champollion_pipeline.generate_embeddings import (
     RemoteArchiveStrategy,
     main,
 )
+
+
+def make_region_logs(model_dir) -> None:
+    """Create model_dir/logs/ holding an epoch=80 checkpoint, so the region has weights to evaluate."""
+    ckpt_dir = model_dir / "logs" / "lightning_logs" / "version_0" / "checkpoints"
+    ckpt_dir.mkdir(parents=True)
+    (ckpt_dir / "epoch=80-step=1.ckpt").write_text("placeholder")
+
 
 # champollion_V1's cka_coherence module (put on sys.path by generate_embeddings).
 cka_mod = sys.modules[ge.test_models_coherence_from_directory.__module__]
@@ -525,49 +532,6 @@ class TestFindCropDir:
         assert script._find_crop_dir(str(tmp_path), "SOr_left") == "SOr"
 
 
-class TestEnsureCkpt:
-    """Test _ensure_ckpt (best_model_weights.pt → Lightning .ckpt)."""
-
-    def test_noop_when_no_weights_present(self, tmp_path):
-        script = make_script(["/m", "/d"])
-        script._ensure_ckpt(str(tmp_path))
-        assert not (tmp_path / "logs").exists()
-
-    def test_noop_when_ckpt_already_exists(self, tmp_path):
-        ckpt_dir = tmp_path / "logs" / "lightning_logs" / "version_0" / "checkpoints"
-        ckpt_dir.mkdir(parents=True)
-        (ckpt_dir / "existing.ckpt").write_text("kept")
-        (tmp_path / "logs" / "best_model_weights.pt").write_text("ignored")
-        script = make_script(["/m", "/d"])
-        script._ensure_ckpt(str(tmp_path))
-        assert (ckpt_dir / "existing.ckpt").read_text() == "kept"
-        assert not (ckpt_dir / "best_model.ckpt").exists()
-
-    def test_converts_weights_to_checkpoint(self, tmp_path):
-        logs = tmp_path / "logs"
-        logs.mkdir()
-        torch.save({"layer.weight": torch.zeros(2)}, str(logs / "best_model_weights.pt"))
-        script = make_script(["/m", "/d"])
-        script._ensure_ckpt(str(tmp_path))
-        ckpt_path = logs / "lightning_logs" / "version_0" / "checkpoints" / "best_model.ckpt"
-        assert ckpt_path.exists()
-        ckpt = torch.load(str(ckpt_path), map_location="cpu", weights_only=False)
-        assert ckpt["epoch"] == 0
-        assert ckpt["global_step"] == 0
-        assert "layer.weight" in ckpt["state_dict"]
-
-    def test_conversion_is_idempotent(self, tmp_path):
-        logs = tmp_path / "logs"
-        logs.mkdir()
-        torch.save({"w": torch.zeros(1)}, str(logs / "best_model_weights.pt"))
-        script = make_script(["/m", "/d"])
-        script._ensure_ckpt(str(tmp_path))
-        ckpt_path = logs / "lightning_logs" / "version_0" / "checkpoints" / "best_model.ckpt"
-        first_mtime = ckpt_path.stat().st_mtime_ns
-        script._ensure_ckpt(str(tmp_path))
-        assert ckpt_path.stat().st_mtime_ns == first_mtime
-
-
 class TestRunPerRegion:
     """Test _run_per_region error handling and command construction."""
 
@@ -586,7 +550,7 @@ class TestRunPerRegion:
 
     def test_existing_embeddings_are_skipped(self, tmp_path, capsys):
         models = tmp_path / "models"
-        (models / "SOr_left" / "logs").mkdir(parents=True)
+        make_region_logs(models / "SOr_left")
         out = tmp_path / "out"
         (out / "SOr_left").mkdir(parents=True)
         (out / "SOr_left" / "full_embeddings.csv").touch()
@@ -598,7 +562,7 @@ class TestRunPerRegion:
 
     def test_overwrite_recomputes_existing_embeddings(self, tmp_path):
         models = tmp_path / "models"
-        (models / "SOr_left" / "logs").mkdir(parents=True)
+        make_region_logs(models / "SOr_left")
         out = tmp_path / "out"
         (out / "SOr_left").mkdir(parents=True)
         (out / "SOr_left" / "full_embeddings.csv").touch()
@@ -611,7 +575,7 @@ class TestRunPerRegion:
 
     def test_command_uses_left_skeleton_for_left_region(self, tmp_path):
         models = tmp_path / "models"
-        (models / "SOr_left" / "logs").mkdir(parents=True)
+        make_region_logs(models / "SOr_left")
         crops = tmp_path / "crops"
         (crops / "S.Or.").mkdir(parents=True)
 
@@ -626,7 +590,7 @@ class TestRunPerRegion:
 
     def test_command_uses_right_skeleton_for_right_region(self, tmp_path):
         models = tmp_path / "models"
-        (models / "SOr_right" / "logs").mkdir(parents=True)
+        make_region_logs(models / "SOr_right")
 
         script = make_script([str(models), "/d"])
         calls = []
@@ -638,7 +602,7 @@ class TestRunPerRegion:
 
     def test_returns_last_command_result(self, tmp_path):
         models = tmp_path / "models"
-        (models / "SOr_left" / "logs").mkdir(parents=True)
+        make_region_logs(models / "SOr_left")
         script = make_script([str(models), "/d"])
         script.execute_command = lambda cmd, shell=False: 3
         result = script._run_per_region("evaluate.py", str(tmp_path), str(tmp_path / "out"))
