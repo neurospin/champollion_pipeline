@@ -454,6 +454,11 @@ class GenerateEmbeddings(ScriptBuilder):
                 "Defaults to the --model-version value when given, else canonical_25.",
                 default=None,
             )
+            .add_flag(
+                "--allow-version-mismatch",
+                "Run even when --masks and --model-version differ (crops of one mask version evaluated with the "
+                "model set of another); a warning is emitted.",
+            )
             .add_argument(
                 "--regions",
                 type=str,
@@ -535,6 +540,7 @@ class GenerateEmbeddings(ScriptBuilder):
         parsed = super().parse_args(args)
         self._resolve_model_version_alias()
         self._resolve_masks_default()
+        self._check_version_mismatch()
         return parsed
 
     def _resolve_model_version_alias(self) -> None:
@@ -561,6 +567,23 @@ class GenerateEmbeddings(ScriptBuilder):
         if self.args.masks is None:
             model_version = self.args.model_version
             self.args.masks = model_version if model_version is not None else DEFAULT_MASKS_VERSION
+
+    def _check_version_mismatch(self) -> None:
+        """Exit 2 when --masks and --model-version differ, unless --allow-version-mismatch (then warn)."""
+        model_version, masks = self.args.model_version, self.args.masks
+        if model_version is None or masks == model_version:
+            return
+        if not self.args.allow_version_mismatch:
+            self.parser.error(
+                f"--masks {masks!r} and --model-version {model_version!r} differ: --masks picks the input crops, "
+                "--model-version the model set; pass --allow-version-mismatch to run with both"
+            )
+        warnings.warn(
+            f"--masks {masks!r} and --model-version {model_version!r} differ; running anyway "
+            f"(--allow-version-mismatch): crops {masks!r}, models {model_version!r}",
+            UserWarning,
+            stacklevel=2,
+        )
 
     def fetch_models(self, models_path):
         """
