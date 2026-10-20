@@ -1,8 +1,9 @@
 #!/usr/bin/env python3
 """
 generate_embeddings parser: the --checkpoint-epoch option (EPOCH80 parser task).
-Removal of --use_last_checkpoint is pinned separately, in
-tests/test_generate_embeddings_no_last_checkpoint.py (EPOCH80 dead-code task).
+The parser's rejection of the removed --use_last_checkpoint flag is pinned here
+(TestUseLastCheckpointRejected); the removal of the code only that flag reached is
+pinned in tests/test_generate_embeddings_no_last_checkpoint.py (EPOCH80 dead-code task).
 
 Epoch-80 harmonisation (user decision 2026-10-13): each region is evaluated with
 the checkpoint of a configurable epoch, default 80. These tests exercise only the
@@ -69,3 +70,13 @@ class TestCheckpointEpochInvalidValueRejected:
         # argparse not knowing the option at all.
         assert "unrecognized arguments" not in err, err
         assert OPTION in err, err
+
+
+class TestUseLastCheckpointRejected:
+    """REQ-EPOCH80-BDRABCZUK-C4B0B7D02FAB: --use_last_checkpoint exits with status 2."""
+
+    def test_flag_exits_with_status_2(self, capsys):
+        exc = parse_expecting_exit([*POSITIONALS, "--use_last_checkpoint"])
+        err = capsys.readouterr().err
+        assert exc.code == 2, err
+        assert "--use_last_checkpoint" in err, err

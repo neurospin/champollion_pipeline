@@ -21,7 +21,6 @@ from unittest.mock import MagicMock, patch
 import numpy as np
 import pandas as pd
 import pytest
-import torch
 
 from champollion_pipeline import generate_embeddings as ge
 from champollion_pipeline.generate_embeddings import (
@@ -531,49 +530,6 @@ class TestFindCropDir:
         (tmp_path / "other").mkdir()
         script = make_script(["/m", "/d"])
         assert script._find_crop_dir(str(tmp_path), "SOr_left") == "SOr"
-
-
-class TestEnsureCkpt:
-    """Test _ensure_ckpt (best_model_weights.pt → Lightning .ckpt)."""
-
-    def test_noop_when_no_weights_present(self, tmp_path):
-        script = make_script(["/m", "/d"])
-        script._ensure_ckpt(str(tmp_path))
-        assert not (tmp_path / "logs").exists()
-
-    def test_noop_when_ckpt_already_exists(self, tmp_path):
-        ckpt_dir = tmp_path / "logs" / "lightning_logs" / "version_0" / "checkpoints"
-        ckpt_dir.mkdir(parents=True)
-        (ckpt_dir / "existing.ckpt").write_text("kept")
-        (tmp_path / "logs" / "best_model_weights.pt").write_text("ignored")
-        script = make_script(["/m", "/d"])
-        script._ensure_ckpt(str(tmp_path))
-        assert (ckpt_dir / "existing.ckpt").read_text() == "kept"
-        assert not (ckpt_dir / "best_model.ckpt").exists()
-
-    def test_converts_weights_to_checkpoint(self, tmp_path):
-        logs = tmp_path / "logs"
-        logs.mkdir()
-        torch.save({"layer.weight": torch.zeros(2)}, str(logs / "best_model_weights.pt"))
-        script = make_script(["/m", "/d"])
-        script._ensure_ckpt(str(tmp_path))
-        ckpt_path = logs / "lightning_logs" / "version_0" / "checkpoints" / "best_model.ckpt"
-        assert ckpt_path.exists()
-        ckpt = torch.load(str(ckpt_path), map_location="cpu", weights_only=False)
-        assert ckpt["epoch"] == 0
-        assert ckpt["global_step"] == 0
-        assert "layer.weight" in ckpt["state_dict"]
-
-    def test_conversion_is_idempotent(self, tmp_path):
-        logs = tmp_path / "logs"
-        logs.mkdir()
-        torch.save({"w": torch.zeros(1)}, str(logs / "best_model_weights.pt"))
-        script = make_script(["/m", "/d"])
-        script._ensure_ckpt(str(tmp_path))
-        ckpt_path = logs / "lightning_logs" / "version_0" / "checkpoints" / "best_model.ckpt"
-        first_mtime = ckpt_path.stat().st_mtime_ns
-        script._ensure_ckpt(str(tmp_path))
-        assert ckpt_path.stat().st_mtime_ns == first_mtime
 
 
 class TestRunPerRegion:

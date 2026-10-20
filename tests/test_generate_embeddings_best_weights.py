@@ -66,7 +66,7 @@ def write_native_ckpt(model_dir: Path, name: str, state_dict: dict, version: int
 
 
 def write_converted_ckpt(model_dir: Path, state_dict: dict) -> Path:
-    """Write a best_model.ckpt shaped like a previous _ensure_ckpt conversion."""
+    """Write a best_model.ckpt shaped like a converted best-weights checkpoint."""
     ckpt_dir = ckpt_dir_of(model_dir)
     ckpt_dir.mkdir(parents=True, exist_ok=True)
     path = ckpt_dir / "best_model.ckpt"
