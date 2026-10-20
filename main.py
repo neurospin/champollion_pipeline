@@ -569,7 +569,7 @@ class GenerateEmbeddingsStage(PipelineStage):
             models_path = dataset.hf_repo_id if dataset.hf_enabled else str(self.config.models_path)
             args = [models_path, dataset.datasets_root, f"--masks={dataset.masks_version}"]
             if dataset.hf_enabled:
-                args.append(f"--masks-version={dataset.masks_version}")
+                args.append(f"--model-version={dataset.masks_version}")
 
             region_embeddings_dir = _compute_region_embeddings_source(dataset)
             if region_embeddings_dir:
