@@ -293,6 +293,16 @@ outputs are not found automatically, so pass that directory explicitly to `champ
 
 To re-run on an existing dataset, add `--overwrite`.
 
+### Checkpoint selection
+
+Each region is evaluated with the Lightning checkpoint `logs/lightning_logs/version_*/checkpoints/epoch=N-step=*.ckpt` of its model directory, N being `--checkpoint-epoch` (default `80`, 0-based; pipeline config `dataset.checkpoint_epoch`). Every `version_*` directory is searched; when several checkpoints match, the highest step wins.
+
+As an interim measure, `logs/best_model_weights.pt` stands in for a region lacking the epoch-N checkpoint. The embeddings stage prints one WARNING line for each region evaluated with `best_model_weights.pt`.
+
+A region holding neither `logs/best_model_weights.pt` nor the epoch-N checkpoint stops the embeddings stage before any region is evaluated; the error names every such region.
+
+The `--use_last_checkpoint` option has been removed: `champollion-embeddings` exits with status 2 when given it. In an existing pipeline configuration file, the keys `dataset.use_last_checkpoint` and `dataset.use_best_model` are ignored with a warning.
+
 ### Model sources
 
 You can point to different model sources:
@@ -317,6 +327,7 @@ When using Hugging Face, models are cached in `data/{dataset}/derivatives/champo
 | `--output` | Output base directory override. Default: `{datasets_root}/derivatives/champollion_V1/{masks}/region_embeddings/`. |
 | `--subjects` | Path to subjects CSV with a `Subject` column. Default: `{datasets_root}/participants.tsv`. |
 | `--cpu` | Force CPU usage (disable CUDA) |
+| `--checkpoint-epoch` | Training epoch N (0-based) of the Lightning checkpoint evaluated for each region (default: `80`). Pipeline config: `dataset.checkpoint_epoch`. |
 | `--overwrite` | Recompute embeddings that already exist on disk |
 | `--no-cache` | Force re-extraction of the archive (ignore cache) |
 | `--run-cka` | Run CKA coherence test after embeddings |
