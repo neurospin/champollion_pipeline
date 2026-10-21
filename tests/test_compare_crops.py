@@ -119,7 +119,7 @@ class _FakeAims:
     write = staticmethod(_fake_write)
 
 
-@pytest.fixture(autouse=True)
+@pytest.fixture(autouse=True)  # noqa: V103 - autouse fixture
 def fake_aims(monkeypatch):
     _HEADERS.clear()
     _WRITTEN.clear()

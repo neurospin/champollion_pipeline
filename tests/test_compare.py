@@ -26,6 +26,7 @@ from compare import (
     _get_subject_voxel_counts,
     _mask_stats,
     bucket_label,
+    find_masks,
     load_mask_vol,
     save_xor_vol,
     sort_buckets,
@@ -120,11 +121,20 @@ class TestVoxelDiff:
         b = np.array([[[0.0, 1.0]]])
         assert voxel_diff(a, b) == {"changed": 2, "added": 1, "removed": 1, "value_changed": 0}
 
+    def test_value_change_without_add_or_remove(self):
+        a = np.array([[[1.0, 1.0]]])
+        b = np.array([[[2.0, 1.0]]])
+        assert voxel_diff(a, b) == {"changed": 1, "added": 0, "removed": 0, "value_changed": 1}
+
 
 class TestWassersteinDistance:
     def test_both_empty_is_zero(self):
         z = np.zeros((3, 3, 3))
         assert wasserstein_distance(z, z.copy()) == 0.0
+
+    def test_identical_maps_is_zero(self):
+        a = _point_volume((1, 1, 1))
+        assert wasserstein_distance(a, a.copy()) == pytest.approx(0.0)
 
     def test_single_axis_shift(self):
         assert wasserstein_distance(_point_volume((0, 0, 0)), _point_volume((2, 0, 0))) == pytest.approx(2.0)
@@ -136,6 +146,9 @@ class TestWassersteinDistance:
 class TestBucketLabel:
     def test_integer_step(self):
         assert bucket_label(3.7, 1.0) == "3-4vox"
+
+    def test_integer_step_ten(self):
+        assert bucket_label(23.0, 10.0) == "20-30vox"
 
     def test_fractional_step(self):
         assert bucket_label(0.7, 0.5) == "0.50-1.00vox"
@@ -272,6 +285,20 @@ class TestGetSubjectVoxelCounts:
         sub = {"subject": "sub-01", "dir": str(tmp_path), "graph_file": "L*.arg"}
         assert _get_subject_voxel_counts(sub, str(tmp_path)) == ("sub-01", {"S.C._left": 6})
 
+    def test_unnamed_vertices_are_ignored(self, tmp_path, fake_soma_aims):
+        graph_path = tmp_path / "Lsub-02.arg"
+        graph_path.touch()
+        fake_soma_aims({str(graph_path): _FakeGraph([_FakeVertex(None, {"aims_ss": 9})])})
+        sub = {"subject": "sub-02", "dir": str(tmp_path), "graph_file": "L*.arg"}
+        assert _get_subject_voxel_counts(sub, str(tmp_path)) == ("sub-02", {})
+
+    def test_brainvisa_dir_added_to_syspath(self, tmp_path, fake_soma_aims):
+        marker = str(tmp_path / "bv_dir_databases")
+        sub = {"subject": "sub-03", "dir": str(tmp_path), "graph_file": "NOPE*.arg"}
+        _get_subject_voxel_counts(sub, marker)
+        assert marker in sys.path
+        sys.path.remove(marker)
+
 
 class TestMaskStats:
     def test_collects_max_sum_and_nonzero(self, tmp_path, fake_soma_aims):
@@ -359,10 +386,26 @@ class TestDispatch:
 class TestFindMasks:
     def test_returns_relative_to_absolute_map(self, tmp_path):
         _make_tree(tmp_path, ["L/S.C.nii.gz", "R/S.C.nii.gz"])
-        script = _make_script(["masks", "--set_a", "a", "--set_b", "b"])
-        found = script._find_masks(tmp_path, "*/*.nii.gz")
+        found = find_masks(tmp_path, "*/*.nii.gz")
         assert sorted(found) == ["L/S.C.nii.gz", "R/S.C.nii.gz"]
         assert found["L/S.C.nii.gz"] == str((tmp_path / "L" / "S.C.nii.gz").resolve())
+
+    def test_ignores_deeper_per_subject_files(self, tmp_path):
+        _make_tree(tmp_path, ["L/S.C.nii.gz", "L/S.C/sub-01.nii.gz"])
+        assert list(find_masks(tmp_path, "*/*.nii.gz")) == ["L/S.C.nii.gz"]
+
+    def test_empty_directory(self, tmp_path):
+        assert find_masks(tmp_path, "*/*.nii.gz") == {}
+
+    def test_matches_cortical_tiles_region_mask_layout(self, tmp_path):
+        _make_tree(tmp_path, ["S.C.LEFT/mask/Lmask_skeleton.nii.gz", "S.C.RIGHT/mask/Lmask_skeleton.nii.gz"])
+        found = find_masks(tmp_path, "*/mask/*mask_skeleton.nii.gz")
+        assert sorted(found) == ["S.C.LEFT/mask/Lmask_skeleton.nii.gz", "S.C.RIGHT/mask/Lmask_skeleton.nii.gz"]
+
+    def test_pattern_filters_out_other_mask_types(self, tmp_path):
+        _make_tree(tmp_path, ["S.C.LEFT/mask/Lmask_skeleton.nii.gz", "S.C.LEFT/mask/Lmask_foldlabel.nii.gz"])
+        found = find_masks(tmp_path, "*/mask/*mask_foldlabel.nii.gz")
+        assert list(found) == ["S.C.LEFT/mask/Lmask_foldlabel.nii.gz"]
 
 
 # ---------------------------------------------------------------------------
@@ -597,6 +640,14 @@ class TestLoadDatabase:
         data = script._load_database("folds/3.3/a", ["L", "R"], str(tmp_path), 1, str(tmp_path))
         assert data == {"sub-01": {"S.C.": 7}}
         assert subjects_mod.get_all_subjects_as_dictionary.call_count == 2
+
+    def test_pattern_includes_graph_subpath(self, tmp_path, stub_deep_folding, monkeypatch):
+        subjects_mod = stub_deep_folding([])
+        monkeypatch.setattr(compare, "_get_subject_voxel_counts", lambda sub, _bv: (None, None))
+        script = _make_script(_db_argv(tmp_path))
+        script._load_database("folds/3.3/a", ["L"], str(tmp_path), 1, str(tmp_path))
+        patterns = subjects_mod.get_all_subjects_as_dictionary.call_args.args[1]
+        assert patterns == ["%(subject)s/folds/3.3/a/%(side)s%(subject)s*.arg"]
 
     def test_warns_when_subject_has_no_graph(self, tmp_path, stub_deep_folding, monkeypatch, capsys):
         stub_deep_folding([{"subject": "sub-99", "dir": "d", "graph_file": "g"}])

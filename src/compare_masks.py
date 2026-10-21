@@ -25,92 +25,11 @@ Usage:
 """
 
 import argparse
-import json
 import sys
-from pathlib import Path
 
-import numpy as np
-from scipy.stats import wasserstein_distance as _wasserstein_1d
+from compare import bucket_label, find_masks, load_mask_vol, run_subcommand, voxel_diff, wasserstein_distance
 
-try:
-    from soma import aims
-except ImportError:
-    print("ERROR: PyAIMS (soma.aims) is not available in this environment.")
-    sys.exit(1)
-
-
-def load_mask_vol(path: str) -> np.ndarray:
-    """Read a NIfTI mask with PyAIMS and return a 3-D float64 array (x, y, z).
-
-    The raw integer counts (0 = absent, k = k subjects) are preserved as-is
-    so they can serve as probability weights in the Wasserstein computation.
-    """
-    vol = aims.read(path)
-    return np.asarray(vol, dtype=np.float64).squeeze()
-
-
-def wasserstein_distance(a: np.ndarray, b: np.ndarray) -> float:
-    """Approximate 3-D Wasserstein distance (in voxels) via axis-marginals.
-
-    Each 3-D probability map is projected onto each spatial axis (summing
-    over the other two axes).  The 1-D Wasserstein distances along X, Y, Z
-    are combined as the Euclidean norm, giving an approximation of the true
-    3-D Earth Mover's Distance.  Returns 0.0 when both maps are empty.
-    """
-    sum_a = a.sum()
-    sum_b = b.sum()
-    if sum_a == 0.0 and sum_b == 0.0:
-        return 0.0
-
-    d_sq = 0.0
-    for axis in range(3):
-        other = tuple(i for i in range(3) if i != axis)
-        proj_a = a.sum(axis=other)
-        proj_b = b.sum(axis=other)
-        s_a = proj_a.sum()
-        s_b = proj_b.sum()
-        if s_a == 0.0 or s_b == 0.0:
-            continue
-        positions = np.arange(len(proj_a), dtype=np.float64)
-        d = float(_wasserstein_1d(positions, positions, proj_a / s_a, proj_b / s_b))
-        d_sq += d * d
-    return float(np.sqrt(d_sq))
-
-
-def voxel_diff(a: np.ndarray, b: np.ndarray) -> dict:
-    """Count voxels that changed between two mask volumes.
-
-    Returns:
-      changed  – total voxels where a[i] != b[i]
-      added    – voxels that went from 0 in a to nonzero in b
-      removed  – voxels that went from nonzero in a to 0 in b
-    """
-    a_nz = a != 0
-    b_nz = b != 0
-    return {
-        "changed": int(np.sum(a != b)),
-        "added": int(np.sum(~a_nz & b_nz)),
-        "removed": int(np.sum(a_nz & ~b_nz)),
-    }
-
-
-def bucket_label(value: float, step: float) -> str:
-    low = (value // step) * step
-    high = low + step
-    if step == int(step):
-        return f"{int(low)}-{int(high)}vox"
-    return f"{low:.2f}-{high:.2f}vox"
-
-
-def find_masks(directory: Path) -> dict:
-    """Return {relative_path: absolute_path} for final masks under directory.
-
-    Only matches files at exactly one subdirectory deep (side/sulcus.nii.gz),
-    ignoring intermediate per-subject files (side/sulcus/subject.nii.gz).
-    Uses the relative path as key so side is included and cross-sulcus subject
-    filename collisions cannot occur.
-    """
-    return {str(p.relative_to(directory)): str(p) for p in sorted(directory.glob("*/*.nii.gz"))}
+__all__ = ["bucket_label", "find_masks", "load_mask_vol", "main", "parse_args", "voxel_diff", "wasserstein_distance"]
 
 
 def parse_args(argv):
@@ -134,97 +53,18 @@ def parse_args(argv):
     return parser.parse_args(argv)
 
 
-def main(argv=None):
+def main(argv=None) -> int:
     args = parse_args(argv)
-
-    dir_a = Path(args.set_a)
-    dir_b = Path(args.set_b)
-
-    if not dir_a.is_dir():
-        print(f"ERROR: set_a directory not found: {dir_a}")
-        sys.exit(1)
-    if not dir_b.is_dir():
-        print(f"ERROR: set_b directory not found: {dir_b}")
-        sys.exit(1)
-
-    masks_a = find_masks(dir_a)
-    masks_b = find_masks(dir_b)
-
-    common = sorted(set(masks_a) & set(masks_b))
-    only_a = sorted(set(masks_a) - set(masks_b))
-    only_b = sorted(set(masks_b) - set(masks_a))
-
-    print(f"Masks in set_a:      {len(masks_a)}")
-    print(f"Masks in set_b:      {len(masks_b)}")
-    print(f"Common (compared):   {len(common)}")
-    print(f"Only in set_a:       {len(only_a)}")
-    print(f"Only in set_b:       {len(only_b)}")
-
-    use_wass = args.metric in ("wasserstein", "both")
-    use_diff = args.metric in ("diff", "both")
-    step = args.bucket_step
-
-    def sort_buckets(b):
-        return dict(sorted(b.items(), key=lambda kv: float(kv[0].split("-")[0])))
-
-    wass_buckets: dict[str, list] = {}
-    diff_buckets: dict[str, list] = {}
-    distances: dict[str, float] = {}
-    diffs: dict[str, dict] = {}
-
-    for name in common:
-        arr_a = load_mask_vol(masks_a[name])
-        arr_b = load_mask_vol(masks_b[name])
-
-        if use_wass:
-            dist = wasserstein_distance(arr_a, arr_b)
-            distances[name] = round(dist, 3)
-            wass_buckets.setdefault(bucket_label(dist, step), []).append(name)
-
-        if use_diff:
-            d = voxel_diff(arr_a, arr_b)
-            diffs[name] = d
-            diff_buckets.setdefault(bucket_label(d["changed"], step), []).append(name)
-
-    report = {
-        "set_a": str(dir_a),
-        "set_b": str(dir_b),
-        "metric": args.metric,
-        "summary": {
-            "total_common": len(common),
-            "only_in_set_a": only_a,
-            "only_in_set_b": only_b,
+    return run_subcommand(
+        "masks",
+        {
+            "set_a": args.set_a,
+            "set_b": args.set_b,
+            "output": args.output,
+            "metric": args.metric,
+            "bucket_step": args.bucket_step,
         },
-    }
-
-    if use_wass:
-        report["wasserstein_by_bucket"] = sort_buckets(wass_buckets)
-        report["wasserstein_per_mask"] = dict(sorted(distances.items(), key=lambda kv: -kv[1]))
-
-    if use_diff:
-        report["diff_by_bucket"] = sort_buckets(diff_buckets)
-        report["diffs_per_mask"] = dict(sorted(diffs.items(), key=lambda kv: -kv[1]["changed"]))
-
-    out_path = Path(args.output)
-    out_path.parent.mkdir(parents=True, exist_ok=True)
-    with open(out_path, "w") as f:
-        json.dump(report, f, indent=2)
-
-    print(f"\nReport written to: {out_path}")
-
-    if use_wass and wass_buckets:
-        print(f"\nWasserstein buckets (step={step}):")
-        for label, names in sort_buckets(wass_buckets).items():
-            print(f"  {label:10s}  {len(names):3d} mask(s)")
-
-    if use_diff and diff_buckets:
-        print(f"\nDiff buckets (step={step}):")
-        for label, names in sort_buckets(diff_buckets).items():
-            print(f"  {label:10s}  {len(names):3d} mask(s)")
-        unchanged = sum(1 for d in diffs.values() if d["changed"] == 0)
-        print(f"Unchanged masks: {unchanged}/{len(diffs)}")
-
-    return 0
+    )
 
 
 if __name__ == "__main__":

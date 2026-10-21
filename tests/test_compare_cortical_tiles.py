@@ -3,8 +3,8 @@
 """
 Unit tests for src/compare_cortical_tiles.py
 
-PyAIMS is stubbed in conftest.py; here ``compare_cortical_tiles.aims`` is
-replaced by a fake reader serving small in-memory numpy volumes.
+PyAIMS is stubbed in conftest.py; here ``compare.aims`` (the single implementation
+compare_cortical_tiles delegates to) is replaced by a fake reader serving small in-memory numpy volumes.
 """
 
 import json
@@ -14,15 +14,9 @@ from pathlib import Path
 import numpy as np
 import pytest
 
+import compare
 import compare_cortical_tiles
-from compare_cortical_tiles import (
-    CompareCorticalTiles,
-    bucket_label,
-    find_masks,
-    load_mask_vol,
-    voxel_diff,
-    wasserstein_distance,
-)
+from compare_cortical_tiles import CompareCorticalTiles
 
 # ---------------------------------------------------------------------------
 # Helpers
@@ -57,69 +51,6 @@ def _make_script(argv: list) -> CompareCorticalTiles:
     script = CompareCorticalTiles()
     script.args = script.parse_args(argv)
     return script
-
-
-# ---------------------------------------------------------------------------
-# Pure helpers
-# ---------------------------------------------------------------------------
-
-
-class TestLoadMaskVol:
-    def test_squeezes_trailing_axis(self, monkeypatch):
-        vol = np.ones((2, 2, 2, 1), dtype=np.int16)
-        monkeypatch.setattr(compare_cortical_tiles, "aims", _FakeAims({"/m.nii.gz": vol}))
-        arr = load_mask_vol("/m.nii.gz")
-        assert arr.shape == (2, 2, 2)
-        assert arr.dtype == np.float64
-
-
-class TestVoxelDiff:
-    def test_identical_volumes(self):
-        a = np.ones((2, 2, 2))
-        assert voxel_diff(a, a.copy()) == {"changed": 0, "added": 0, "removed": 0}
-
-    def test_added_and_removed(self):
-        a = np.array([[[1.0, 0.0]]])
-        b = np.array([[[0.0, 1.0]]])
-        assert voxel_diff(a, b) == {"changed": 2, "added": 1, "removed": 1}
-
-
-class TestWassersteinDistance:
-    def test_both_empty_is_zero(self):
-        z = np.zeros((3, 3, 3))
-        assert wasserstein_distance(z, z.copy()) == 0.0
-
-    def test_single_axis_shift(self):
-        assert wasserstein_distance(_point_volume((0, 0, 0)), _point_volume((3, 0, 0))) == pytest.approx(3.0)
-
-    def test_one_empty_map_skips_axes(self):
-        assert wasserstein_distance(_point_volume((1, 1, 1)), np.zeros((4, 4, 4))) == 0.0
-
-
-class TestBucketLabel:
-    def test_integer_step(self):
-        assert bucket_label(15.0, 10.0) == "10-20vox"
-
-    def test_fractional_step(self):
-        assert bucket_label(1.25, 0.5) == "1.00-1.50vox"
-
-
-class TestFindMasks:
-    def test_matches_region_mask_layout(self, tmp_path):
-        _make_tile_tree(tmp_path, ["S.C.LEFT", "S.C.RIGHT"])
-        found = find_masks(tmp_path, "*mask_skeleton.nii.gz")
-        assert sorted(found) == [
-            "S.C.LEFT/mask/Lmask_skeleton.nii.gz",
-            "S.C.RIGHT/mask/Lmask_skeleton.nii.gz",
-        ]
-
-    def test_pattern_filters_out_other_mask_types(self, tmp_path):
-        _make_tile_tree(tmp_path, ["S.C.LEFT"], filename="Lmask_skeleton.nii.gz")
-        _make_tile_tree(tmp_path, ["S.C.LEFT"], filename="Lmask_foldlabel.nii.gz")
-        assert list(find_masks(tmp_path, "*mask_foldlabel.nii.gz")) == ["S.C.LEFT/mask/Lmask_foldlabel.nii.gz"]
-
-    def test_empty_directory(self, tmp_path):
-        assert find_masks(tmp_path, "*.nii.gz") == {}
 
 
 # ---------------------------------------------------------------------------
@@ -171,7 +102,7 @@ def tile_sets(tmp_path, monkeypatch):
         str(dir_a / "ONLY_A" / "mask" / "Lmask_skeleton.nii.gz"): np.zeros((4, 4, 4)),
         str(dir_b / "ONLY_B" / "mask" / "Lmask_skeleton.nii.gz"): np.zeros((4, 4, 4)),
     }
-    monkeypatch.setattr(compare_cortical_tiles, "aims", _FakeAims(volumes))
+    monkeypatch.setattr(compare, "aims", _FakeAims(volumes))
     return dir_a, dir_b
 
 
@@ -250,7 +181,7 @@ class TestRun:
             str(dir_a / "SHARED" / "mask" / "Lmask_skeleton.nii.gz"): np.zeros((4, 4, 4)),
             str(dir_b / "SHARED" / "mask" / "Lmask_skeleton.nii.gz"): np.zeros((2, 2, 2)),
         }
-        monkeypatch.setattr(compare_cortical_tiles, "aims", _FakeAims(volumes))
+        monkeypatch.setattr(compare, "aims", _FakeAims(volumes))
         out = tmp_path / "r.json"
         script = _make_script(["--set_a", str(dir_a), "--set_b", str(dir_b), "--output", str(out)])
         assert script.run() == 0

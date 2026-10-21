@@ -420,6 +420,11 @@ def visualise_mask_diffs(
         return _launch_viewer(_make_viewer_entries(names, masks_a, masks_b, xor_root))
 
 
+def find_masks(directory: Path, glob_pattern: str) -> dict[str, str]:
+    """Return {path relative to directory: resolved absolute path} for files matching glob_pattern, sorted."""
+    return {str(p.relative_to(directory)): str(p.resolve()) for p in sorted(directory.glob(glob_pattern))}
+
+
 def save_xor_vol(ref_path: str, a: np.ndarray, b: np.ndarray, out_path: str) -> None:
     """Write a NIfTI XOR image (1 = voxel differs, 0 = same) to out_path.
 
@@ -1709,9 +1714,6 @@ class Compare(ScriptBuilder):
     # Mask comparison modes
     # ---------------------------------------------------------------------- #
 
-    def _find_masks(self, directory: Path, glob_pattern: str) -> dict:
-        return {str(p.relative_to(directory)): str(p.resolve()) for p in sorted(directory.glob(glob_pattern))}
-
     def _run_masks(self) -> int:
         return self._compare_nifti_masks("*/*.nii.gz")
 
@@ -1725,8 +1727,8 @@ class Compare(ScriptBuilder):
         if not self.validate_paths([str(dir_a), str(dir_b)]):
             return 1
 
-        masks_a = self._find_masks(dir_a, glob_pattern)
-        masks_b = self._find_masks(dir_b, glob_pattern)
+        masks_a = find_masks(dir_a, glob_pattern)
+        masks_b = find_masks(dir_b, glob_pattern)
 
         common = sorted(set(masks_a) & set(masks_b))
         only_a = sorted(set(masks_a) - set(masks_b))
@@ -1970,6 +1972,20 @@ class Compare(ScriptBuilder):
 
         print(f"\nCSV written to: {output_path}")
         return 0
+
+
+def run_subcommand(mode: str, options: dict[str, object]) -> int:
+    """Run the Compare subcommand mode with options, as `python compare.py <mode> --<name>=<value> ...` would.
+
+    An option whose value is None is left out (the subcommand default applies). Every other value is passed as
+    the single token f"--{name}={value}" (the `=` form, so a value starting with '-' is never read as an option),
+    so Compare's own parser types and choices validate it. No update check and no argument print (the calling
+    script owns both).
+    """
+    argv = [mode] + [f"--{name}={value}" for name, value in options.items() if value is not None]
+    script = Compare()
+    script.parse_args(argv)
+    return script.run()
 
 
 def main():
