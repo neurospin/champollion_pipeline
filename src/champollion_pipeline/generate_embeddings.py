@@ -204,7 +204,7 @@ class HuggingFaceStrategy(ModelFetchStrategy):
             repo_id = self._extract_repo_id(models_path)
             print(f"Attempting to download from Hugging Face: {repo_id}")
             if self.subfolder:
-                print(f"  mask version subfolder: {self.subfolder}")
+                print(f"  model version subfolder: {self.subfolder}")
             from huggingface_hub import snapshot_download
 
             # Ensure system CA bundle is used when the env's certifi bundle is incomplete
@@ -214,7 +214,7 @@ class HuggingFaceStrategy(ModelFetchStrategy):
                 if os.path.exists(_sys_ca):
                     os.environ["SSL_CERT_FILE"] = _sys_ca
 
-            # Cache per (repo, subfolder) to avoid collisions across mask versions
+            # Cache per (repo, subfolder) to avoid collisions across model versions
             repo_name = repo_id.split("/")[-1]
             cache_name = f"{repo_name}_{self.subfolder}" if self.subfolder else repo_name
             local_path = join(extract_to, cache_name)
@@ -438,9 +438,14 @@ class GenerateEmbeddings(ScriptBuilder):
                 "Use deep_folding-2025 as the derivatives folder. Shorthand for --cortical_version deep_folding-2025.",
             )
             .add_optional_argument(
-                "--masks-version",
-                "Mask version subfolder to download from HuggingFace (e.g. 'canonical_25'). "
+                "--model-version",
+                "Model-set subfolder to download from the Hugging Face models repository (e.g. 'canonical_25'). "
                 "Ignored when models_path is a local directory.",
+                default=None,
+            )
+            .add_optional_argument(
+                "--masks-version",
+                "Deprecated alias of --model-version; same value and behaviour.",
                 default=None,
             )
             .add_optional_argument(
@@ -524,6 +529,31 @@ class GenerateEmbeddings(ScriptBuilder):
             return abspath(override)
         return compute_models_cache_dir(self.args.datasets_root)
 
+    def parse_args(self, args: list[str] | None = None) -> argparse.Namespace:
+        """Parse args, then resolve the deprecated --masks-version alias into model_version."""
+        parsed = super().parse_args(args)
+        self._resolve_model_version_alias()
+        return parsed
+
+    def _resolve_model_version_alias(self) -> None:
+        """Copy --masks-version into model_version with a FutureWarning; exit 2 if the two flags differ."""
+        alias = self.args.masks_version
+        if alias is None:
+            return
+        model_version = self.args.model_version
+        if model_version is not None and model_version != alias:
+            self.parser.error(
+                f"--model-version {model_version!r} and --masks-version {alias!r} differ; --masks-version is a "
+                "deprecated alias of --model-version, pass only --model-version"
+            )
+        warnings.warn(
+            "--masks-version is deprecated; use --model-version instead "
+            "(same value, the Hugging Face model-set subfolder).",
+            FutureWarning,
+            stacklevel=2,
+        )
+        self.args.model_version = alias
+
     def fetch_models(self, models_path):
         """
         Fetch models using strategy pattern.
@@ -550,8 +580,8 @@ class GenerateEmbeddings(ScriptBuilder):
         # Check HuggingFace and URL strategies first with the ORIGINAL path
         # These strategies look for semantic patterns (e.g., "user/repo", URLs)
         # that would be destroyed by path resolution
-        masks_version = getattr(self.args, "masks_version", None)
-        hf_strategy = HuggingFaceStrategy(subfolder=masks_version)
+        model_version = getattr(self.args, "model_version", None)
+        hf_strategy = HuggingFaceStrategy(subfolder=model_version)
         if hf_strategy.can_handle(models_path):
             try:
                 return hf_strategy.fetch(models_path, extract_to, no_cache)
