@@ -438,39 +438,9 @@ class Compare(ScriptBuilder):
         use_diff = self.args.metric in ("diff", "both")
         step = self.args.bucket_step
 
-        wass_buckets: dict[str, list] = {}
-        diff_buckets: dict[str, list] = {}
-        distances: dict[str, float] = {}
-        diffs: dict[str, dict] = {}
-        skipped_shape_mismatch: dict[str, dict[str, list[int]]] = {}
-
-        for name in common:
-            arr_a = masks.load_mask_vol(masks_a[name])
-            arr_b = masks.load_mask_vol(masks_b[name])
-
-            if arr_a.shape != arr_b.shape:
-                print(f"WARNING: shape mismatch for {name}: {arr_a.shape} vs {arr_b.shape}, skipping.")
-                skipped_shape_mismatch[name] = {
-                    "shape_a": [int(n) for n in arr_a.shape],
-                    "shape_b": [int(n) for n in arr_b.shape],
-                }
-                continue
-
-            if use_wass:
-                dist = masks.wasserstein_distance(arr_a, arr_b)
-                is_one_side_empty = math.isinf(dist)
-                distances[name] = dist if is_one_side_empty else round(dist, 3)
-                bucket = masks.ONE_SIDE_EMPTY_BUCKET if is_one_side_empty else masks.bucket_label(dist, step)
-                wass_buckets.setdefault(bucket, []).append(name)
-
-            if use_diff:
-                d = masks.voxel_diff(arr_a, arr_b)
-                diffs[name] = d
-                diff_buckets.setdefault(masks.bucket_label(d["changed"], step), []).append(name)
-
-            if self.args.xor_dir:
-                out_xor = str(Path(self.args.xor_dir) / name)
-                masks.save_xor_vol(masks_a[name], arr_a, arr_b, out_xor)
+        wass_buckets, diff_buckets, distances, diffs, skipped_shape_mismatch = _score_common_masks(
+            common, masks_a, masks_b, use_wass, use_diff, step, self.args.xor_dir
+        )
 
         total_compared = len(common) - len(skipped_shape_mismatch)
         print(f"Compared:            {total_compared}")
@@ -516,13 +486,11 @@ class Compare(ScriptBuilder):
 
         if use_wass and wass_buckets:
             print(f"\nWasserstein buckets (step={step}):")
-            for lbl, names in masks.sort_buckets(wass_buckets).items():
-                print(f"  {lbl:15s}  {len(names):3d} mask(s)")
+            _print_bucket_counts(wass_buckets)
 
         if use_diff and diff_buckets:
             print(f"\nDiff buckets (step={step}):")
-            for lbl, names in masks.sort_buckets(diff_buckets).items():
-                print(f"  {lbl:15s}  {len(names):3d} mask(s)")
+            _print_bucket_counts(diff_buckets)
             unchanged = sum(1 for d in diffs.values() if d["changed"] == 0)
             print(f"Unchanged masks: {unchanged}/{len(diffs)}")
 
@@ -686,3 +654,56 @@ def run_subcommand(mode: str, options: dict[str, object]) -> int:
 def main():
     script = Compare()
     return script.main()
+
+
+def _print_bucket_counts(buckets: "dict[str, list]") -> None:
+    """Print one `  <label>  <n> mask(s)` line per bucket, in masks.sort_buckets order."""
+    for lbl, names in masks.sort_buckets(buckets).items():
+        print(f"  {lbl:15s}  {len(names):3d} mask(s)")
+
+
+def _score_common_masks(
+    common: "list[str]",
+    masks_a: "dict[str, str]",
+    masks_b: "dict[str, str]",
+    use_wass: bool,
+    use_diff: bool,
+    step: float,
+    xor_dir: "str | None",
+) -> "tuple[dict[str, list], dict[str, list], dict[str, float], dict[str, dict], dict[str, dict[str, list[int]]]]":
+    """Score each common mask pair; returns (wass_buckets, diff_buckets, distances, diffs, skipped_shape_mismatch)."""
+    wass_buckets: dict[str, list] = {}
+    diff_buckets: dict[str, list] = {}
+    distances: dict[str, float] = {}
+    diffs: dict[str, dict] = {}
+    skipped_shape_mismatch: dict[str, dict[str, list[int]]] = {}
+
+    for name in common:
+        arr_a = masks.load_mask_vol(masks_a[name])
+        arr_b = masks.load_mask_vol(masks_b[name])
+
+        if arr_a.shape != arr_b.shape:
+            print(f"WARNING: shape mismatch for {name}: {arr_a.shape} vs {arr_b.shape}, skipping.")
+            skipped_shape_mismatch[name] = {
+                "shape_a": [int(n) for n in arr_a.shape],
+                "shape_b": [int(n) for n in arr_b.shape],
+            }
+            continue
+
+        if use_wass:
+            dist = masks.wasserstein_distance(arr_a, arr_b)
+            is_one_side_empty = math.isinf(dist)
+            distances[name] = dist if is_one_side_empty else round(dist, 3)
+            bucket = masks.ONE_SIDE_EMPTY_BUCKET if is_one_side_empty else masks.bucket_label(dist, step)
+            wass_buckets.setdefault(bucket, []).append(name)
+
+        if use_diff:
+            d = masks.voxel_diff(arr_a, arr_b)
+            diffs[name] = d
+            diff_buckets.setdefault(masks.bucket_label(d["changed"], step), []).append(name)
+
+        if xor_dir:
+            out_xor = str(Path(xor_dir) / name)
+            masks.save_xor_vol(masks_a[name], arr_a, arr_b, out_xor)
+
+    return wass_buckets, diff_buckets, distances, diffs, skipped_shape_mismatch

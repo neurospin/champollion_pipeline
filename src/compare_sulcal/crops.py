@@ -257,6 +257,53 @@ def _summarise_region(
     }
 
 
+def _unaligned_skip_reason(
+    key: str, reason: str, shape_a: "tuple[int, ...]", shape_b: "tuple[int, ...]"
+) -> "str | None":
+    """Return the skip reason for a region/side with no crop offset, or None to compare directly.
+
+    Prints the comparing-directly WARNING when the crop info is absent and the shapes are equal.
+    """
+    if reason not in _CROP_INFO_ABSENT or shape_a != shape_b:
+        return reason
+    print(f"WARNING: {key}: {reason}, comparing directly (equal shapes {shape_a}).")
+    return None
+
+
+def _build_crop_alignment(
+    shape_a: "tuple[int, ...]", shape_b: "tuple[int, ...]", offset: "tuple[int, int, int] | None"
+) -> "tuple[dict | None, tuple[int, int, int] | None]":
+    """Return (alignment, lo): the union-grid alignment and set A's origin in it, both None without an offset."""
+    if offset is None:
+        return None, None
+    union_shape, pos_a, pos_b = _compute_union_grid(shape_a, shape_b, offset)
+    lo: "tuple[int, int, int]" = tuple(-p for p in pos_a)
+    return {"pos_a": pos_a, "pos_b": pos_b, "union_shape": union_shape}, lo
+
+
+def _pair_subjects(subjects_a: "list[str]", subjects_b: "list[str]") -> "list[tuple[str, int, int]]":
+    """Pair subjects by ID in set A order: (subject, index in A, index in B) per A entry also in B."""
+    index_b = {s: j for j, s in enumerate(subjects_b)}
+    return [(subj, i, index_b[subj]) for i, subj in enumerate(subjects_a) if subj in index_b]
+
+
+def _save_top_lost_xors(
+    side_dir: Path,
+    top_lost: "list[dict]",
+    pair_index: dict,
+    arr_a: np.ndarray,
+    arr_b: np.ndarray,
+    alignment: "dict | None",
+    xor_header: "dict | None",
+) -> None:
+    """Write one XOR volume per top_lost subject under side_dir (created if missing)."""
+    side_dir.mkdir(parents=True, exist_ok=True)
+    for entry in top_lost:
+        i, j = pair_index[entry["subject"]]
+        vol_a, vol_b = _compute_aligned_pair(arr_a[i], arr_b[j], alignment)
+        _save_crop_xor(_compute_crop_xor(vol_a, vol_b), side_dir, entry["subject"], xor_header)
+
+
 def _compare_region_side(
     set_a: Path,
     set_b: Path,
@@ -306,30 +353,14 @@ def _compare_region_side(
     offset, reason = _compute_crop_offset(header_a, header_b)
 
     if offset is None:
-        if reason in _CROP_INFO_ABSENT:
-            if shape_a != shape_b:
-                return _skip(reason, arr_a, arr_b)
-            print(f"WARNING: {key}: {reason}, comparing directly (equal shapes {shape_a}).")
-        else:
-            return _skip(reason, arr_a, arr_b)
+        skip_reason = _unaligned_skip_reason(key, reason, shape_a, shape_b)
+        if skip_reason is not None:
+            return _skip(skip_reason, arr_a, arr_b)
 
-    # Build alignment
-    if offset is not None:
-        union_shape, pos_a, pos_b = _compute_union_grid(shape_a, shape_b, offset)
-        alignment: "dict | None" = {"pos_a": pos_a, "pos_b": pos_b, "union_shape": union_shape}
-        lo: "tuple[int, int, int]" = tuple(-p for p in pos_a)
-    else:
-        union_shape = shape_a
-        pos_a = pos_b = None
-        alignment = None
+    alignment, lo = _build_crop_alignment(shape_a, shape_b, offset)
 
-    # Pair subjects by ID, preserving set A order
-    index_b = {s: j for j, s in enumerate(subjects_b)}
-    n_common = 0
-    for s in subjects_a:
-        if s in index_b:
-            n_common += 1
-
+    pairs = _pair_subjects(subjects_a, subjects_b)
+    n_common = len(pairs)
     only_in_a = len(subjects_a) - n_common
     only_in_b = len(subjects_b) - n_common
 
@@ -338,10 +369,7 @@ def _compare_region_side(
 
     pair_index: dict = {}
     rows: list[dict] = []
-    for i, subj in enumerate(subjects_a):
-        if subj not in index_b:
-            continue
-        j = index_b[subj]
+    for subj, i, j in pairs:
         pair_index[subj] = (i, j)
         vol_a, vol_b = _compute_aligned_pair(arr_a[i], arr_b[j], alignment)
         metrics = _compare_subject_crops(vol_a, vol_b)
@@ -351,13 +379,10 @@ def _compare_region_side(
     summary = _summarise_region(rows, shape_a, shape_b, offset, top_k, only_in_a, only_in_b)
 
     if xor_dir is not None and summary["top_lost"]:
-        side_dir = xor_dir / region / side
-        side_dir.mkdir(parents=True, exist_ok=True)
         xor_header = None if offset is None else _make_crop_xor_header(header_a, lo)
-        for entry in summary["top_lost"]:
-            i, j = pair_index[entry["subject"]]
-            vol_a, vol_b = _compute_aligned_pair(arr_a[i], arr_b[j], alignment)
-            _save_crop_xor(_compute_crop_xor(vol_a, vol_b), side_dir, entry["subject"], xor_header)
+        _save_top_lost_xors(
+            xor_dir / region / side, summary["top_lost"], pair_index, arr_a, arr_b, alignment, xor_header
+        )
 
     return {"key": key, "region": region, "side": side, "rows": rows, "summary": summary, "skipped": None}
 
