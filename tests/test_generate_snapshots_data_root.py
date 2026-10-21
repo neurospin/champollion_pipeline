@@ -1,7 +1,7 @@
 """TASK-201: tiles snapshot data root (REQ-TILESROOT-01).
 
 Hermetic per ARCHITECTURE.md#snapshot-mesh-fallback-hermetic: Anatomist,
-PyAIMS and cortical_tiles are patched as module attributes of generate_snapshots; every path the
+PyAIMS and cortical_tiles are patched as module attributes of snapshot_types.brainvisa_imports; every path the
 code touches lives under ``tmp_path`` and ``ICBM_MESH_DIR_FALLBACK`` is
 redirected there, so nothing depends on /neurospin being mounted or not.
 """
@@ -10,8 +10,9 @@ from unittest.mock import MagicMock, patch
 
 import pytest
 
-import champollion_pipeline.generate_snapshots as gs
 from champollion_pipeline.generate_snapshots import generate_tiles_snapshot
+from champollion_pipeline.snapshot_types import brainvisa_imports
+from champollion_pipeline.snapshot_types import tiles as tiles_module
 
 _MODULE_ATTRS = {"anatomist.headless": "ana", "cortical_tiles.config": "config", "soma.aims": "aims"}
 
@@ -34,7 +35,7 @@ def tiles_env(tmp_path, monkeypatch):
     icbm.mkdir()
     (icbm / "mni_icbm152_nlin_asym_09c_Lhemi.gii").touch()
     (icbm / "mni_icbm152_nlin_asym_09c_Rhemi.gii").touch()
-    monkeypatch.setattr(gs, "ICBM_MESH_DIR_FALLBACK", str(icbm))
+    monkeypatch.setattr(tiles_module, "ICBM_MESH_DIR_FALLBACK", str(icbm))
 
     anatomist = MagicMock()
     anatomist.createWindow.return_value = MagicMock()
@@ -81,7 +82,7 @@ class TestTilesMissingRegionGraphMessage:
     def test_explicit_root_message_names_path_and_option(self, tmp_path, tiles_env, capsys):
         """REQ-TILESROOT-01: explicit champollion_data_root lacking the region graph."""
         modules, empty_root, crops = tiles_env
-        with patch.multiple(gs, **_as_module_attrs(modules)):
+        with patch.multiple(brainvisa_imports, **_as_module_attrs(modules)):
             snaps = generate_tiles_snapshot(
                 str(crops), str(tmp_path / "tiles.png"), champollion_data_root=str(empty_root)
             )
@@ -93,7 +94,7 @@ class TestTilesMissingRegionGraphMessage:
     def test_config_default_root_message_names_path_and_option(self, tmp_path, tiles_env, capsys):
         """REQ-TILESROOT-01: cortical_tiles config default root lacking the region graph (TASK-201 case)."""
         modules, empty_root, crops = tiles_env
-        with patch.multiple(gs, **_as_module_attrs(modules)):
+        with patch.multiple(brainvisa_imports, **_as_module_attrs(modules)):
             snaps = generate_tiles_snapshot(str(crops), str(tmp_path / "tiles.png"))
         out = capsys.readouterr().out
         assert snaps == []
