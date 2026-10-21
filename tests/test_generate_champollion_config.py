@@ -9,7 +9,7 @@ from unittest.mock import MagicMock, mock_open, patch
 
 import pytest
 
-from champollion_pipeline.generate_champollion_config import GenerateChampollionConfig
+from champollion_pipeline.generate_champollion_config import GenerateChampollionConfig, main
 
 
 class TestGenerateChampollionConfigInit:
@@ -286,8 +286,6 @@ class TestMainFunction:
             mock_instance.print_args.return_value = mock_instance
             mock_instance.run.return_value = 0
             MockScript.return_value = mock_instance
-
-            from champollion_pipeline.generate_champollion_config import main
 
             with patch("sys.argv", ["script", temp_dir, "--dataset", "test"]):
                 result = main()

@@ -10,6 +10,7 @@ rendered for real through matplotlib's Agg backend using tiny synthetic
 coordinate arrays and a stubbed UMAP model.
 """
 
+import json
 import os
 import os.path as osp
 from unittest.mock import MagicMock, patch
@@ -811,7 +812,6 @@ class TestRunDispatch:
         assert (tmp_path / "out").is_dir()
 
     def test_manifest_lists_every_snapshot(self, tmp_path):
-        import json
 
         script = self._script(tmp_path)
         sulcal, tiles, umap = self._patched(script)

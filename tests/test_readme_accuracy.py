@@ -60,7 +60,8 @@ import pytest
 
 from champollion_pipeline.generate_embeddings import GenerateEmbeddings
 from champollion_pipeline.put_together_embeddings import PutTogetherEmbeddings
-from champollion_pipeline.run_cortical_tiles import RunCorticalTiles
+from champollion_pipeline.run_cortical_tiles import LABELLING_SESSION_DEFAULT, RunCorticalTiles
+from champollion_pipeline.utils.lib import DERIVATIVES_FOLDER
 
 PROJECT_ROOT = Path(__file__).resolve().parents[1]
 
@@ -528,7 +529,6 @@ class TestCorticalTilesWholeBrainAndOptionsMatchReadme:
 
     def test_whole_brain_output_directory_is_documented(self):
         """run() fuses L+R and strips the ventricle into {output}/cortical_tiles-2026/whole_brain/F/."""
-        from champollion_pipeline.utils.lib import DERIVATIVES_FOLDER
 
         expected = f"{{output}}/{DERIVATIVES_FOLDER}/whole_brain/F/"
         section = _section_block(r"3\. Generate Sulcal Region Crops")
@@ -540,7 +540,6 @@ class TestCorticalTilesWholeBrainAndOptionsMatchReadme:
 
     def test_labelling_session_row_states_default(self):
         """--labelling_session (REQ-LABELSESSION-01) must appear in 'All options' with its real default."""
-        from champollion_pipeline.run_cortical_tiles import LABELLING_SESSION_DEFAULT
 
         assert "--labelling_session" in _real_option_strings(RunCorticalTiles), (
             "sanity check: expected run_cortical_tiles.py to declare --labelling_session"
