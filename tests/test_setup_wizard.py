@@ -12,6 +12,7 @@ REQ-WIZARD-03: install.sh shall verify pixi is installed, then run
 
 from __future__ import annotations
 
+import importlib.util
 import stat
 from pathlib import Path
 
@@ -63,7 +64,6 @@ class TestSetupWizardScript:
 
     def test_wizard_dry_run_exits_without_running(self):
         """--dry-run must not call subprocess.run on any pixi command."""
-        import importlib.util
 
         spec = importlib.util.spec_from_file_location("setup_wizard", WIZARD)
         mod = importlib.util.module_from_spec(spec)
@@ -75,7 +75,6 @@ class TestSetupWizardScript:
         assert plan.warnings == []
 
     def test_command_matrix_full_local(self):
-        import importlib.util
 
         spec = importlib.util.spec_from_file_location("setup_wizard", WIZARD)
         mod = importlib.util.module_from_spec(spec)
@@ -85,7 +84,6 @@ class TestSetupWizardScript:
         assert "pixi run install-all" in plan.commands
 
     def test_command_matrix_training_jean_zay(self):
-        import importlib.util
 
         spec = importlib.util.spec_from_file_location("setup_wizard", WIZARD)
         mod = importlib.util.module_from_spec(spec)

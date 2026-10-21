@@ -6,7 +6,7 @@ from unittest.mock import MagicMock, patch
 
 import pytest
 
-from champollion_pipeline.put_together_embeddings import PutTogetherEmbeddings
+from champollion_pipeline.put_together_embeddings import PutTogetherEmbeddings, main
 
 
 class TestPutTogetherEmbeddingsInit:
@@ -112,8 +112,6 @@ class TestMainFunction:
             mock_instance.print_args.return_value = mock_instance
             mock_instance.run.return_value = 0
             MockScript.return_value = mock_instance
-
-            from champollion_pipeline.put_together_embeddings import main
 
             with patch("sys.argv", ["script", str(tmp_path), "--output_path", str(tmp_path / "out")]):
                 result = main()

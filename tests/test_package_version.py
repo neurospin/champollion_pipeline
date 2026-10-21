@@ -23,6 +23,8 @@ from pathlib import Path
 import pytest
 import tomllib
 
+import champollion_pipeline
+
 REPO_ROOT = Path(__file__).resolve().parent.parent
 PYPROJECT = REPO_ROOT / "pyproject.toml"
 PIXI_TOML = REPO_ROOT / "pixi.toml"
@@ -63,7 +65,6 @@ class TestPackageMetadataMatchesManifests:
     """REQ-INSTALL-07: `__init__.py` states no package fact the manifests contradict."""
 
     def test_version_matches_pyproject(self):
-        import champollion_pipeline
 
         expected = _pyproject_version()
         assert champollion_pipeline.__version__ == expected, (

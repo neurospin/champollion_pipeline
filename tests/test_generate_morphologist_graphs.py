@@ -9,7 +9,7 @@ from unittest.mock import MagicMock, call, patch
 
 import pytest
 
-from champollion_pipeline.generate_morphologist_graphs import GenerateMorphologistGraphs
+from champollion_pipeline.generate_morphologist_graphs import GenerateMorphologistGraphs, main
 
 
 class TestGenerateMorphologistGraphsInit:
@@ -289,8 +289,6 @@ class TestMainFunction:
             mock_instance.print_args.return_value = mock_instance
             mock_instance.run.return_value = 0
             MockScript.return_value = mock_instance
-
-            from champollion_pipeline.generate_morphologist_graphs import main
 
             with patch("sys.argv", ["script", temp_dir, temp_dir]):
                 result = main()

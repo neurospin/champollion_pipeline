@@ -5,12 +5,18 @@ Unit tests for run_cortical_tiles.py
 """
 
 import json
+import shutil
+import tempfile
 from pathlib import Path
 from unittest.mock import MagicMock, call, patch
 
+import numpy as np
 import pytest
+from hypothesis import assume, given, settings
+from hypothesis import strategies as st
 
-from champollion_pipeline.run_cortical_tiles import RunCorticalTiles
+from champollion_pipeline.run_cortical_tiles import RunCorticalTiles, main
+from champollion_pipeline.utils.lib import DERIVATIVES_FOLDER
 
 
 @pytest.fixture(autouse=True)  # noqa: V103
@@ -499,7 +505,6 @@ class TestSkipDistbottom:
 
     def test_output_dir_set_from_output_arg(self, temp_dir):
         """Test that output_dir in config is set to output/DERIVATIVES_FOLDER."""
-        from champollion_pipeline.utils.lib import DERIVATIVES_FOLDER
 
         output_dir = Path(temp_dir) / "derivatives"
         output_dir.mkdir()
@@ -565,7 +570,6 @@ class TestSkipDistbottom:
 
     def test_config_with_null_values_overwritten_correctly(self, temp_dir):
         """JSON null (None) for graphs_dir/output_dir is overwritten with correct paths."""
-        from champollion_pipeline.utils.lib import DERIVATIVES_FOLDER as DF
 
         input_dir = Path(temp_dir) / "input"
         output_dir = Path(temp_dir) / "output"
@@ -595,7 +599,7 @@ class TestSkipDistbottom:
 
                         updated = json.loads(config_path.read_text())
                         assert updated["graphs_dir"] == str(input_dir.resolve())
-                        assert updated["output_dir"] == str(output_dir.resolve() / DF)
+                        assert updated["output_dir"] == str(output_dir.resolve() / DERIVATIVES_FOLDER)
 
 
 class TestBidsConfig:
@@ -651,10 +655,9 @@ class TestGraphPathConfigOverride:
     """Test that path_to_graph and path_sk_with_hull are written into the JSON config."""
 
     def _run_with_config(self, temp_dir, config_data, graph_path, skel_path):
-        from pathlib import Path as _Path
 
-        input_dir = _Path(temp_dir) / "input"
-        output_dir = _Path(temp_dir) / "output"
+        input_dir = Path(temp_dir) / "input"
+        output_dir = Path(temp_dir) / "output"
         input_dir.mkdir()
         output_dir.mkdir()
         config_path = output_dir / "pipeline_loop_2mm.json"
@@ -797,8 +800,6 @@ class TestHypothesisConfigInvariants:
 
     def _run_in_temp(self, config_data):
         """Create fresh input/output dirs, write config in output, run script."""
-        import shutil
-        import tempfile
 
         tmp = tempfile.mkdtemp()
         try:
@@ -832,8 +833,6 @@ class TestHypothesisConfigInvariants:
     @pytest.mark.hypothesis
     def test_graphs_dir_always_overwritten_to_input(self):
         """graphs_dir is always set to abspath(input) regardless of initial value."""
-        from hypothesis import given, settings
-        from hypothesis import strategies as st
 
         json_val = st.one_of(
             st.none(),
@@ -855,10 +854,6 @@ class TestHypothesisConfigInvariants:
     @pytest.mark.hypothesis
     def test_output_dir_always_output_plus_derivatives(self):
         """output_dir is always output/DERIVATIVES_FOLDER regardless of initial value."""
-        from hypothesis import given, settings
-        from hypothesis import strategies as st
-
-        from champollion_pipeline.utils.lib import DERIVATIVES_FOLDER
 
         json_val = st.one_of(
             st.none(),
@@ -880,8 +875,6 @@ class TestHypothesisConfigInvariants:
     @pytest.mark.hypothesis
     def test_extra_config_keys_are_preserved(self):
         """Arbitrary extra keys in the config JSON survive the JSON rewrite."""
-        from hypothesis import given, settings
-        from hypothesis import strategies as st
 
         reserved = {"graphs_dir", "output_dir", "skip_distbottom"}
         key_st = st.from_regex(r"[a-z][a-z0-9_]{0,15}", fullmatch=True).filter(lambda k: k not in reserved)
@@ -906,11 +899,6 @@ class TestHypothesisConfigInvariants:
     @pytest.mark.hypothesis
     def test_d_arg_always_output_for_any_path_names(self):
         """-d is always abspath(output), regardless of directory names."""
-        import shutil
-        import tempfile
-
-        from hypothesis import assume, given, settings
-        from hypothesis import strategies as st
 
         path_part = st.from_regex(r"[a-zA-Z0-9_-]{1,15}", fullmatch=True)
 
@@ -1025,8 +1013,6 @@ class TestMainFunction:
             mock_instance.run.return_value = 0
             MockScript.return_value = mock_instance
 
-            from champollion_pipeline.run_cortical_tiles import main
-
             with patch(
                 "sys.argv",
                 ["script", temp_dir, temp_dir, "--path_to_graph", "graphs", "--path_sk_with_hull", "skeleton"],
@@ -1085,8 +1071,6 @@ class TestGenerateMaskNpys:
         (mask_dir / "Rmask_cropped.nii.gz").write_bytes(b"fake")
 
         script = RunCorticalTiles()
-
-        import numpy as np
 
         fake_arr = np.ones((10, 10, 10, 1))
         mock_vol = MagicMock()
@@ -1312,7 +1296,6 @@ class TestWholeBrainGeneration:
         call_order = []
 
         # Re-implement _run inline to track call order via side_effect.
-        import tempfile
 
         tmp = tempfile.mkdtemp()
         try:
@@ -1350,8 +1333,6 @@ class TestWholeBrainGeneration:
             ):
                 script.run()
         finally:
-            import shutil
-
             shutil.rmtree(tmp, ignore_errors=True)
 
         assert call_order == ["add_left_and_right_volumes", "remove_ventricle"]
