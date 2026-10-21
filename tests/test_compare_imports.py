@@ -1,7 +1,8 @@
-"""Import placement in src/compare.py (TASK-185).
+"""Import placement in src/compare.py and the package src/compare_sulcal (TASK-185).
 
 - TestTask185CompareImports  REQ-COMPARE-91  no import inside a function or method body
-                             REQ-COMPARE-92  _load_database calls compare.get_all_subjects_as_dictionary
+                             REQ-COMPARE-92  _load_database calls get_all_subjects_as_dictionary
+                                             of compare_sulcal.brainvisa
 
 Project rule (CLAUDE.md): all imports go at the top of the file.
 REQ-COMPARE-53 already covered visualise_mask_diffs; this file covers the
@@ -13,7 +14,8 @@ import ast
 from pathlib import Path
 from unittest.mock import MagicMock
 
-import compare
+import compare_sulcal.brainvisa
+import compare_sulcal.databases
 from compare import Compare
 
 SRC_COMPARE = Path(__file__).resolve().parent.parent / "src" / "compare.py"
@@ -47,14 +49,16 @@ def _make_script(argv: list) -> Compare:
 
 class TestTask185CompareImports:
     def test_compare_module_has_no_function_level_import(self):
-        tree = ast.parse(SRC_COMPARE.read_text())
-        assert _function_level_imports(tree) == []
+        for path in [SRC_COMPARE, *sorted((SRC_COMPARE.parent / "compare_sulcal").glob("*.py"))]:
+            assert _function_level_imports(ast.parse(path.read_text())) == [], path
 
     def test_load_database_calls_module_level_get_all_subjects_as_dictionary(self, tmp_path, monkeypatch):
         lister = MagicMock(return_value=[{"subject": "sub-01", "dir": "d", "graph_file": "g"}])
         # raising=True (the default): the attribute must already exist on the module.
-        monkeypatch.setattr(compare, "get_all_subjects_as_dictionary", lister)
-        monkeypatch.setattr(compare, "_get_subject_voxel_counts", lambda sub, _bv: (sub["subject"], {"S.C.": 3}))
+        monkeypatch.setattr(compare_sulcal.brainvisa, "get_all_subjects_as_dictionary", lister)
+        monkeypatch.setattr(
+            compare_sulcal.databases, "_get_subject_voxel_counts", lambda sub, _bv: (sub["subject"], {"S.C.": 3})
+        )
         script = _make_script(
             [
                 "databases",

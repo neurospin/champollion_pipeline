@@ -16,7 +16,7 @@ import sys
 
 import pytest
 
-import compare
+import compare_sulcal.brainvisa
 from compare import _get_subject_voxel_counts
 
 SUBJECT = "subj-alpha"
@@ -72,7 +72,7 @@ def install(monkeypatch):
         fake = _FakeAims(graphs)
         monkeypatch.setattr(sys.modules["soma"], "aims", fake)
         # compare binds aims at import time: patch its module-level name too
-        monkeypatch.setattr(compare, "aims", fake)
+        monkeypatch.setattr(compare_sulcal.brainvisa, "aims", fake)
         return fake
 
     return _install

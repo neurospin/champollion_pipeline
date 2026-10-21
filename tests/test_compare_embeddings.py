@@ -53,6 +53,7 @@ import pytest
 from scipy.stats import spearmanr
 
 import compare
+import compare_sulcal.embeddings
 from compare import Compare
 
 _R1 = "SCall-SsP-SintraCing"
@@ -168,7 +169,7 @@ def _fake_load_umap_model(path):
 @pytest.fixture(autouse=True)  # noqa: V103 - autouse fixture, used by pytest
 def fake_umap(monkeypatch):
     _MODELS.clear()
-    monkeypatch.setattr(compare, "load_umap_model", _fake_load_umap_model, raising=False)
+    monkeypatch.setattr(compare_sulcal.embeddings, "load_umap_model", _fake_load_umap_model)
     yield
     _MODELS.clear()
 

@@ -39,6 +39,9 @@ import numpy as np
 import pytest
 
 import compare
+import compare_sulcal.brainvisa
+import compare_sulcal.masks
+import compare_sulcal.viewer
 from compare import Compare, visualise_mask_diffs
 
 pytestmark = pytest.mark.unit  # noqa: V107
@@ -188,7 +191,7 @@ def mask_tree(tmp_path, monkeypatch):
             objects[str((dir_a / rel).resolve())] = _FakeVolume(arr_a)
             objects[str((dir_b / rel).resolve())] = _FakeVolume(arr_b)
         fake = _FakeAims(objects)
-        monkeypatch.setattr(compare, "aims", fake)
+        monkeypatch.setattr(compare_sulcal.brainvisa, "aims", fake)
         return dir_a, dir_b, fake
 
     return _install
@@ -204,7 +207,7 @@ def _capture_visualise(monkeypatch):
         seen["kwargs"] = kwargs
         return 0
 
-    monkeypatch.setattr(compare, "visualise_mask_diffs", _fake)
+    monkeypatch.setattr(compare_sulcal.viewer, "visualise_mask_diffs", _fake)
     return seen
 
 
@@ -218,7 +221,7 @@ class TestTask191Ranking:
     def test_top_five_by_score_descending(self, monkeypatch, run_recorder):
         names = [f"m{i}.nii.gz" for i in range(7)]
         objects, masks_a, masks_b = _mask_pairs(names)
-        monkeypatch.setattr(compare, "aims", _FakeAims(objects))
+        monkeypatch.setattr(compare_sulcal.brainvisa, "aims", _FakeAims(objects))
         run = run_recorder()
 
         scores = {name: float(i + 1) for i, name in enumerate(names)}
@@ -231,7 +234,7 @@ class TestTask191Ranking:
     def test_infinite_score_ranks_first(self, monkeypatch, run_recorder):
         names = ["near.nii.gz", "far.nii.gz", "emptied.nii.gz"]
         objects, masks_a, masks_b = _mask_pairs(names)
-        monkeypatch.setattr(compare, "aims", _FakeAims(objects))
+        monkeypatch.setattr(compare_sulcal.brainvisa, "aims", _FakeAims(objects))
         run = run_recorder()
 
         scores = {"near.nii.gz": 0.5, "far.nii.gz": 3.25, "emptied.nii.gz": math.inf}
@@ -243,7 +246,7 @@ class TestTask191Ranking:
     def test_zero_scores_excluded(self, monkeypatch, run_recorder):
         names = ["a.nii.gz", "b.nii.gz", "c.nii.gz"]
         objects, masks_a, masks_b = _mask_pairs(names)
-        monkeypatch.setattr(compare, "aims", _FakeAims(objects))
+        monkeypatch.setattr(compare_sulcal.brainvisa, "aims", _FakeAims(objects))
         run = run_recorder()
 
         visualise_mask_diffs({"a.nii.gz": 0.0, "b.nii.gz": 2.0, "c.nii.gz": 0}, masks_a, masks_b)
@@ -340,20 +343,20 @@ class TestTask191Ranking:
 class TestTask192XorFiles:
     def _spy_save_xor_vol(self, monkeypatch):
         calls = []
-        original = compare.save_xor_vol
+        original = compare_sulcal.masks.save_xor_vol
 
         def _spy(*args, **kwargs):
             calls.append(args[3] if len(args) > 3 else kwargs.get("out_path"))
             return original(*args, **kwargs)
 
-        monkeypatch.setattr(compare, "save_xor_vol", _spy)
+        monkeypatch.setattr(compare_sulcal.masks, "save_xor_vol", _spy)
         return calls
 
     @pytest.mark.usefixtures("display_env")
     def test_temp_xor_files_come_from_save_xor_vol(self, monkeypatch, run_recorder, tmp_root):
         names = ["x.nii.gz", "y.nii.gz"]
         objects, masks_a, masks_b = _mask_pairs(names)
-        monkeypatch.setattr(compare, "aims", _FakeAims(objects))
+        monkeypatch.setattr(compare_sulcal.brainvisa, "aims", _FakeAims(objects))
         calls = self._spy_save_xor_vol(monkeypatch)
         run = run_recorder()
 
@@ -365,7 +368,7 @@ class TestTask192XorFiles:
     def test_temp_xor_files_share_one_directory_removed_after_return(self, monkeypatch, run_recorder, tmp_root):
         names = ["x.nii.gz", "y.nii.gz", "z.nii.gz"]
         objects, masks_a, masks_b = _mask_pairs(names)
-        monkeypatch.setattr(compare, "aims", _FakeAims(objects))
+        monkeypatch.setattr(compare_sulcal.brainvisa, "aims", _FakeAims(objects))
         existed = {}
 
         def _check(cmd):
@@ -389,7 +392,7 @@ class TestTask192XorFiles:
         names = ["L/x.nii.gz", "L/y.nii.gz"]
         objects, masks_a, masks_b = _mask_pairs(names)
         fake = _FakeAims(objects)
-        monkeypatch.setattr(compare, "aims", fake)
+        monkeypatch.setattr(compare_sulcal.brainvisa, "aims", fake)
         calls = self._spy_save_xor_vol(monkeypatch)
         xor_dir = _make_tree(tmp_path / "xors", names)
         temp_seen = []
@@ -433,7 +436,7 @@ class TestTask192XorFiles:
     def test_temp_dir_removed_when_aims_write_raises(self, monkeypatch, run_recorder, tmp_root):
         names = ["x.nii.gz", "y.nii.gz", "z.nii.gz"]
         objects, masks_a, masks_b = _mask_pairs(names)
-        monkeypatch.setattr(compare, "aims", _FakeAims(objects, fail_write_after=1))
+        monkeypatch.setattr(compare_sulcal.brainvisa, "aims", _FakeAims(objects, fail_write_after=1))
         run = run_recorder()
 
         with pytest.raises(RuntimeError, match="fake aims.write failure"):
@@ -447,7 +450,7 @@ class TestTask192XorFiles:
         names = ["x.nii.gz", "y.nii.gz"]
         objects, masks_a, masks_b = _mask_pairs(names)
         # The second-ranked mask's set_b file cannot be read.
-        monkeypatch.setattr(compare, "aims", _FakeAims(objects, fail_read={masks_b["y.nii.gz"]}))
+        monkeypatch.setattr(compare_sulcal.brainvisa, "aims", _FakeAims(objects, fail_read={masks_b["y.nii.gz"]}))
         run = run_recorder()
 
         with pytest.raises(RuntimeError, match="fake aims.read failure"):
@@ -460,7 +463,7 @@ class TestTask192XorFiles:
     def test_temp_dir_removed_when_subprocess_raises(self, monkeypatch, run_recorder, tmp_root):
         names = ["x.nii.gz"]
         objects, masks_a, masks_b = _mask_pairs(names)
-        monkeypatch.setattr(compare, "aims", _FakeAims(objects))
+        monkeypatch.setattr(compare_sulcal.brainvisa, "aims", _FakeAims(objects))
         run_recorder(raises=OSError("cannot spawn"))
 
         try:
@@ -480,7 +483,7 @@ class TestTask187ViewerFailure:
     @pytest.mark.usefixtures("display_env")
     def test_nonzero_return_code_reported_on_stderr(self, monkeypatch, run_recorder, tmp_root, capsys):
         objects, masks_a, masks_b = _mask_pairs(["m.nii.gz"])
-        monkeypatch.setattr(compare, "aims", _FakeAims(objects))
+        monkeypatch.setattr(compare_sulcal.brainvisa, "aims", _FakeAims(objects))
         run_recorder(returncode=139)
 
         assert visualise_mask_diffs({"m.nii.gz": 1.0}, masks_a, masks_b) == 1
@@ -489,7 +492,7 @@ class TestTask187ViewerFailure:
     @pytest.mark.usefixtures("display_env")
     def test_returns_zero_when_viewer_succeeds(self, monkeypatch, run_recorder, tmp_root, capsys):
         objects, masks_a, masks_b = _mask_pairs(["m.nii.gz"])
-        monkeypatch.setattr(compare, "aims", _FakeAims(objects))
+        monkeypatch.setattr(compare_sulcal.brainvisa, "aims", _FakeAims(objects))
         run_recorder(returncode=0)
 
         assert visualise_mask_diffs({"m.nii.gz": 1.0}, masks_a, masks_b) == 0
@@ -556,7 +559,7 @@ class TestTask188DisplayCheck:
         for var, value in env.items():
             monkeypatch.setenv(var, value)
         objects, masks_a, masks_b = _mask_pairs(["m.nii.gz"])
-        monkeypatch.setattr(compare, "aims", _FakeAims(objects))
+        monkeypatch.setattr(compare_sulcal.brainvisa, "aims", _FakeAims(objects))
         run = run_recorder()
 
         assert visualise_mask_diffs({"m.nii.gz": 1.0}, masks_a, masks_b) == 0
@@ -792,7 +795,7 @@ class TestTask189HelpText:
 
 class TestTask185VisualiseImports:
     def test_visualise_mask_diffs_has_no_import_statement(self):
-        tree = ast.parse(SRC_COMPARE.read_text())
+        tree = ast.parse((SRC_COMPARE.parent / "compare_sulcal" / "viewer.py").read_text())
         func = next(
             node for node in ast.walk(tree) if isinstance(node, ast.FunctionDef) and node.name == "visualise_mask_diffs"
         )

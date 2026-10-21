@@ -41,6 +41,7 @@ champollion-labelling-qc = "champollion_pipeline.generate_labelling_qc:main"
 
 [tool.setuptools.packages.find]
 where = ["src"]
+exclude = ["compare_sulcal*"]
 
 [tool.ruff]
 line-length = 120
