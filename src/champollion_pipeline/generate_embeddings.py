@@ -120,6 +120,26 @@ def read_model_set(model_set_dir: str) -> ModelSet:
     return ModelSet(data["model_version"], data["masks"], data.get("checkpoint_epoch"))
 
 
+def write_model_set(model_set_dir: str, model_set: ModelSet) -> str:
+    """Atomically write <model_set_dir>/model_set.json (model_version, masks, then checkpoint_epoch when set) and
+    return its path. The directory must exist; OSError propagates and leaves no temporary file behind."""
+    path = join(model_set_dir, MODEL_SET_FILE_NAME)
+    content = {"model_version": model_set.model_version, "masks": model_set.masks}
+    if model_set.checkpoint_epoch is not None:
+        content["checkpoint_epoch"] = model_set.checkpoint_epoch
+    fd, tmp_path = tempfile.mkstemp(dir=model_set_dir, prefix=".model_set.", suffix=".tmp")
+    try:
+        with os.fdopen(fd, "w", encoding="utf-8") as f:
+            f.write(json.dumps(content, indent=2) + "\n")
+        os.chmod(tmp_path, 0o644)
+        os.replace(tmp_path, path)
+    except BaseException:
+        with contextlib.suppress(OSError):
+            os.unlink(tmp_path)
+        raise
+    return path
+
+
 class ModelFetchStrategy(ABC):
     """Abstract base class for model fetching strategies."""
 
@@ -264,8 +284,6 @@ class HuggingFaceStrategy(ModelFetchStrategy):
             )
             if self.subfolder:
                 downloaded_path = join(downloaded_path, self.subfolder)
-            print(f"Successfully downloaded from Hugging Face to: {downloaded_path}")
-            return downloaded_path
 
         except ImportError:
             raise ImportError(
@@ -273,6 +291,27 @@ class HuggingFaceStrategy(ModelFetchStrategy):
             )
         except Exception as e:
             raise RuntimeError(f"Failed to download from Hugging Face: {e}")
+        if self.subfolder:
+            self._ensure_model_set_marker(downloaded_path)
+        print(f"Successfully downloaded from Hugging Face to: {downloaded_path}")
+        return downloaded_path
+
+    def _ensure_model_set_marker(self, model_set_dir: str) -> None:
+        """Write model_set.json (model_version and masks = the subfolder) unless one is already there; a write
+        failure only warns."""
+        path = join(model_set_dir, MODEL_SET_FILE_NAME)
+        if os.path.lexists(path):
+            return
+        try:
+            write_model_set(model_set_dir, ModelSet(self.subfolder, self.subfolder))
+        except OSError as err:
+            warnings.warn(
+                f"Could not write {path} ({err}); the model set is used without a model_set.json marker",
+                UserWarning,
+                stacklevel=2,
+            )
+            return
+        print(f"  model set marker written: {path}")
 
 
 class RemoteArchiveStrategy(ModelFetchStrategy):
