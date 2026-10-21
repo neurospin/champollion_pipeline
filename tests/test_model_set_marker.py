@@ -145,3 +145,33 @@ class TestLocalMarkerMasksMismatchAllowed:
                 pytest.fail(f"GenerateEmbeddings parser rejected {argv!r} (SystemExit {exc.code})")
         messages = [str(w.message) for w in record if issubclass(w.category, UserWarning)]
         assert any(MASKS in m and MARKER_MASKS in m for m in messages), messages
+
+
+class TestLocalMarkerMissing:
+    """REQ-MODELVER-BDRABCZUK-FF80E381F552: a local directory <D> without model_set.json gives a UserWarning naming
+    <D>/model_set.json and the resolved --masks <M>, instead of exiting."""
+
+    def _parse_expect_warning(self, argv) -> list[str]:
+        """Parse argv with the real parser; fail on SystemExit; return the UserWarning messages emitted."""
+        script = GenerateEmbeddings()
+        with pytest.warns(UserWarning) as record:
+            try:
+                script.parse_args(argv)
+            except SystemExit as exc:
+                pytest.fail(f"GenerateEmbeddings parser rejected {argv!r} (SystemExit {exc.code})")
+        return [str(w.message) for w in record if issubclass(w.category, UserWarning)]
+
+    def test_missing_marker_warns_naming_path_and_masks(self, tmp_path):
+        models = tmp_path / "models"
+        models.mkdir()
+        marker_path = str(models / MODEL_SET_FILE_NAME)
+        messages = self._parse_expect_warning([str(models), _datasets_root(tmp_path), "--masks", MARKER_MASKS])
+        assert any(marker_path in m and MARKER_MASKS in m for m in messages), messages
+
+    def test_missing_marker_with_default_masks_warns(self, tmp_path):
+        """Neither --masks nor --model-version: the resolved --masks is the canonical_25 default."""
+        models = tmp_path / "models"
+        models.mkdir()
+        marker_path = str(models / MODEL_SET_FILE_NAME)
+        messages = self._parse_expect_warning([str(models), _datasets_root(tmp_path)])
+        assert any(marker_path in m and MASKS in m for m in messages), messages

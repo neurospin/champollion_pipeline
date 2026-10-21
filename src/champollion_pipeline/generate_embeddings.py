@@ -625,9 +625,19 @@ class GenerateEmbeddings(ScriptBuilder):
 
     def _check_local_model_set(self) -> None:
         """Exit 2 when a local model set's model_set.json is invalid, or names other masks than --masks unless
-        --allow-version-mismatch (then warn). No marker or no local directory: nothing."""
+        --allow-version-mismatch (then warn). A local directory without a marker: warn that it cannot be checked.
+        Not a local directory: nothing."""
         models_dir = self.args.models_path
-        if not os.path.isdir(models_dir) or not os.path.isfile(join(models_dir, MODEL_SET_FILE_NAME)):
+        if not os.path.isdir(models_dir):
+            return
+        if not os.path.isfile(join(models_dir, MODEL_SET_FILE_NAME)):
+            masks = self.args.masks
+            warnings.warn(
+                f"{join(models_dir, MODEL_SET_FILE_NAME)} not found: the local model set cannot be checked against "
+                f"--masks {masks!r}; running anyway with --masks {masks!r}",
+                UserWarning,
+                stacklevel=2,
+            )
             return
         try:
             model_set = read_model_set(models_dir)
