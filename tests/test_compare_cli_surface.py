@@ -47,6 +47,11 @@ from pathlib import Path
 import pytest
 import tomllib
 
+import compare
+import compare_cortical_tiles
+import compare_databases
+import compare_masks
+
 _REPO_ROOT = Path(__file__).resolve().parent.parent
 _SRC_DIR = _REPO_ROOT / "src"
 
@@ -200,7 +205,6 @@ def _help_choices(text: str, option: str) -> set:
 
 
 def _compare_parser():
-    import compare
 
     return compare.Compare().parser
 
@@ -267,7 +271,6 @@ def test_compare_set_options_required(subcommand, missing, tmp_path):
 @pytest.mark.parametrize("missing", list(_DB_REQUIRED))
 def test_databases_graph_options_required(missing):
     """REQ-COMPARE-BDRABCZUK-9948C646D2E5 (src/compare.py databases and src/compare_databases.py)."""
-    import compare_databases
 
     argv = _db_args()
     index = argv.index(missing)
@@ -388,10 +391,7 @@ def test_script_help_lists_exact_options(script):
 
 def _parse_mask_script(script: str, argv: list):
     if script == "compare_masks":
-        import compare_masks
-
         return compare_masks.parse_args(argv)
-    import compare_cortical_tiles
 
     return compare_cortical_tiles.CompareCorticalTiles().parser.parse_args(argv)
 
@@ -427,7 +427,6 @@ def test_compare_cortical_tiles_script_defaults(tmp_path):
 
 def test_compare_databases_script_defaults():
     """REQ-COMPARE-BDRABCZUK-4AC071AD83CC."""
-    import compare_databases
 
     args = compare_databases.CompareDatabases().parser.parse_args(_db_args())
     assert args.label_a == "A"

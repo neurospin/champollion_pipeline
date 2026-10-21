@@ -371,11 +371,14 @@ def test_config_defaults():
 
 
 def test_embeddings_defaults():
+    # Since the MODELVER merge --masks has no parser default: GenerateEmbeddings.parse_args fills it from
+    # --model-version, else canonical_25 (pinned in tests/test_generate_embeddings_masks_default.py).
     ns = _parse("generate_embeddings", ["/models", "/data/MYDATASET"])
     _assert_subset(
         ns,
         {
-            "masks": "canonical_25",
+            "masks": None,
+            "model_version": None,
             "cortical_version": "cortical_tiles-2026",
             "checkpoint_epoch": 80,
             "masks_version": None,

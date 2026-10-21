@@ -32,6 +32,7 @@ from champollion_pipeline.generate_embeddings import (
     RemoteArchiveStrategy,
     main,
 )
+from champollion_pipeline.models import fetch as models_fetch
 
 
 def make_region_logs(model_dir) -> None:
@@ -228,7 +229,7 @@ class TestHuggingFaceStrategy:
         assert os.environ["SSL_CERT_FILE"] == "/my/bundle.pem"
 
     def test_missing_huggingface_hub_raises_import_error(self, tmp_path):
-        with patch.object(ge, "huggingface_hub", None):
+        with patch.object(models_fetch, "huggingface_hub", None):
             with pytest.raises(ImportError, match="huggingface_hub is required"):
                 HuggingFaceStrategy().fetch("neurospin/X", str(tmp_path))
 
@@ -411,7 +412,7 @@ class TestFetchModels:
     def test_masks_version_is_passed_as_hf_subfolder(self):
         script = self._script(["--masks-version", "canonical_25"])
         with (
-            patch.object(ge, "HuggingFaceStrategy", wraps=ge.HuggingFaceStrategy) as cls,
+            patch.object(models_fetch, "HuggingFaceStrategy", wraps=models_fetch.HuggingFaceStrategy) as cls,
         ):
             cls.return_value = MagicMock(can_handle=MagicMock(return_value=True), fetch=MagicMock(return_value="/hf"))
             script.fetch_models("neurospin/X")

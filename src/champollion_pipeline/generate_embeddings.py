@@ -6,54 +6,54 @@ Calls champollion/evaluate.py for each region in models_path.
 """
 
 import argparse
-import contextlib
 import cProfile
-import glob
-import gzip
-import json
 import os
 import pstats
 import re
 import shutil
 import subprocess
 import sys
-import tarfile
 import tempfile
-import urllib.request
 import warnings
-from abc import ABC, abstractmethod
-from collections.abc import Iterator
-from dataclasses import dataclass
 from io import StringIO
 from os.path import abspath, dirname, exists, join
 from pathlib import Path
-from urllib.parse import urlparse
 
-import torch
 from champollion_utils.script_builder import ScriptBuilder
-
-try:
-    import huggingface_hub
-except ImportError:
-    huggingface_hub = None
 
 from champollion_pipeline.derivatives_layout import (
     DEFAULT_MASKS_VERSION,
     compute_models_cache_dir,
     compute_region_embeddings_dir,
 )
+from champollion_pipeline.models.cache import (
+    MODEL_SET_FILE_NAME,
+    ensure_models_cache_dir,
+    read_model_set,
+    write_json_atomic,
+)
+from champollion_pipeline.models.cache import ModelSet as ModelSet
+from champollion_pipeline.models.cache import write_model_set as write_model_set
+from champollion_pipeline.models.checkpoint import (
+    DEFAULT_CHECKPOINT_EPOCH,
+    check_region_weights,
+    evaluation_model_dir,
+    find_region_model_dirs,
+    resolve_region_name,
+    uses_best_weights_stand_in,
+    weights_source,
+)
+from champollion_pipeline.models.fetch import HuggingFaceStrategy as HuggingFaceStrategy
+from champollion_pipeline.models.fetch import InteractiveFallbackStrategy as InteractiveFallbackStrategy
+from champollion_pipeline.models.fetch import LocalPathStrategy as LocalPathStrategy
+from champollion_pipeline.models.fetch import ModelFetchStrategy as ModelFetchStrategy
+from champollion_pipeline.models.fetch import RemoteArchiveStrategy as RemoteArchiveStrategy
+from champollion_pipeline.models.fetch import fetch_model_set
 from champollion_pipeline.process_setup import init_pipeline_process
 from champollion_pipeline.utils.lib import CORTICAL_TILES_VERSION
 
 # Add champollion to path for CKA imports
 _SCRIPT_DIR = dirname(abspath(__file__))
-_CONVERTED_CKPT_NAME = "best_model.ckpt"
-_WEIGHTS_FILE_NAME = "best_model_weights.pt"
-DEFAULT_CHECKPOINT_EPOCH = 80
-_EPOCH_CKPT_PATTERN = r"epoch={epoch}-step=(?P<step>\d+)\.ckpt"
-_VERSION_DIR_PATTERN = re.compile(r"version_(?P<index>\d+)")
-_MIRROR_PREFIX = "champollion_eval_"
-MODEL_SET_FILE_NAME = "model_set.json"
 PROVENANCE_FILE_NAME = "provenance.json"
 _CHAMPOLLION_DIR = abspath(join(_SCRIPT_DIR, "..", "..", "external", "champollion_V1"))
 if _CHAMPOLLION_DIR not in sys.path:
@@ -73,88 +73,6 @@ def _parse_non_negative_int(value: str) -> int:
     return number
 
 
-def ensure_models_cache_dir(cache_dir: str) -> str:
-    """Create the models cache directory if needed and check it is writable.
-
-    Args:
-        cache_dir: absolute path of the models cache directory.
-
-    Returns:
-        cache_dir, unchanged.
-
-    Raises:
-        OSError: naming cache_dir, when it cannot be created or is not writable.
-    """
-    try:
-        os.makedirs(cache_dir, exist_ok=True)
-    except OSError as err:
-        raise OSError(f"Cannot create models cache directory {cache_dir}: {err}") from err
-    if not os.access(cache_dir, os.W_OK):
-        raise OSError(f"Models cache directory {cache_dir} is not writable")
-    return cache_dir
-
-
-@dataclass(frozen=True)
-class ModelSet:
-    """Content of a model set directory's model_set.json marker."""
-
-    model_version: str
-    masks: str
-    checkpoint_epoch: int | None = None
-
-
-def read_model_set(model_set_dir: str) -> ModelSet:
-    """Read and validate <model_set_dir>/model_set.json.
-
-    OSError (a missing marker included) propagates; any invalid content raises a ValueError whose message starts
-    with the marker path. Unknown keys are ignored; a missing checkpoint_epoch gives None.
-    """
-    path = join(model_set_dir, MODEL_SET_FILE_NAME)
-    with open(path, encoding="utf-8") as f:
-        try:
-            data = json.load(f)
-        except ValueError as err:
-            raise ValueError(f"{path}: not valid JSON ({err})") from err
-    if type(data) is not dict:
-        raise ValueError(f"{path}: expected a JSON object, got {type(data).__name__}")
-    for key in ("model_version", "masks"):
-        value = data.get(key)
-        if not isinstance(value, str) or value == "":
-            raise ValueError(f"{path}: {key!r} must be a non-empty string, got {value!r}")
-    if "checkpoint_epoch" in data:
-        epoch = data["checkpoint_epoch"]
-        if not (type(epoch) is int and epoch >= 0):
-            raise ValueError(f"{path}: 'checkpoint_epoch' must be a non-negative integer, got {epoch!r}")
-    return ModelSet(data["model_version"], data["masks"], data.get("checkpoint_epoch"))
-
-
-def _write_json_atomic(path: str, data: dict) -> None:
-    """Write data as indented JSON to path through a temporary file in the same directory, then rename it.
-    The directory must exist; OSError propagates and leaves no temporary file behind."""
-    stem = os.path.splitext(os.path.basename(path))[0]
-    fd, tmp_path = tempfile.mkstemp(dir=dirname(path), prefix=f".{stem}.", suffix=".tmp")
-    try:
-        with os.fdopen(fd, "w", encoding="utf-8") as f:
-            f.write(json.dumps(data, indent=2) + "\n")
-        os.chmod(tmp_path, 0o644)
-        os.replace(tmp_path, path)
-    except BaseException:
-        with contextlib.suppress(OSError):
-            os.unlink(tmp_path)
-        raise
-
-
-def write_model_set(model_set_dir: str, model_set: ModelSet) -> str:
-    """Atomically write <model_set_dir>/model_set.json (model_version, masks, then checkpoint_epoch when set) and
-    return its path. The directory must exist; OSError propagates and leaves no temporary file behind."""
-    path = join(model_set_dir, MODEL_SET_FILE_NAME)
-    content = {"model_version": model_set.model_version, "masks": model_set.masks}
-    if model_set.checkpoint_epoch is not None:
-        content["checkpoint_epoch"] = model_set.checkpoint_epoch
-    _write_json_atomic(path, content)
-    return path
-
-
 def read_pipeline_commit() -> str | None:
     """40-hex git commit of the champollion_pipeline source checkout, or None when git cannot report it."""
     repo_dir = dirname(abspath(__file__))
@@ -168,339 +86,6 @@ def read_pipeline_commit() -> str | None:
     if result.returncode != 0 or not re.fullmatch(r"[0-9a-f]{40}", commit):
         return None
     return commit
-
-
-class ModelFetchStrategy(ABC):
-    """Abstract base class for model fetching strategies."""
-
-    @abstractmethod
-    def can_handle(self, models_path: str) -> bool:
-        """Check if this strategy can handle the given path."""
-        pass
-
-    @abstractmethod
-    def fetch(self, models_path: str, extract_to: str, no_cache: bool = False) -> str:
-        """Fetch models and return the local path."""
-        pass
-
-
-class LocalPathStrategy(ModelFetchStrategy):
-    """Strategy for handling local file paths."""
-
-    def can_handle(self, models_path: str) -> bool:
-        """Check if path exists locally."""
-        return exists(models_path)
-
-    def fetch(self, models_path: str, extract_to: str, no_cache: bool = False) -> str:
-        """Return the local path as-is, or extract if it's an archive."""
-        # If it's a directory, use it directly
-        if os.path.isdir(models_path):
-            print(f"Models found at local path: {models_path}")
-            return models_path
-
-        # If it's an archive file, check cache or extract
-        if any(models_path.endswith(ext) for ext in [".tar.xz", ".tar.gz", ".tgz", ".gz"]):
-            # Compute cache path based on archive name
-            # Extract to a subdirectory named after the archive
-            archive_name = Path(models_path).stem
-            if archive_name.endswith(".tar"):
-                archive_name = Path(archive_name).stem
-            cached_path = join(extract_to, archive_name)
-
-            # Check if cache exists and should be reused
-            if exists(cached_path) and os.path.isdir(cached_path) and not no_cache:
-                # Verify cache has content (not just an empty directory)
-                if any(os.scandir(cached_path)):
-                    print(f"Using cached extraction: {cached_path}")
-                    print("(Use --no-cache to force re-extraction)")
-                    return cached_path
-
-            # Extract archive
-            print(f"Local archive found: {models_path}")
-            print(f"Extracting to: {cached_path}")
-            if no_cache and exists(cached_path):
-                print(f"Removing existing cache: {cached_path}")
-                shutil.rmtree(cached_path)
-            extracted_path = self._extract_archive(models_path, cached_path)
-            return extracted_path
-
-        # Otherwise, assume it's a regular file/directory and return as-is
-        print(f"Models found at local path: {models_path}")
-        return models_path
-
-    def _extract_archive(self, archive_path: str, extract_to: str) -> str:
-        """Extract archive and return path to extracted content."""
-        os.makedirs(extract_to, exist_ok=True)
-
-        if archive_path.endswith((".tar.xz", ".tar.gz", ".tgz")):
-            with tarfile.open(archive_path, "r:*") as tar:
-                tar.extractall(path=extract_to)
-                members = tar.getmembers()
-                if members:
-                    # Return the extract_to path where contents are
-                    print(f"Extracted to: {extract_to}")
-                    return extract_to
-        elif archive_path.endswith(".gz"):
-            output_path = join(extract_to, Path(archive_path).stem)
-            with gzip.open(archive_path, "rb") as f_in:
-                with open(output_path, "wb") as f_out:
-                    shutil.copyfileobj(f_in, f_out)
-            print(f"Extracted to: {output_path}")
-            return output_path
-
-        return extract_to
-
-
-class HuggingFaceStrategy(ModelFetchStrategy):
-    """Strategy for handling Hugging Face repository IDs and URLs."""
-
-    def __init__(self, subfolder: str = None):
-        self.subfolder = subfolder
-
-    def can_handle(self, models_path: str) -> bool:
-        """Check if path looks like a Hugging Face repo ID or URL."""
-        # Check if it's a huggingface.co URL
-        parsed = urlparse(models_path)
-        if parsed.scheme in ["http", "https"]:
-            return "huggingface.co" in parsed.netloc
-        # HF repo IDs are typically in format: username/repo-name
-        # Check if it looks like a repo ID (no file extensions)
-        return (
-            "/" in models_path
-            and not models_path.startswith("/")
-            and not any(models_path.endswith(ext) for ext in [".tar.xz", ".tar.gz", ".tgz", ".gz", ".zip"])
-        )
-
-    def _extract_repo_id(self, models_path: str) -> str:
-        """Extract repo ID from a Hugging Face URL or return as-is if already a repo ID."""
-        parsed = urlparse(models_path)
-        if parsed.scheme in ["http", "https"] and "huggingface.co" in parsed.netloc:
-            # URL format: https://huggingface.co/username/repo-name
-            # Path is /username/repo-name, strip leading slash
-            path_parts = parsed.path.strip("/").split("/")
-            if len(path_parts) >= 2:
-                return "/".join(path_parts[:2])  # username/repo-name
-            elif len(path_parts) == 1:
-                return path_parts[0]  # Just repo-name for official repos
-        return models_path  # Already a repo ID
-
-    def fetch(self, models_path: str, extract_to: str, no_cache: bool = False) -> str:
-        """Download from Hugging Face."""
-        try:
-            # Extract repo ID from URL if needed
-            repo_id = self._extract_repo_id(models_path)
-            print(f"Attempting to download from Hugging Face: {repo_id}")
-            if self.subfolder:
-                print(f"  model version subfolder: {self.subfolder}")
-            if huggingface_hub is None:
-                raise ImportError("huggingface_hub not installed")
-
-            # Ensure system CA bundle is used when the env's certifi bundle is incomplete
-            # (e.g. behind a corporate proxy with a custom root CA).
-            if not os.environ.get("SSL_CERT_FILE") and not os.environ.get("REQUESTS_CA_BUNDLE"):
-                _sys_ca = "/etc/ssl/certs/ca-certificates.crt"
-                if os.path.exists(_sys_ca):
-                    os.environ["SSL_CERT_FILE"] = _sys_ca
-
-            # Cache per (repo, subfolder) to avoid collisions across model versions
-            repo_name = repo_id.split("/")[-1]
-            cache_name = f"{repo_name}_{self.subfolder}" if self.subfolder else repo_name
-            local_path = join(extract_to, cache_name)
-
-            # HuggingFace handles caching internally, but we can force redownload
-            # snapshot_download does not accept subfolder; use allow_patterns instead
-            allow_patterns = [f"{self.subfolder}/*"] if self.subfolder else None
-            downloaded_path = huggingface_hub.snapshot_download(
-                repo_id=repo_id, local_dir=local_path, allow_patterns=allow_patterns, force_download=no_cache
-            )
-            if self.subfolder:
-                downloaded_path = join(downloaded_path, self.subfolder)
-
-        except ImportError:
-            raise ImportError(
-                "huggingface_hub is required for Hugging Face downloads. Install it with: pip install huggingface_hub"
-            )
-        except Exception as e:
-            raise RuntimeError(f"Failed to download from Hugging Face: {e}")
-        if self.subfolder:
-            self._ensure_model_set_marker(downloaded_path)
-        print(f"Successfully downloaded from Hugging Face to: {downloaded_path}")
-        return downloaded_path
-
-    def _ensure_model_set_marker(self, model_set_dir: str) -> None:
-        """Write model_set.json (model_version and masks = the subfolder) unless one is already there; a write
-        failure only warns."""
-        path = join(model_set_dir, MODEL_SET_FILE_NAME)
-        if os.path.lexists(path):
-            return
-        try:
-            write_model_set(model_set_dir, ModelSet(self.subfolder, self.subfolder))
-        except OSError as err:
-            warnings.warn(
-                f"Could not write {path} ({err}); the model set is used without a model_set.json marker",
-                UserWarning,
-                stacklevel=2,
-            )
-            return
-        print(f"  model set marker written: {path}")
-
-
-class RemoteArchiveStrategy(ModelFetchStrategy):
-    """Strategy for handling remote archive URLs."""
-
-    def can_handle(self, models_path: str) -> bool:
-        """Check if path is a remote URL to an archive."""
-        parsed = urlparse(models_path)
-        if parsed.scheme not in ["http", "https", "ftp"]:
-            return False
-        # Check if it ends with archive extensions
-        return any(models_path.endswith(ext) for ext in [".tar.xz", ".tar.gz", ".tgz", ".gz", ".zip"])
-
-    def fetch(self, models_path: str, extract_to: str, no_cache: bool = False) -> str:
-        """Download and extract remote archive."""
-        # Compute cache path based on archive name
-        filename = Path(urlparse(models_path).path).name
-        archive_name = Path(filename).stem
-        if archive_name.endswith(".tar"):
-            archive_name = Path(archive_name).stem
-        cached_path = join(extract_to, archive_name)
-
-        # Check if cache exists and should be reused
-        if exists(cached_path) and os.path.isdir(cached_path) and not no_cache:
-            print(f"Using cached extraction: {cached_path}")
-            print("(Use --no-cache to force re-download)")
-            return cached_path
-
-        # Remove existing cache if --no-cache
-        if no_cache and exists(cached_path):
-            print(f"Removing existing cache: {cached_path}")
-            shutil.rmtree(cached_path)
-
-        print(f"Downloading archive from: {models_path}")
-
-        # Download to temporary file
-        local_archive = join(extract_to, filename)
-
-        try:
-            urllib.request.urlretrieve(models_path, local_archive)
-            print(f"Downloaded to: {local_archive}")
-
-            # Extract the archive
-            extracted_path = self._extract_archive(local_archive, extract_to)
-
-            # Clean up the archive file
-            os.remove(local_archive)
-
-            return extracted_path
-
-        except Exception as e:
-            raise RuntimeError(f"Failed to download or extract archive: {e}")
-
-    def _extract_archive(self, archive_path: str, extract_to: str) -> str:
-        """Extract archive and return path to extracted content."""
-        print(f"Extracting {archive_path}...")
-
-        if archive_path.endswith((".tar.xz", ".tar.gz", ".tgz")):
-            with tarfile.open(archive_path, "r:*") as tar:
-                tar.extractall(path=extract_to)
-                members = tar.getmembers()
-                if members:
-                    top_dir = members[0].name.split("/")[0]
-                    extracted_path = join(extract_to, top_dir)
-                    print(f"Extracted to: {extracted_path}")
-                    return extracted_path
-        elif archive_path.endswith(".gz"):
-            output_path = join(extract_to, Path(archive_path).stem)
-            with gzip.open(archive_path, "rb") as f_in:
-                with open(output_path, "wb") as f_out:
-                    shutil.copyfileobj(f_in, f_out)
-            print(f"Extracted to: {output_path}")
-            return output_path
-
-        return extract_to
-
-
-class InteractiveFallbackStrategy(ModelFetchStrategy):
-    """Fallback strategy that asks user for local archive."""
-
-    def can_handle(self, models_path: str) -> bool:
-        """This strategy handles all cases as a fallback."""
-        return True
-
-    def fetch(self, models_path: str, extract_to: str, no_cache: bool = False) -> str:
-        """Ask user for local archive path (only works in interactive mode)."""
-        print(f"\nCannot automatically retrieve models from: {models_path}")
-
-        # Check if we're in an interactive terminal
-        if not sys.stdin.isatty():
-            raise RuntimeError(
-                f"Cannot find models at: {models_path}\n"
-                f"When running non-interactively, please provide:\n"
-                f"  - A valid local path to the models directory\n"
-                f"  - A local archive file (.tar.xz, .tar.gz)\n"
-                f"  - A HuggingFace repo ID (e.g., 'neurospin/Champollion_V1')"
-            )
-
-        print("\nPlease provide a local path to the models or archive.")
-        response = input("Do you have a local copy? (yes/no): ").strip()
-
-        if response.lower() not in ["yes", "y"]:
-            print("Cannot proceed without models. Exiting gracefully.")
-            sys.exit(0)
-
-        archive_path = input("Path to models directory or archive (tar.xz, tar.gz, .gz): ").strip()
-
-        if not exists(archive_path):
-            raise FileNotFoundError(f"Path not found: {archive_path}")
-
-        # If it's a directory, use it directly
-        if os.path.isdir(archive_path):
-            print(f"Using models from directory: {archive_path}")
-            return archive_path
-
-        # Check for cached extraction
-        archive_name = Path(archive_path).stem
-        if archive_name.endswith(".tar"):
-            archive_name = Path(archive_name).stem
-        cached_path = join(extract_to, archive_name)
-
-        if exists(cached_path) and os.path.isdir(cached_path) and not no_cache:
-            print(f"Using cached extraction: {cached_path}")
-            print("(Use --no-cache to force re-extraction)")
-            return cached_path
-
-        # Remove existing cache if --no-cache
-        if no_cache and exists(cached_path):
-            print(f"Removing existing cache: {cached_path}")
-            shutil.rmtree(cached_path)
-
-        # Otherwise, try to extract it
-        print(f"Extracting archive: {archive_path}")
-        extracted_path = self._extract_archive(archive_path, extract_to)
-        return extracted_path
-
-    def _extract_archive(self, archive_path: str, extract_to: str) -> str:
-        """Extract archive and return path to extracted content."""
-        os.makedirs(extract_to, exist_ok=True)
-
-        if archive_path.endswith((".tar.xz", ".tar.gz", ".tgz")):
-            with tarfile.open(archive_path, "r:*") as tar:
-                tar.extractall(path=extract_to)
-                members = tar.getmembers()
-                if members:
-                    top_dir = members[0].name.split("/")[0]
-                    extracted_path = join(extract_to, top_dir)
-                    print(f"Extracted to: {extracted_path}")
-                    return extracted_path
-        elif archive_path.endswith(".gz"):
-            output_path = join(extract_to, Path(archive_path).stem)
-            with gzip.open(archive_path, "rb") as f_in:
-                with open(output_path, "wb") as f_out:
-                    shutil.copyfileobj(f_in, f_out)
-            print(f"Extracted to: {output_path}")
-            return output_path
-
-        return extract_to
 
 
 class GenerateEmbeddings(ScriptBuilder):
@@ -742,64 +327,11 @@ class GenerateEmbeddings(ScriptBuilder):
         Returns:
             Local path to the models
         """
-        # Downloaded/extracted models are cached under --models-cache, or inside
-        # the dataset tree: <datasets_root>/derivatives/champollion_V1/models_cache
         extract_to = ensure_models_cache_dir(self._compute_extract_dir())
-
-        # Get no_cache flag (force re-extraction)
-        no_cache = getattr(self.args, "no_cache", False)
         self._models_source = None
-
-        # Check HuggingFace and URL strategies first with the ORIGINAL path
-        # These strategies look for semantic patterns (e.g., "user/repo", URLs)
-        # that would be destroyed by path resolution
-        model_version = getattr(self.args, "model_version", None)
-        hf_strategy = HuggingFaceStrategy(subfolder=model_version)
-        if hf_strategy.can_handle(models_path):
-            try:
-                fetched = hf_strategy.fetch(models_path, extract_to, no_cache)
-                self._models_source = {
-                    "type": "huggingface",
-                    "repo_id": hf_strategy._extract_repo_id(models_path),
-                    "subfolder": model_version,
-                }
-                return fetched
-            except Exception as e:
-                print(f"HuggingFace strategy failed: {e}")
-                # Continue to other strategies
-
-        remote_strategy = RemoteArchiveStrategy()
-        if remote_strategy.can_handle(models_path):
-            try:
-                fetched = remote_strategy.fetch(models_path, extract_to, no_cache)
-                self._models_source = {"type": "url", "url": models_path}
-                return fetched
-            except Exception as e:
-                print(f"Remote archive strategy failed: {e}")
-                # Continue to other strategies
-
-        # Resolve relative paths to absolute for local file strategies
-        # This ensures relative paths like ../../models.tar.xz work
-        resolved_path = models_path
-        if not urlparse(models_path).scheme:  # Not a URL
-            if not models_path.startswith("/"):  # Relative path
-                resolved_path = abspath(models_path)
-
-        # Try local path strategy with resolved path
-        local_strategy = LocalPathStrategy()
-        if local_strategy.can_handle(resolved_path):
-            try:
-                fetched = local_strategy.fetch(resolved_path, extract_to, no_cache)
-                self._models_source = {"type": "local", "path": os.path.abspath(resolved_path)}
-                return fetched
-            except Exception as e:
-                print(f"Local path strategy failed: {e}")
-                # Continue to fallback
-
-        # Fallback: ask user interactively
-        fallback_strategy = InteractiveFallbackStrategy()
-        fetched = fallback_strategy.fetch(resolved_path, extract_to, no_cache)
-        self._models_source = {"type": "local", "path": os.path.abspath(fetched)}
+        fetched, self._models_source = fetch_model_set(
+            models_path, extract_to, getattr(self.args, "model_version", None), getattr(self.args, "no_cache", False)
+        )
         return fetched
 
     def _read_marker_model_version(self, fetched_models_path: str) -> str | None:
@@ -834,7 +366,7 @@ class GenerateEmbeddings(ScriptBuilder):
         """Atomically write <output_base>/provenance.json and return its path; OSError fails the stage."""
         os.makedirs(output_base, exist_ok=True)
         path = join(output_base, PROVENANCE_FILE_NAME)
-        _write_json_atomic(path, provenance)
+        write_json_atomic(path, provenance)
         print(f"Provenance written: {path}")
         return path
 
@@ -954,185 +486,6 @@ class GenerateEmbeddings(ScriptBuilder):
                         return dname
         return base
 
-    @staticmethod
-    def _save_converted_ckpt(state_dict: dict, ckpt_path: Path) -> None:
-        """Write state_dict as a converted Lightning ckpt (the only owner of its shape)."""
-        ckpt_path.parent.mkdir(parents=True, exist_ok=True)
-        torch.save({"state_dict": state_dict, "epoch": 0, "global_step": 0}, str(ckpt_path))
-
-    @staticmethod
-    def _new_mirror(model_path: str, root: str) -> tuple[str, Path]:
-        """Create <root>/<region dir name> with the region's .hydra (symlink) and an empty
-        logs/lightning_logs/version_0/checkpoints/; return (mirror, ckpt_dir). Never writes under model_path.
-        """
-        mirror = Path(root) / os.path.basename(os.path.normpath(model_path))
-        mirror.mkdir()
-        hydra_dir = join(model_path, ".hydra")
-        if exists(hydra_dir):
-            os.symlink(abspath(hydra_dir), mirror / ".hydra")
-        ckpt_dir = mirror / "logs" / "lightning_logs" / "version_0" / "checkpoints"
-        ckpt_dir.mkdir(parents=True)
-        return str(mirror), ckpt_dir
-
-    @staticmethod
-    @contextlib.contextmanager
-    def _temporary_mirror_root() -> Iterator[str]:
-        """A temporary directory for an evaluation mirror, removed on exit (symlinks are not followed)."""
-        root = tempfile.mkdtemp(prefix=_MIRROR_PREFIX)
-        try:
-            yield root
-        finally:
-            shutil.rmtree(root, ignore_errors=True)
-
-    def _build_best_weights_mirror(self, model_path: str, pt_path: Path, root: str) -> str:
-        """Mirror holding the region's .hydra and one ckpt converted from pt_path."""
-        mirror, ckpt_dir = self._new_mirror(model_path, root)
-        self._save_converted_ckpt(self._load_weights_state_dict(pt_path), ckpt_dir / _CONVERTED_CKPT_NAME)
-        return mirror
-
-    @staticmethod
-    def _build_epoch_ckpt_mirror(model_path: str, ckpt: Path, root: str) -> str:
-        """Mirror holding the region's .hydra and a symlink to the epoch-N checkpoint, under its own name."""
-        mirror, ckpt_dir = GenerateEmbeddings._new_mirror(model_path, root)
-        os.symlink(abspath(ckpt), ckpt_dir / ckpt.name)
-        return mirror
-
-    @staticmethod
-    def _compute_ckpt_rank(ckpt: Path, step: int) -> tuple[int, int, str]:
-        """Sort key: step, then version_<n> index (-1 if unparsable), then path text."""
-        match = _VERSION_DIR_PATTERN.fullmatch(ckpt.parent.parent.name)
-        return step, int(match["index"]) if match else -1, str(ckpt)
-
-    def _find_epoch_ckpt(self, model_path: str) -> Path | None:
-        """The epoch-N checkpoint (N = --checkpoint-epoch) of any version_*/checkpoints/, highest step first."""
-        pattern = re.compile(_EPOCH_CKPT_PATTERN.format(epoch=self.args.checkpoint_epoch))
-        lightning_logs = Path(model_path) / "logs" / "lightning_logs"
-        ranked = []
-        for ckpt in lightning_logs.glob("version_*/checkpoints/*.ckpt"):
-            match = pattern.fullmatch(ckpt.name)
-            if match:
-                ranked.append((self._compute_ckpt_rank(ckpt, int(match["step"])), ckpt))
-        return max(ranked)[1] if ranked else None
-
-    def _has_region_weights(self, model_path: str) -> bool:
-        """True when the region has an epoch-N checkpoint or logs/best_model_weights.pt."""
-        return (
-            self._find_epoch_ckpt(model_path) is not None or (Path(model_path) / "logs" / _WEIGHTS_FILE_NAME).exists()
-        )
-
-    def _uses_best_weights_stand_in(self, model_path: str) -> bool:
-        """True when best_model_weights.pt stands in for the missing epoch-N checkpoint."""
-        if self._find_epoch_ckpt(model_path) is not None:
-            return False
-        return (Path(model_path) / "logs" / _WEIGHTS_FILE_NAME).exists()
-
-    def _check_region_weights(self, region_dirs: list[str], models_path: str) -> None:
-        """Raise ValueError naming every region with neither an epoch-N checkpoint nor best weights."""
-        missing = list(
-            dict.fromkeys(
-                self._resolve_region_name(d, models_path) for d in region_dirs if not self._has_region_weights(d)
-            )
-        )
-        if missing:
-            raise ValueError(
-                f"No weights for {len(missing)} region(s): {', '.join(missing)}. Each region model "
-                f"directory needs logs/best_model_weights.pt or an epoch={self.args.checkpoint_epoch}-step=*.ckpt "
-                "checkpoint under logs/lightning_logs/version_*/checkpoints/; no region was evaluated."
-            )
-
-    @contextlib.contextmanager
-    def _evaluation_model_dir(self, model_path: str) -> Iterator[str]:
-        """Yield the directory to pass to evaluate.py as -m, in this order:
-
-        1. an epoch-N checkpoint exists (any version_*): a temporary mirror holding .hydra and only
-           that checkpoint, removed afterwards;
-        2. no best_model_weights.pt: model_path itself, nothing written (the stage fails fast before this);
-        3. otherwise: a temporary mirror holding .hydra and the converted best weights, which stand in
-           for the missing epoch-N checkpoint.
-        """
-        epoch_ckpt = self._find_epoch_ckpt(model_path)
-        if epoch_ckpt is not None:
-            with self._temporary_mirror_root() as root:
-                yield self._build_epoch_ckpt_mirror(model_path, epoch_ckpt, root)
-            return
-        pt_path = Path(model_path) / "logs" / _WEIGHTS_FILE_NAME
-        if not pt_path.exists():
-            yield model_path
-            return
-        with self._temporary_mirror_root() as root:
-            yield self._build_best_weights_mirror(model_path, pt_path, root)
-
-    def _weights_source(self, model_path: str) -> str | None:
-        """Return the user-dir weights file evaluate.py ends up using, or None."""
-        epoch_ckpt = self._find_epoch_ckpt(model_path)
-        if epoch_ckpt is not None:
-            return str(epoch_ckpt)
-        pt_path = join(model_path, "logs", _WEIGHTS_FILE_NAME)
-        if exists(pt_path):
-            return pt_path
-        ckpts = glob.glob(model_path + "/logs/lightning_logs/version_0/checkpoints/*.ckpt")
-        return ckpts[0] if ckpts else None
-
-    @staticmethod
-    def _load_weights_state_dict(pt_path: Path) -> dict:
-        """Load best_model_weights.pt, unwrapping a top-level state_dict if present."""
-        loaded = torch.load(str(pt_path), map_location="cpu")
-        return loaded["state_dict"] if isinstance(loaded, dict) and "state_dict" in loaded else loaded
-
-    def _find_region_model_dirs(self, models_path: str) -> list[str]:
-        """Return every directory, at any depth under models_path, that directly
-        contains a logs/ subdirectory. A matched directory's own subtree is not
-        searched further. models_path itself is never returned. Symlinks are not
-        resolved when reporting a match, but realpath is used to guard against
-        cycles. Sorted lexicographically.
-        """
-        if not os.path.isdir(models_path):
-            raise ValueError(f"Models path not found: {models_path}")
-
-        found: list[str] = []
-        visited_real: set[str] = set()
-        stack = [models_path]
-        while stack:
-            current = stack.pop()
-            real_current = os.path.realpath(current)
-            if real_current in visited_real:
-                continue
-            visited_real.add(real_current)
-            try:
-                children = sorted(os.listdir(current))
-            except OSError:
-                continue
-            for child in children:
-                if child.startswith("."):
-                    continue
-                child_path = join(current, child)
-                if not os.path.isdir(child_path):
-                    continue
-                if os.path.isdir(join(child_path, "logs")):
-                    found.append(child_path)
-                else:
-                    stack.append(child_path)
-        return sorted(found)
-
-    def _resolve_region_name(self, model_path: str, models_path: str) -> str:
-        """Return the nearest path segment, at or above model_path and below
-        models_path, whose name ends in '_left' or '_right'.
-
-        A flat model layout (<models_path>/<Region>_<side>/logs/...) has
-        model_path itself end in the suffix. A HuggingFace-cache layout with
-        an extra fold-hash directory (<models_path>/<Region>_<side>/<hash>/logs/...)
-        needs one step up. Falls back to the model directory's own basename
-        if no ancestor matches (unchanged from prior behaviour).
-        """
-        models_path = os.path.normpath(models_path)
-        segment = os.path.normpath(model_path)
-        while segment and segment != models_path:
-            name = os.path.basename(segment)
-            if name.endswith("_left") or name.endswith("_right"):
-                return name
-            segment = os.path.dirname(segment)
-        return os.path.basename(model_path)
-
     def _run_per_region(self, evaluate_script: str, crops_2mm_dir: str, output_base: str) -> int:
         """Invoke champollion/evaluate.py for each region in models_path.
 
@@ -1140,18 +493,19 @@ class GenerateEmbeddings(ScriptBuilder):
         evaluate code, or 0 when all evaluated regions succeed.
         """
         models_path = self.args.models_path
-        region_dirs = self._find_region_model_dirs(models_path)
+        epoch = self.args.checkpoint_epoch
+        region_dirs = find_region_model_dirs(models_path)
 
         if not region_dirs:
             raise ValueError(f"No region model directories (containing logs/) found under {models_path}")
-        self._check_region_weights(region_dirs, models_path)
+        check_region_weights(region_dirs, models_path, epoch)
 
         print(f"\nGenerating embeddings for {len(region_dirs)} regions → {output_base}")
 
         failed_regions: list[str] = []
         first_failure = 0
         for model_path in region_dirs:
-            region = self._resolve_region_name(model_path, models_path)
+            region = resolve_region_name(model_path, models_path)
             side = "L" if region.endswith("_left") else "R"
             crop_name = self._find_crop_dir(crops_2mm_dir, region)
             mask_dir = join(crops_2mm_dir, crop_name, "mask")
@@ -1163,7 +517,7 @@ class GenerateEmbeddings(ScriptBuilder):
                 print(f"  [SKIP] {region} — already exists (--overwrite to recompute)")
                 continue
 
-            with self._evaluation_model_dir(model_path) as eval_model_path:
+            with evaluation_model_dir(model_path, epoch) as eval_model_path:
                 os.makedirs(os.path.dirname(saving_path), exist_ok=True)
                 # A recompute must never leave the previous run's output behind.
                 if exists(saving_path):
@@ -1182,10 +536,9 @@ class GenerateEmbeddings(ScriptBuilder):
                     saving_path,
                 ]
 
-                weights = self._weights_source(model_path) or "<none found>"
+                weights = weights_source(model_path, epoch) or "<none found>"
                 print(f"\n[Region {region}] weights: {weights}")
-                if self._uses_best_weights_stand_in(model_path):
-                    epoch = self.args.checkpoint_epoch
+                if uses_best_weights_stand_in(model_path, epoch):
                     print(
                         f"[Region {region}] WARNING: no epoch={epoch} checkpoint; "
                         f"best_model_weights.pt stands in for epoch {epoch} (interim)"
