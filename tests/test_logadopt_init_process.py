@@ -117,7 +117,7 @@ def test_main_py_uncaught_exception_logs_one_crash_line(tmp_path):
     """REQ-LOGADOPT-01: a missing --config file escapes main() as FileNotFoundError."""
     missing = tmp_path / "missing_config.yaml"
     result = _run_driver(tmp_path, MAIN_PY, ["--config", str(missing)])
-    _assert_one_unified_crash_line(result, "main::ConfigLoader.load_from_yaml")
+    _assert_one_unified_crash_line(result, "champollion_pipeline.config::ConfigLoader.load_from_yaml")
 
 
 @pytest.mark.parametrize("script", STAGE_SCRIPTS)

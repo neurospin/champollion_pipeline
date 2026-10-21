@@ -31,6 +31,11 @@ from os.path import abspath, isdir
 
 from champollion_utils.script_builder import ScriptBuilder
 
+try:
+    import huggingface_hub
+except ImportError:
+    huggingface_hub = None
+
 
 class UploadModelsToHF(ScriptBuilder):
     """Upload a local models directory to a versioned HuggingFace subfolder."""
@@ -62,9 +67,7 @@ class UploadModelsToHF(ScriptBuilder):
         )
 
     def run(self) -> int:
-        try:
-            from huggingface_hub import HfApi
-        except ImportError:
+        if huggingface_hub is None:
             print("ERROR: huggingface_hub is required. Install with: pip install huggingface_hub")
             return 1
 
@@ -73,7 +76,7 @@ class UploadModelsToHF(ScriptBuilder):
             print(f"ERROR: models_dir not found: {models_dir}")
             return 1
 
-        api = HfApi(token=self.args.token)
+        api = huggingface_hub.HfApi(token=self.args.token)
         masks_version = self.args.masks_version
         repo_id = self.args.repo_id
 

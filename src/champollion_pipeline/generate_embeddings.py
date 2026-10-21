@@ -19,6 +19,7 @@ import subprocess
 import sys
 import tarfile
 import tempfile
+import urllib.request
 import warnings
 from abc import ABC, abstractmethod
 from collections.abc import Iterator
@@ -30,6 +31,11 @@ from urllib.parse import urlparse
 
 import torch
 from champollion_utils.script_builder import ScriptBuilder
+
+try:
+    import huggingface_hub
+except ImportError:
+    huggingface_hub = None
 
 from champollion_pipeline.derivatives_layout import (
     DEFAULT_MASKS_VERSION,
@@ -286,7 +292,8 @@ class HuggingFaceStrategy(ModelFetchStrategy):
             print(f"Attempting to download from Hugging Face: {repo_id}")
             if self.subfolder:
                 print(f"  model version subfolder: {self.subfolder}")
-            from huggingface_hub import snapshot_download
+            if huggingface_hub is None:
+                raise ImportError("huggingface_hub not installed")
 
             # Ensure system CA bundle is used when the env's certifi bundle is incomplete
             # (e.g. behind a corporate proxy with a custom root CA).
@@ -303,7 +310,7 @@ class HuggingFaceStrategy(ModelFetchStrategy):
             # HuggingFace handles caching internally, but we can force redownload
             # snapshot_download does not accept subfolder; use allow_patterns instead
             allow_patterns = [f"{self.subfolder}/*"] if self.subfolder else None
-            downloaded_path = snapshot_download(
+            downloaded_path = huggingface_hub.snapshot_download(
                 repo_id=repo_id, local_dir=local_path, allow_patterns=allow_patterns, force_download=no_cache
             )
             if self.subfolder:
@@ -351,8 +358,6 @@ class RemoteArchiveStrategy(ModelFetchStrategy):
 
     def fetch(self, models_path: str, extract_to: str, no_cache: bool = False) -> str:
         """Download and extract remote archive."""
-        import urllib.request
-
         # Compute cache path based on archive name
         filename = Path(urlparse(models_path).path).name
         archive_name = Path(filename).stem
@@ -616,7 +621,6 @@ class GenerateEmbeddings(ScriptBuilder):
 
     def _patch_config_paths(self, config_path: str, target_folder: str) -> None:
         """Rewrite the derivatives folder in every YAML under config_path in-place."""
-        import re
 
         pattern = re.compile(r"(derivatives/)([^/\n]+)(/crops(?:/[^/\n]+)*/2mm)")
         patched = 0

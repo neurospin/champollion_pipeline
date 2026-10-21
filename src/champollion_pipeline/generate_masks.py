@@ -4,6 +4,8 @@
 Script to generate sulcal mask files from manually labelled graph data.
 """
 
+import datetime
+import glob
 import json
 import os
 import sys
@@ -11,7 +13,17 @@ from abc import ABC, abstractmethod
 from dataclasses import dataclass
 from os.path import abspath, dirname, exists, join
 
+import numpy as np
 from champollion_utils.script_builder import ScriptBuilder
+from cortical_tiles.brainvisa.compute_mask import compute_mask, initialize_mask, write_mask
+from cortical_tiles.brainvisa.utils.parallel import define_njobs
+from cortical_tiles.brainvisa.utils.subjects import (
+    get_all_subjects_as_dictionary,
+    select_subjects_int_if_list_of_dict,
+)
+from cortical_tiles.brainvisa.utils.sulcus import complete_sulci_name
+from joblib import Parallel, delayed
+from soma import aims
 
 from champollion_pipeline.process_setup import detach_frozen_root_handlers
 
@@ -62,11 +74,9 @@ def _log_invalid_subject(log_path: str, subject_info: str) -> None:
     Each line is: ISO-8601 timestamp TAB subject_info.
     The file is created if it does not exist (append mode).
     """
-    import datetime as _dt
-
     os.makedirs(os.path.dirname(log_path), exist_ok=True)
     with open(log_path, "a") as fh:
-        fh.write(f"{_dt.datetime.now().isoformat()}\t{subject_info}\n")
+        fh.write(f"{datetime.datetime.now().isoformat()}\t{subject_info}\n")
 
 
 @dataclass
@@ -123,31 +133,21 @@ def _compute_one_sulcus(
     When public_use=True, per-subject NIfTI files are not written; only the
     aggregated count mask is produced.
     """
-    import os as _os  # noqa: PLC0415
-    import sys as _sys  # noqa: PLC0415
-    from os.path import join as _join  # noqa: PLC0415
-
-    import numpy as _np  # noqa: PLC0415
-
-    if brainvisa_dir not in _sys.path:
-        _sys.path.insert(0, brainvisa_dir)
-    from compute_mask import initialize_mask, write_mask  # noqa: PLC0415
-    from soma import aims  # noqa: PLC0415
-
-    from champollion_pipeline.generate_masks import RETURN_DICTIONARY  # noqa: PLC0415
+    if brainvisa_dir not in sys.path:
+        sys.path.insert(0, brainvisa_dir)
 
     try:
-        sample_dir = _join(mask_dir, side, sulcus_full)
-        _os.makedirs(_join(mask_dir, side), exist_ok=True)
+        sample_dir = join(mask_dir, side, sulcus_full)
+        os.makedirs(join(mask_dir, side), exist_ok=True)
         if not public_use:
-            _os.makedirs(sample_dir, exist_ok=True)
+            os.makedirs(sample_dir, exist_ok=True)
 
         mask = initialize_mask(voxel_size_tuple)
-        arr = _np.asarray(mask)
+        arr = np.asarray(mask)
 
         for sub_name, sub_voxels in per_subject_voxels.items():
-            voxels = sub_voxels.get(sulcus_full, _np.empty((0, 3), dtype=_np.int32))
-            arr_one = _np.zeros(arr.shape, dtype=_np.int16)
+            voxels = sub_voxels.get(sulcus_full, np.empty((0, 3), dtype=np.int32))
+            arr_one = np.zeros(arr.shape, dtype=np.int16)
             if len(voxels):
                 dims = arr.shape[:3]
                 valid = (
@@ -165,10 +165,10 @@ def _compute_one_sulcus(
                 vol_one = aims.Volume(arr_one)
                 vol_one.copyHeaderFrom(mask.header())
                 vol_one.header()["voxel_size"] = mask.header()["voxel_size"]
-                aims.write(vol_one, _join(sample_dir, f"{sub_name}.nii.gz"))
+                aims.write(vol_one, join(sample_dir, f"{sub_name}.nii.gz"))
             arr += arr_one
 
-        write_mask(mask, _join(mask_dir, side, sulcus_full + ".nii.gz"))
+        write_mask(mask, join(mask_dir, side, sulcus_full + ".nii.gz"))
     except Exception as e:
         return f"failed: {e}"
     return RETURN_DICTIONARY["ok"]
@@ -184,17 +184,10 @@ def _load_and_extract_subject(sub, sulci_full_set, voxel_size_tuple, brainvisa_d
     Accumulates voxels across all vertices that share the same sulcus name
     (a single sulcus can have many separate labelled patches in the graph).
     """
-    import glob as _glob  # noqa: PLC0415
-    import sys as _sys  # noqa: PLC0415
-    from os.path import join as _join  # noqa: PLC0415
+    if brainvisa_dir not in sys.path:
+        sys.path.insert(0, brainvisa_dir)
 
-    import numpy as _np  # noqa: PLC0415
-
-    if brainvisa_dir not in _sys.path:
-        _sys.path.insert(0, brainvisa_dir)
-    from soma import aims  # noqa: PLC0415
-
-    matches = _glob.glob(_join(sub["dir"], sub["graph_file"] % sub))
+    matches = glob.glob(join(sub["dir"], sub["graph_file"] % sub))
     if not matches:
         return sub["subject"], None
 
@@ -211,11 +204,11 @@ def _load_and_extract_subject(sub, sulci_full_set, voxel_size_tuple, brainvisa_d
             bucket = vertex.get(bucket_name)
             if bucket is None:
                 continue
-            vr = _np.asarray([g_to_icbm.transform(_np.array(v) * voxel_size_in) for v in bucket[0].keys()])
+            vr = np.asarray([g_to_icbm.transform(np.array(v) * voxel_size_in) for v in bucket[0].keys()])
             if vr.shape[0] == 0:
                 continue
-            all_parts.setdefault(vname, []).append(_np.round(vr / voxel_size_tuple).astype(_np.int32))
-    sub_data = {vname: _np.vstack(parts) for vname, parts in all_parts.items()}
+            all_parts.setdefault(vname, []).append(np.round(vr / voxel_size_tuple).astype(np.int32))
+    sub_data = {vname: np.vstack(parts) for vname, parts in all_parts.items()}
     return sub["subject"], sub_data
 
 
@@ -270,11 +263,6 @@ class SerialRunner(MaskRunner):
     def __call__(self, config: RunConfig):
         if config.brainvisa_dir not in sys.path:
             sys.path.insert(0, config.brainvisa_dir)
-        from compute_mask import compute_mask as _compute_mask  # noqa: PLC0415
-        from cortical_tiles.brainvisa.utils.sulcus import (  # noqa: PLC0415
-            complete_sulci_name,
-        )
-
         for side in config.sides:
             results = {}
             for sulcus in sorted(config.sulci):
@@ -292,7 +280,7 @@ class SerialRunner(MaskRunner):
                         f"voxel_size={config.voxel_size})"
                     )
                 try:
-                    _compute_mask(
+                    compute_mask(
                         src_dir=config.labeled_subjects_dir,
                         path_to_graph=config.path_to_graph_supervised,
                         mask_dir=config.mask_dir,
@@ -336,15 +324,6 @@ class BufferedRunner(MaskRunner):
         self.njobs = njobs
 
     def __call__(self, config: RunConfig):
-        from cortical_tiles.brainvisa.utils.subjects import (  # noqa: PLC0415
-            get_all_subjects_as_dictionary,
-            select_subjects_int_if_list_of_dict,
-        )
-        from cortical_tiles.brainvisa.utils.sulcus import (  # noqa: PLC0415
-            complete_sulci_name,
-        )
-        from joblib import Parallel, delayed  # noqa: PLC0415
-
         voxel_size_tuple = (config.voxel_size, config.voxel_size, config.voxel_size)
 
         for side in config.sides:
@@ -522,8 +501,6 @@ class GenerateMasks(ScriptBuilder):
 
         njobs = None
         if self.args.njobs is not None:
-            from cortical_tiles.brainvisa.utils.parallel import define_njobs  # noqa: PLC0415
-
             njobs = define_njobs(self.args.njobs)
             if not self.args.buffered:
                 print("  Note: --njobs implies --buffered")

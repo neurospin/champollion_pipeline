@@ -23,18 +23,17 @@ Usage:
 import argparse
 import logging
 import os
+import re
 import sys
-from abc import ABC, abstractmethod
 from contextlib import contextmanager
-from dataclasses import dataclass, field
 from pathlib import Path
 from typing import Dict, Iterator, List, Optional
 
-import yaml
 from champollion_utils.update_check import check_for_updates
 
+from champollion_pipeline._stage_base import PipelineStage, StageResult
+from champollion_pipeline.config import ConfigLoader, DatasetConfig, PipelineConfig
 from champollion_pipeline.derivatives_layout import (
-    DEFAULT_MASKS_VERSION,
     HEMISPHERES,
     compute_combined_embeddings_dir,
     compute_region_embeddings_dir,
@@ -42,7 +41,7 @@ from champollion_pipeline.derivatives_layout import (
     compute_snapshots_dir,
 )
 from champollion_pipeline.generate_champollion_config import GenerateChampollionConfig
-from champollion_pipeline.generate_embeddings import DEFAULT_CHECKPOINT_EPOCH, GenerateEmbeddings
+from champollion_pipeline.generate_embeddings import GenerateEmbeddings
 from champollion_pipeline.generate_morphologist_graphs import GenerateMorphologistGraphs
 from champollion_pipeline.generate_snapshots import GenerateSnapshots
 from champollion_pipeline.process_setup import init_pipeline_process
@@ -50,7 +49,7 @@ from champollion_pipeline.put_together_embeddings import PutTogetherEmbeddings
 from champollion_pipeline.run_cortical_tiles import RunCorticalTiles
 
 # Add src to path for imports – still needed for the optional file_indexer.pipeline_checks
-# import below and the lazy parallel_runner import in streaming mode.
+# and parallel_runner imports below.
 pipeline_src = Path(__file__).parent / "src"
 sys.path.insert(0, str(pipeline_src))
 
@@ -60,296 +59,23 @@ except ImportError:
     SubjectEligibilityChecker = None
     build_output_report = None
 
-
-# ====================== Configuration Management ======================
-
-
-# Dataset config keys that no longer exist; old YAML files still carrying them load with a warning.
-_REMOVED_DATASET_KEYS = {
-    "use_best_model": "it had no effect; set dataset.checkpoint_epoch to choose the training epoch whose "
-    "checkpoint is evaluated",
-    "use_last_checkpoint": "replaced by dataset.checkpoint_epoch (training epoch N, 0-based, of the Lightning "
-    "checkpoint epoch=N-step=*.ckpt to evaluate; default 80)",
-}
-
-
-@dataclass
-class DatasetConfig:
-    """Configuration for dataset processing."""
-
-    name: str = "example_dataset"
-    dataset_localization: str = "local"
-    datasets_root: str = ""
-    datasets: List[str] = field(default_factory=lambda: ["example"])
-    labels: List[str] = field(default_factory=lambda: ["Sex"])
-
-    # Paths
-    input_path: str = ""
-    morphologist_graphs: str = ""
-    cortical_tiles_output: str = ""
-    crops_path: str = ""
-    embeddings_path: str = ""
-
-    # Region filter (empty = all 56 regions)
-    regions: List[str] = field(default_factory=list)
-
-    # Processing parameters
-    njobs: int = 22
-    path_to_graph: str = "t1mri/default_acquisition/default_analysis/folds/3.3/base"
-    path_sk_with_hull: str = "t1mri/default_acquisition/default_analysis/segmentation/mesh"
-    sk_qc_path: str = ""
-    masks_version: str = DEFAULT_MASKS_VERSION
-    skel_seed: Optional[int] = None  # None: the skel_seed in <derivatives>/pipeline_loop_2mm.json
-
-    # Embeddings parameters
-    classifier_name: str = "svm"
-    overwrite: bool = False
-    embeddings_only: bool = False
-    checkpoint_epoch: int = DEFAULT_CHECKPOINT_EPOCH
-    models_cache: Optional[str] = None  # None: <datasets_root>/derivatives/champollion_V1/models_cache
-    subsets: List[str] = field(default_factory=lambda: ["full"])
-    epochs: List[Optional[int]] = field(default_factory=lambda: [None])
-    split: str = "random"
-    cv: int = 5
-    splits_basedir: Optional[str] = None
-    idx_region_evaluation: Optional[int] = None
-    short_name: str = "eval"
-
-    # HuggingFace parameters
-    hf_enabled: bool = False
-    hf_repo_id: Optional[str] = None
-    hf_token: Optional[str] = None
-
-    # Unused: no stage reads it. Kept so existing YAML files that set it still load.
-    config_path: Optional[str] = None
-
-    # CPU mode (disable CUDA)
-    cpu: bool = False
-
-    # BIDS database layout (subjects/sub-*/ses-*/...)
-    bids: bool = False
-
-    # Snapshots parameters
-    snapshots_path: str = ""
-    reference_data_path: str = ""
-    champollion_data_root: Optional[str] = None
-
-
-@dataclass
-class PipelineConfig:
-    """Configuration for pipeline execution."""
-
-    # Root paths
-    root_path: str = str(Path(__file__).parent)
-    data_path: str = ""
-    models_path: str = ""
-    outputs_path: str = ""
-    champollion_v1_path: str = ""
-
-    # Pipeline stages to execute
-    stages: Dict[str, bool] = field(
-        default_factory=lambda: {
-            "generate_morphologist_graphs": False,
-            "run_cortical_tiles": False,
-            "generate_champollion_config": False,
-            "generate_embeddings": True,
-            "put_together_embeddings": False,
-            "generate_snapshots": False,
-        }
-    )
-
-    # Stage dependencies
-    dependencies: Dict[str, List[str]] = field(
-        default_factory=lambda: {
-            "generate_morphologist_graphs": [],
-            "run_cortical_tiles": ["generate_morphologist_graphs"],
-            "generate_champollion_config": ["run_cortical_tiles"],
-            "generate_embeddings": ["generate_champollion_config"],
-            "put_together_embeddings": ["generate_embeddings"],
-            "generate_snapshots": ["put_together_embeddings"],
-        }
-    )
-
-    # Execution settings
-    mode: str = "sequential"
-    n_workers: int = 0  # 0 means use os.cpu_count()
-    worker_timeout: int = 7200  # seconds per worker
-    stop_on_error: bool = True
-    verbose: bool = False
-
-    # Logging
-    log_level: str = "INFO"
-    log_dir: str = ""
-    log_to_file: bool = True
-    log_to_console: bool = True
-
-    # Dataset configuration
-    dataset: DatasetConfig = field(default_factory=DatasetConfig)
-
-
-class ConfigLoader:
-    """Load and manage pipeline configuration."""
-
-    @staticmethod
-    def load_from_yaml(config_path: str) -> PipelineConfig:
-        """Load configuration from YAML file."""
-        with open(config_path, "r") as f:
-            config_dict = yaml.safe_load(f)
-
-        return ConfigLoader._dict_to_config(config_dict)
-
-    @staticmethod
-    def _dict_to_config(config_dict: Dict) -> PipelineConfig:
-        """Convert dictionary to PipelineConfig object."""
-        # Extract dataset config
-        dataset_dict = config_dict.pop("dataset", {})
-        for key, hint in _REMOVED_DATASET_KEYS.items():
-            if key in dataset_dict:
-                dataset_dict.pop(key)
-                logging.getLogger("champollion_pipeline").warning(
-                    "Ignoring removed config key dataset.%s: %s", key, hint
-                )
-        dataset_config = DatasetConfig(**dataset_dict)
-
-        # Create pipeline config
-        pipeline_config = PipelineConfig(**config_dict, dataset=dataset_config)
-
-        return pipeline_config
-
-    @staticmethod
-    def save_to_yaml(config: PipelineConfig, output_path: str):
-        """Save configuration to YAML file."""
-        # Convert to dictionary
-        config_dict = {
-            "root_path": config.root_path,
-            "data_path": config.data_path,
-            "models_path": config.models_path,
-            "outputs_path": config.outputs_path,
-            "champollion_v1_path": config.champollion_v1_path,
-            "stages": config.stages,
-            "dependencies": config.dependencies,
-            "mode": config.mode,
-            "n_workers": config.n_workers,
-            "worker_timeout": config.worker_timeout,
-            "stop_on_error": config.stop_on_error,
-            "verbose": config.verbose,
-            "log_level": config.log_level,
-            "log_dir": config.log_dir,
-            "log_to_file": config.log_to_file,
-            "log_to_console": config.log_to_console,
-            "dataset": {
-                "name": config.dataset.name,
-                "dataset_localization": config.dataset.dataset_localization,
-                "datasets_root": config.dataset.datasets_root,
-                "datasets": config.dataset.datasets,
-                "labels": config.dataset.labels,
-                "input_path": config.dataset.input_path,
-                "morphologist_graphs": config.dataset.morphologist_graphs,
-                "cortical_tiles_output": config.dataset.cortical_tiles_output,
-                "crops_path": config.dataset.crops_path,
-                "embeddings_path": config.dataset.embeddings_path,
-                "njobs": config.dataset.njobs,
-                "path_to_graph": config.dataset.path_to_graph,
-                "path_sk_with_hull": config.dataset.path_sk_with_hull,
-                "sk_qc_path": config.dataset.sk_qc_path,
-                "masks_version": config.dataset.masks_version,
-                "skel_seed": config.dataset.skel_seed,
-                "regions": config.dataset.regions,
-                "classifier_name": config.dataset.classifier_name,
-                "overwrite": config.dataset.overwrite,
-                "embeddings_only": config.dataset.embeddings_only,
-                "checkpoint_epoch": config.dataset.checkpoint_epoch,
-                "models_cache": config.dataset.models_cache,
-                "subsets": config.dataset.subsets,
-                "epochs": config.dataset.epochs,
-                "split": config.dataset.split,
-                "cv": config.dataset.cv,
-                "splits_basedir": config.dataset.splits_basedir,
-                "idx_region_evaluation": config.dataset.idx_region_evaluation,
-                "short_name": config.dataset.short_name,
-                "hf_enabled": config.dataset.hf_enabled,
-                "hf_repo_id": config.dataset.hf_repo_id,
-                # hf_token is a secret: never written (REQ-HFTOKEN-01).
-                # Supply it via the HF_TOKEN environment variable.
-                "config_path": config.dataset.config_path,
-                "cpu": config.dataset.cpu,
-                "bids": config.dataset.bids,
-                "snapshots_path": config.dataset.snapshots_path,
-                "reference_data_path": config.dataset.reference_data_path,
-                "champollion_data_root": config.dataset.champollion_data_root,
-            },
-        }
-
-        with open(output_path, "w") as f:
-            yaml.safe_dump(config_dict, f, default_flow_style=False, sort_keys=False)
-        if config.dataset.hf_token:
-            print(
-                f"Note: dataset.hf_token not written to {output_path}; set the HF_TOKEN environment variable instead."
-            )
+_PARALLEL_RUNNER_IMPORT_ERROR: Optional[str] = None
+try:
+    from parallel_runner import run_parallel_pipeline
+except ImportError as e:
+    run_parallel_pipeline = None
+    _PARALLEL_RUNNER_IMPORT_ERROR = str(e)
 
 
 # ====================== Pipeline Stage Strategy Pattern ======================
 
 
-@dataclass
-class StageResult:
-    """Result of a pipeline stage execution."""
-
-    stage_name: str
-    success: bool
-    message: str
-    return_code: int = 0
-
-
-class PipelineStage(ABC):
-    """Abstract base class for pipeline stages."""
-
-    def __init__(self, name: str, config: PipelineConfig, logger: logging.Logger):
-        self.name = name
-        self.config = config
-        self.logger = logger
-
-    @abstractmethod
-    def validate(self) -> bool:
-        """Validate stage prerequisites."""
-        pass
-
-    @abstractmethod
-    def execute(self) -> StageResult:
-        """Execute the stage."""
-        pass
-
-    def log_start(self):
-        """Log stage start."""
-        self.logger.info(f"{'=' * 60}")
-        self.logger.info(f"Starting stage: {self.name}")
-        self.logger.info(f"{'=' * 60}")
-
-    def log_failure(self):
-        """Log the exception being handled as this stage's failure, with its traceback."""
-        self.logger.fail(f"Stage {self.name} failed", exc_info=True, stacklevel=2)
-
-    def log_end(self, result: StageResult):
-        """Log stage end."""
-        status = "✅ SUCCESS" if result.success else "❌ FAILED"
-        self.logger.info(f"{status}: {self.name} - {result.message}")
-        self.logger.info(f"{'=' * 60}\n")
-
-    def subject_input_dir(self) -> Optional[str]:
-        """Return the subjects directory to index before this stage. None = skip."""
-        return None
-
-    def required_file_patterns(self) -> List[str]:
-        """Glob patterns (relative to subject dir) required per subject."""
-        return []
-
-    def output_dir(self) -> Optional[str]:
-        """Return the output directory to index after this stage. None = skip."""
-        return None
-
-
 class GenerateMorphologistGraphsStage(PipelineStage):
     """Stage for generating Morphologist graphs."""
+
+    progress_message = "Generating Morphologist graphs..."
+    success_message = "Morphologist graphs generated successfully"
+    failure_message = "Morphologist failed"
 
     def validate(self) -> bool:
         """Validate that input data exists."""
@@ -359,39 +85,27 @@ class GenerateMorphologistGraphsStage(PipelineStage):
             return False
         return True
 
-    def execute(self) -> StageResult:
-        """Execute Morphologist graphs generation."""
-        self.log_start()
-        try:
-            self.logger.info("Generating Morphologist graphs...")
-            args = [
-                str(self.config.dataset.input_path),
-                str(self.config.dataset.morphologist_graphs),
-            ]
-            if self.config.dataset.bids:
-                args.append("--bids")
-            if getattr(self.config, "parallel", False):
-                args.append("--parallel")
-            script = GenerateMorphologistGraphs()
-            script.parse_args(args)
-            return_code = script.run()
+    def build_args(self) -> List[str]:
+        args = [
+            str(self.config.dataset.input_path),
+            str(self.config.dataset.morphologist_graphs),
+        ]
+        if self.config.dataset.bids:
+            args.append("--bids")
+        if getattr(self.config, "parallel", False):
+            args.append("--parallel")
+        return args
 
-            result = StageResult(
-                stage_name=self.name,
-                success=(return_code == 0),
-                message="Morphologist graphs generated successfully" if return_code == 0 else "Morphologist failed",
-                return_code=return_code,
-            )
-        except Exception as e:
-            self.log_failure()
-            result = StageResult(stage_name=self.name, success=False, message=f"Failed: {str(e)}", return_code=1)
-
-        self.log_end(result)
-        return result
+    def create_script(self) -> GenerateMorphologistGraphs:
+        return GenerateMorphologistGraphs()
 
 
 class RunCorticalTilesStage(PipelineStage):
     """Stage for running cortical_tiles."""
+
+    progress_message = "Running cortical_tiles to generate sulcal regions..."
+    success_message = "Cortical tiles completed"
+    failure_message = "Failed"
 
     def validate(self) -> bool:
         """Validate that Morphologist graphs exist."""
@@ -401,67 +115,45 @@ class RunCorticalTilesStage(PipelineStage):
             return False
         return True
 
-    def execute(self) -> StageResult:
-        """Execute cortical_tiles."""
-        self.log_start()
-        try:
-            self.logger.info("Running cortical_tiles to generate sulcal regions...")
+    def build_args(self) -> List[str]:
+        args = [
+            str(self.config.dataset.morphologist_graphs),
+            str(self.config.dataset.cortical_tiles_output),
+            f"--path_to_graph={self.config.dataset.path_to_graph}",
+            f"--path_sk_with_hull={self.config.dataset.path_sk_with_hull}",
+            f"--njobs={self.config.dataset.njobs}",
+            f"--masks={self.config.dataset.masks_version}",
+        ]
 
-            # Build arguments from config
-            args = [
-                str(self.config.dataset.morphologist_graphs),
-                str(self.config.dataset.cortical_tiles_output),
-                f"--path_to_graph={self.config.dataset.path_to_graph}",
-                f"--path_sk_with_hull={self.config.dataset.path_sk_with_hull}",
-                f"--njobs={self.config.dataset.njobs}",
-                f"--masks={self.config.dataset.masks_version}",
-            ]
+        if self.config.dataset.skel_seed is not None:
+            args.append(f"--skel-seed={self.config.dataset.skel_seed}")
 
-            if self.config.dataset.skel_seed is not None:
-                args.append(f"--skel-seed={self.config.dataset.skel_seed}")
+        if self.config.dataset.sk_qc_path:
+            args.append(f"--sk_qc_path={self.config.dataset.sk_qc_path}")
 
-            if self.config.dataset.sk_qc_path:
-                args.append(f"--sk_qc_path={self.config.dataset.sk_qc_path}")
+        if self.config.dataset.bids:
+            args.append("--bids")
 
-            if self.config.dataset.bids:
-                args.append("--bids")
+        if self.config.dataset.regions:
+            args.extend(["--regions"] + self.config.dataset.regions)
+        return args
 
-            if self.config.dataset.regions:
-                args.extend(["--regions"] + self.config.dataset.regions)
-
-            # Parse and run
-            script = RunCorticalTiles()
-            script.parse_args(args)
-            return_code = script.run()
-
-            result = StageResult(
-                stage_name=self.name,
-                success=(return_code == 0),
-                message="Cortical tiles completed" if return_code == 0 else "Failed",
-                return_code=return_code,
-            )
-        except Exception as e:
-            self.log_failure()
-            result = StageResult(stage_name=self.name, success=False, message=f"Failed: {str(e)}", return_code=1)
-
-        self.log_end(result)
-        return result
+    def create_script(self) -> RunCorticalTiles:
+        return RunCorticalTiles()
 
     def subject_input_dir(self) -> Optional[str]:
         d = self.config.dataset.morphologist_graphs
         return d if d and os.path.exists(d) else None
 
     def required_file_patterns(self) -> List[str]:
-        import re as _re
-
         side = "R"
         g = self.config.dataset.path_to_graph
         s = self.config.dataset.path_sk_with_hull
         if self.config.dataset.bids:
             # scan_id.path_prefix already includes the session directory;
             # strip the leading ses-XXX/ segment so patterns are session-relative.
-            g = _re.sub(r"^ses-[^/]*/+", "", g)
-            s = _re.sub(r"^ses-[^/]*/+", "", s)
+            g = re.sub(r"^ses-[^/]*/+", "", g)
+            s = re.sub(r"^ses-[^/]*/+", "", s)
         return [
             f"{g}/{side}*.arg",
             f"{s}/{side}*.nii.gz",
@@ -475,6 +167,10 @@ class RunCorticalTilesStage(PipelineStage):
 class GenerateChampollionConfigStage(PipelineStage):
     """Stage for generating Champollion configuration."""
 
+    progress_message = "Generating Champollion configuration..."
+    success_message = "Champollion config generated"
+    failure_message = "Config generation failed"
+
     def validate(self) -> bool:
         """Validate that crops exist."""
         crops_path = Path(self.config.dataset.crops_path)
@@ -482,34 +178,15 @@ class GenerateChampollionConfigStage(PipelineStage):
             self.logger.warning(f"Crops path does not exist yet: {crops_path}")
         return True
 
-    def execute(self) -> StageResult:
-        """Execute Champollion config generation."""
-        self.log_start()
-        try:
-            self.logger.info("Generating Champollion configuration...")
+    def build_args(self) -> List[str]:
+        return [
+            str(self.config.dataset.crops_path),
+            f"--dataset={self.config.dataset.name}",
+            f"--masks={self.config.dataset.masks_version}",
+        ]
 
-            args = [
-                str(self.config.dataset.crops_path),
-                f"--dataset={self.config.dataset.name}",
-                f"--masks={self.config.dataset.masks_version}",
-            ]
-
-            script = GenerateChampollionConfig()
-            script.parse_args(args)
-            return_code = script.run()
-
-            result = StageResult(
-                stage_name=self.name,
-                success=(return_code == 0),
-                message="Champollion config generated" if return_code == 0 else "Config generation failed",
-                return_code=return_code,
-            )
-        except Exception as e:
-            self.log_failure()
-            result = StageResult(stage_name=self.name, success=False, message=f"Failed: {str(e)}", return_code=1)
-
-        self.log_end(result)
-        return result
+    def create_script(self) -> GenerateChampollionConfig:
+        return GenerateChampollionConfig()
 
 
 _HF_REPO_ID_REQUIRED = "hf_enabled requires dataset.hf_repo_id"
@@ -538,6 +215,10 @@ def _scoped_env(name: str, value: Optional[str]) -> Iterator[None]:
 class GenerateEmbeddingsStage(PipelineStage):
     """Stage for generating embeddings."""
 
+    progress_message = "Generating embeddings and training classifiers..."
+    success_message = "Embeddings generated"
+    failure_message = "Embedding generation failed"
+
     def validate(self) -> bool:
         """Validate that the model source is usable."""
         dataset = self.config.dataset
@@ -552,8 +233,7 @@ class GenerateEmbeddingsStage(PipelineStage):
             return False
         return True
 
-    def execute(self) -> StageResult:
-        """Execute embeddings generation."""
+    def precheck(self) -> Optional[StageResult]:
         dataset = self.config.dataset
         if dataset.hf_enabled and not dataset.hf_repo_id:
             return StageResult(
@@ -562,46 +242,37 @@ class GenerateEmbeddingsStage(PipelineStage):
                 message=_HF_REPO_ID_REQUIRED,
                 return_code=1,
             )
-        self.log_start()
-        try:
-            self.logger.info("Generating embeddings and training classifiers...")
+        return None
 
-            models_path = dataset.hf_repo_id if dataset.hf_enabled else str(self.config.models_path)
-            args = [models_path, dataset.datasets_root, f"--masks={dataset.masks_version}"]
-            if dataset.hf_enabled:
-                args.append(f"--model-version={dataset.masks_version}")
+    def build_args(self) -> List[str]:
+        dataset = self.config.dataset
+        models_path = dataset.hf_repo_id if dataset.hf_enabled else str(self.config.models_path)
+        args = [models_path, dataset.datasets_root, f"--masks={dataset.masks_version}"]
+        if dataset.hf_enabled:
+            args.append(f"--model-version={dataset.masks_version}")
 
-            region_embeddings_dir = _compute_region_embeddings_source(dataset)
-            if region_embeddings_dir:
-                args.append(f"--output={region_embeddings_dir}")
-            if dataset.overwrite:
-                args.append("--overwrite")
-            if dataset.cpu:
-                args.append("--cpu")
-            args.append(f"--checkpoint-epoch={dataset.checkpoint_epoch}")
-            if dataset.models_cache is not None:
-                args.append(f"--models-cache={dataset.models_cache}")
-            if dataset.regions:
-                args.extend(["--regions", *_compute_embeddings_region_names(dataset.regions)])
+        region_embeddings_dir = _compute_region_embeddings_source(dataset)
+        if region_embeddings_dir:
+            args.append(f"--output={region_embeddings_dir}")
+        if dataset.overwrite:
+            args.append("--overwrite")
+        if dataset.cpu:
+            args.append("--cpu")
+        args.append(f"--checkpoint-epoch={dataset.checkpoint_epoch}")
+        if dataset.models_cache is not None:
+            args.append(f"--models-cache={dataset.models_cache}")
+        if dataset.regions:
+            args.extend(["--regions", *_compute_embeddings_region_names(dataset.regions)])
+        return args
 
-            script = GenerateEmbeddings()
-            script.parse_args(args)
-            hf_token = dataset.hf_token if dataset.hf_enabled else None
-            with _scoped_env("HF_TOKEN", hf_token):
-                return_code = script.run()
+    def create_script(self) -> GenerateEmbeddings:
+        return GenerateEmbeddings()
 
-            result = StageResult(
-                stage_name=self.name,
-                success=(return_code == 0),
-                message="Embeddings generated" if return_code == 0 else "Embedding generation failed",
-                return_code=return_code,
-            )
-        except Exception as e:
-            self.log_failure()
-            result = StageResult(stage_name=self.name, success=False, message=f"Failed: {str(e)}", return_code=1)
-
-        self.log_end(result)
-        return result
+    def run_script(self, script: GenerateEmbeddings) -> int:
+        dataset = self.config.dataset
+        hf_token = dataset.hf_token if dataset.hf_enabled else None
+        with _scoped_env("HF_TOKEN", hf_token):
+            return script.run()
 
 
 def _compute_region_embeddings_source(dataset: DatasetConfig) -> str:
@@ -639,6 +310,10 @@ def _compute_embeddings_region_names(regions: List[str]) -> List[str]:
 class PutTogetherEmbeddingsStage(PipelineStage):
     """Stage for combining embeddings."""
 
+    progress_message = "Putting together embeddings..."
+    success_message = "Embeddings combined successfully"
+    failure_message = "Combine failed"
+
     def validate(self) -> bool:
         """Validate that embeddings exist."""
         embeddings_path = Path(_compute_region_embeddings_source(self.config.dataset))
@@ -647,38 +322,25 @@ class PutTogetherEmbeddingsStage(PipelineStage):
             return False
         return True
 
-    def execute(self) -> StageResult:
-        """Execute embeddings combination."""
-        self.log_start()
-        try:
-            self.logger.info("Putting together embeddings...")
-            dataset = self.config.dataset
-            output_path = (
-                Path(compute_combined_embeddings_dir(dataset.datasets_root, dataset.masks_version))
-                if dataset.datasets_root
-                else (dataset.cortical_tiles_output or self.config.outputs_path)
-            )
-            args = [_compute_region_embeddings_source(dataset), f"--output_path={output_path}"]
-            script = PutTogetherEmbeddings()
-            script.parse_args(args)
-            return_code = script.run()
+    def build_args(self) -> List[str]:
+        dataset = self.config.dataset
+        output_path = (
+            Path(compute_combined_embeddings_dir(dataset.datasets_root, dataset.masks_version))
+            if dataset.datasets_root
+            else (dataset.cortical_tiles_output or self.config.outputs_path)
+        )
+        return [_compute_region_embeddings_source(dataset), f"--output_path={output_path}"]
 
-            result = StageResult(
-                stage_name=self.name,
-                success=(return_code == 0),
-                message="Embeddings combined successfully" if return_code == 0 else "Combine failed",
-                return_code=return_code,
-            )
-        except Exception as e:
-            self.log_failure()
-            result = StageResult(stage_name=self.name, success=False, message=f"Failed: {str(e)}", return_code=1)
-
-        self.log_end(result)
-        return result
+    def create_script(self) -> PutTogetherEmbeddings:
+        return PutTogetherEmbeddings()
 
 
 class GenerateSnapshotsStage(PipelineStage):
     """Stage for generating visualization snapshots."""
+
+    progress_message = "Generating visualization snapshots..."
+    success_message = "Snapshots generated"
+    failure_message = "Snapshot generation failed"
 
     def validate(self) -> bool:
         """Validate that embeddings exist and output path is set."""
@@ -691,49 +353,26 @@ class GenerateSnapshotsStage(PipelineStage):
             return False
         return True
 
-    def execute(self) -> StageResult:
-        """Execute snapshot generation."""
-        self.log_start()
-        try:
-            self.logger.info("Generating visualization snapshots...")
+    def build_args(self) -> List[str]:
+        dataset = self.config.dataset
+        args = [f"--output_dir={_compute_snapshots_output_dir(dataset)}"]
+        if dataset.datasets_root:
+            combined_dir = compute_combined_embeddings_dir(dataset.datasets_root, dataset.masks_version)
+            args.append(f"--embeddings_dir={combined_dir}")
+        elif dataset.embeddings_path:
+            args.append(f"--embeddings_dir={dataset.embeddings_path}")
+        if self.config.dataset.morphologist_graphs:
+            args.append(f"--morphologist_dir={self.config.dataset.morphologist_graphs}")
+        if self.config.dataset.crops_path:
+            args.append(f"--cortical_tiles_dir={self.config.dataset.crops_path}")
+        if self.config.dataset.reference_data_path:
+            args.append(f"--reference_data_dir={self.config.dataset.reference_data_path}")
+        if self.config.dataset.champollion_data_root:
+            args.append(f"--champollion_data_root={self.config.dataset.champollion_data_root}")
+        return args
 
-            dataset = self.config.dataset
-            args = [f"--output_dir={_compute_snapshots_output_dir(dataset)}"]
-            if dataset.datasets_root:
-                combined_dir = compute_combined_embeddings_dir(dataset.datasets_root, dataset.masks_version)
-                args.append(f"--embeddings_dir={combined_dir}")
-            elif dataset.embeddings_path:
-                args.append(f"--embeddings_dir={dataset.embeddings_path}")
-            if self.config.dataset.morphologist_graphs:
-                args.append(f"--morphologist_dir={self.config.dataset.morphologist_graphs}")
-            if self.config.dataset.crops_path:
-                args.append(f"--cortical_tiles_dir={self.config.dataset.crops_path}")
-            if self.config.dataset.reference_data_path:
-                args.append(f"--reference_data_dir={self.config.dataset.reference_data_path}")
-            if self.config.dataset.champollion_data_root:
-                args.append(f"--champollion_data_root={self.config.dataset.champollion_data_root}")
-
-            script = GenerateSnapshots()
-            script.parse_args(args)
-            return_code = script.run()
-
-            result = StageResult(
-                stage_name=self.name,
-                success=(return_code == 0),
-                message=("Snapshots generated" if return_code == 0 else "Snapshot generation failed"),
-                return_code=return_code,
-            )
-        except Exception as e:
-            self.log_failure()
-            result = StageResult(
-                stage_name=self.name,
-                success=False,
-                message=f"Failed: {str(e)}",
-                return_code=1,
-            )
-
-        self.log_end(result)
-        return result
+    def create_script(self) -> GenerateSnapshots:
+        return GenerateSnapshots()
 
 
 # ====================== Pipeline Orchestrator ======================
@@ -1106,10 +745,8 @@ def main() -> int:
                 file=sys.stderr,
             )
             return 1
-        try:
-            from parallel_runner import run_parallel_pipeline
-        except ImportError as e:
-            print(f"Error: could not import parallel_runner: {e}", file=sys.stderr)
+        if run_parallel_pipeline is None:
+            print(f"Error: could not import parallel_runner: {_PARALLEL_RUNNER_IMPORT_ERROR}", file=sys.stderr)
             return 1
         subjects_dir = config.dataset.input_path or config.dataset.morphologist_graphs
         output_dir = config.outputs_path

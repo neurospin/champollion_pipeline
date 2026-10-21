@@ -500,6 +500,7 @@ champollion_pipeline/
 │       ├── prune_failed_subjects.py
 │       ├── purge_subject.py
 │       ├── process_setup.py
+│       ├── _stage_base.py           # Template base class of main.py's pipeline stages
 │       └── generate_labelling_qc.py
 ├── data/                       # Created by install-all; not committed
 └── pixi.toml

@@ -4,7 +4,7 @@
 Unit tests for src/generate_umap_reference.py
 
 The module imports ``get_model_paths`` from the champollion_V1 submodule at
-import time, and ``umap`` lazily inside ``generate_umap_reference()``.  Both are
+import time, and binds ``umap`` (as ``umap_lib``) at import time.  Both are
 stubbed here so the tests run without the submodule and without fitting a real
 UMAP model.
 """
@@ -43,7 +43,7 @@ class _FakeReducer:
 def fake_umap(monkeypatch):
     module = MagicMock()
     module.UMAP = _FakeReducer
-    monkeypatch.setitem(sys.modules, "umap", module)
+    monkeypatch.setattr(generate_umap_reference, "umap_lib", module)
     return module
 
 

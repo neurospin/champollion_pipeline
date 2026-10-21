@@ -2,8 +2,10 @@ line-length = 120
 exclude = [".pixi", "__pycache__", "external", "*.pyc"]
 
 [lint]
-select = ["E", "F", "I"]
+select = ["E", "F", "I", "PLC0415"]
 extend-ignore = ["E203"]
 
 [lint.per-file-ignores]
 "__init__.py" = ["F401"]
+"tests/**" = ["PLC0415"]
+"src/champollion_pipeline/generate_snapshots.py" = ["PLC0415"]

@@ -31,6 +31,8 @@ import sys
 
 import joblib
 import numpy as np
+import pandas as pd
+import umap as umap_lib
 from champollion_utils.script_builder import ScriptBuilder
 
 # Re-use the model-discovery helpers from champollion_V1 utils
@@ -83,9 +85,6 @@ def generate_umap_reference(
         List of (region, hemi) pairs for which artefacts were successfully
         generated.
     """
-    import pandas as pd
-    import umap as umap_lib
-
     os.makedirs(output_dir, exist_ok=True)
 
     models_dir = osp.abspath(models_dir)
