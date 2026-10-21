@@ -10,6 +10,7 @@ import contextlib
 import cProfile
 import glob
 import gzip
+import json
 import os
 import pstats
 import re
@@ -20,6 +21,7 @@ import tempfile
 import warnings
 from abc import ABC, abstractmethod
 from collections.abc import Iterator
+from dataclasses import dataclass
 from io import StringIO
 from os.path import abspath, dirname, exists, join
 from pathlib import Path
@@ -44,6 +46,7 @@ DEFAULT_CHECKPOINT_EPOCH = 80
 _EPOCH_CKPT_PATTERN = r"epoch={epoch}-step=(?P<step>\d+)\.ckpt"
 _VERSION_DIR_PATTERN = re.compile(r"version_(?P<index>\d+)")
 _MIRROR_PREFIX = "champollion_eval_"
+MODEL_SET_FILE_NAME = "model_set.json"
 _CHAMPOLLION_DIR = abspath(join(_SCRIPT_DIR, "..", "..", "external", "champollion_V1"))
 if _CHAMPOLLION_DIR not in sys.path:
     sys.path.insert(0, _CHAMPOLLION_DIR)
@@ -81,6 +84,40 @@ def ensure_models_cache_dir(cache_dir: str) -> str:
     if not os.access(cache_dir, os.W_OK):
         raise OSError(f"Models cache directory {cache_dir} is not writable")
     return cache_dir
+
+
+@dataclass(frozen=True)
+class ModelSet:
+    """Content of a model set directory's model_set.json marker."""
+
+    model_version: str
+    masks: str
+    checkpoint_epoch: int | None = None
+
+
+def read_model_set(model_set_dir: str) -> ModelSet:
+    """Read and validate <model_set_dir>/model_set.json.
+
+    OSError (a missing marker included) propagates; any invalid content raises a ValueError whose message starts
+    with the marker path. Unknown keys are ignored; a missing checkpoint_epoch gives None.
+    """
+    path = join(model_set_dir, MODEL_SET_FILE_NAME)
+    with open(path, encoding="utf-8") as f:
+        try:
+            data = json.load(f)
+        except ValueError as err:
+            raise ValueError(f"{path}: not valid JSON ({err})") from err
+    if type(data) is not dict:
+        raise ValueError(f"{path}: expected a JSON object, got {type(data).__name__}")
+    for key in ("model_version", "masks"):
+        value = data.get(key)
+        if not isinstance(value, str) or value == "":
+            raise ValueError(f"{path}: {key!r} must be a non-empty string, got {value!r}")
+    if "checkpoint_epoch" in data:
+        epoch = data["checkpoint_epoch"]
+        if not (type(epoch) is int and epoch >= 0):
+            raise ValueError(f"{path}: 'checkpoint_epoch' must be a non-negative integer, got {epoch!r}")
+    return ModelSet(data["model_version"], data["masks"], data.get("checkpoint_epoch"))
 
 
 class ModelFetchStrategy(ABC):
@@ -541,6 +578,7 @@ class GenerateEmbeddings(ScriptBuilder):
         self._resolve_model_version_alias()
         self._resolve_masks_default()
         self._check_version_mismatch()
+        self._check_local_model_set()
         return parsed
 
     def _resolve_model_version_alias(self) -> None:
@@ -581,6 +619,31 @@ class GenerateEmbeddings(ScriptBuilder):
         warnings.warn(
             f"--masks {masks!r} and --model-version {model_version!r} differ; running anyway "
             f"(--allow-version-mismatch): crops {masks!r}, models {model_version!r}",
+            UserWarning,
+            stacklevel=2,
+        )
+
+    def _check_local_model_set(self) -> None:
+        """Exit 2 when a local model set's model_set.json is invalid, or names other masks than --masks unless
+        --allow-version-mismatch (then warn). No marker or no local directory: nothing."""
+        models_dir = self.args.models_path
+        if not os.path.isdir(models_dir) or not os.path.isfile(join(models_dir, MODEL_SET_FILE_NAME)):
+            return
+        try:
+            model_set = read_model_set(models_dir)
+        except ValueError as err:
+            self.parser.error(str(err))
+        path, marker_masks, masks = join(models_dir, MODEL_SET_FILE_NAME), model_set.masks, self.args.masks
+        if marker_masks == masks:
+            return
+        if not self.args.allow_version_mismatch:
+            self.parser.error(
+                f"{path} masks {marker_masks!r} and --masks {masks!r} differ: the local model set was trained on "
+                f"{marker_masks!r} crops; pass --masks {marker_masks!r}, or --allow-version-mismatch to run with both"
+            )
+        warnings.warn(
+            f"{path} masks {marker_masks!r} and --masks {masks!r} differ; running anyway (--allow-version-mismatch): "
+            f"crops {masks!r}, models trained on {marker_masks!r}",
             UserWarning,
             stacklevel=2,
         )
