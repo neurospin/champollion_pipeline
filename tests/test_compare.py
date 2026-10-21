@@ -21,6 +21,9 @@ import numpy as np
 import pytest
 
 import compare
+import compare_sulcal.brainvisa
+import compare_sulcal.databases
+import compare_sulcal.viewer
 from compare import (
     Compare,
     _get_subject_voxel_counts,
@@ -104,7 +107,9 @@ def _make_script(argv: list) -> Compare:
 
 class TestLoadMaskVol:
     def test_squeezes_and_casts(self, monkeypatch):
-        monkeypatch.setattr(compare, "aims", _FakeAims({"/m.nii.gz": np.ones((2, 2, 2, 1), dtype=np.int16)}))
+        monkeypatch.setattr(
+            compare_sulcal.brainvisa, "aims", _FakeAims({"/m.nii.gz": np.ones((2, 2, 2, 1), dtype=np.int16)})
+        )
         arr = load_mask_vol("/m.nii.gz")
         assert arr.shape == (2, 2, 2)
         assert arr.dtype == np.float64
@@ -169,7 +174,7 @@ class TestSaveXorVol:
     def test_writes_binary_xor_with_reference_header(self, tmp_path, monkeypatch):
         ref = _FakeVolume(np.zeros((2, 2, 2)), header={"voxel_size": [2.0, 2.0, 2.0]})
         fake = _FakeAims({"/ref.nii.gz": ref})
-        monkeypatch.setattr(compare, "aims", fake)
+        monkeypatch.setattr(compare_sulcal.brainvisa, "aims", fake)
 
         a = np.array([[[1.0, 0.0]], [[0.0, 0.0]]])
         b = np.array([[[0.0, 0.0]], [[0.0, 0.0]]])
@@ -212,7 +217,7 @@ class TestVisualiseMaskDiffs:
             objects[pb] = _FakeVolume(_point_volume((1, 0, 0)))
             masks_a[name], masks_b[name] = pa, pb
         fake = _FakeAims(objects)
-        monkeypatch.setattr(compare, "aims", fake)
+        monkeypatch.setattr(compare_sulcal.brainvisa, "aims", fake)
         run = MagicMock(return_value=subprocess.CompletedProcess(args=[], returncode=0))
         monkeypatch.setattr("subprocess.run", run)
 
@@ -257,7 +262,7 @@ def fake_soma_aims(monkeypatch):
         fake = _FakeAims(objects)
         monkeypatch.setattr(sys.modules["soma"], "aims", fake)
         # compare binds aims at import time: patch its module-level name too
-        monkeypatch.setattr(compare, "aims", fake)
+        monkeypatch.setattr(compare_sulcal.brainvisa, "aims", fake)
         return fake
 
     return _install
@@ -423,7 +428,7 @@ def mask_sets(tmp_path, monkeypatch):
         str((dir_a / "L" / "only_a.nii.gz").resolve()): _FakeVolume(np.zeros((4, 4, 4))),
         str((dir_b / "L" / "only_b.nii.gz").resolve()): _FakeVolume(np.zeros((4, 4, 4))),
     }
-    monkeypatch.setattr(compare, "aims", _FakeAims(objects))
+    monkeypatch.setattr(compare_sulcal.brainvisa, "aims", _FakeAims(objects))
     return dir_a, dir_b
 
 
@@ -479,7 +484,7 @@ class TestCompareNiftiMasks:
         dir_a = _make_tree(tmp_path / "a", ["L/shared.nii.gz"])
         dir_b = _make_tree(tmp_path / "b", ["L/shared.nii.gz"])
         monkeypatch.setattr(
-            compare,
+            compare_sulcal.brainvisa,
             "aims",
             _FakeAims(
                 {
@@ -520,7 +525,7 @@ class TestCompareNiftiMasks:
         dir_a = _make_tree(tmp_path / "a", [rel])
         dir_b = _make_tree(tmp_path / "b", [rel])
         monkeypatch.setattr(
-            compare,
+            compare_sulcal.brainvisa,
             "aims",
             _FakeAims(
                 {
@@ -547,7 +552,7 @@ class TestCompareNiftiMasks:
             seen["scores"] = scores
             return 0
 
-        monkeypatch.setattr(compare, "visualise_mask_diffs", _fake)
+        monkeypatch.setattr(compare_sulcal.viewer, "visualise_mask_diffs", _fake)
         script = _make_script(
             [
                 "masks",
@@ -571,7 +576,7 @@ class TestCompareNiftiMasks:
             seen["scores"] = scores
             return 0
 
-        monkeypatch.setattr(compare, "visualise_mask_diffs", _fake)
+        monkeypatch.setattr(compare_sulcal.viewer, "visualise_mask_diffs", _fake)
         script = _make_script(
             [
                 "masks",
@@ -610,7 +615,7 @@ def stub_deep_folding(monkeypatch):
         # REQ-COMPARE-92: once the import sits at the module top, the stub must
         # also replace the name already bound on compare (no-op before then).
         monkeypatch.setattr(
-            compare, "get_all_subjects_as_dictionary", subjects_mod.get_all_subjects_as_dictionary, raising=False
+            compare_sulcal.brainvisa, "get_all_subjects_as_dictionary", subjects_mod.get_all_subjects_as_dictionary
         )
         return subjects_mod
 
@@ -635,7 +640,9 @@ def _db_argv(tmp_path, **overrides):
 class TestLoadDatabase:
     def test_aggregates_subjects_over_sides(self, tmp_path, stub_deep_folding, monkeypatch):
         subjects_mod = stub_deep_folding([{"subject": "sub-01", "dir": "d", "graph_file": "g"}])
-        monkeypatch.setattr(compare, "_get_subject_voxel_counts", lambda sub, _bv: (sub["subject"], {"S.C.": 7}))
+        monkeypatch.setattr(
+            compare_sulcal.databases, "_get_subject_voxel_counts", lambda sub, _bv: (sub["subject"], {"S.C.": 7})
+        )
         script = _make_script(_db_argv(tmp_path))
         data = script._load_database("folds/3.3/a", ["L", "R"], str(tmp_path), 1, str(tmp_path))
         assert data == {"sub-01": {"S.C.": 7}}
@@ -643,7 +650,7 @@ class TestLoadDatabase:
 
     def test_pattern_includes_graph_subpath(self, tmp_path, stub_deep_folding, monkeypatch):
         subjects_mod = stub_deep_folding([])
-        monkeypatch.setattr(compare, "_get_subject_voxel_counts", lambda sub, _bv: (None, None))
+        monkeypatch.setattr(compare_sulcal.databases, "_get_subject_voxel_counts", lambda sub, _bv: (None, None))
         script = _make_script(_db_argv(tmp_path))
         script._load_database("folds/3.3/a", ["L"], str(tmp_path), 1, str(tmp_path))
         patterns = subjects_mod.get_all_subjects_as_dictionary.call_args.args[1]
@@ -651,7 +658,7 @@ class TestLoadDatabase:
 
     def test_warns_when_subject_has_no_graph(self, tmp_path, stub_deep_folding, monkeypatch, capsys):
         stub_deep_folding([{"subject": "sub-99", "dir": "d", "graph_file": "g"}])
-        monkeypatch.setattr(compare, "_get_subject_voxel_counts", lambda sub, _bv: ("sub-99", None))
+        monkeypatch.setattr(compare_sulcal.databases, "_get_subject_voxel_counts", lambda sub, _bv: ("sub-99", None))
         script = _make_script(_db_argv(tmp_path))
         assert script._load_database("p", ["L"], str(tmp_path), 1, str(tmp_path)) == {}
         assert "no graph for sub-99" in capsys.readouterr().out
@@ -730,7 +737,7 @@ class TestRunDatabases:
                 {"L/S.C..nii.gz": (20, 800, 80), "L/F.C.M..nii.gz": (2, 80, 8)},
             ]
         )
-        monkeypatch.setattr(compare, "_mask_stats", lambda d, _bv: next(stats))
+        monkeypatch.setattr(compare_sulcal.databases, "_mask_stats", lambda d, _bv: next(stats))
         out = tmp_path / "masked.csv"
         script = _make_script(_db_argv(tmp_path, output=out, masks_a=masks_a, masks_b=masks_b))
         assert script.run() == 0
@@ -742,7 +749,7 @@ class TestRunDatabases:
     @pytest.mark.usefixtures("two_campaigns")
     def test_mask_dirs_ignored_when_absent(self, tmp_path, monkeypatch):
         called = MagicMock()
-        monkeypatch.setattr(compare, "_mask_stats", called)
+        monkeypatch.setattr(compare_sulcal.databases, "_mask_stats", called)
         script = _make_script(_db_argv(tmp_path, output=tmp_path / "nomask.csv", masks_a=tmp_path / "nope"))
         assert script.run() == 0
         called.assert_not_called()

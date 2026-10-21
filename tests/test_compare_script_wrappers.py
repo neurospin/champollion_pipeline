@@ -7,7 +7,8 @@ src/compare_masks.py, src/compare_cortical_tiles.py and src/compare_databases.py
 keep their own command line (pinned by tests/test_compare_cli_surface.py) but
 hold no second copy of the comparison code: each one runs the matching
 subcommand of ``compare.Compare`` with its parsed option values, and none
-redefines a module-level function of src/compare.py.
+redefines a module-level function of src/compare.py or of the package
+src/compare_sulcal.
 
 The delegation tests replace ``compare.Compare.run`` with a spy that records the
 parsed arguments, so no mask, graph or PyAIMS reader is ever touched. The import
@@ -15,7 +16,7 @@ test runs in a fresh Python subprocess where ``soma`` and ``cortical_tiles`` are
 blocked through ``sys.modules[...] = None`` (conftest.py stubs ``soma`` in this
 process).
 
-Requirements (area COMPARE, author BDRABCZUK): 6F374B546BB4 no redefined
+Requirements (area COMPARE, author BDRABCZUK): 492515474291 no redefined
 function, 0DA1ADB31D7A 0AA1B1A259B1 E0BC6E28176B delegation, 66C86B6209DD
 import outside BrainVISA. Task: TASK-TASK-BDRABCZUK-8D3C019A018B.
 """
@@ -89,14 +90,16 @@ def _set_dirs(tmp_path: Path) -> tuple:
 
 
 # --------------------------------------------------------------------------- #
-# One implementation: the scripts redefine no function of src/compare.py
+# One implementation: the scripts redefine no function of src/compare.py or src/compare_sulcal
 # --------------------------------------------------------------------------- #
 
 
 @pytest.mark.parametrize("script", _SCRIPTS)
 def test_script_defines_no_compare_function(script):
-    """REQ-COMPARE-BDRABCZUK-6F374B546BB4."""
-    shared = _module_level_functions(_SRC_DIR / "compare.py") & _module_level_functions(_SRC_DIR / f"{script}.py")
+    """REQ-COMPARE-BDRABCZUK-492515474291."""
+    compare_sources = [_SRC_DIR / "compare.py", *sorted((_SRC_DIR / "compare_sulcal").glob("*.py"))]
+    compare_functions = set().union(*(_module_level_functions(path) for path in compare_sources))
+    shared = compare_functions & _module_level_functions(_SRC_DIR / f"{script}.py")
     assert shared - {"main"} == set()
 
 

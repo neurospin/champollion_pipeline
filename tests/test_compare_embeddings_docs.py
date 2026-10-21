@@ -21,6 +21,7 @@ from pathlib import Path
 import pytest
 
 COMPARE_PY = Path(__file__).resolve().parents[1] / "src" / "compare.py"
+COMPARE_SOURCES = [COMPARE_PY, *sorted((COMPARE_PY.parent / "compare_sulcal").glob("*.py"))]
 SECTION_TITLE = "Embeddings comparison (embeddings)"
 _UNDERLINE = re.compile(r"^-{3,}$")
 
@@ -29,7 +30,9 @@ EMBEDDINGS_FUNCTIONS = ["linear_cka", "knn_overlap", "procrustes_align", "load_u
 
 
 def _tree() -> ast.Module:
-    return ast.parse(COMPARE_PY.read_text(encoding="utf-8"))
+    """src/compare.py first (its docstring stays the module docstring), then the compare_sulcal package files."""
+    body = [stmt for path in COMPARE_SOURCES for stmt in ast.parse(path.read_text(encoding="utf-8")).body]
+    return ast.Module(body=body, type_ignores=[])
 
 
 def _embeddings_parser_names(tree: ast.Module) -> set[str]:

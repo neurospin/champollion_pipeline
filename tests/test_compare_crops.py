@@ -43,6 +43,7 @@ import numpy as np
 import pytest
 
 import compare
+import compare_sulcal.brainvisa
 from compare import Compare
 
 _CSV_COLUMNS = ["region", "side", "subject", "n_a", "n_b", "kept", "lost", "gained", "pct_lost", "dice", "shift"]
@@ -123,7 +124,7 @@ class _FakeAims:
 def fake_aims(monkeypatch):
     _HEADERS.clear()
     _WRITTEN.clear()
-    monkeypatch.setattr(compare, "aims", _FakeAims())
+    monkeypatch.setattr(compare_sulcal.brainvisa, "aims", _FakeAims())
     yield
     _HEADERS.clear()
     _WRITTEN.clear()

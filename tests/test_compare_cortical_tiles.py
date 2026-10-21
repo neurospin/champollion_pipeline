@@ -14,8 +14,8 @@ from pathlib import Path
 import numpy as np
 import pytest
 
-import compare
 import compare_cortical_tiles
+import compare_sulcal.brainvisa
 from compare_cortical_tiles import CompareCorticalTiles
 
 # ---------------------------------------------------------------------------
@@ -102,7 +102,7 @@ def tile_sets(tmp_path, monkeypatch):
         str(dir_a / "ONLY_A" / "mask" / "Lmask_skeleton.nii.gz"): np.zeros((4, 4, 4)),
         str(dir_b / "ONLY_B" / "mask" / "Lmask_skeleton.nii.gz"): np.zeros((4, 4, 4)),
     }
-    monkeypatch.setattr(compare, "aims", _FakeAims(volumes))
+    monkeypatch.setattr(compare_sulcal.brainvisa, "aims", _FakeAims(volumes))
     return dir_a, dir_b
 
 
@@ -181,7 +181,7 @@ class TestRun:
             str(dir_a / "SHARED" / "mask" / "Lmask_skeleton.nii.gz"): np.zeros((4, 4, 4)),
             str(dir_b / "SHARED" / "mask" / "Lmask_skeleton.nii.gz"): np.zeros((2, 2, 2)),
         }
-        monkeypatch.setattr(compare, "aims", _FakeAims(volumes))
+        monkeypatch.setattr(compare_sulcal.brainvisa, "aims", _FakeAims(volumes))
         out = tmp_path / "r.json"
         script = _make_script(["--set_a", str(dir_a), "--set_b", str(dir_b), "--output", str(out)])
         assert script.run() == 0

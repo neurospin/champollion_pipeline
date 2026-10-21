@@ -14,8 +14,8 @@ from pathlib import Path
 import numpy as np
 import pytest
 
-import compare
 import compare_masks
+import compare_sulcal.brainvisa
 from compare_masks import parse_args
 
 # ---------------------------------------------------------------------------
@@ -94,7 +94,7 @@ def mask_sets(tmp_path, monkeypatch):
         str(dir_a / "L" / "only_a.nii.gz"): np.zeros((4, 4, 4)),
         str(dir_b / "L" / "only_b.nii.gz"): np.zeros((4, 4, 4)),
     }
-    monkeypatch.setattr(compare, "aims", _FakeAims(volumes))
+    monkeypatch.setattr(compare_sulcal.brainvisa, "aims", _FakeAims(volumes))
     return dir_a, dir_b
 
 

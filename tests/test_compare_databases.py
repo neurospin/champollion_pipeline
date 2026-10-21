@@ -16,6 +16,7 @@ import pytest
 
 import compare
 import compare_databases
+import compare_sulcal.databases
 from compare_databases import CompareDatabases
 
 # ---------------------------------------------------------------------------
@@ -166,7 +167,7 @@ class TestRun:
                 {"L/S.C..nii.gz": (20, 800, 80), "L/F.C.M..nii.gz": (2, 80, 8)},
             ]
         )
-        monkeypatch.setattr(compare, "_mask_stats", lambda d, _bv: next(stats))
+        monkeypatch.setattr(compare_sulcal.databases, "_mask_stats", lambda d, _bv: next(stats))
 
         out = tmp_path / "masked.csv"
         script = _make_script(
@@ -184,7 +185,7 @@ class TestRun:
     @pytest.mark.usefixtures("two_campaigns")
     def test_mask_dirs_ignored_when_absent(self, tmp_path, monkeypatch):
         called = MagicMock()
-        monkeypatch.setattr(compare, "_mask_stats", called)
+        monkeypatch.setattr(compare_sulcal.databases, "_mask_stats", called)
         out = tmp_path / "nomask.csv"
         script = _make_script(_base_argv(tmp_path, output=out, masks_a=tmp_path / "nope"))
         assert script.run() == 0

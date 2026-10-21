@@ -21,7 +21,7 @@ from pathlib import Path
 import numpy as np
 import pytest
 
-import compare
+import compare_sulcal.brainvisa
 from compare import Compare, wasserstein_distance
 
 _SHAPE = (4, 4, 4)
@@ -91,7 +91,7 @@ def one_side_empty_report(request, mode, tmp_path, monkeypatch):
             path.parent.mkdir(parents=True, exist_ok=True)
             path.touch()
             objects[str(path.resolve())] = vol
-    monkeypatch.setattr(compare, "aims", _FakeAims(objects))
+    monkeypatch.setattr(compare_sulcal.brainvisa, "aims", _FakeAims(objects))
 
     out = tmp_path / "report.json"
     script = Compare()
