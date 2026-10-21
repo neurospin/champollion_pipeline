@@ -1,18 +1,25 @@
 """TASK-201: tiles snapshot data root (REQ-TILESROOT-01).
 
 Hermetic per ARCHITECTURE.md#snapshot-mesh-fallback-hermetic: Anatomist,
-PyAIMS and cortical_tiles are mocked through ``sys.modules``; every path the
+PyAIMS and cortical_tiles are patched as module attributes of generate_snapshots; every path the
 code touches lives under ``tmp_path`` and ``ICBM_MESH_DIR_FALLBACK`` is
 redirected there, so nothing depends on /neurospin being mounted or not.
 """
 
-import sys
 from unittest.mock import MagicMock, patch
 
 import pytest
 
 import champollion_pipeline.generate_snapshots as gs
 from champollion_pipeline.generate_snapshots import generate_tiles_snapshot
+
+_MODULE_ATTRS = {"anatomist.headless": "ana", "cortical_tiles.config": "config", "soma.aims": "aims"}
+
+
+def _as_module_attrs(modules):
+    """generate_snapshots attribute -> mock, for the guarded BrainVISA modules present in ``modules``."""
+    return {attr: modules[key] for key, attr in _MODULE_ATTRS.items() if key in modules}
+
 
 OPTION = "--champollion_data_root"
 
@@ -74,7 +81,7 @@ class TestTilesMissingRegionGraphMessage:
     def test_explicit_root_message_names_path_and_option(self, tmp_path, tiles_env, capsys):
         """REQ-TILESROOT-01: explicit champollion_data_root lacking the region graph."""
         modules, empty_root, crops = tiles_env
-        with patch.dict(sys.modules, modules):
+        with patch.multiple(gs, **_as_module_attrs(modules)):
             snaps = generate_tiles_snapshot(
                 str(crops), str(tmp_path / "tiles.png"), champollion_data_root=str(empty_root)
             )
@@ -86,7 +93,7 @@ class TestTilesMissingRegionGraphMessage:
     def test_config_default_root_message_names_path_and_option(self, tmp_path, tiles_env, capsys):
         """REQ-TILESROOT-01: cortical_tiles config default root lacking the region graph (TASK-201 case)."""
         modules, empty_root, crops = tiles_env
-        with patch.dict(sys.modules, modules):
+        with patch.multiple(gs, **_as_module_attrs(modules)):
             snaps = generate_tiles_snapshot(str(crops), str(tmp_path / "tiles.png"))
         out = capsys.readouterr().out
         assert snaps == []

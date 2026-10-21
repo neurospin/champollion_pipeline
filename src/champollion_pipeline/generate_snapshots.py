@@ -18,10 +18,40 @@ import os.path as osp
 import re
 import sys
 
+import joblib
+import matplotlib
+import matplotlib.pyplot as plt
 import numpy as np
+import pandas as pd
 from champollion_utils.script_builder import ScriptBuilder
 
 from champollion_pipeline.process_setup import init_pipeline_process
+
+# Guarded BrainVISA imports: absent off BrainVISA machines, where the module must still import.
+_BRAINVISA_IMPORT_ERRORS: dict[str, str] = {}
+try:
+    import anatomist.headless as ana
+except ImportError as exc:
+    ana = None
+    _BRAINVISA_IMPORT_ERRORS["anatomist.headless"] = str(exc)
+try:
+    from cortical_tiles import config
+except ImportError as exc:
+    config = None
+    _BRAINVISA_IMPORT_ERRORS["cortical_tiles.config"] = str(exc)
+try:
+    from soma import aims
+except ImportError as exc:
+    aims = None
+    _BRAINVISA_IMPORT_ERRORS["soma.aims"] = str(exc)
+
+
+def _require_brainvisa(module, name):
+    """Return ``module``; raise ImportError naming ``name`` when its guarded import failed."""
+    if module is None:
+        raise ImportError(f"{name} is not importable: {_BRAINVISA_IMPORT_ERRORS.get(name, 'not installed')}")
+    return module
+
 
 # Hint printed when the tiles snapshot cannot find the region graphs under the data root
 REGION_GRAPH_ROOT_HINT = (
@@ -189,13 +219,11 @@ def generate_sulcal_graph_snapshot(
             as a semi-transparent background surface.
         a: Existing Anatomist instance to reuse. If None a new one is created.
     """
-    import anatomist.headless as ana
-
     if view_quaternion is None:
         view_quaternion = (0.5, 0.5, 0.5, 0.5)
 
     if a is None:
-        a = ana.Anatomist()
+        a = _require_brainvisa(ana, "anatomist.headless").Anatomist()
 
     objects = []
     graph = a.loadObject(graph_path)
@@ -250,9 +278,9 @@ def generate_tiles_snapshot(crops_dir, output_path, size=(800, 600), level=1, ch
     Returns:
         List of generated snapshot file paths
     """
-    import anatomist.headless as ana
-    from cortical_tiles import config
-    from soma import aims
+    _require_brainvisa(ana, "anatomist.headless")
+    _require_brainvisa(config, "cortical_tiles.config")
+    _require_brainvisa(aims, "soma.aims")
 
     a = ana.Anatomist()
 
@@ -388,12 +416,7 @@ def generate_umap_snapshot(embeddings_dir, reference_data_dir, output_path, size
     Returns:
         List of generated snapshot file paths.
     """
-    import joblib
-    import matplotlib
-
     matplotlib.use("Agg")
-    import matplotlib.pyplot as plt
-    import pandas as pd
 
     basename = osp.splitext(output_path)[0]
     ext = osp.splitext(output_path)[1] or ".png"
