@@ -9,7 +9,6 @@ import argparse
 import contextlib
 import cProfile
 import glob
-import gzip
 import json
 import os
 import pstats
@@ -17,7 +16,6 @@ import re
 import shutil
 import subprocess
 import sys
-import tarfile
 import tempfile
 import warnings
 from abc import ABC, abstractmethod
@@ -37,6 +35,7 @@ from champollion_pipeline.derivatives_layout import (
     compute_region_embeddings_dir,
 )
 from champollion_pipeline.process_setup import init_pipeline_process
+from champollion_pipeline.utils.archive import extract_archive, remove_stale_cache, reuse_cached_extraction
 from champollion_pipeline.utils.lib import CORTICAL_TILES_VERSION
 
 # Add champollion to path for CKA imports
@@ -201,48 +200,22 @@ class LocalPathStrategy(ModelFetchStrategy):
                 archive_name = Path(archive_name).stem
             cached_path = join(extract_to, archive_name)
 
-            # Check if cache exists and should be reused
-            if exists(cached_path) and os.path.isdir(cached_path) and not no_cache:
-                # Verify cache has content (not just an empty directory)
-                if any(os.scandir(cached_path)):
-                    print(f"Using cached extraction: {cached_path}")
-                    print("(Use --no-cache to force re-extraction)")
-                    return cached_path
+            if reuse_cached_extraction(cached_path, no_cache, require_content=True):
+                print("(Use --no-cache to force re-extraction)")
+                return cached_path
 
-            # Extract archive
             print(f"Local archive found: {models_path}")
             print(f"Extracting to: {cached_path}")
-            if no_cache and exists(cached_path):
-                print(f"Removing existing cache: {cached_path}")
-                shutil.rmtree(cached_path)
-            extracted_path = self._extract_archive(models_path, cached_path)
-            return extracted_path
+            remove_stale_cache(cached_path, no_cache)
+            return self._extract_archive(models_path, cached_path)
 
         # Otherwise, assume it's a regular file/directory and return as-is
         print(f"Models found at local path: {models_path}")
         return models_path
 
     def _extract_archive(self, archive_path: str, extract_to: str) -> str:
-        """Extract archive and return path to extracted content."""
-        os.makedirs(extract_to, exist_ok=True)
-
-        if archive_path.endswith((".tar.xz", ".tar.gz", ".tgz")):
-            with tarfile.open(archive_path, "r:*") as tar:
-                tar.extractall(path=extract_to)
-                members = tar.getmembers()
-                if members:
-                    # Return the extract_to path where contents are
-                    print(f"Extracted to: {extract_to}")
-                    return extract_to
-        elif archive_path.endswith(".gz"):
-            output_path = join(extract_to, Path(archive_path).stem)
-            with gzip.open(archive_path, "rb") as f_in:
-                with open(output_path, "wb") as f_out:
-                    shutil.copyfileobj(f_in, f_out)
-            print(f"Extracted to: {output_path}")
-            return output_path
-
-        return extract_to
+        """Extract archive into extract_to and return extract_to (or the decompressed .gz file)."""
+        return extract_archive(archive_path, extract_to, top_level=False)
 
 
 class HuggingFaceStrategy(ModelFetchStrategy):
@@ -360,16 +333,10 @@ class RemoteArchiveStrategy(ModelFetchStrategy):
             archive_name = Path(archive_name).stem
         cached_path = join(extract_to, archive_name)
 
-        # Check if cache exists and should be reused
-        if exists(cached_path) and os.path.isdir(cached_path) and not no_cache:
-            print(f"Using cached extraction: {cached_path}")
+        if reuse_cached_extraction(cached_path, no_cache):
             print("(Use --no-cache to force re-download)")
             return cached_path
-
-        # Remove existing cache if --no-cache
-        if no_cache and exists(cached_path):
-            print(f"Removing existing cache: {cached_path}")
-            shutil.rmtree(cached_path)
+        remove_stale_cache(cached_path, no_cache)
 
         print(f"Downloading archive from: {models_path}")
 
@@ -392,27 +359,9 @@ class RemoteArchiveStrategy(ModelFetchStrategy):
             raise RuntimeError(f"Failed to download or extract archive: {e}")
 
     def _extract_archive(self, archive_path: str, extract_to: str) -> str:
-        """Extract archive and return path to extracted content."""
+        """Extract archive and return path to its top-level entry."""
         print(f"Extracting {archive_path}...")
-
-        if archive_path.endswith((".tar.xz", ".tar.gz", ".tgz")):
-            with tarfile.open(archive_path, "r:*") as tar:
-                tar.extractall(path=extract_to)
-                members = tar.getmembers()
-                if members:
-                    top_dir = members[0].name.split("/")[0]
-                    extracted_path = join(extract_to, top_dir)
-                    print(f"Extracted to: {extracted_path}")
-                    return extracted_path
-        elif archive_path.endswith(".gz"):
-            output_path = join(extract_to, Path(archive_path).stem)
-            with gzip.open(archive_path, "rb") as f_in:
-                with open(output_path, "wb") as f_out:
-                    shutil.copyfileobj(f_in, f_out)
-            print(f"Extracted to: {output_path}")
-            return output_path
-
-        return extract_to
+        return extract_archive(archive_path, extract_to, top_level=True)
 
 
 class InteractiveFallbackStrategy(ModelFetchStrategy):
@@ -459,43 +408,17 @@ class InteractiveFallbackStrategy(ModelFetchStrategy):
             archive_name = Path(archive_name).stem
         cached_path = join(extract_to, archive_name)
 
-        if exists(cached_path) and os.path.isdir(cached_path) and not no_cache:
-            print(f"Using cached extraction: {cached_path}")
+        if reuse_cached_extraction(cached_path, no_cache):
             print("(Use --no-cache to force re-extraction)")
             return cached_path
+        remove_stale_cache(cached_path, no_cache)
 
-        # Remove existing cache if --no-cache
-        if no_cache and exists(cached_path):
-            print(f"Removing existing cache: {cached_path}")
-            shutil.rmtree(cached_path)
-
-        # Otherwise, try to extract it
         print(f"Extracting archive: {archive_path}")
-        extracted_path = self._extract_archive(archive_path, extract_to)
-        return extracted_path
+        return self._extract_archive(archive_path, extract_to)
 
     def _extract_archive(self, archive_path: str, extract_to: str) -> str:
-        """Extract archive and return path to extracted content."""
-        os.makedirs(extract_to, exist_ok=True)
-
-        if archive_path.endswith((".tar.xz", ".tar.gz", ".tgz")):
-            with tarfile.open(archive_path, "r:*") as tar:
-                tar.extractall(path=extract_to)
-                members = tar.getmembers()
-                if members:
-                    top_dir = members[0].name.split("/")[0]
-                    extracted_path = join(extract_to, top_dir)
-                    print(f"Extracted to: {extracted_path}")
-                    return extracted_path
-        elif archive_path.endswith(".gz"):
-            output_path = join(extract_to, Path(archive_path).stem)
-            with gzip.open(archive_path, "rb") as f_in:
-                with open(output_path, "wb") as f_out:
-                    shutil.copyfileobj(f_in, f_out)
-            print(f"Extracted to: {output_path}")
-            return output_path
-
-        return extract_to
+        """Extract archive and return path to its top-level entry."""
+        return extract_archive(archive_path, extract_to, top_level=True)
 
 
 class GenerateEmbeddings(ScriptBuilder):
