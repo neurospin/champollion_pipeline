@@ -15,6 +15,7 @@ import os
 import pstats
 import re
 import shutil
+import subprocess
 import sys
 import tarfile
 import tempfile
@@ -47,6 +48,7 @@ _EPOCH_CKPT_PATTERN = r"epoch={epoch}-step=(?P<step>\d+)\.ckpt"
 _VERSION_DIR_PATTERN = re.compile(r"version_(?P<index>\d+)")
 _MIRROR_PREFIX = "champollion_eval_"
 MODEL_SET_FILE_NAME = "model_set.json"
+PROVENANCE_FILE_NAME = "provenance.json"
 _CHAMPOLLION_DIR = abspath(join(_SCRIPT_DIR, "..", "..", "external", "champollion_V1"))
 if _CHAMPOLLION_DIR not in sys.path:
     sys.path.insert(0, _CHAMPOLLION_DIR)
@@ -120,6 +122,22 @@ def read_model_set(model_set_dir: str) -> ModelSet:
     return ModelSet(data["model_version"], data["masks"], data.get("checkpoint_epoch"))
 
 
+def _write_json_atomic(path: str, data: dict) -> None:
+    """Write data as indented JSON to path through a temporary file in the same directory, then rename it.
+    The directory must exist; OSError propagates and leaves no temporary file behind."""
+    stem = os.path.splitext(os.path.basename(path))[0]
+    fd, tmp_path = tempfile.mkstemp(dir=dirname(path), prefix=f".{stem}.", suffix=".tmp")
+    try:
+        with os.fdopen(fd, "w", encoding="utf-8") as f:
+            f.write(json.dumps(data, indent=2) + "\n")
+        os.chmod(tmp_path, 0o644)
+        os.replace(tmp_path, path)
+    except BaseException:
+        with contextlib.suppress(OSError):
+            os.unlink(tmp_path)
+        raise
+
+
 def write_model_set(model_set_dir: str, model_set: ModelSet) -> str:
     """Atomically write <model_set_dir>/model_set.json (model_version, masks, then checkpoint_epoch when set) and
     return its path. The directory must exist; OSError propagates and leaves no temporary file behind."""
@@ -127,17 +145,23 @@ def write_model_set(model_set_dir: str, model_set: ModelSet) -> str:
     content = {"model_version": model_set.model_version, "masks": model_set.masks}
     if model_set.checkpoint_epoch is not None:
         content["checkpoint_epoch"] = model_set.checkpoint_epoch
-    fd, tmp_path = tempfile.mkstemp(dir=model_set_dir, prefix=".model_set.", suffix=".tmp")
-    try:
-        with os.fdopen(fd, "w", encoding="utf-8") as f:
-            f.write(json.dumps(content, indent=2) + "\n")
-        os.chmod(tmp_path, 0o644)
-        os.replace(tmp_path, path)
-    except BaseException:
-        with contextlib.suppress(OSError):
-            os.unlink(tmp_path)
-        raise
+    _write_json_atomic(path, content)
     return path
+
+
+def read_pipeline_commit() -> str | None:
+    """40-hex git commit of the champollion_pipeline source checkout, or None when git cannot report it."""
+    repo_dir = dirname(abspath(__file__))
+    try:
+        result = subprocess.run(
+            ["git", "-C", repo_dir, "rev-parse", "HEAD"], capture_output=True, text=True, check=False, timeout=10
+        )
+    except (OSError, subprocess.SubprocessError):
+        return None
+    commit = result.stdout.strip()
+    if result.returncode != 0 or not re.fullmatch(r"[0-9a-f]{40}", commit):
+        return None
+    return commit
 
 
 class ModelFetchStrategy(ABC):
@@ -565,6 +589,7 @@ class GenerateEmbeddings(ScriptBuilder):
                 default=None,
             )
         )
+        self._models_source: dict | None = None
 
     def _make_regions_tmpdir(self, models_path: str) -> str:
         """Return a temp dir containing symlinks to only the requested region subdirs."""
@@ -719,6 +744,7 @@ class GenerateEmbeddings(ScriptBuilder):
 
         # Get no_cache flag (force re-extraction)
         no_cache = getattr(self.args, "no_cache", False)
+        self._models_source = None
 
         # Check HuggingFace and URL strategies first with the ORIGINAL path
         # These strategies look for semantic patterns (e.g., "user/repo", URLs)
@@ -727,7 +753,13 @@ class GenerateEmbeddings(ScriptBuilder):
         hf_strategy = HuggingFaceStrategy(subfolder=model_version)
         if hf_strategy.can_handle(models_path):
             try:
-                return hf_strategy.fetch(models_path, extract_to, no_cache)
+                fetched = hf_strategy.fetch(models_path, extract_to, no_cache)
+                self._models_source = {
+                    "type": "huggingface",
+                    "repo_id": hf_strategy._extract_repo_id(models_path),
+                    "subfolder": model_version,
+                }
+                return fetched
             except Exception as e:
                 print(f"HuggingFace strategy failed: {e}")
                 # Continue to other strategies
@@ -735,7 +767,9 @@ class GenerateEmbeddings(ScriptBuilder):
         remote_strategy = RemoteArchiveStrategy()
         if remote_strategy.can_handle(models_path):
             try:
-                return remote_strategy.fetch(models_path, extract_to, no_cache)
+                fetched = remote_strategy.fetch(models_path, extract_to, no_cache)
+                self._models_source = {"type": "url", "url": models_path}
+                return fetched
             except Exception as e:
                 print(f"Remote archive strategy failed: {e}")
                 # Continue to other strategies
@@ -751,14 +785,54 @@ class GenerateEmbeddings(ScriptBuilder):
         local_strategy = LocalPathStrategy()
         if local_strategy.can_handle(resolved_path):
             try:
-                return local_strategy.fetch(resolved_path, extract_to, no_cache)
+                fetched = local_strategy.fetch(resolved_path, extract_to, no_cache)
+                self._models_source = {"type": "local", "path": os.path.abspath(resolved_path)}
+                return fetched
             except Exception as e:
                 print(f"Local path strategy failed: {e}")
                 # Continue to fallback
 
         # Fallback: ask user interactively
         fallback_strategy = InteractiveFallbackStrategy()
-        return fallback_strategy.fetch(resolved_path, extract_to, no_cache)
+        fetched = fallback_strategy.fetch(resolved_path, extract_to, no_cache)
+        self._models_source = {"type": "local", "path": os.path.abspath(fetched)}
+        return fetched
+
+    def _read_marker_model_version(self, fetched_models_path: str) -> str | None:
+        """The model_version of the fetched model set's model_set.json, or None when absent or unreadable."""
+        path = join(fetched_models_path, MODEL_SET_FILE_NAME)
+        if not os.path.isfile(path):
+            return None
+        try:
+            return read_model_set(fetched_models_path).model_version
+        except (ValueError, OSError) as err:
+            warnings.warn(
+                f"Could not read {path} for provenance.json ({err}); model_version falls back to --model-version",
+                UserWarning,
+                stacklevel=2,
+            )
+            return None
+
+    def _build_provenance(self, fetched_models_path: str) -> dict:
+        """masks, model_version, checkpoint_epoch, models_source and pipeline_commit of this run, in that order."""
+        model_version = self._read_marker_model_version(fetched_models_path)
+        if model_version is None:
+            model_version = getattr(self.args, "model_version", None)
+        return {
+            "masks": self.args.masks,
+            "model_version": model_version,
+            "checkpoint_epoch": self.args.checkpoint_epoch,
+            "models_source": self._models_source,
+            "pipeline_commit": read_pipeline_commit(),
+        }
+
+    def _write_provenance(self, output_base: str, provenance: dict) -> str:
+        """Atomically write <output_base>/provenance.json and return its path; OSError fails the stage."""
+        os.makedirs(output_base, exist_ok=True)
+        path = join(output_base, PROVENANCE_FILE_NAME)
+        _write_json_atomic(path, provenance)
+        print(f"Provenance written: {path}")
+        return path
 
     def _validate_inputs(self):
         pass
@@ -819,6 +893,7 @@ class GenerateEmbeddings(ScriptBuilder):
         """Run embeddings generation using champollion/evaluate.py per region."""
         original_models_path = self.args.models_path
         self.args.models_path = self.fetch_models(original_models_path)
+        provenance = self._build_provenance(self.args.models_path)
 
         tmpdir = None
         if self.args.regions:
@@ -850,6 +925,7 @@ class GenerateEmbeddings(ScriptBuilder):
                 shutil.rmtree(tmpdir)
             self.args.models_path = original_models_path
 
+        self._write_provenance(output_base, provenance)
         if self.args.run_cka:
             self._run_cka_test(output_base)
 
