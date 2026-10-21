@@ -11,6 +11,7 @@ from unittest.mock import MagicMock, patch
 import pytest
 
 from champollion_pipeline.generate_embeddings import GenerateEmbeddings, HuggingFaceStrategy
+from champollion_pipeline.models.checkpoint import find_region_model_dirs
 from champollion_pipeline.utils.lib import CORTICAL_TILES_VERSION
 
 
@@ -228,7 +229,7 @@ class TestModelDiscovery:
         script = GenerateEmbeddings()
         script.args = script.parse_args([str(models_dir), str(tmp_path)])
 
-        found = script._find_region_model_dirs(str(models_dir))
+        found = find_region_model_dirs(str(models_dir))
 
         assert found == [str(real)]
 
@@ -240,7 +241,7 @@ class TestRegionNameResolution:
     Hugging Face-cache-downloaded models carry an extra fold-hash level between
     the region+side folder and `logs/`, e.g.
     `models_cache/Champollion_V1/STsbr_right/name08-32-57_200/logs/best_model_weights.pt`.
-    `_find_region_model_dirs` correctly returns the fold-hash directory (it holds
+    `find_region_model_dirs` correctly returns the fold-hash directory (it holds
     the checkpoint), so `_run_per_region` must not take that directory's own
     basename as the region name.
 

@@ -16,8 +16,8 @@ from unittest.mock import MagicMock, patch
 
 import pytest
 
-import champollion_pipeline.generate_embeddings as ge
 from champollion_pipeline.generate_embeddings import GenerateEmbeddings
+from champollion_pipeline.models import fetch as models_fetch
 
 pytestmark = pytest.mark.unit  # noqa: V107
 
@@ -51,7 +51,7 @@ def _parse_and_fetch(argv: list[str]) -> tuple[MagicMock, list[warnings.WarningM
         warnings.simplefilter("always")
         script = _parse(argv)
         strategy = MagicMock(can_handle=MagicMock(return_value=True), fetch=MagicMock(return_value="/hf"))
-        with patch.object(ge, "HuggingFaceStrategy", return_value=strategy) as strategy_cls:
+        with patch.object(models_fetch, "HuggingFaceStrategy", return_value=strategy) as strategy_cls:
             script.fetch_models(HF_REPO)
     return strategy_cls, list(caught)
 

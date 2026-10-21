@@ -32,6 +32,7 @@ from champollion_pipeline.generate_embeddings import (
     RemoteArchiveStrategy,
     main,
 )
+from champollion_pipeline.models import fetch as models_fetch
 
 
 def make_region_logs(model_dir) -> None:
@@ -411,7 +412,7 @@ class TestFetchModels:
     def test_masks_version_is_passed_as_hf_subfolder(self):
         script = self._script(["--masks-version", "canonical_25"])
         with (
-            patch.object(ge, "HuggingFaceStrategy", wraps=ge.HuggingFaceStrategy) as cls,
+            patch.object(models_fetch, "HuggingFaceStrategy", wraps=models_fetch.HuggingFaceStrategy) as cls,
         ):
             cls.return_value = MagicMock(can_handle=MagicMock(return_value=True), fetch=MagicMock(return_value="/hf"))
             script.fetch_models("neurospin/X")
