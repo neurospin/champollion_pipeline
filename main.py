@@ -27,15 +27,14 @@ import re
 import sys
 from abc import ABC, abstractmethod
 from contextlib import contextmanager
-from dataclasses import dataclass, field
+from dataclasses import dataclass
 from pathlib import Path
 from typing import Dict, Iterator, List, Optional
 
-import yaml
 from champollion_utils.update_check import check_for_updates
 
+from champollion_pipeline.config import ConfigLoader, DatasetConfig, PipelineConfig
 from champollion_pipeline.derivatives_layout import (
-    DEFAULT_MASKS_VERSION,
     HEMISPHERES,
     compute_combined_embeddings_dir,
     compute_region_embeddings_dir,
@@ -43,7 +42,7 @@ from champollion_pipeline.derivatives_layout import (
     compute_snapshots_dir,
 )
 from champollion_pipeline.generate_champollion_config import GenerateChampollionConfig
-from champollion_pipeline.generate_embeddings import DEFAULT_CHECKPOINT_EPOCH, GenerateEmbeddings
+from champollion_pipeline.generate_embeddings import GenerateEmbeddings
 from champollion_pipeline.generate_morphologist_graphs import GenerateMorphologistGraphs
 from champollion_pipeline.generate_snapshots import GenerateSnapshots
 from champollion_pipeline.process_setup import init_pipeline_process
@@ -67,233 +66,6 @@ try:
 except ImportError as e:
     run_parallel_pipeline = None
     _PARALLEL_RUNNER_IMPORT_ERROR = str(e)
-
-
-# ====================== Configuration Management ======================
-
-
-# Dataset config keys that no longer exist; old YAML files still carrying them load with a warning.
-_REMOVED_DATASET_KEYS = {
-    "use_best_model": "it had no effect; set dataset.checkpoint_epoch to choose the training epoch whose "
-    "checkpoint is evaluated",
-    "use_last_checkpoint": "replaced by dataset.checkpoint_epoch (training epoch N, 0-based, of the Lightning "
-    "checkpoint epoch=N-step=*.ckpt to evaluate; default 80)",
-}
-
-
-@dataclass
-class DatasetConfig:
-    """Configuration for dataset processing."""
-
-    name: str = "example_dataset"
-    dataset_localization: str = "local"
-    datasets_root: str = ""
-    datasets: List[str] = field(default_factory=lambda: ["example"])
-    labels: List[str] = field(default_factory=lambda: ["Sex"])
-
-    # Paths
-    input_path: str = ""
-    morphologist_graphs: str = ""
-    cortical_tiles_output: str = ""
-    crops_path: str = ""
-    embeddings_path: str = ""
-
-    # Region filter (empty = all 56 regions)
-    regions: List[str] = field(default_factory=list)
-
-    # Processing parameters
-    njobs: int = 22
-    path_to_graph: str = "t1mri/default_acquisition/default_analysis/folds/3.3/base"
-    path_sk_with_hull: str = "t1mri/default_acquisition/default_analysis/segmentation/mesh"
-    sk_qc_path: str = ""
-    masks_version: str = DEFAULT_MASKS_VERSION
-    skel_seed: Optional[int] = None  # None: the skel_seed in <derivatives>/pipeline_loop_2mm.json
-
-    # Embeddings parameters
-    classifier_name: str = "svm"
-    overwrite: bool = False
-    embeddings_only: bool = False
-    checkpoint_epoch: int = DEFAULT_CHECKPOINT_EPOCH
-    models_cache: Optional[str] = None  # None: <datasets_root>/derivatives/champollion_V1/models_cache
-    subsets: List[str] = field(default_factory=lambda: ["full"])
-    epochs: List[Optional[int]] = field(default_factory=lambda: [None])
-    split: str = "random"
-    cv: int = 5
-    splits_basedir: Optional[str] = None
-    idx_region_evaluation: Optional[int] = None
-    short_name: str = "eval"
-
-    # HuggingFace parameters
-    hf_enabled: bool = False
-    hf_repo_id: Optional[str] = None
-    hf_token: Optional[str] = None
-
-    # Unused: no stage reads it. Kept so existing YAML files that set it still load.
-    config_path: Optional[str] = None
-
-    # CPU mode (disable CUDA)
-    cpu: bool = False
-
-    # BIDS database layout (subjects/sub-*/ses-*/...)
-    bids: bool = False
-
-    # Snapshots parameters
-    snapshots_path: str = ""
-    reference_data_path: str = ""
-    champollion_data_root: Optional[str] = None
-
-
-@dataclass
-class PipelineConfig:
-    """Configuration for pipeline execution."""
-
-    # Root paths
-    root_path: str = str(Path(__file__).parent)
-    data_path: str = ""
-    models_path: str = ""
-    outputs_path: str = ""
-    champollion_v1_path: str = ""
-
-    # Pipeline stages to execute
-    stages: Dict[str, bool] = field(
-        default_factory=lambda: {
-            "generate_morphologist_graphs": False,
-            "run_cortical_tiles": False,
-            "generate_champollion_config": False,
-            "generate_embeddings": True,
-            "put_together_embeddings": False,
-            "generate_snapshots": False,
-        }
-    )
-
-    # Stage dependencies
-    dependencies: Dict[str, List[str]] = field(
-        default_factory=lambda: {
-            "generate_morphologist_graphs": [],
-            "run_cortical_tiles": ["generate_morphologist_graphs"],
-            "generate_champollion_config": ["run_cortical_tiles"],
-            "generate_embeddings": ["generate_champollion_config"],
-            "put_together_embeddings": ["generate_embeddings"],
-            "generate_snapshots": ["put_together_embeddings"],
-        }
-    )
-
-    # Execution settings
-    mode: str = "sequential"
-    n_workers: int = 0  # 0 means use os.cpu_count()
-    worker_timeout: int = 7200  # seconds per worker
-    stop_on_error: bool = True
-    verbose: bool = False
-
-    # Logging
-    log_level: str = "INFO"
-    log_dir: str = ""
-    log_to_file: bool = True
-    log_to_console: bool = True
-
-    # Dataset configuration
-    dataset: DatasetConfig = field(default_factory=DatasetConfig)
-
-
-class ConfigLoader:
-    """Load and manage pipeline configuration."""
-
-    @staticmethod
-    def load_from_yaml(config_path: str) -> PipelineConfig:
-        """Load configuration from YAML file."""
-        with open(config_path, "r") as f:
-            config_dict = yaml.safe_load(f)
-
-        return ConfigLoader._dict_to_config(config_dict)
-
-    @staticmethod
-    def _dict_to_config(config_dict: Dict) -> PipelineConfig:
-        """Convert dictionary to PipelineConfig object."""
-        # Extract dataset config
-        dataset_dict = config_dict.pop("dataset", {})
-        for key, hint in _REMOVED_DATASET_KEYS.items():
-            if key in dataset_dict:
-                dataset_dict.pop(key)
-                logging.getLogger("champollion_pipeline").warning(
-                    "Ignoring removed config key dataset.%s: %s", key, hint
-                )
-        dataset_config = DatasetConfig(**dataset_dict)
-
-        # Create pipeline config
-        pipeline_config = PipelineConfig(**config_dict, dataset=dataset_config)
-
-        return pipeline_config
-
-    @staticmethod
-    def save_to_yaml(config: PipelineConfig, output_path: str):
-        """Save configuration to YAML file."""
-        # Convert to dictionary
-        config_dict = {
-            "root_path": config.root_path,
-            "data_path": config.data_path,
-            "models_path": config.models_path,
-            "outputs_path": config.outputs_path,
-            "champollion_v1_path": config.champollion_v1_path,
-            "stages": config.stages,
-            "dependencies": config.dependencies,
-            "mode": config.mode,
-            "n_workers": config.n_workers,
-            "worker_timeout": config.worker_timeout,
-            "stop_on_error": config.stop_on_error,
-            "verbose": config.verbose,
-            "log_level": config.log_level,
-            "log_dir": config.log_dir,
-            "log_to_file": config.log_to_file,
-            "log_to_console": config.log_to_console,
-            "dataset": {
-                "name": config.dataset.name,
-                "dataset_localization": config.dataset.dataset_localization,
-                "datasets_root": config.dataset.datasets_root,
-                "datasets": config.dataset.datasets,
-                "labels": config.dataset.labels,
-                "input_path": config.dataset.input_path,
-                "morphologist_graphs": config.dataset.morphologist_graphs,
-                "cortical_tiles_output": config.dataset.cortical_tiles_output,
-                "crops_path": config.dataset.crops_path,
-                "embeddings_path": config.dataset.embeddings_path,
-                "njobs": config.dataset.njobs,
-                "path_to_graph": config.dataset.path_to_graph,
-                "path_sk_with_hull": config.dataset.path_sk_with_hull,
-                "sk_qc_path": config.dataset.sk_qc_path,
-                "masks_version": config.dataset.masks_version,
-                "skel_seed": config.dataset.skel_seed,
-                "regions": config.dataset.regions,
-                "classifier_name": config.dataset.classifier_name,
-                "overwrite": config.dataset.overwrite,
-                "embeddings_only": config.dataset.embeddings_only,
-                "checkpoint_epoch": config.dataset.checkpoint_epoch,
-                "models_cache": config.dataset.models_cache,
-                "subsets": config.dataset.subsets,
-                "epochs": config.dataset.epochs,
-                "split": config.dataset.split,
-                "cv": config.dataset.cv,
-                "splits_basedir": config.dataset.splits_basedir,
-                "idx_region_evaluation": config.dataset.idx_region_evaluation,
-                "short_name": config.dataset.short_name,
-                "hf_enabled": config.dataset.hf_enabled,
-                "hf_repo_id": config.dataset.hf_repo_id,
-                # hf_token is a secret: never written (REQ-HFTOKEN-01).
-                # Supply it via the HF_TOKEN environment variable.
-                "config_path": config.dataset.config_path,
-                "cpu": config.dataset.cpu,
-                "bids": config.dataset.bids,
-                "snapshots_path": config.dataset.snapshots_path,
-                "reference_data_path": config.dataset.reference_data_path,
-                "champollion_data_root": config.dataset.champollion_data_root,
-            },
-        }
-
-        with open(output_path, "w") as f:
-            yaml.safe_dump(config_dict, f, default_flow_style=False, sort_keys=False)
-        if config.dataset.hf_token:
-            print(
-                f"Note: dataset.hf_token not written to {output_path}; set the HF_TOKEN environment variable instead."
-            )
 
 
 # ====================== Pipeline Stage Strategy Pattern ======================
