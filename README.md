@@ -328,8 +328,10 @@ Downloaded and extracted models are cached in `{datasets_root}/derivatives/champ
 
 | Option | Description |
 |--------|-------------|
-| `--masks-version` | Mask version subfolder to download from Hugging Face (e.g. `canonical_25`). Ignored when `models_path` is a local directory. |
-| `--masks` | Cortical tiles mask version used as the crops subdirectory (default: `canonical_25`) |
+| `--model-version` | Model set to use: the subfolder downloaded from Hugging Face (e.g. `canonical_25`). With a local `models_path` nothing is downloaded, but the value still sets the `--masks` default and is checked against `--masks`. |
+| `--masks-version` | Deprecated alias of `--model-version` (same value); prints a FutureWarning. Giving both with different values exits with status 2. |
+| `--masks` | Cortical tiles mask version used as the crops subdirectory. Default: the `--model-version` value when given, else `canonical_25`. |
+| `--allow-version-mismatch` | Run when `--masks` differs from `--model-version`, or from the `masks` of a local `model_set.json`, with a warning instead of exiting with status 2. |
 | `--regions` | Restrict to specific region names (space-separated). Default: all regions found in `models_path`. |
 | `--output` | Output base directory override. Default: `{datasets_root}/derivatives/champollion_V1/{masks}/region_embeddings/`. |
 | `--subjects` | Path to subjects CSV with a `Subject` column. Default: `{datasets_root}/participants.tsv`. |
@@ -344,6 +346,33 @@ Downloaded and extracted models are cached in `{datasets_root}/derivatives/champ
 | `--profiling` | Enable Python profiling (cProfile) |
 
 </details>
+
+### Model set marker: `model_set.json`
+
+A model set folder can carry a `model_set.json` marker that says which crops its models were trained on:
+
+```json
+{
+  "model_version": "canonical_25",
+  "masks": "canonical_25",
+  "checkpoint_epoch": 80
+}
+```
+
+`model_version` and `masks` are required; `checkpoint_epoch` is optional.
+
+- **Local model folder:** when `models_path` is a directory with a `model_set.json`, its `masks` must equal `--masks`; otherwise the run stops with exit status 2, unless `--allow-version-mismatch` is given (then a warning is printed and the run goes on). An unreadable marker always stops the run. A local folder without the marker runs with a warning that it cannot be checked.
+- **Hugging Face download:** after downloading a model set subfolder, the pipeline writes a `model_set.json` into the cached folder (`model_version` and `masks` set to the subfolder) unless the repository already ships one, so the cached folder can later be checked as a local model folder.
+
+### Run record: `provenance.json`
+
+Each run writes `provenance.json` next to the per-region outputs (in the `--output` directory). It records:
+
+- `masks`: the crops mask version used;
+- `model_version`: from the model set's `model_set.json` when present, else `--model-version`;
+- `checkpoint_epoch`: the `--checkpoint-epoch` used;
+- `models_source`: where the models came from (local path, Hugging Face repo and subfolder, or archive URL);
+- `pipeline_commit`: the git commit of this pipeline checkout, or `null` when git cannot report it.
 
 ### Excluding `models_cache/` from dataset sync and archives
 

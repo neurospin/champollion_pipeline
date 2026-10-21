@@ -10,16 +10,19 @@ import contextlib
 import cProfile
 import glob
 import gzip
+import json
 import os
 import pstats
 import re
 import shutil
+import subprocess
 import sys
 import tarfile
 import tempfile
 import warnings
 from abc import ABC, abstractmethod
 from collections.abc import Iterator
+from dataclasses import dataclass
 from io import StringIO
 from os.path import abspath, dirname, exists, join
 from pathlib import Path
@@ -44,6 +47,8 @@ DEFAULT_CHECKPOINT_EPOCH = 80
 _EPOCH_CKPT_PATTERN = r"epoch={epoch}-step=(?P<step>\d+)\.ckpt"
 _VERSION_DIR_PATTERN = re.compile(r"version_(?P<index>\d+)")
 _MIRROR_PREFIX = "champollion_eval_"
+MODEL_SET_FILE_NAME = "model_set.json"
+PROVENANCE_FILE_NAME = "provenance.json"
 _CHAMPOLLION_DIR = abspath(join(_SCRIPT_DIR, "..", "..", "external", "champollion_V1"))
 if _CHAMPOLLION_DIR not in sys.path:
     sys.path.insert(0, _CHAMPOLLION_DIR)
@@ -81,6 +86,82 @@ def ensure_models_cache_dir(cache_dir: str) -> str:
     if not os.access(cache_dir, os.W_OK):
         raise OSError(f"Models cache directory {cache_dir} is not writable")
     return cache_dir
+
+
+@dataclass(frozen=True)
+class ModelSet:
+    """Content of a model set directory's model_set.json marker."""
+
+    model_version: str
+    masks: str
+    checkpoint_epoch: int | None = None
+
+
+def read_model_set(model_set_dir: str) -> ModelSet:
+    """Read and validate <model_set_dir>/model_set.json.
+
+    OSError (a missing marker included) propagates; any invalid content raises a ValueError whose message starts
+    with the marker path. Unknown keys are ignored; a missing checkpoint_epoch gives None.
+    """
+    path = join(model_set_dir, MODEL_SET_FILE_NAME)
+    with open(path, encoding="utf-8") as f:
+        try:
+            data = json.load(f)
+        except ValueError as err:
+            raise ValueError(f"{path}: not valid JSON ({err})") from err
+    if type(data) is not dict:
+        raise ValueError(f"{path}: expected a JSON object, got {type(data).__name__}")
+    for key in ("model_version", "masks"):
+        value = data.get(key)
+        if not isinstance(value, str) or value == "":
+            raise ValueError(f"{path}: {key!r} must be a non-empty string, got {value!r}")
+    if "checkpoint_epoch" in data:
+        epoch = data["checkpoint_epoch"]
+        if not (type(epoch) is int and epoch >= 0):
+            raise ValueError(f"{path}: 'checkpoint_epoch' must be a non-negative integer, got {epoch!r}")
+    return ModelSet(data["model_version"], data["masks"], data.get("checkpoint_epoch"))
+
+
+def _write_json_atomic(path: str, data: dict) -> None:
+    """Write data as indented JSON to path through a temporary file in the same directory, then rename it.
+    The directory must exist; OSError propagates and leaves no temporary file behind."""
+    stem = os.path.splitext(os.path.basename(path))[0]
+    fd, tmp_path = tempfile.mkstemp(dir=dirname(path), prefix=f".{stem}.", suffix=".tmp")
+    try:
+        with os.fdopen(fd, "w", encoding="utf-8") as f:
+            f.write(json.dumps(data, indent=2) + "\n")
+        os.chmod(tmp_path, 0o644)
+        os.replace(tmp_path, path)
+    except BaseException:
+        with contextlib.suppress(OSError):
+            os.unlink(tmp_path)
+        raise
+
+
+def write_model_set(model_set_dir: str, model_set: ModelSet) -> str:
+    """Atomically write <model_set_dir>/model_set.json (model_version, masks, then checkpoint_epoch when set) and
+    return its path. The directory must exist; OSError propagates and leaves no temporary file behind."""
+    path = join(model_set_dir, MODEL_SET_FILE_NAME)
+    content = {"model_version": model_set.model_version, "masks": model_set.masks}
+    if model_set.checkpoint_epoch is not None:
+        content["checkpoint_epoch"] = model_set.checkpoint_epoch
+    _write_json_atomic(path, content)
+    return path
+
+
+def read_pipeline_commit() -> str | None:
+    """40-hex git commit of the champollion_pipeline source checkout, or None when git cannot report it."""
+    repo_dir = dirname(abspath(__file__))
+    try:
+        result = subprocess.run(
+            ["git", "-C", repo_dir, "rev-parse", "HEAD"], capture_output=True, text=True, check=False, timeout=10
+        )
+    except (OSError, subprocess.SubprocessError):
+        return None
+    commit = result.stdout.strip()
+    if result.returncode != 0 or not re.fullmatch(r"[0-9a-f]{40}", commit):
+        return None
+    return commit
 
 
 class ModelFetchStrategy(ABC):
@@ -227,8 +308,6 @@ class HuggingFaceStrategy(ModelFetchStrategy):
             )
             if self.subfolder:
                 downloaded_path = join(downloaded_path, self.subfolder)
-            print(f"Successfully downloaded from Hugging Face to: {downloaded_path}")
-            return downloaded_path
 
         except ImportError:
             raise ImportError(
@@ -236,6 +315,27 @@ class HuggingFaceStrategy(ModelFetchStrategy):
             )
         except Exception as e:
             raise RuntimeError(f"Failed to download from Hugging Face: {e}")
+        if self.subfolder:
+            self._ensure_model_set_marker(downloaded_path)
+        print(f"Successfully downloaded from Hugging Face to: {downloaded_path}")
+        return downloaded_path
+
+    def _ensure_model_set_marker(self, model_set_dir: str) -> None:
+        """Write model_set.json (model_version and masks = the subfolder) unless one is already there; a write
+        failure only warns."""
+        path = join(model_set_dir, MODEL_SET_FILE_NAME)
+        if os.path.lexists(path):
+            return
+        try:
+            write_model_set(model_set_dir, ModelSet(self.subfolder, self.subfolder))
+        except OSError as err:
+            warnings.warn(
+                f"Could not write {path} ({err}); the model set is used without a model_set.json marker",
+                UserWarning,
+                stacklevel=2,
+            )
+            return
+        print(f"  model set marker written: {path}")
 
 
 class RemoteArchiveStrategy(ModelFetchStrategy):
@@ -450,8 +550,14 @@ class GenerateEmbeddings(ScriptBuilder):
             )
             .add_optional_argument(
                 "--masks",
-                "Cortical tiles mask version used as crops subdirectory (e.g. 'canonical_25').",
-                default=DEFAULT_MASKS_VERSION,
+                "Cortical tiles mask version used as crops subdirectory (e.g. 'canonical_25'). "
+                "Defaults to the --model-version value when given, else canonical_25.",
+                default=None,
+            )
+            .add_flag(
+                "--allow-version-mismatch",
+                "Run even when --masks and --model-version differ (crops of one mask version evaluated with the "
+                "model set of another); a warning is emitted.",
             )
             .add_argument(
                 "--regions",
@@ -483,6 +589,7 @@ class GenerateEmbeddings(ScriptBuilder):
                 default=None,
             )
         )
+        self._models_source: dict | None = None
 
     def _make_regions_tmpdir(self, models_path: str) -> str:
         """Return a temp dir containing symlinks to only the requested region subdirs."""
@@ -533,6 +640,9 @@ class GenerateEmbeddings(ScriptBuilder):
         """Parse args, then resolve the deprecated --masks-version alias into model_version."""
         parsed = super().parse_args(args)
         self._resolve_model_version_alias()
+        self._resolve_masks_default()
+        self._check_version_mismatch()
+        self._check_local_model_set()
         return parsed
 
     def _resolve_model_version_alias(self) -> None:
@@ -553,6 +663,64 @@ class GenerateEmbeddings(ScriptBuilder):
             stacklevel=2,
         )
         self.args.model_version = alias
+
+    def _resolve_masks_default(self) -> None:
+        """Fill --masks when it was not given: the model version if set, else DEFAULT_MASKS_VERSION."""
+        if self.args.masks is None:
+            model_version = self.args.model_version
+            self.args.masks = model_version if model_version is not None else DEFAULT_MASKS_VERSION
+
+    def _check_version_mismatch(self) -> None:
+        """Exit 2 when --masks and --model-version differ, unless --allow-version-mismatch (then warn)."""
+        model_version, masks = self.args.model_version, self.args.masks
+        if model_version is None or masks == model_version:
+            return
+        if not self.args.allow_version_mismatch:
+            self.parser.error(
+                f"--masks {masks!r} and --model-version {model_version!r} differ: --masks picks the input crops, "
+                "--model-version the model set; pass --allow-version-mismatch to run with both"
+            )
+        warnings.warn(
+            f"--masks {masks!r} and --model-version {model_version!r} differ; running anyway "
+            f"(--allow-version-mismatch): crops {masks!r}, models {model_version!r}",
+            UserWarning,
+            stacklevel=2,
+        )
+
+    def _check_local_model_set(self) -> None:
+        """Exit 2 when a local model set's model_set.json is invalid, or names other masks than --masks unless
+        --allow-version-mismatch (then warn). A local directory without a marker: warn that it cannot be checked.
+        Not a local directory: nothing."""
+        models_dir = self.args.models_path
+        if not os.path.isdir(models_dir):
+            return
+        if not os.path.isfile(join(models_dir, MODEL_SET_FILE_NAME)):
+            masks = self.args.masks
+            warnings.warn(
+                f"{join(models_dir, MODEL_SET_FILE_NAME)} not found: the local model set cannot be checked against "
+                f"--masks {masks!r}; running anyway with --masks {masks!r}",
+                UserWarning,
+                stacklevel=2,
+            )
+            return
+        try:
+            model_set = read_model_set(models_dir)
+        except ValueError as err:
+            self.parser.error(str(err))
+        path, marker_masks, masks = join(models_dir, MODEL_SET_FILE_NAME), model_set.masks, self.args.masks
+        if marker_masks == masks:
+            return
+        if not self.args.allow_version_mismatch:
+            self.parser.error(
+                f"{path} masks {marker_masks!r} and --masks {masks!r} differ: the local model set was trained on "
+                f"{marker_masks!r} crops; pass --masks {marker_masks!r}, or --allow-version-mismatch to run with both"
+            )
+        warnings.warn(
+            f"{path} masks {marker_masks!r} and --masks {masks!r} differ; running anyway (--allow-version-mismatch): "
+            f"crops {masks!r}, models trained on {marker_masks!r}",
+            UserWarning,
+            stacklevel=2,
+        )
 
     def fetch_models(self, models_path):
         """
@@ -576,6 +744,7 @@ class GenerateEmbeddings(ScriptBuilder):
 
         # Get no_cache flag (force re-extraction)
         no_cache = getattr(self.args, "no_cache", False)
+        self._models_source = None
 
         # Check HuggingFace and URL strategies first with the ORIGINAL path
         # These strategies look for semantic patterns (e.g., "user/repo", URLs)
@@ -584,7 +753,13 @@ class GenerateEmbeddings(ScriptBuilder):
         hf_strategy = HuggingFaceStrategy(subfolder=model_version)
         if hf_strategy.can_handle(models_path):
             try:
-                return hf_strategy.fetch(models_path, extract_to, no_cache)
+                fetched = hf_strategy.fetch(models_path, extract_to, no_cache)
+                self._models_source = {
+                    "type": "huggingface",
+                    "repo_id": hf_strategy._extract_repo_id(models_path),
+                    "subfolder": model_version,
+                }
+                return fetched
             except Exception as e:
                 print(f"HuggingFace strategy failed: {e}")
                 # Continue to other strategies
@@ -592,7 +767,9 @@ class GenerateEmbeddings(ScriptBuilder):
         remote_strategy = RemoteArchiveStrategy()
         if remote_strategy.can_handle(models_path):
             try:
-                return remote_strategy.fetch(models_path, extract_to, no_cache)
+                fetched = remote_strategy.fetch(models_path, extract_to, no_cache)
+                self._models_source = {"type": "url", "url": models_path}
+                return fetched
             except Exception as e:
                 print(f"Remote archive strategy failed: {e}")
                 # Continue to other strategies
@@ -608,14 +785,54 @@ class GenerateEmbeddings(ScriptBuilder):
         local_strategy = LocalPathStrategy()
         if local_strategy.can_handle(resolved_path):
             try:
-                return local_strategy.fetch(resolved_path, extract_to, no_cache)
+                fetched = local_strategy.fetch(resolved_path, extract_to, no_cache)
+                self._models_source = {"type": "local", "path": os.path.abspath(resolved_path)}
+                return fetched
             except Exception as e:
                 print(f"Local path strategy failed: {e}")
                 # Continue to fallback
 
         # Fallback: ask user interactively
         fallback_strategy = InteractiveFallbackStrategy()
-        return fallback_strategy.fetch(resolved_path, extract_to, no_cache)
+        fetched = fallback_strategy.fetch(resolved_path, extract_to, no_cache)
+        self._models_source = {"type": "local", "path": os.path.abspath(fetched)}
+        return fetched
+
+    def _read_marker_model_version(self, fetched_models_path: str) -> str | None:
+        """The model_version of the fetched model set's model_set.json, or None when absent or unreadable."""
+        path = join(fetched_models_path, MODEL_SET_FILE_NAME)
+        if not os.path.isfile(path):
+            return None
+        try:
+            return read_model_set(fetched_models_path).model_version
+        except (ValueError, OSError) as err:
+            warnings.warn(
+                f"Could not read {path} for provenance.json ({err}); model_version falls back to --model-version",
+                UserWarning,
+                stacklevel=2,
+            )
+            return None
+
+    def _build_provenance(self, fetched_models_path: str) -> dict:
+        """masks, model_version, checkpoint_epoch, models_source and pipeline_commit of this run, in that order."""
+        model_version = self._read_marker_model_version(fetched_models_path)
+        if model_version is None:
+            model_version = getattr(self.args, "model_version", None)
+        return {
+            "masks": self.args.masks,
+            "model_version": model_version,
+            "checkpoint_epoch": self.args.checkpoint_epoch,
+            "models_source": self._models_source,
+            "pipeline_commit": read_pipeline_commit(),
+        }
+
+    def _write_provenance(self, output_base: str, provenance: dict) -> str:
+        """Atomically write <output_base>/provenance.json and return its path; OSError fails the stage."""
+        os.makedirs(output_base, exist_ok=True)
+        path = join(output_base, PROVENANCE_FILE_NAME)
+        _write_json_atomic(path, provenance)
+        print(f"Provenance written: {path}")
+        return path
 
     def _validate_inputs(self):
         pass
@@ -676,6 +893,7 @@ class GenerateEmbeddings(ScriptBuilder):
         """Run embeddings generation using champollion/evaluate.py per region."""
         original_models_path = self.args.models_path
         self.args.models_path = self.fetch_models(original_models_path)
+        provenance = self._build_provenance(self.args.models_path)
 
         tmpdir = None
         if self.args.regions:
@@ -707,6 +925,7 @@ class GenerateEmbeddings(ScriptBuilder):
                 shutil.rmtree(tmpdir)
             self.args.models_path = original_models_path
 
+        self._write_provenance(output_base, provenance)
         if self.args.run_cka:
             self._run_cka_test(output_base)
 
