@@ -10,12 +10,14 @@ passed to run_cortical_tiles.py from the start.
 """
 
 import os
+from datetime import datetime
 from os.path import exists, join
 from pathlib import Path
 
 import pandas as pd
 from champollion_utils.script_builder import ScriptBuilder
 
+from champollion_pipeline.derivatives_layout import compute_run_log_path
 from champollion_pipeline.process_setup import init_pipeline_process
 from champollion_pipeline.utils.lib import DERIVATIVES_FOLDER
 
@@ -67,6 +69,10 @@ class PruneFailedSubjects(ScriptBuilder):
         qc_file["participant_id"] = qc_file["participant_id"].astype(str)
         passing = qc_file[qc_file["qc"] != 0]["participant_id"].tolist()
         return set(passing)
+
+    def default_log_path(self) -> str:
+        """Run-log path of a bare --log: <output>/.log/prune_failed_subjects_<stamp>.log (<output> = derivatives)."""
+        return compute_run_log_path(self.args.output, self.script_name, datetime.now().astimezone())
 
     def run(self):
         """Execute the prune operation."""

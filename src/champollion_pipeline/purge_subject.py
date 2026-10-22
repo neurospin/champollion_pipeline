@@ -10,6 +10,7 @@ Handles:
 """
 
 import shutil
+from datetime import datetime
 from os.path import exists, join
 from pathlib import Path
 
@@ -17,6 +18,7 @@ import numpy as np
 import pandas as pd
 from champollion_utils.script_builder import ScriptBuilder
 
+from champollion_pipeline.derivatives_layout import compute_run_log_path
 from champollion_pipeline.process_setup import init_pipeline_process
 
 
@@ -120,6 +122,12 @@ class PurgeSubject(ScriptBuilder):
 
         if not found_in_any:
             print(f"Subject '{subject}' not found in any aggregated array.")
+
+    def default_log_path(self) -> str:
+        """Run-log path of a bare --log: <dataset>/derivatives/.log/purge_subject_<stamp>.log."""
+        return compute_run_log_path(
+            str(Path(self.args.derivatives).parent), self.script_name, datetime.now().astimezone()
+        )
 
     def run(self):
         derivatives = self.args.derivatives
