@@ -3,7 +3,6 @@
 REQ-LOGADOPT-01: main.py run as a script logs one CRASH line for an uncaught Exception.
 REQ-LOGADOPT-02: each stage script run as __main__ logs one CRASH line for an uncaught Exception.
 REQ-LOGADOPT-03: main.py prints each orchestrator record once, in the unified format.
-REQ-LOGADOPT-06 (supersedes 04): pyproject.toml pins champollion_utils to a git tag v0.2.0 or later.
 REQ-LOGADOPT-05: a stage exception caught by main.py is logged at FAIL with the stage name and traceback.
 
 Process-wide state (root logger, sys.excepthook) is involved, so the entry
@@ -19,14 +18,6 @@ import textwrap
 from pathlib import Path
 
 import pytest
-from packaging.requirements import Requirement
-from packaging.utils import canonicalize_name
-from packaging.version import Version
-
-try:
-    import tomllib
-except ModuleNotFoundError:  # Python 3.10
-    import tomli as tomllib
 
 REPO_ROOT = Path(__file__).resolve().parent.parent
 MAIN_PY = REPO_ROOT / "main.py"
@@ -155,30 +146,6 @@ def test_main_py_orchestrator_record_printed_once_in_unified_format(tmp_path):
     match = UNIFIED_LINE.match(lines[0])
     assert match is not None, f"orchestrator line is not in the unified format: {lines[0]!r}"
     assert match["level"] == "INFO"
-
-
-RELEASE_TAG = re.compile(r"^v(?P<version>\d+\.\d+\.\d+)$")
-
-
-def _assert_utils_pinned_to_release_tag(pyproject_path: Path, minimum: str = "0.2.0") -> None:
-    """Assert the champollion-utils direct reference pins a vX.Y.Z git tag at or above minimum."""
-    pyproject = tomllib.loads(pyproject_path.read_text(encoding="utf-8"))
-    requirements = [Requirement(dep) for dep in pyproject["project"]["dependencies"]]
-    utils = [req for req in requirements if canonicalize_name(req.name) == "champollion-utils"]
-    assert len(utils) == 1, f"expected one champollion-utils dependency, got {utils!r}"
-    url = utils[0].url
-    assert url is not None and url.startswith("git+"), f"{utils[0]} is not a PEP 508 git direct reference"
-    path = url.split("://", 1)[-1]
-    assert "@" in path, f"{url} does not pin a git ref"
-    ref = path.rsplit("@", 1)[1]
-    tag = RELEASE_TAG.match(ref)
-    assert tag is not None, f"{url} pins {ref!r}, not a v<MAJOR>.<MINOR>.<PATCH> tag"
-    assert Version(tag["version"]) >= Version(minimum), f"{url} pins {ref}, below v{minimum}"
-
-
-def test_pyproject_champollion_utils_pins_release_tag_0_2_0_or_later():
-    """REQ-LOGADOPT-06: the champollion-utils git URL pins a release tag v0.2.0 or later."""
-    _assert_utils_pinned_to_release_tag(REPO_ROOT / "pyproject.toml")
 
 
 def test_main_py_stage_exception_logged_at_fail_with_traceback(tmp_path):

@@ -28,7 +28,7 @@ Requirements (area COMPARE, author BDRABCZUK):
 4B6CAF044462 9948C646D2E5 required options, 117DA8854F73 176B8286C589
 344D566E476B 7B6A038CF0A3 06A9B555A5BF subcommand defaults, B8A47BB26FE8
 1BA70A85A01E EA954461B742 choices, 941405980FD7 missing --set_a, 5EA1F9FAA661
-compare names, 2A0C618A7734 E39EB582D5D5 622864743E4C script options,
+compare names, 2A0C618A7734 F48CF44F94F1 E039500B2685 script options,
 509D22CD1937 script required options, 3D27AA1B3C0D AE6339FE8D98 4AC071AD83CC
 script defaults, E6ABDDDFD058 script --metric choices, A43D0BA27200 script
 missing --set_a, 200C6AFF041C 4E8737605582 B3921FE6A4DF script names,
@@ -135,8 +135,17 @@ _COMPARE_OPTIONS = {
 
 _SCRIPT_OPTIONS = {
     "compare_masks": {"--set_a", "--set_b", "--output", "--metric", "--bucket_step", "--help"},
-    "compare_cortical_tiles": {"--set_a", "--set_b", "--output", "--pattern", "--metric", "--bucket_step", "--help"},
-    "compare_databases": _DB_OPTIONS,
+    "compare_cortical_tiles": {
+        "--set_a",
+        "--set_b",
+        "--output",
+        "--pattern",
+        "--metric",
+        "--bucket_step",
+        "--log",
+        "--help",
+    },
+    "compare_databases": _DB_OPTIONS | {"--log"},
 }
 
 _PUBLIC_NAMES = {
@@ -383,7 +392,7 @@ def test_compare_missing_set_a_exits_1(subcommand, tmp_path):
 
 @pytest.mark.parametrize("script", list(_SCRIPT_OPTIONS))
 def test_script_help_lists_exact_options(script):
-    """REQ-COMPARE-BDRABCZUK-2A0C618A7734, -E39EB582D5D5, -622864743E4C."""
+    """REQ-COMPARE-BDRABCZUK-2A0C618A7734, -F48CF44F94F1, -E039500B2685 (--log from champollion_utils >= 0.3.0)."""
     result = _help(script)
     assert result.returncode == 0, result.stderr
     assert _help_options(result.stdout) == _SCRIPT_OPTIONS[script]
