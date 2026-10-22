@@ -14,10 +14,12 @@ import glob
 import os
 import os.path
 from collections import Counter
+from datetime import datetime
 
 from champollion_utils.script_builder import ScriptBuilder
 from joblib import Parallel, delayed
 
+from champollion_pipeline.derivatives_layout import compute_run_log_path
 from champollion_pipeline.process_setup import init_pipeline_process
 
 # ---------------------------------------------------------------------------
@@ -225,6 +227,10 @@ class GenerateLabellingQC(ScriptBuilder):
             )
         )
 
+    def default_log_path(self) -> str:
+        """Run-log path of a bare --log: .log/generate_labelling_qc_<stamp>.log next to the output TSV."""
+        return compute_run_log_path(os.path.dirname(self.args.output), self.script_name, datetime.now().astimezone())
+
     def run(self) -> int:
         """Walk subjects directory, check labelling graphs, write QC TSV."""
         subjects_dir = self.args.input
@@ -264,7 +270,7 @@ class GenerateLabellingQC(ScriptBuilder):
 def main() -> int:
     """Run the labelling QC script."""
     init_pipeline_process()
-    return GenerateLabellingQC().build().print_args().run()
+    return GenerateLabellingQC().main()
 
 
 if __name__ == "__main__":

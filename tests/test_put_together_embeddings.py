@@ -2,7 +2,7 @@
 # -*- coding: utf-8 -*-
 """Unit tests for put_together_embeddings.py"""
 
-from unittest.mock import MagicMock, patch
+from unittest.mock import patch
 
 import pytest
 
@@ -105,22 +105,23 @@ class TestRunMethod:
 
 
 class TestMainFunction:
-    def test_main_creates_script_and_runs(self, tmp_path):
-        with patch("champollion_pipeline.put_together_embeddings.PutTogetherEmbeddings") as MockScript:
-            mock_instance = MagicMock()
-            mock_instance.build.return_value = mock_instance
-            mock_instance.print_args.return_value = mock_instance
-            mock_instance.run.return_value = 0
-            MockScript.return_value = mock_instance
-
-            with patch("sys.argv", ["script", str(tmp_path), "--output_path", str(tmp_path / "out")]):
+    def test_main_inits_then_returns_script_main(self):
+        """main() calls init_pipeline_process(), then returns the script's ScriptBuilder.main() result."""
+        calls = []
+        with patch(
+            "champollion_pipeline.put_together_embeddings.init_pipeline_process",
+            side_effect=lambda: calls.append("init"),
+        ):
+            script_main = {"return_value.main.side_effect": lambda: calls.append("main") or 3}
+            with patch(
+                "champollion_pipeline.put_together_embeddings.PutTogetherEmbeddings", **script_main
+            ) as MockScript:
                 result = main()
 
-            MockScript.assert_called_once()
-            mock_instance.build.assert_called_once()
-            mock_instance.print_args.assert_called_once()
-            mock_instance.run.assert_called_once()
-            assert result == 0
+        MockScript.assert_called_once_with()
+        MockScript.return_value.main.assert_called_once_with()
+        assert calls == ["init", "main"]
+        assert result == 3
 
 
 @pytest.mark.integration

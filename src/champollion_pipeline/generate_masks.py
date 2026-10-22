@@ -25,6 +25,7 @@ from cortical_tiles.brainvisa.utils.sulcus import complete_sulci_name
 from joblib import Parallel, delayed
 from soma import aims
 
+from champollion_pipeline.derivatives_layout import compute_run_log_path
 from champollion_pipeline.process_setup import detach_frozen_root_handlers
 
 # Default regions — same 28 as generate_sulcal_regions.py
@@ -471,6 +472,10 @@ class GenerateMasks(ScriptBuilder):
             .add_flag("--public_use", "Skip per-subject NIfTI files; write only the aggregated mask.")
             .add_flag("--verbose", "Print detailed per-subject and per-sulcus progress logs.")
         )
+
+    def default_log_path(self) -> str:
+        """Run-log path of a bare --log: <output_dir>/.log/generate_masks_<stamp>.log."""
+        return compute_run_log_path(self.args.output_dir, self.script_name, datetime.datetime.now().astimezone())
 
     def run(self):
         """Execute mask generation for all (sulcus × side) combinations."""

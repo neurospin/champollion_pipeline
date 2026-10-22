@@ -135,6 +135,8 @@ class PipelineConfig:
     log_dir: str = ""  # noqa: V107 - YAML config field
     log_to_file: bool = True  # noqa: V107 - YAML config field
     log_to_console: bool = True  # noqa: V107 - YAML config field
+    # Run-log directory of the in-process stages: "" = each stage's default_log_path(), None = no run log.
+    log: Optional[str] = None  # noqa: V107 - YAML config field
 
     # Dataset configuration
     dataset: DatasetConfig = field(default_factory=DatasetConfig)

@@ -59,6 +59,33 @@ pixi run champollion-snapshots \
     --output_dir /data/myproject/derivatives/champollion_V1/canonical_25/snapshots/
 ```
 
+## Run logs
+
+Add `--log=PATH` to any stage script to also write its whole output (child processes included) to a file:
+
+```bash
+pixi run champollion-embeddings \
+    neurospin/Champollion_V1 \
+    local \
+    myproject \
+    my_run \
+    --embeddings_only \
+    --config_path /data/myproject/derivatives/champollion_V1/configs/dataset/myproject \
+    --log=/data/myproject/logs/embeddings.log
+```
+
+A bare `--log` writes `<stage>_<YYYYmmdd-HHMMSS>.log` in the stage's default folder:
+
+- `champollion-morphologist`: `<output>/derivatives/morphologist-6.0/.log`
+- `champollion-cortical-tiles`: `<output>/cortical_tiles-2026/.log`
+- `champollion-config`: `<dataset>/derivatives/champollion_V1/<masks>/.log`
+- `champollion-embeddings`: `<datasets_root>/derivatives/champollion_V1/<masks>/.log`
+- `champollion-combine`: `<--output_path>/.log`
+- `champollion-snapshots`: `<--output_dir>/.log`
+
+A bare `--log` placed just before a positional argument takes that argument as its PATH: use `--log=PATH`, or put a
+bare `--log` last.
+
 ## Running Tests
 
 ```bash
