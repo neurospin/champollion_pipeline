@@ -23,11 +23,15 @@ Nested-directory mode (raw model directories with per-region subdirs):
 import os
 import re
 import sys
+from datetime import datetime
 from glob import glob
 from os import makedirs
 from os.path import basename, isdir, isfile, join
 
 from champollion_utils.script_builder import ScriptBuilder
+
+from champollion_pipeline.derivatives_layout import compute_run_log_path
+from champollion_pipeline.process_setup import init_pipeline_process
 
 CKA_MODULE = "champollion.metrics.cka_coherence"
 
@@ -95,6 +99,10 @@ class RunCKA(ScriptBuilder):
                 print(f"[warn] CKA failed for {label} (exit code {rc})")
             found += 1
         return found
+
+    def default_log_path(self) -> str:
+        """Run-log path of a bare --log: <--output_dir>/.log/run_cka_<stamp>.log."""
+        return compute_run_log_path(self.args.output_dir, self.script_name, datetime.now().astimezone())
 
     def run(self):
         path_a = self.args.path_a
@@ -193,8 +201,9 @@ class RunCKA(ScriptBuilder):
 
 
 def main():
+    init_pipeline_process()
     script = RunCKA()
-    return script.build().print_args().run()
+    return script.main()
 
 
 if __name__ == "__main__":
