@@ -478,6 +478,51 @@ pixi run champollion-snapshots \
 
 ---
 
+## Run logs
+
+Every stage script takes `--log [PATH]` (champollion_utils 0.3.0 or later), and so does `generate_masks.py`.
+With it, the run's whole output is also written to a run-log file.
+
+`--log=PATH` writes the run log to the file PATH (missing parent folders are created).
+
+A bare `--log` writes it to the script's default folder, in a file named `<stage>_<YYYYmmdd-HHMMSS>.log`:
+
+| Script | Bare `--log` folder |
+|---|---|
+| `champollion-morphologist` | `<output>/derivatives/morphologist-6.0/.log` |
+| `champollion-cortical-tiles` | `<output>/cortical_tiles-2026/.log` |
+| `champollion-config` | `<dataset>/derivatives/champollion_V1/<masks>/.log` |
+| `champollion-embeddings` | `<datasets_root>/derivatives/champollion_V1/<masks>/.log` |
+| `champollion-combine` | `<--output_path>/.log` |
+| `champollion-snapshots` | `<--output_dir>/.log` |
+| `champollion-train` | `data/<dataset>/derivatives/champollion_V1/canonical_25/.log` |
+| `champollion-prune` | `<dataset>/derivatives/.log` |
+| `champollion-purge` | `<dataset>/derivatives/.log` |
+| `champollion-labelling-qc` | `.log` next to the output TSV |
+| `generate_masks.py` | `<--output_dir>/.log` |
+
+A bare `--log` placed just before a positional argument takes that argument as its PATH: pass `--log=PATH`,
+or put a bare `--log` last or before another option.
+
+The run log holds everything written to standard output and standard error during the run, including the
+output of every child process (for example the `Running command:` lines and their subprocess output).
+
+It starts with a header giving the command line, the working directory, the start time and the process id.
+
+It ends with a footer giving the exit code and the elapsed time.
+
+The terminal still shows the same output, unchanged: the run log is a copy.
+
+`main.py` runs the stages in-process: with a bare `--log`, each stage writes its own run log to that stage's
+default folder above.
+
+`main.py --log=DIR` writes one run log per stage, `DIR/<stage>_<YYYYmmdd-HHMMSS>.log`.
+
+In a pipeline config file, the top-level key `log:` does the same (`null`: no run log, `""`: each stage's
+default folder, a path: that directory); the command line wins over the config.
+
+---
+
 ## Project Structure
 
 ```
