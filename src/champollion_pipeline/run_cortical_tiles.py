@@ -21,6 +21,7 @@ import glob
 import json
 import shutil
 import sys
+from datetime import datetime
 from os import chdir, getcwd
 from os.path import abspath, dirname, exists, isdir, join
 
@@ -30,6 +31,7 @@ from cortical_tiles.brainvisa import add_left_and_right_volumes, remove_ventricl
 from joblib import cpu_count
 from soma import aims
 
+from champollion_pipeline.derivatives_layout import compute_run_log_path
 from champollion_pipeline.process_setup import init_pipeline_process
 from champollion_pipeline.utils.cortical_tiles_config import CorticalTilesConfigFactory, versioned_crops_exist
 from champollion_pipeline.utils.lib import DERIVATIVES_FOLDER
@@ -177,6 +179,14 @@ class RunCorticalTiles(ScriptBuilder):
             print(f"Generated {npy_path}")
             generated += 1
         print(f"_generate_mask_npys: {generated} mask .npy file(s) written.")
+
+    def default_log_path(self) -> str:
+        """Run-log path of a bare --log: .log/cortical_tiles_<stamp>.log in the cortical tiles derivatives folder."""
+        return compute_run_log_path(
+            join(abspath(self.args.output), DERIVATIVES_FOLDER),
+            "cortical_tiles",
+            datetime.now().astimezone(),
+        )
 
     def run(self):
         """Execute the cortical_tiles script."""

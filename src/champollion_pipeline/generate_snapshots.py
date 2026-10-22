@@ -15,9 +15,11 @@ import json
 import os
 import os.path as osp
 import sys
+from datetime import datetime
 
 from champollion_utils.script_builder import ScriptBuilder
 
+from champollion_pipeline.derivatives_layout import compute_run_log_path
 from champollion_pipeline.process_setup import init_pipeline_process
 from champollion_pipeline.snapshot_types.sulcal import (
     _detect_hemi,
@@ -85,6 +87,10 @@ class GenerateSnapshots(ScriptBuilder):
             .add_optional_argument("--tiles_level", "Region threshold level (0-3)", default=1, type_=int)
             .add_optional_argument("--champollion_data_root", "Override path to Champollion data directory")
         )
+
+    def default_log_path(self) -> str:
+        """Run-log path of a bare --log: <output_dir>/.log/snapshots_<stamp>.log."""
+        return compute_run_log_path(self.args.output_dir, "snapshots", datetime.now().astimezone())
 
     def run(self) -> int:
         """Run all requested snapshot generation steps."""

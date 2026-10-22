@@ -14,12 +14,18 @@ container environments).  ``--champollion_loc`` is read-only by default.
 import glob
 import json
 import os
+from datetime import datetime
 from os.path import abspath, dirname, exists, join
 
 import numpy as np
 from champollion_utils.script_builder import ScriptBuilder
 
-from champollion_pipeline.derivatives_layout import compute_champollion_configs_root, compute_region_model_name
+from champollion_pipeline.derivatives_layout import (
+    compute_champollion_configs_root,
+    compute_region_model_name,
+    compute_run_log_derivatives_dir,
+    compute_run_log_path,
+)
 from champollion_pipeline.process_setup import init_pipeline_process
 from champollion_pipeline.utils.lib import DERIVATIVES_FOLDER, find_dataset_folder
 
@@ -162,6 +168,18 @@ class GenerateChampollionConfig(ScriptBuilder):
         """
         path = join(champollion_loc, "champollion", "configs", "dataset", self.args.dataset)
         return path if os.path.isdir(path) else None
+
+    def default_log_path(self) -> str:
+        """Run-log path of a bare --log: .log/config_<stamp>.log in the dataset's champollion_V1/<masks> folder."""
+        return compute_run_log_path(
+            compute_run_log_derivatives_dir(
+                "config",
+                join(find_dataset_folder(self.args.crop_path, self.args.dataset), self.args.dataset),
+                masks_version=self.args.masks,
+            ),
+            "config",
+            datetime.now().astimezone(),
+        )
 
     def run(self):
         """Execute the champollion config generation script."""

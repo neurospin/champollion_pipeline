@@ -6,10 +6,12 @@ Script to collect per-region full_embeddings.csv files into a single output fold
 
 import os
 import shutil
+from datetime import datetime
 from os.path import exists, join
 
 from champollion_utils.script_builder import ScriptBuilder
 
+from champollion_pipeline.derivatives_layout import compute_run_log_path
 from champollion_pipeline.process_setup import init_pipeline_process
 
 
@@ -34,6 +36,14 @@ class PutTogetherEmbeddings(ScriptBuilder):
                     "<datasets_root>/derivatives/champollion_V1/<masks>/region_embeddings."
                 ),
             ).add_required_argument("--output_path", "Folder where collected embeddings will be written.")
+        )
+
+    def default_log_path(self) -> str:
+        """Run-log path of a bare --log: <output_path>/.log/combine_<stamp>.log."""
+        return compute_run_log_path(
+            self.args.output_path,
+            "combine",
+            datetime.now().astimezone(),
         )
 
     def run(self):

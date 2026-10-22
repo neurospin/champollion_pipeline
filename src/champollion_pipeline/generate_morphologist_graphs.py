@@ -4,11 +4,13 @@
 Script to generate graphs with morphologist from the user's raw data.
 """
 
+from datetime import datetime
 from os import chdir, getcwd, listdir
 from os.path import basename, isfile, join, splitext
 
 from champollion_utils.script_builder import ScriptBuilder
 
+from champollion_pipeline.derivatives_layout import compute_run_log_derivatives_dir, compute_run_log_path
 from champollion_pipeline.process_setup import init_pipeline_process
 
 
@@ -53,6 +55,14 @@ class GenerateMorphologistGraphs(ScriptBuilder):
         ]
 
         return input_files
+
+    def default_log_path(self) -> str:
+        """Run-log path of a bare --log: <output>/derivatives/morphologist-6.0/.log/morphologist_<stamp>.log."""
+        return compute_run_log_path(
+            compute_run_log_derivatives_dir("morphologist", self.args.output),
+            "morphologist",
+            datetime.now().astimezone(),
+        )
 
     def run(self):
         """Execute the morphologist script."""

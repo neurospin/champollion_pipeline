@@ -15,6 +15,7 @@ import subprocess
 import sys
 import tempfile
 import warnings
+from datetime import datetime
 from io import StringIO
 from os.path import abspath, dirname, exists, join
 from pathlib import Path
@@ -25,6 +26,8 @@ from champollion_pipeline.derivatives_layout import (
     DEFAULT_MASKS_VERSION,
     compute_models_cache_dir,
     compute_region_embeddings_dir,
+    compute_run_log_derivatives_dir,
+    compute_run_log_path,
 )
 from champollion_pipeline.models.cache import (
     MODEL_SET_FILE_NAME,
@@ -372,6 +375,16 @@ class GenerateEmbeddings(ScriptBuilder):
 
     def _validate_inputs(self):
         pass
+
+    def default_log_path(self) -> str:
+        """Run-log path of a bare --log: .log/embeddings_<stamp>.log in the dataset's champollion_V1/<masks> folder."""
+        return compute_run_log_path(
+            compute_run_log_derivatives_dir(
+                "embeddings", self.args.datasets_root.rstrip("/"), masks_version=self.args.masks
+            ),
+            "embeddings",
+            datetime.now().astimezone(),
+        )
 
     def run(self):
         """Execute the embeddings pipeline script."""
