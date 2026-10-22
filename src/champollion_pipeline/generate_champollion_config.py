@@ -264,7 +264,7 @@ def main():
     """Main entry point."""
     init_pipeline_process()
     script = GenerateChampollionConfig()
-    return script.build().print_args().run()
+    return script.main()
 
 
 if __name__ == "__main__":

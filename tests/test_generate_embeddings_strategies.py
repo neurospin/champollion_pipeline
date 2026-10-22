@@ -708,22 +708,16 @@ class TestRunPipelineCkaHook:
 class TestMain:
     """Test the main() entry point."""
 
-    def test_main_builds_prints_and_runs(self, monkeypatch):
+    def test_main_inits_then_returns_script_main(self, monkeypatch):
+        """main() calls init_pipeline_process(), then returns the script's ScriptBuilder.main() result."""
         calls = []
 
         class FakeScript:
-            def build(self):
-                calls.append("build")
-                return self
+            def main(self):
+                calls.append("main")
+                return 3
 
-            def print_args(self):
-                calls.append("print_args")
-                return self
-
-            def run(self):
-                calls.append("run")
-                return 0
-
+        monkeypatch.setattr(ge, "init_pipeline_process", lambda: calls.append("init"))
         monkeypatch.setattr(ge, "GenerateEmbeddings", FakeScript)
-        assert main() == 0
-        assert calls == ["build", "print_args", "run"]
+        assert main() == 3
+        assert calls == ["init", "main"]

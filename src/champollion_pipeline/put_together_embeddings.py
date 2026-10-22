@@ -79,7 +79,7 @@ def main():
     """Main entry point."""
     init_pipeline_process()
     script = PutTogetherEmbeddings()
-    return script.build().print_args().run()
+    return script.main()
 
 
 if __name__ == "__main__":

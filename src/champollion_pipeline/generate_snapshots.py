@@ -258,7 +258,7 @@ class GenerateSnapshots(ScriptBuilder):
 def main():
     init_pipeline_process()
     script = GenerateSnapshots()
-    return script.build().print_args().run()
+    return script.main()
 
 
 if __name__ == "__main__":

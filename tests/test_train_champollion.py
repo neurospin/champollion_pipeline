@@ -448,8 +448,17 @@ class TestDocstringsNoContrastive:
 class TestMain:
     """Test the main() entry point."""
 
-    def test_main_builds_prints_and_runs(self):
-        with patch.object(train_champollion, "TrainChampollion") as cls:
-            cls.return_value.build.return_value.print_args.return_value.run.return_value = 0
-            assert main() == 0
-            cls.return_value.build.assert_called_once()
+    def test_main_inits_then_returns_script_main(self):
+        """main() calls init_pipeline_process(), then returns the script's ScriptBuilder.main() result."""
+        calls = []
+        with patch(
+            "champollion_pipeline.train_champollion.init_pipeline_process", side_effect=lambda: calls.append("init")
+        ):
+            script_main = {"return_value.main.side_effect": lambda: calls.append("main") or 3}
+            with patch("champollion_pipeline.train_champollion.TrainChampollion", **script_main) as MockScript:
+                result = main()
+
+        MockScript.assert_called_once_with()
+        MockScript.return_value.main.assert_called_once_with()
+        assert calls == ["init", "main"]
+        assert result == 3

@@ -133,7 +133,7 @@ class PruneFailedSubjects(ScriptBuilder):
 def main():
     init_pipeline_process()
     script = PruneFailedSubjects()
-    return script.build().print_args().run()
+    return script.main()
 
 
 if __name__ == "__main__":

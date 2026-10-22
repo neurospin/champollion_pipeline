@@ -270,7 +270,7 @@ class GenerateLabellingQC(ScriptBuilder):
 def main() -> int:
     """Run the labelling QC script."""
     init_pipeline_process()
-    return GenerateLabellingQC().build().print_args().run()
+    return GenerateLabellingQC().main()
 
 
 if __name__ == "__main__":
