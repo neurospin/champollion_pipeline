@@ -658,6 +658,15 @@ Examples:
         help="Per-worker timeout waiting for prerequisite files (default: 7200).",
     )
     parser.add_argument(
+        "--log",
+        nargs="?",
+        const="",
+        default=None,
+        metavar="DIR",
+        help="Write a run log per stage: DIR/<stage>_<YYYYmmdd-HHMMSS>.log; bare --log: each stage's default log path "
+        "(its derivatives .log folder). Overrides the config file's log.",
+    )
+    parser.add_argument(
         "--dry-run",
         action="store_true",
         help="Enumerate scans and report without processing (streaming mode only).",
@@ -709,6 +718,8 @@ def _apply_cli_overrides(config: PipelineConfig, args: argparse.Namespace, *, fr
         config.n_workers = args.n_workers
     if args.worker_timeout is not None:
         config.worker_timeout = args.worker_timeout
+    if args.log is not None:
+        config.log = args.log
 
 
 def main() -> int:

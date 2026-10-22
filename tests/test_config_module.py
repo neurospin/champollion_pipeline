@@ -7,9 +7,11 @@ dataclasses.asdict (REQ-REFACTOR-BDRABCZUK-B104FC70DD5F, -D1E056EE6D11,
 -2636D42F82B1, -88F94B3FF991, -47FAA83A09A4).
 
 The golden YAML texts below were written by ConfigLoader.save_to_yaml of
-main.py at commit cc8d67c (hand-built dict, before the move); the refactored
-serialiser must reproduce them byte for byte so existing config files stay
-compatible. dataset.hf_token is set in the custom case and must stay absent.
+main.py at commit cc8d67c (hand-built dict, before the move), plus one
+'log: null' line after log_to_console (PipelineConfig.log, REQ-RUNLOG-BDRABCZUK-4C2F09533A2D);
+the serialiser must reproduce them byte for byte (REQ-REFACTOR-BDRABCZUK-679F9A49A534,
+superseding -2636D42F82B1) so existing config files stay compatible.
+dataset.hf_token is set in the custom case and must stay absent.
 
 main.py lives at the repo root (not inside the installed package), so it is
 loaded by file path under a private module name.
@@ -27,7 +29,7 @@ MAIN_PY = Path(__file__).resolve().parent.parent / "main.py"
 CONFIG_MODULE = "champollion_pipeline.config"
 CONFIG_NAMES = ("DatasetConfig", "PipelineConfig", "ConfigLoader")
 
-# Golden output of save_to_yaml at commit cc8d67c for PipelineConfig() with root_path="/opt/champollion".
+# Golden output of save_to_yaml at cc8d67c (+ "log: null") for PipelineConfig() with root_path="/opt/champollion".
 GOLDEN_DEFAULT_YAML = """\
 root_path: /opt/champollion
 data_path: ''
@@ -62,6 +64,7 @@ log_level: INFO
 log_dir: ''
 log_to_file: true
 log_to_console: true
+log: null
 dataset:
   name: example_dataset
   dataset_localization: local
@@ -106,7 +109,7 @@ dataset:
   champollion_data_root: null
 """
 
-# Golden output of save_to_yaml at commit cc8d67c for _custom_config() below.
+# Golden output of save_to_yaml at commit cc8d67c (+ "log: null") for _custom_config() below.
 GOLDEN_CUSTOM_YAML = """\
 root_path: /opt/champollion
 data_path: /data
@@ -128,6 +131,7 @@ log_level: DEBUG
 log_dir: /logs
 log_to_file: false
 log_to_console: false
+log: null
 dataset:
   name: ukb
   dataset_localization: neurospin
@@ -295,7 +299,7 @@ def test_main_reexports_config_objects(config_module, main_module):
     ids=["default", "custom"],
 )
 def test_save_to_yaml_matches_golden_bytes(config_module, tmp_path, build, expected):
-    """REQ-REFACTOR-BDRABCZUK-2636D42F82B1: save_to_yaml writes the bytes main.py wrote at commit cc8d67c."""
+    """REQ-REFACTOR-BDRABCZUK-679F9A49A534: save_to_yaml writes cc8d67c's bytes plus one 'log: null' line."""
     output = tmp_path / "saved.yaml"
     config_module.ConfigLoader.save_to_yaml(build(config_module), str(output))
     assert output.read_bytes() == expected.encode("utf-8"), "save_to_yaml output differs from the cc8d67c golden YAML"

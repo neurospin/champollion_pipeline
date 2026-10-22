@@ -7,11 +7,15 @@ result); each stage supplies its argv, its script and its messages through hooks
 import logging
 from abc import ABC, abstractmethod
 from dataclasses import dataclass
+from datetime import datetime
+from os.path import join
 from typing import ClassVar, List, Optional
 
+from champollion_utils.run_log import RunLogCapture
 from champollion_utils.script_builder import ScriptBuilder
 
 from champollion_pipeline.config import PipelineConfig
+from champollion_pipeline.derivatives_layout import RUN_LOG_TIMESTAMP_FORMAT
 
 
 @dataclass
@@ -55,6 +59,15 @@ class PipelineStage(ABC):
         """Return a result to stop the stage before any logging, or None to run it."""
         return None
 
+    def run_log_path(self, script: ScriptBuilder) -> Optional[str]:
+        """Run-log file: None without config.log, the script default for "", else DIR/<stage>_<stamp>.log."""
+        log = self.config.log
+        if not isinstance(log, str):
+            return None
+        if log == "":
+            return script.default_log_path()
+        return join(log, f"{self.name}_{datetime.now().astimezone().strftime(RUN_LOG_TIMESTAMP_FORMAT)}.log")
+
     def run_script(self, script: ScriptBuilder) -> int:
         """Run the parsed script and return its exit code."""
         return script.run()
@@ -70,7 +83,13 @@ class PipelineStage(ABC):
             args = self.build_args()
             script = self.create_script()
             script.parse_args(args)
-            return_code = self.run_script(script)
+            log_path = self.run_log_path(script)
+            if log_path is None:
+                return_code = self.run_script(script)
+            else:
+                with RunLogCapture(log_path) as capture:
+                    return_code = self.run_script(script)
+                    capture.exit_code = return_code if isinstance(return_code, int) else 1
             result = StageResult(
                 stage_name=self.name,
                 success=(return_code == 0),
