@@ -21,8 +21,13 @@ Usage
       --output /tmp/db_comparison.csv
 """
 
+from datetime import datetime
+from os.path import dirname
+
 from champollion_utils.script_builder import ScriptBuilder
 
+from champollion_pipeline.derivatives_layout import compute_run_log_path
+from champollion_pipeline.process_setup import init_pipeline_process
 from compare import run_subcommand
 
 _OPTION_NAMES = (
@@ -75,13 +80,18 @@ class CompareDatabases(ScriptBuilder):
             )
         )
 
+    def default_log_path(self) -> str:
+        """Run-log path of a bare --log: <parent of --output>/.log/compare_databases_<stamp>.log."""
+        return compute_run_log_path(dirname(self.args.output), self.script_name, datetime.now().astimezone())
+
     def run(self) -> int:
         return run_subcommand("databases", {name: getattr(self.args, name) for name in _OPTION_NAMES})
 
 
 def main():
+    init_pipeline_process()
     script = CompareDatabases()
-    return script.build().print_args().run()
+    return script.main()
 
 
 if __name__ == "__main__":
