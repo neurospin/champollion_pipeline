@@ -109,7 +109,7 @@ def find_white_mesh(graph_path):
     return matches[0] if matches else None
 
 
-def generate_sulcal_graph_snapshot(
+def generate_sulcal_graph_snapshot(  # noqa: PLR0913 - snapshot API; keyword defaults used by generate_snapshots
     graph_path, output_path, size=(800, 600), view_quaternion=None, mesh_path=None, a=None
 ):
     """Generate a snapshot of a sulcal graph.

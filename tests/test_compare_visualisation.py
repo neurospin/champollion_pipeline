@@ -504,7 +504,7 @@ class TestTask187ViewerFailure:
         ids=["masks", "cortical_tiles"],
     )
     @pytest.mark.usefixtures("display_env")
-    def test_run_exits_one_and_writes_report_on_viewer_failure(
+    def test_run_exits_one_and_writes_report_on_viewer_failure(  # noqa: PLR0913 - pytest fixtures and parametrize arguments
         self, mode, rel, mask_tree, tmp_path, run_recorder, tmp_root, capsys
     ):
         dir_a, dir_b, _ = mask_tree({rel: (_point((0, 0, 0)), _point((1, 0, 0)))})

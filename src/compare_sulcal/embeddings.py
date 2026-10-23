@@ -187,7 +187,7 @@ def _compute_id_pairing(ids_a: list, ids_b: list) -> "tuple[list[int], list[int]
     return idx_a, idx_b, only_in_a, only_in_b
 
 
-def _compute_umap_projection(
+def _compute_umap_projection(  # noqa: PLR0913 - both UMAP dirs and both embedding arrays passed explicitly
     umap_a_dir: "str | None",
     umap_b_dir: "str | None",
     region: str,
@@ -268,7 +268,7 @@ def _load_covariate_csv(path: str, column: str) -> "dict[str, float] | str":
     return result
 
 
-def _summarise_embeddings_region(
+def _summarise_embeddings_region(  # noqa: PLR0913 - one summary field per argument
     rows: list,
     only_in_a: int,
     only_in_b: int,
@@ -308,7 +308,7 @@ def _summarise_embeddings_region(
     return entry
 
 
-def _save_umap_comparison_png(
+def _save_umap_comparison_png(  # noqa: PLR0913 - plot inputs of one region/side passed explicitly
     out_path: Path,
     region: str,
     side: str,
@@ -400,7 +400,7 @@ def _skipped_embeddings_result(region: str, side: str, reason: str) -> dict:
     }
 
 
-def _compare_embeddings_region_side(
+def _compare_embeddings_region_side(  # noqa: PLR0915 - linear per-region worker body; split deferred (user decision 2026-10-23)
     set_a: Path,
     set_b: Path,
     region: str,

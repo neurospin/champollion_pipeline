@@ -146,7 +146,7 @@ def _header(translation=(0.0, 0.0, 0.0), rotation=_MINUS_I, vs=_VS, referentials
 _DEFAULT = object()
 
 
-def _write_crops(root, region, side, subjects, voxels, shape, header=_DEFAULT, input_type="skeleton"):
+def _write_crops(root, region, side, subjects, voxels, shape, header=_DEFAULT, input_type="skeleton"):  # noqa: PLR0913 - synthetic crop builder; keyword defaults per case
     """Write one region/side of a synthetic crop set with numpy.
 
     ``voxels`` is one iterable of ``.npy`` (x, y, z) indices per subject, each

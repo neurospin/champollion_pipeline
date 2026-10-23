@@ -528,7 +528,7 @@ class Compare(ScriptBuilder):
             print(f"    [{side}] Done ({n_ok}/{len(subjects)}).")
         return all_data
 
-    def _run_databases(self) -> int:
+    def _run_databases(self) -> int:  # noqa: PLR0915 - linear subcommand body; split deferred (user decision 2026-10-23)
         brainvisa_dir = abspath(
             join(dirname(__file__), "..", "..", "external", "cortical_tiles", "cortical_tiles", "brainvisa")
         )
@@ -662,7 +662,7 @@ def _print_bucket_counts(buckets: "dict[str, list]") -> None:
         print(f"  {lbl:15s}  {len(names):3d} mask(s)")
 
 
-def _score_common_masks(
+def _score_common_masks(  # noqa: PLR0913 - scoring options passed explicitly; split deferred (user decision 2026-10-23)
     common: "list[str]",
     masks_a: "dict[str, str]",
     masks_b: "dict[str, str]",

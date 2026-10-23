@@ -60,7 +60,7 @@ def _parse_region_hemi(dir_name):
     return None, None
 
 
-def generate_umap_reference(
+def generate_umap_reference(  # noqa: PLR0913 - public API mirroring the CLI options (UMAP hyperparameters)
     models_dir,
     reference_subpath,
     output_dir,

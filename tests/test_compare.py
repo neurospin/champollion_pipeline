@@ -696,7 +696,7 @@ class TestRunDatabases:
     def test_single_side_and_njobs_are_forwarded(self, tmp_path, monkeypatch):
         seen = []
 
-        def _record(self, path_to_graph, sides, subjects_dir, njobs, brainvisa_dir):
+        def _record(self, path_to_graph, sides, subjects_dir, njobs, brainvisa_dir):  # noqa: PLR0913 - fake of Compare._load_database; self counts outside a class
             seen.append((sides, njobs))
             return {}
 
@@ -708,7 +708,7 @@ class TestRunDatabases:
     def test_njobs_defaults_to_cpu_budget(self, tmp_path, monkeypatch):
         seen = []
 
-        def _record(self, path_to_graph, sides, subjects_dir, njobs, brainvisa_dir):
+        def _record(self, path_to_graph, sides, subjects_dir, njobs, brainvisa_dir):  # noqa: PLR0913 - fake of Compare._load_database; self counts outside a class
             seen.append(njobs)
             return {}
 

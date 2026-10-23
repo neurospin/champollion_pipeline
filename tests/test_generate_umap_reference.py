@@ -55,7 +55,7 @@ def no_disk_writes(monkeypatch):
     return dumps, saves
 
 
-def _make_model_dir(models_dir, region_hemi, subpath, rows=3, dims=4, run="run1"):
+def _make_model_dir(models_dir, region_hemi, subpath, rows=3, dims=4, run="run1"):  # noqa: PLR0913 - synthetic model-dir builder; keyword defaults per case
     """Create ``models_dir/region_hemi/run/subpath`` with a small CSV."""
     model_path = models_dir / region_hemi / run
     csv_path = model_path / subpath
