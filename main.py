@@ -457,6 +457,73 @@ class PipelineOrchestrator:
 
         return True
 
+    def _index_path(self, phase: str, stage_name: str) -> str | None:
+        """Path of the pre/post index JSON of a stage, or None without outputs_path."""
+        if not self.config.outputs_path:
+            return None
+        return os.path.join(self.config.outputs_path, f"index_{phase}_{stage_name}.json")
+
+    def _report_pre_stage(self, stage_name: str, stage: PipelineStage) -> None:
+        """Index the stage's input subjects and print the eligibility report."""
+        if SubjectEligibilityChecker is None:
+            return
+        input_dir = stage.subject_input_dir()
+        if not input_dir:
+            return
+        patterns = stage.required_file_patterns()
+        if not patterns:
+            return
+        if self.config.outputs_path:
+            os.makedirs(self.config.outputs_path, exist_ok=True)
+        index_path = self._index_path("pre", stage_name)
+        checker = SubjectEligibilityChecker(
+            input_dir,
+            patterns,
+            stage_name=stage_name,
+            bids=self.config.dataset.bids,
+            path_to_graph=self.config.dataset.path_to_graph,
+        )
+        checker.check(save_index_to=index_path).print()
+
+    def _report_post_stage(self, stage_name: str, stage: PipelineStage) -> None:
+        """Index the stage's output and print the summary report."""
+        if build_output_report is None:
+            return
+        out_dir = stage.output_dir()
+        if not out_dir or not os.path.exists(out_dir):
+            return
+        build_output_report(out_dir, stage_name, save_index_to=self._index_path("post", stage_name)).print()
+
+    def _run_stage(self, stage_name: str, completed_stages: list[str]) -> bool:
+        """Check, validate, report and execute one registered stage; True on success."""
+        if not self._check_dependencies(stage_name, completed_stages):
+            return False
+        stage = self.stages[stage_name]
+        if not stage.validate():
+            self.logger.error(f"Stage '{stage_name}' validation failed")
+            return False
+        self._report_pre_stage(stage_name, stage)
+        result = stage.execute()
+        if result.success:
+            self._report_post_stage(stage_name, stage)
+            return True
+        if self.config.stop_on_error:
+            self.logger.error("Stopping pipeline due to stage failure")
+        return False
+
+    def _log_summary(self, completed_stages: list[str], failed_stages: list[str]) -> int:
+        """Log the execution summary and return the pipeline exit code."""
+        self.logger.info("\n" + "=" * 60)
+        self.logger.info("Pipeline Execution Summary")
+        self.logger.info("=" * 60)
+        self.logger.info(f"Completed stages: {completed_stages}")
+        if failed_stages:
+            self.logger.info(f"Failed stages: {failed_stages}")
+            self.logger.error("❌ Pipeline completed with errors")
+            return 1
+        self.logger.info("✅ Pipeline completed successfully")
+        return 0
+
     def run(self) -> int:
         """Run the pipeline."""
         self.logger.info("🚀 Starting Champollion Pipeline")
@@ -477,86 +544,14 @@ class PipelineOrchestrator:
             if stage_name not in self.stages:
                 self.logger.warning(f"Stage '{stage_name}' not registered. Skipping.")
                 continue
-
-            # Check dependencies
-            if not self._check_dependencies(stage_name, completed_stages):
-                failed_stages.append(stage_name)
-                if self.config.stop_on_error:
-                    break
-                continue
-
-            # Get stage
-            stage = self.stages[stage_name]
-
-            # Validate
-            if not stage.validate():
-                self.logger.error(f"Stage '{stage_name}' validation failed")
-                failed_stages.append(stage_name)
-                if self.config.stop_on_error:
-                    break
-                continue
-
-            # Pre-stage: index input + eligibility report
-            if SubjectEligibilityChecker is not None:
-                input_dir = stage.subject_input_dir()
-                if input_dir:
-                    patterns = stage.required_file_patterns()
-                    if patterns:
-                        index_path = None
-                        if self.config.outputs_path:
-                            os.makedirs(self.config.outputs_path, exist_ok=True)
-                            index_path = os.path.join(
-                                self.config.outputs_path,
-                                f"index_pre_{stage_name}.json",
-                            )
-                        checker = SubjectEligibilityChecker(
-                            input_dir,
-                            patterns,
-                            stage_name=stage_name,
-                            bids=self.config.dataset.bids,
-                            path_to_graph=self.config.dataset.path_to_graph,
-                        )
-                        pre_report = checker.check(save_index_to=index_path)
-                        pre_report.print()
-
-            # Execute
-            result = stage.execute()
-
-            # Post-stage: index output + summary report
-            if result.success and build_output_report is not None:
-                out_dir = stage.output_dir()
-                if out_dir and os.path.exists(out_dir):
-                    index_path = None
-                    if self.config.outputs_path:
-                        index_path = os.path.join(
-                            self.config.outputs_path,
-                            f"index_post_{stage_name}.json",
-                        )
-                    out_report = build_output_report(out_dir, stage_name, save_index_to=index_path)
-                    out_report.print()
-
-            if result.success:
+            if self._run_stage(stage_name, completed_stages):
                 completed_stages.append(stage_name)
-            else:
-                failed_stages.append(stage_name)
-                if self.config.stop_on_error:
-                    self.logger.error("Stopping pipeline due to stage failure")
-                    break
+                continue
+            failed_stages.append(stage_name)
+            if self.config.stop_on_error:
+                break
 
-        # Summary
-        self.logger.info("\n" + "=" * 60)
-        self.logger.info("Pipeline Execution Summary")
-        self.logger.info("=" * 60)
-        self.logger.info(f"Completed stages: {completed_stages}")
-        if failed_stages:
-            self.logger.info(f"Failed stages: {failed_stages}")
-
-        if failed_stages:
-            self.logger.error("❌ Pipeline completed with errors")
-            return 1
-        else:
-            self.logger.info("✅ Pipeline completed successfully")
-            return 0
+        return self._log_summary(completed_stages, failed_stages)
 
 
 # ====================== CLI Interface ======================
@@ -674,15 +669,8 @@ Examples:
     return parser.parse_args()
 
 
-def _apply_cli_overrides(config: PipelineConfig, args: argparse.Namespace, *, from_default: bool) -> None:
-    """Apply command-line argument overrides to a PipelineConfig in place.
-
-    ``from_default`` must be ``True`` when *config* was produced by
-    :func:`create_default_config` (no ``--config`` file was supplied) and
-    ``False`` when it was loaded from a YAML file.  The flag gates the
-    REQ-DEFROOT dataset-root re-derivation that must only fire for the
-    default config (REQ-DEFROOT-03/04).
-    """
+def _apply_stage_overrides(config: PipelineConfig, args: argparse.Namespace) -> None:
+    """Apply --stages and --enable-all-stages."""
     if args.stages:
         # Disable all stages, then enable specified ones
         for stage in config.stages:
@@ -694,6 +682,9 @@ def _apply_cli_overrides(config: PipelineConfig, args: argparse.Namespace, *, fr
         for stage in config.stages:
             config.stages[stage] = True
 
+
+def _apply_dataset_path_overrides(config: PipelineConfig, args: argparse.Namespace, *, from_default: bool) -> None:
+    """Apply --dataset-name (re-deriving the default config's datasets_root) and --models-path."""
     if args.dataset_name:
         config.dataset.name = args.dataset_name
         if from_default:
@@ -704,6 +695,9 @@ def _apply_cli_overrides(config: PipelineConfig, args: argparse.Namespace, *, fr
     if args.models_path:
         config.models_path = args.models_path
 
+
+def _apply_runtime_overrides(config: PipelineConfig, args: argparse.Namespace) -> None:
+    """Apply --verbose, --bids, --mode, --n-workers, --worker-timeout and --log."""
     if args.verbose:
         config.verbose = True
         config.log_level = "DEBUG"
@@ -719,6 +713,20 @@ def _apply_cli_overrides(config: PipelineConfig, args: argparse.Namespace, *, fr
         config.worker_timeout = args.worker_timeout
     if args.log is not None:
         config.log = args.log
+
+
+def _apply_cli_overrides(config: PipelineConfig, args: argparse.Namespace, *, from_default: bool) -> None:
+    """Apply command-line argument overrides to a PipelineConfig in place.
+
+    ``from_default`` must be ``True`` when *config* was produced by
+    :func:`create_default_config` (no ``--config`` file was supplied) and
+    ``False`` when it was loaded from a YAML file.  The flag gates the
+    REQ-DEFROOT dataset-root re-derivation that must only fire for the
+    default config (REQ-DEFROOT-03/04).
+    """
+    _apply_stage_overrides(config, args)
+    _apply_dataset_path_overrides(config, args, from_default=from_default)
+    _apply_runtime_overrides(config, args)
 
 
 def main() -> int:

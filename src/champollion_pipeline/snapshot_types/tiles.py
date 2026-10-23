@@ -47,7 +47,7 @@ def find_completed_regions(crops_dir):
     return result
 
 
-def generate_tiles_snapshot(crops_dir, output_path, size=(800, 600), level=1, champollion_data_root=None):
+def generate_tiles_snapshot(crops_dir, output_path, size=(800, 600), level=1, champollion_data_root=None):  # noqa: PLR0915 - linear Anatomist rendering sequence; split deferred (user decision 2026-10-23)
     """Generate snapshots of cortical tiles regions using Anatomist.
 
     Loads region graphs from the Champollion model data, overlays

@@ -121,7 +121,7 @@ def get_sulci_for_regions(regions, sides, json_path):
 # --------------------------------------------------------------------------- #
 
 
-def _compute_one_sulcus(
+def _compute_one_sulcus(  # noqa: PLR0913 - joblib worker called positionally; test fakes mirror the signature
     sulcus_full, per_subject_voxels, voxel_size_tuple, mask_dir, side, brainvisa_dir, public_use=False
 ):
     """Worker: build one sulcal mask from pre-extracted voxel coords.

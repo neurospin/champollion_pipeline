@@ -187,7 +187,7 @@ class RunCorticalTiles(ScriptBuilder):
             datetime.now().astimezone(),
         )
 
-    def run(self):
+    def run(self):  # noqa: PLR0915 - linear stage script body; split deferred (user decision 2026-10-23)
         """Execute the cortical_tiles script."""
         print(f"run_cortical_tiles.py/input: {self.args.input}")
         print(f"run_cortical_tiles.py/output: {self.args.output}")

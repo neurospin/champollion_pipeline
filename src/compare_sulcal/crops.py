@@ -228,7 +228,7 @@ def _compare_subject_crops(crop_a: np.ndarray, crop_b: np.ndarray) -> dict:
     }
 
 
-def _summarise_region(
+def _summarise_region(  # noqa: PLR0913 - one summary.json field per argument
     rows: list, shape_a, shape_b, offset: "tuple[int, int, int] | None", top_k: int, only_in_a: int, only_in_b: int
 ) -> dict:
     """Build the summary.json regions entry for one compared region/side."""
@@ -287,7 +287,7 @@ def _pair_subjects(subjects_a: "list[str]", subjects_b: "list[str]") -> "list[tu
     return [(subj, i, index_b[subj]) for i, subj in enumerate(subjects_a) if subj in index_b]
 
 
-def _save_top_lost_xors(
+def _save_top_lost_xors(  # noqa: PLR0913 - arrays and headers of one region/side passed explicitly
     side_dir: Path,
     top_lost: "list[dict]",
     pair_index: dict,
@@ -304,7 +304,7 @@ def _save_top_lost_xors(
         _save_crop_xor(_compute_crop_xor(vol_a, vol_b), side_dir, entry["subject"], xor_header)
 
 
-def _compare_region_side(
+def _compare_region_side(  # noqa: PLR0913 - joblib worker over region/side; inputs passed explicitly
     set_a: Path,
     set_b: Path,
     region: str,

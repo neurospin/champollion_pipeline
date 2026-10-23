@@ -104,7 +104,7 @@ class RunCKA(ScriptBuilder):
         """Run-log path of a bare --log: <--output_dir>/.log/run_cka_<stamp>.log."""
         return compute_run_log_path(self.args.output_dir, self.script_name, datetime.now().astimezone())
 
-    def run(self):
+    def run(self):  # noqa: C901, PLR0915 - linear CLI script body; split deferred (user decision 2026-10-23)
         path_a = self.args.path_a
         path_b = self.args.path_b
         makedirs(self.args.output_dir, exist_ok=True)

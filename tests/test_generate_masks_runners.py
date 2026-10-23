@@ -295,7 +295,7 @@ class TestBufferedRunner:
 
         if compute is None:
 
-            def compute(sf, per_subject_voxels, voxel_size_tuple, md, side, _bv_dir, public_use):
+            def compute(sf, per_subject_voxels, voxel_size_tuple, md, side, _bv_dir, public_use):  # noqa: PLR0913 - fake of _compute_one_sulcus; mirrors its signature
                 out = Path(md) / side / f"{sf}.nii.gz"
                 out.parent.mkdir(parents=True, exist_ok=True)
                 out.touch()
@@ -372,7 +372,7 @@ class TestBufferedRunner:
     def test_force_recomputes_existing_masks(self, tmp_path, monkeypatch, subjects_modules):
         computed = []
 
-        def compute(sf, per_subject_voxels, voxel_size_tuple, md, side, _bv_dir, public_use):
+        def compute(sf, per_subject_voxels, voxel_size_tuple, md, side, _bv_dir, public_use):  # noqa: PLR0913 - fake of _compute_one_sulcus; mirrors its signature
             computed.append(sf)
             out = Path(md) / side / f"{sf}.nii.gz"
             out.parent.mkdir(parents=True, exist_ok=True)
@@ -402,7 +402,7 @@ class TestBufferedRunner:
     def test_public_use_flag_is_forwarded_to_the_worker(self, tmp_path, monkeypatch, subjects_modules):
         seen = {}
 
-        def compute(sf, per_subject_voxels, voxel_size_tuple, md, side, _bv_dir, public_use):
+        def compute(sf, per_subject_voxels, voxel_size_tuple, md, side, _bv_dir, public_use):  # noqa: PLR0913 - fake of _compute_one_sulcus; mirrors its signature
             seen["public_use"] = public_use
             return RETURN_DICTIONARY["ok"]
 

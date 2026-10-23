@@ -61,7 +61,7 @@ def _graph_dir(subjects: Path, subject: str, path_to_graph: str = CLASSIC_PATH) 
     return subjects / subject / path_to_graph
 
 
-def _make_subject(
+def _make_subject(  # noqa: PLR0913 - synthetic subject-tree builder; keyword defaults per case
     subjects: Path,
     subject: str,
     sides=("L", "R"),
