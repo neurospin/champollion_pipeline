@@ -274,21 +274,8 @@ class RunCorticalTiles(ScriptBuilder):
             str(self.args.njobs),
         ]
 
-        # # Add optional arguments if provided
-        # # If region_file is not provided, use the default one from champollion_pipeline
-        # if self.args.region_file:
-        #     cmd.extend(["--region-file", abspath(self.args.region_file)])
-        # else:
-        #     # Use default region file from champollion_pipeline directory
-        #     default_region_file = abspath(join(
-        #         dirname(__file__),
-        #         '..', 'sulci_regions_champollion_V1.json'
-        #     ))
-        #     if exists(default_region_file):
-        #         cmd.extend(["--region-file", default_region_file])
-
         if self.args.regions:
-            cmd.extend(["-r"] + self.args.regions)
+            cmd.extend(["-r", *self.args.regions])
 
         if self.args.sk_qc_path:
             cmd.extend(["--sk_qc_path", self.args.sk_qc_path])
@@ -331,9 +318,9 @@ class RunCorticalTiles(ScriptBuilder):
             src_dir=skeleton_src_dir,
             parallel=True,
             # Its own -1 default breaks on the string-only revalidation in
-            # cortical_tiles.brainvisa.utils.subjects.get_number_subjects();
-            # pass "all" explicitly to route around that upstream quirk
-            # (external/ -- not ours to fix).
+            # get_number_subjects in the cortical_tiles brainvisa subjects utils,
+            # so pass "all" explicitly to route around that upstream quirk,
+            # which lives under external/ and is not ours to fix.
             number_subjects="all",
         )
         remove_ventricle.remove_ventricle(

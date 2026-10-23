@@ -31,7 +31,7 @@ def _function_level_imports(tree: ast.AST) -> list:
     def _walk(node, enclosing):
         for child in ast.iter_child_nodes(node):
             if isinstance(child, _FUNCTION_NODES):
-                _walk(child, enclosing + [child.name])
+                _walk(child, [*enclosing, child.name])
                 continue
             if isinstance(child, _IMPORT_NODES) and enclosing:
                 found.append((child.lineno, ".".join(enclosing), ast.unparse(child)))

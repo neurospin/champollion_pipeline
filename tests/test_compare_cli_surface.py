@@ -268,7 +268,7 @@ def test_compare_help_lists_exact_options(subcommand):
 @pytest.mark.parametrize("missing", ["--set_a", "--set_b"])
 def test_compare_set_options_required(subcommand, missing, tmp_path):
     """REQ-COMPARE-BDRABCZUK-4B6CAF044462."""
-    argv = [subcommand] + _set_args(tmp_path)
+    argv = [subcommand, *_set_args(tmp_path)]
     index = argv.index(missing)
     del argv[index : index + 2]
     with pytest.raises(SystemExit) as excinfo:
@@ -284,7 +284,7 @@ def test_databases_graph_options_required(missing):
     index = argv.index(missing)
     del argv[index : index + 2]
     with pytest.raises(SystemExit) as excinfo:
-        _parse_compare(["databases"] + argv)
+        _parse_compare(["databases", *argv])
     assert excinfo.value.code == 2
     with pytest.raises(SystemExit) as excinfo:
         compare_databases.CompareDatabases().parser.parse_args(argv)
@@ -294,7 +294,7 @@ def test_databases_graph_options_required(missing):
 @pytest.mark.parametrize("subcommand", ["masks", "cortical_tiles"])
 def test_compare_mask_modes_defaults(subcommand, tmp_path):
     """REQ-COMPARE-BDRABCZUK-117DA8854F73."""
-    args = _parse_compare([subcommand] + _set_args(tmp_path))
+    args = _parse_compare([subcommand, *_set_args(tmp_path)])
     assert args.output == "comparison_report.json"
     assert args.metric == "diff"
     assert args.bucket_step == 1.0
@@ -304,13 +304,13 @@ def test_compare_mask_modes_defaults(subcommand, tmp_path):
 
 def test_compare_cortical_tiles_pattern_default(tmp_path):
     """REQ-COMPARE-BDRABCZUK-176B8286C589."""
-    args = _parse_compare(["cortical_tiles"] + _set_args(tmp_path))
+    args = _parse_compare(["cortical_tiles", *_set_args(tmp_path)])
     assert args.pattern == "*mask_skeleton.nii.gz"
 
 
 def test_compare_crops_defaults(tmp_path):
     """REQ-COMPARE-BDRABCZUK-344D566E476B."""
-    args = _parse_compare(["crops"] + _set_args(tmp_path))
+    args = _parse_compare(["crops", *_set_args(tmp_path)])
     assert args.output == "crops_comparison"
     assert args.input_type == "skeleton"
     assert args.xor_dir is None
@@ -322,7 +322,7 @@ def test_compare_crops_defaults(tmp_path):
 
 def test_compare_databases_defaults():
     """REQ-COMPARE-BDRABCZUK-7B6A038CF0A3."""
-    args = _parse_compare(["databases"] + _db_args())
+    args = _parse_compare(["databases", *_db_args()])
     assert args.label_a == "A"
     assert args.label_b == "B"
     assert args.side == "both"
@@ -334,7 +334,7 @@ def test_compare_databases_defaults():
 
 def test_compare_embeddings_defaults(tmp_path):
     """REQ-COMPARE-BDRABCZUK-06A9B555A5BF."""
-    args = _parse_compare(["embeddings"] + _set_args(tmp_path))
+    args = _parse_compare(["embeddings", *_set_args(tmp_path)])
     assert args.output == "embeddings_comparison"
     assert args.side == "both"
     assert args.k == 15
@@ -352,9 +352,9 @@ def test_compare_metric_choices(subcommand, tmp_path):
     expected = {"wasserstein", "diff", "both"}
     assert _help_choices(_help("compare", subcommand).stdout, "--metric") == expected
     for value in expected:
-        assert _parse_compare([subcommand] + _set_args(tmp_path) + ["--metric", value]).metric == value
+        assert _parse_compare([subcommand, *_set_args(tmp_path), "--metric", value]).metric == value
     with pytest.raises(SystemExit) as excinfo:
-        _parse_compare([subcommand] + _set_args(tmp_path) + ["--metric", "bogus"])
+        _parse_compare([subcommand, *_set_args(tmp_path), "--metric", "bogus"])
     assert excinfo.value.code == 2
 
 
@@ -363,7 +363,7 @@ def test_compare_crops_input_type_choices(tmp_path):
     expected = {"skeleton", "label", "extremities", "distmap", "distbottom"}
     assert _help_choices(_help("compare", "crops").stdout, "--input_type") == expected
     for value in expected:
-        assert _parse_compare(["crops"] + _set_args(tmp_path) + ["--input_type", value]).input_type == value
+        assert _parse_compare(["crops", *_set_args(tmp_path), "--input_type", value]).input_type == value
 
 
 @pytest.mark.parametrize("subcommand", ["crops", "databases", "embeddings"])
@@ -373,14 +373,14 @@ def test_compare_side_choices(subcommand, tmp_path):
     assert _help_choices(_help("compare", subcommand).stdout, "--side") == expected
     base = [subcommand] + (_db_args() if subcommand == "databases" else _set_args(tmp_path))
     for value in expected:
-        assert _parse_compare(base + ["--side", value]).side == value
+        assert _parse_compare([*base, "--side", value]).side == value
 
 
 @pytest.mark.parametrize("subcommand", _SET_SUBCOMMANDS)
 def test_compare_missing_set_a_exits_1(subcommand, tmp_path):
     """REQ-COMPARE-BDRABCZUK-941405980FD7."""
     (tmp_path / "b").mkdir()
-    result = _run_script("compare", [subcommand] + _set_args(tmp_path), tmp_path)
+    result = _run_script("compare", [subcommand, *_set_args(tmp_path)], tmp_path)
     assert result.returncode == 1, result.stdout + result.stderr
 
 
@@ -452,9 +452,9 @@ def test_mask_scripts_metric_choices(script, tmp_path):
     expected = {"wasserstein", "diff", "both"}
     assert _help_choices(_help(script).stdout, "--metric") == expected
     for value in expected:
-        assert _parse_mask_script(script, _set_args(tmp_path) + ["--metric", value]).metric == value
+        assert _parse_mask_script(script, [*_set_args(tmp_path), "--metric", value]).metric == value
     with pytest.raises(SystemExit) as excinfo:
-        _parse_mask_script(script, _set_args(tmp_path) + ["--metric", "bogus"])
+        _parse_mask_script(script, [*_set_args(tmp_path), "--metric", "bogus"])
     assert excinfo.value.code == 2
 
 

@@ -98,7 +98,7 @@ class PipelineStage(ABC):
             )
         except Exception as e:
             self.log_failure()
-            result = StageResult(stage_name=self.name, success=False, message=f"Failed: {str(e)}", return_code=1)
+            result = StageResult(stage_name=self.name, success=False, message=f"Failed: {e!s}", return_code=1)
 
         self.log_end(result)
         return result

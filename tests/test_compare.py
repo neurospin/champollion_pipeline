@@ -53,7 +53,7 @@ class _FakeVolume:
     def header(self):
         return self._header
 
-    def copyHeaderFrom(self, header):  # noqa: N802 - mirrors the PyAIMS API
+    def copyHeaderFrom(self, header):
         self.copied_header = header
 
     def __array__(self, dtype=None):
@@ -70,7 +70,7 @@ class _FakeAims:
     def read(self, path):
         return self.objects[str(path)]
 
-    def Volume(self, array):  # noqa: N802 - mirrors the PyAIMS API
+    def Volume(self, array):
         return _FakeVolume(array)
 
     def write(self, vol, path):
@@ -755,7 +755,7 @@ class TestRunDatabases:
 
 
 # ---------------------------------------------------------------------------
-# main()
+# Tests of main()
 # ---------------------------------------------------------------------------
 
 

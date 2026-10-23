@@ -94,8 +94,17 @@ class TestImportsTopLevelTestsScripts:
 
     def test_no_import_outside_top_level(self):
         result = subprocess.run(
-            [*_ruff(), "check", "--isolated", "--no-cache", "--select", RULE, "--output-format", "concise"]
-            + _scoped_files(),
+            [
+                *_ruff(),
+                "check",
+                "--isolated",
+                "--no-cache",
+                "--select",
+                RULE,
+                "--output-format",
+                "concise",
+                *_scoped_files(),
+            ],
             cwd=REPO_ROOT,
             capture_output=True,
             text=True,
