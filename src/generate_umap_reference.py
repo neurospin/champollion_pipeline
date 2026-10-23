@@ -28,10 +28,16 @@ Typical usage::
 import os
 import os.path as osp
 import sys
+from datetime import datetime
 
 import joblib
 import numpy as np
+import pandas as pd
+import umap as umap_lib
 from champollion_utils.script_builder import ScriptBuilder
+
+from champollion_pipeline.derivatives_layout import compute_run_log_path
+from champollion_pipeline.process_setup import init_pipeline_process
 
 # Re-use the model-discovery helpers from champollion_V1 utils
 sys.path.insert(
@@ -83,9 +89,6 @@ def generate_umap_reference(
         List of (region, hemi) pairs for which artefacts were successfully
         generated.
     """
-    import pandas as pd
-    import umap as umap_lib
-
     os.makedirs(output_dir, exist_ok=True)
 
     models_dir = osp.abspath(models_dir)
@@ -184,6 +187,10 @@ class GenerateUmapReference(ScriptBuilder):
             .add_flag("--overwrite", "Re-generate artefacts even if output files already exist.")
         )
 
+    def default_log_path(self) -> str:
+        """Run-log path of a bare --log: <--output_dir>/.log/generate_umap_reference_<stamp>.log."""
+        return compute_run_log_path(self.args.output_dir, self.script_name, datetime.now().astimezone())
+
     def run(self) -> int:
         print(f"Models directory : {self.args.models_dir}")
         print(f"Reference subpath: {self.args.reference_subpath}")
@@ -211,8 +218,9 @@ class GenerateUmapReference(ScriptBuilder):
 
 
 def main():
+    init_pipeline_process()
     script = GenerateUmapReference()
-    return script.build().print_args().run()
+    return script.main()
 
 
 if __name__ == "__main__":

@@ -481,24 +481,20 @@ class TestMainFunction:
             result = main()
             assert result == 0
 
-    def test_main_calls_build_print_run(self, temp_dir):
-        """Test that main() follows the ScriptBuilder pattern."""
-        output_dir = os.path.join(temp_dir, "out")
-        stub = GenerateSnapshots.__new__(GenerateSnapshots)
+    def test_main_inits_then_returns_script_main(self):
+        """main() calls init_pipeline_process(), then returns the script's ScriptBuilder.main() result."""
+        calls = []
         with patch(
-            "sys.argv",
-            [
-                "generate_snapshots.py",
-                "--output_dir",
-                output_dir,
-            ],
+            "champollion_pipeline.generate_snapshots.init_pipeline_process", side_effect=lambda: calls.append("init")
         ):
-            with patch.object(GenerateSnapshots, "build", return_value=stub) as mock_build:
-                stub.print_args = lambda: stub
-                stub.run = lambda: 0
+            script_main = {"return_value.main.side_effect": lambda: calls.append("main") or 3}
+            with patch("champollion_pipeline.generate_snapshots.GenerateSnapshots", **script_main) as MockScript:
                 result = main()
-                mock_build.assert_called_once()
-                assert result == 0
+
+        MockScript.assert_called_once_with()
+        MockScript.return_value.main.assert_called_once_with()
+        assert calls == ["init", "main"]
+        assert result == 3
 
 
 @pytest.mark.smoke

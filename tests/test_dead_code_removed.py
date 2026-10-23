@@ -27,6 +27,7 @@ import pytest
 REPO_ROOT = Path(__file__).resolve().parent.parent
 MAIN_PY = REPO_ROOT / "main.py"
 PKG_DIR = REPO_ROOT / "src" / "champollion_pipeline"
+STAGE_BASE_PY = PKG_DIR / "_stage_base.py"  # StageResult moved here from main.py
 PRUNE_PY = PKG_DIR / "prune_failed_subjects.py"
 LIB_PY = PKG_DIR / "utils" / "lib.py"
 
@@ -73,7 +74,7 @@ class TestDeadCodeRemoved:
 
     def test_stage_result_has_no_outputs_field(self):
         """``StageResult`` no longer declares the never-set, never-read ``outputs`` field."""
-        fields = _annotated_field_names(_class_def(_tree(MAIN_PY), "StageResult"))
+        fields = _annotated_field_names(_class_def(_tree(STAGE_BASE_PY), "StageResult"))
         assert "outputs" not in fields, "REQ-CLEANUP-DEADCODE-01: StageResult still declares 'outputs'"
 
     def test_prune_failed_subjects_has_no_read_non_passing_subjects(self):
@@ -101,7 +102,7 @@ class TestLiveSiblingsKept:
     """Over-deletion guards: live neighbours of the dead code stay in place."""
 
     def test_stage_result_keeps_its_live_fields(self):
-        fields = _annotated_field_names(_class_def(_tree(MAIN_PY), "StageResult"))
+        fields = _annotated_field_names(_class_def(_tree(STAGE_BASE_PY), "StageResult"))
         assert {"stage_name", "success", "message", "return_code"} <= fields
 
     def test_prune_failed_subjects_keeps_read_passing_subjects(self):

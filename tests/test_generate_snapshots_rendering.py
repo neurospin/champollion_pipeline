@@ -4,15 +4,15 @@
 Unit tests for the rendering helpers and run-step dispatch of
 generate_snapshots.py.
 
-Anatomist, PyAIMS and deep_folding are injected as mocks through sys.modules,
+Anatomist, PyAIMS and deep_folding are patched as module attributes of snapshot_types.brainvisa_imports,
 so no BrainVISA install, X display or GPU is needed.  The UMAP plots are
 rendered for real through matplotlib's Agg backend using tiny synthetic
 coordinate arrays and a stubbed UMAP model.
 """
 
+import json
 import os
 import os.path as osp
-import sys
 from unittest.mock import MagicMock, patch
 
 import numpy as np
@@ -22,7 +22,6 @@ from champollion_pipeline import generate_snapshots as gs
 from champollion_pipeline.generate_snapshots import (
     GenerateSnapshots,
     _detect_hemi,
-    _parse_embedding_csv_name,
     find_completed_regions,
     find_sulcal_graphs,
     find_white_mesh,
@@ -31,6 +30,16 @@ from champollion_pipeline.generate_snapshots import (
     generate_umap_snapshot,
     list_acquisitions,
 )
+from champollion_pipeline.snapshot_types import brainvisa_imports
+from champollion_pipeline.snapshot_types import tiles as tiles_module
+from champollion_pipeline.snapshot_types.umap import _parse_embedding_csv_name
+
+_MODULE_ATTRS = {"anatomist.headless": "ana", "cortical_tiles.config": "config", "soma.aims": "aims"}
+
+
+def _as_module_attrs(modules):
+    """generate_snapshots attribute -> mock, for the guarded BrainVISA modules present in ``modules``."""
+    return {attr: modules[key] for key, attr in _MODULE_ATTRS.items() if key in modules}
 
 
 def anatomist_modules(anatomist_instance):
@@ -221,21 +230,21 @@ class TestGenerateSulcalGraphSnapshot:
     def test_returns_output_path_and_saves_image(self, tmp_path):
         a = self._anatomist()
         out = tmp_path / "snap.png"
-        with patch.dict(sys.modules, anatomist_modules(a)):
+        with patch.multiple(brainvisa_imports, **_as_module_attrs(anatomist_modules(a))):
             result = generate_sulcal_graph_snapshot("/graph.arg", str(out))
         assert result == str(out)
         a.createWindow.return_value.snapshotImage.return_value.save.assert_called_once_with(str(out))
 
     def test_default_quaternion_is_the_left_side_view(self, tmp_path):
         a = self._anatomist()
-        with patch.dict(sys.modules, anatomist_modules(a)):
+        with patch.multiple(brainvisa_imports, **_as_module_attrs(anatomist_modules(a))):
             generate_sulcal_graph_snapshot("/graph.arg", str(tmp_path / "s.png"))
         win = a.createWindow.return_value
         assert win.camera.call_args.kwargs["view_quaternion"] == (0.5, 0.5, 0.5, 0.5)
 
     def test_explicit_quaternion_is_used(self, tmp_path):
         a = self._anatomist()
-        with patch.dict(sys.modules, anatomist_modules(a)):
+        with patch.multiple(brainvisa_imports, **_as_module_attrs(anatomist_modules(a))):
             generate_sulcal_graph_snapshot("/graph.arg", str(tmp_path / "s.png"), view_quaternion=(1, 0, 0, 0))
         assert a.createWindow.return_value.camera.call_args.kwargs["view_quaternion"] == (1, 0, 0, 0)
 
@@ -243,28 +252,28 @@ class TestGenerateSulcalGraphSnapshot:
         a = self._anatomist()
         mesh = tmp_path / "Lwhite.gii"
         mesh.touch()
-        with patch.dict(sys.modules, anatomist_modules(a)):
+        with patch.multiple(brainvisa_imports, **_as_module_attrs(anatomist_modules(a))):
             generate_sulcal_graph_snapshot("/graph.arg", str(tmp_path / "s.png"), mesh_path=str(mesh))
         assert a.loadObject.call_count == 2
         a.loadObject.return_value.setMaterial.assert_called_with(diffuse=[0.8, 0.8, 0.8, 0.37])
 
     def test_missing_mesh_is_ignored(self, tmp_path):
         a = self._anatomist()
-        with patch.dict(sys.modules, anatomist_modules(a)):
+        with patch.multiple(brainvisa_imports, **_as_module_attrs(anatomist_modules(a))):
             generate_sulcal_graph_snapshot("/graph.arg", str(tmp_path / "s.png"), mesh_path=str(tmp_path / "nope.gii"))
         assert a.loadObject.call_count == 1
 
     def test_existing_anatomist_instance_is_reused(self, tmp_path):
         a = self._anatomist()
         modules = anatomist_modules(MagicMock())
-        with patch.dict(sys.modules, modules):
+        with patch.multiple(brainvisa_imports, **_as_module_attrs(modules)):
             generate_sulcal_graph_snapshot("/graph.arg", str(tmp_path / "s.png"), a=a)
         modules["anatomist.headless"].Anatomist.assert_not_called()
         a.createWindow.assert_called_once()
 
     def test_objects_and_windows_are_released(self, tmp_path):
         a = self._anatomist()
-        with patch.dict(sys.modules, anatomist_modules(a)):
+        with patch.multiple(brainvisa_imports, **_as_module_attrs(anatomist_modules(a))):
             generate_sulcal_graph_snapshot("/graph.arg", str(tmp_path / "s.png"))
         a.removeObjects.assert_called_once()
         a.closeWindows.assert_called_once()
@@ -324,14 +333,14 @@ class TestGenerateTilesSnapshot:
         modules, _, _, _ = env
         crops = tmp_path / "empty_crops"
         crops.mkdir()
-        with patch.dict(sys.modules, modules):
+        with patch.multiple(brainvisa_imports, **_as_module_attrs(modules)):
             assert generate_tiles_snapshot(str(crops), str(tmp_path / "t.png")) == []
         assert "No completed regions found" in capsys.readouterr().out
 
     def test_one_snapshot_per_hemisphere(self, tmp_path, env):
         modules, _, data_root, _ = env
         crops = self._crops(tmp_path)
-        with patch.dict(sys.modules, modules):
+        with patch.multiple(brainvisa_imports, **_as_module_attrs(modules)):
             snaps = generate_tiles_snapshot(
                 str(crops), str(tmp_path / "tiles.png"), champollion_data_root=str(data_root)
             )
@@ -340,7 +349,7 @@ class TestGenerateTilesSnapshot:
     def test_single_hemisphere_produces_one_snapshot(self, tmp_path, env):
         modules, _, data_root, _ = env
         crops = self._crops(tmp_path, hemis=("L",))
-        with patch.dict(sys.modules, modules):
+        with patch.multiple(brainvisa_imports, **_as_module_attrs(modules)):
             snaps = generate_tiles_snapshot(
                 str(crops), str(tmp_path / "tiles.png"), champollion_data_root=str(data_root)
             )
@@ -349,7 +358,7 @@ class TestGenerateTilesSnapshot:
     def test_data_root_falls_back_to_cortical_tiles_config(self, tmp_path, env):
         modules, _, data_root, _ = env
         crops = self._crops(tmp_path)
-        with patch.dict(sys.modules, modules):
+        with patch.multiple(brainvisa_imports, **_as_module_attrs(modules)):
             snaps = generate_tiles_snapshot(str(crops), str(tmp_path / "tiles.png"))
         assert len(snaps) == 2
         modules["cortical_tiles.config"].config.assert_called()
@@ -368,7 +377,7 @@ class TestGenerateTilesSnapshot:
         cfg = modules["cortical_tiles.config"].config.return_value
         cfg.get_champollion_data_root_dir.return_value = str(decoy_root)
         crops = self._crops(tmp_path)
-        with patch.dict(sys.modules, modules):
+        with patch.multiple(brainvisa_imports, **_as_module_attrs(modules)):
             snaps = generate_tiles_snapshot(
                 str(crops), str(tmp_path / "tiles.png"), champollion_data_root=str(data_root)
             )
@@ -378,7 +387,7 @@ class TestGenerateTilesSnapshot:
     def test_missing_region_graph_is_reported_and_skipped(self, tmp_path, env, capsys):
         modules, _, data_root, _ = env
         crops = self._crops(tmp_path)
-        with patch.dict(sys.modules, modules):
+        with patch.multiple(brainvisa_imports, **_as_module_attrs(modules)):
             snaps = generate_tiles_snapshot(
                 str(crops), str(tmp_path / "tiles.png"), level=3, champollion_data_root=str(data_root)
             )
@@ -390,7 +399,7 @@ class TestGenerateTilesSnapshot:
         for gii in icbm.glob("*.gii"):
             gii.unlink()
         crops = self._crops(tmp_path)
-        with patch.dict(sys.modules, modules):
+        with patch.multiple(brainvisa_imports, **_as_module_attrs(modules)):
             snaps = generate_tiles_snapshot(
                 str(crops), str(tmp_path / "tiles.png"), champollion_data_root=str(data_root)
             )
@@ -416,9 +425,9 @@ class TestGenerateTilesSnapshot:
         fallback.mkdir()
         for side in ("L", "R"):
             (fallback / f"mni_icbm152_nlin_asym_09c_{side}hemi.gii").touch()
-        monkeypatch.setattr(gs, "ICBM_MESH_DIR_FALLBACK", str(fallback))
+        monkeypatch.setattr(tiles_module, "ICBM_MESH_DIR_FALLBACK", str(fallback))
         crops = self._crops(tmp_path)
-        with patch.dict(sys.modules, modules):
+        with patch.multiple(brainvisa_imports, **_as_module_attrs(modules)):
             snaps = generate_tiles_snapshot(
                 str(crops), str(tmp_path / "tiles.png"), champollion_data_root=str(data_root)
             )
@@ -436,9 +445,9 @@ class TestGenerateTilesSnapshot:
         modules, _, data_root, _ = env
         self._fail_icbm_lookup(modules)
         fallback = tmp_path / "absent_fallback_mesh"
-        monkeypatch.setattr(gs, "ICBM_MESH_DIR_FALLBACK", str(fallback))
+        monkeypatch.setattr(tiles_module, "ICBM_MESH_DIR_FALLBACK", str(fallback))
         crops = self._crops(tmp_path, hemis=("L",))
-        with patch.dict(sys.modules, modules):
+        with patch.multiple(brainvisa_imports, **_as_module_attrs(modules)):
             snaps = generate_tiles_snapshot(
                 str(crops), str(tmp_path / "tiles.png"), champollion_data_root=str(data_root)
             )
@@ -449,14 +458,14 @@ class TestGenerateTilesSnapshot:
     def test_extension_defaults_to_png(self, tmp_path, env):
         modules, _, data_root, _ = env
         crops = self._crops(tmp_path, hemis=("L",))
-        with patch.dict(sys.modules, modules):
+        with patch.multiple(brainvisa_imports, **_as_module_attrs(modules)):
             snaps = generate_tiles_snapshot(str(crops), str(tmp_path / "tiles"), champollion_data_root=str(data_root))
         assert snaps == [str(tmp_path / "tiles_left.png")]
 
     def test_nomenclature_object_is_released(self, tmp_path, env):
         modules, a, data_root, _ = env
         crops = self._crops(tmp_path, hemis=("L",))
-        with patch.dict(sys.modules, modules):
+        with patch.multiple(brainvisa_imports, **_as_module_attrs(modules)):
             generate_tiles_snapshot(str(crops), str(tmp_path / "tiles.png"), champollion_data_root=str(data_root))
         assert a.deleteObjects.call_args.args[0] == [a.toAObject.return_value]
 
@@ -803,7 +812,6 @@ class TestRunDispatch:
         assert (tmp_path / "out").is_dir()
 
     def test_manifest_lists_every_snapshot(self, tmp_path):
-        import json
 
         script = self._script(tmp_path)
         sulcal, tiles, umap = self._patched(script)

@@ -328,8 +328,10 @@ Downloaded and extracted models are cached in `{datasets_root}/derivatives/champ
 
 | Option | Description |
 |--------|-------------|
-| `--masks-version` | Mask version subfolder to download from Hugging Face (e.g. `canonical_25`). Ignored when `models_path` is a local directory. |
-| `--masks` | Cortical tiles mask version used as the crops subdirectory (default: `canonical_25`) |
+| `--model-version` | Model set to use: the subfolder downloaded from Hugging Face (e.g. `canonical_25`). With a local `models_path` nothing is downloaded, but the value still sets the `--masks` default and is checked against `--masks`. |
+| `--masks-version` | Deprecated alias of `--model-version` (same value); prints a FutureWarning. Giving both with different values exits with status 2. |
+| `--masks` | Cortical tiles mask version used as the crops subdirectory. Default: the `--model-version` value when given, else `canonical_25`. |
+| `--allow-version-mismatch` | Run when `--masks` differs from `--model-version`, or from the `masks` of a local `model_set.json`, with a warning instead of exiting with status 2. |
 | `--regions` | Restrict to specific region names (space-separated). Default: all regions found in `models_path`. |
 | `--output` | Output base directory override. Default: `{datasets_root}/derivatives/champollion_V1/{masks}/region_embeddings/`. |
 | `--subjects` | Path to subjects CSV with a `Subject` column. Default: `{datasets_root}/participants.tsv`. |
@@ -344,6 +346,33 @@ Downloaded and extracted models are cached in `{datasets_root}/derivatives/champ
 | `--profiling` | Enable Python profiling (cProfile) |
 
 </details>
+
+### Model set marker: `model_set.json`
+
+A model set folder can carry a `model_set.json` marker that says which crops its models were trained on:
+
+```json
+{
+  "model_version": "canonical_25",
+  "masks": "canonical_25",
+  "checkpoint_epoch": 80
+}
+```
+
+`model_version` and `masks` are required; `checkpoint_epoch` is optional.
+
+- **Local model folder:** when `models_path` is a directory with a `model_set.json`, its `masks` must equal `--masks`; otherwise the run stops with exit status 2, unless `--allow-version-mismatch` is given (then a warning is printed and the run goes on). An unreadable marker always stops the run. A local folder without the marker runs with a warning that it cannot be checked.
+- **Hugging Face download:** after downloading a model set subfolder, the pipeline writes a `model_set.json` into the cached folder (`model_version` and `masks` set to the subfolder) unless the repository already ships one, so the cached folder can later be checked as a local model folder.
+
+### Run record: `provenance.json`
+
+Each run writes `provenance.json` next to the per-region outputs (in the `--output` directory). It records:
+
+- `masks`: the crops mask version used;
+- `model_version`: from the model set's `model_set.json` when present, else `--model-version`;
+- `checkpoint_epoch`: the `--checkpoint-epoch` used;
+- `models_source`: where the models came from (local path, Hugging Face repo and subfolder, or archive URL);
+- `pipeline_commit`: the git commit of this pipeline checkout, or `null` when git cannot report it.
 
 ### Excluding `models_cache/` from dataset sync and archives
 
@@ -449,6 +478,51 @@ pixi run champollion-snapshots \
 
 ---
 
+## Run logs
+
+Every stage script takes `--log [PATH]` (champollion_utils 0.3.0 or later), and so does `generate_masks.py`.
+With it, the run's whole output is also written to a run-log file.
+
+`--log=PATH` writes the run log to the file PATH (missing parent folders are created).
+
+A bare `--log` writes it to the script's default folder, in a file named `<stage>_<YYYYmmdd-HHMMSS>.log`:
+
+| Script | Bare `--log` folder |
+|---|---|
+| `champollion-morphologist` | `<output>/derivatives/morphologist-6.0/.log` |
+| `champollion-cortical-tiles` | `<output>/cortical_tiles-2026/.log` |
+| `champollion-config` | `<dataset>/derivatives/champollion_V1/<masks>/.log` |
+| `champollion-embeddings` | `<datasets_root>/derivatives/champollion_V1/<masks>/.log` |
+| `champollion-combine` | `<--output_path>/.log` |
+| `champollion-snapshots` | `<--output_dir>/.log` |
+| `champollion-train` | `data/<dataset>/derivatives/champollion_V1/canonical_25/.log` |
+| `champollion-prune` | `<dataset>/derivatives/.log` |
+| `champollion-purge` | `<dataset>/derivatives/.log` |
+| `champollion-labelling-qc` | `.log` next to the output TSV |
+| `generate_masks.py` | `<--output_dir>/.log` |
+
+A bare `--log` placed just before a positional argument takes that argument as its PATH: pass `--log=PATH`,
+or put a bare `--log` last or before another option.
+
+The run log holds everything written to standard output and standard error during the run, including the
+output of every child process (for example the `Running command:` lines and their subprocess output).
+
+It starts with a header giving the command line, the working directory, the start time and the process id.
+
+It ends with a footer giving the exit code and the elapsed time.
+
+The terminal still shows the same output, unchanged: the run log is a copy.
+
+`main.py` runs the stages in-process: with a bare `--log`, each stage writes its own run log to that stage's
+default folder above.
+
+`main.py --log=DIR` writes one run log per stage, `DIR/<stage>_<YYYYmmdd-HHMMSS>.log`.
+
+In a pipeline config file, the top-level key `log:` does the same (`null`: no run log, `""`: each stage's
+default folder, a path: that directory); the command line wins over the config.
+
+---
+
 ## Project Structure
 
 ```
@@ -471,6 +545,7 @@ champollion_pipeline/
 │       ├── prune_failed_subjects.py
 │       ├── purge_subject.py
 │       ├── process_setup.py
+│       ├── _stage_base.py           # Template base class of main.py's pipeline stages
 │       └── generate_labelling_qc.py
 ├── data/                       # Created by install-all; not committed
 └── pixi.toml

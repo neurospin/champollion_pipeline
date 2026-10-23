@@ -5,12 +5,16 @@ Unit tests for generate_embeddings.py
 """
 
 import os
+import pathlib
 import re
+import shutil
 from unittest.mock import MagicMock, patch
 
 import pytest
+import tomllib
 
 from champollion_pipeline.generate_embeddings import GenerateEmbeddings, HuggingFaceStrategy
+from champollion_pipeline.models.checkpoint import find_region_model_dirs
 from champollion_pipeline.utils.lib import CORTICAL_TILES_VERSION
 
 
@@ -228,7 +232,7 @@ class TestModelDiscovery:
         script = GenerateEmbeddings()
         script.args = script.parse_args([str(models_dir), str(tmp_path)])
 
-        found = script._find_region_model_dirs(str(models_dir))
+        found = find_region_model_dirs(str(models_dir))
 
         assert found == [str(real)]
 
@@ -240,7 +244,7 @@ class TestRegionNameResolution:
     Hugging Face-cache-downloaded models carry an extra fold-hash level between
     the region+side folder and `logs/`, e.g.
     `models_cache/Champollion_V1/STsbr_right/name08-32-57_200/logs/best_model_weights.pt`.
-    `_find_region_model_dirs` correctly returns the fold-hash directory (it holds
+    `find_region_model_dirs` correctly returns the fold-hash directory (it holds
     the checkpoint), so `_run_per_region` must not take that directory's own
     basename as the region name.
 
@@ -415,7 +419,6 @@ class TestCorticalVersionFlags:
     """Tests for --cortical_version and --legacy flags."""
 
     def test_cortical_version_default(self):
-        from champollion_pipeline.utils.lib import CORTICAL_TILES_VERSION
 
         script = GenerateEmbeddings()
         args = script.parse_args(["/m", "/d"])
@@ -437,7 +440,6 @@ class TestCorticalVersionFlags:
         assert args.legacy is True
 
     def test_get_derivatives_folder_returns_cortical_version_by_default(self):
-        from champollion_pipeline.utils.lib import CORTICAL_TILES_VERSION
 
         script = GenerateEmbeddings()
         script.args = script.parse_args(["/m", "/d"])
@@ -479,7 +481,6 @@ class TestCorticalVersionFlags:
         assert "dataset_folder: /some/unrelated/path" in content
 
     def test_patch_config_paths_skips_already_correct_files(self, tmp_path):
-        from champollion_pipeline.utils.lib import CORTICAL_TILES_VERSION
 
         yaml_file = tmp_path / "config.yaml"
         original = f"numpy_all: /data/derivatives/cortical_tiles-{CORTICAL_TILES_VERSION}/crops/2mm/L.npy\n"
@@ -536,8 +537,6 @@ class TestRegionsFilter:
             assert os.path.islink(os.path.join(tmpdir, "SC-sylv_left"))
             assert "other_region" not in entries
         finally:
-            import shutil
-
             shutil.rmtree(tmpdir)
 
     def test_make_regions_tmpdir_raises_on_missing_region(self, tmp_path):
@@ -771,9 +770,6 @@ class TestPixiTaskPaths:
                 yield location, task_name, rel_path
 
     def test_all_pixi_task_scripts_exist(self):
-        import pathlib
-
-        import tomllib
 
         repo_root = pathlib.Path(__file__).parent.parent
         with (repo_root / "pixi.toml").open("rb") as handle:

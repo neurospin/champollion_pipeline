@@ -13,7 +13,6 @@ test.  Only ``umap`` is stubbed, so no real UMAP model is fitted.
 """
 
 import importlib.util
-import sys
 from pathlib import Path
 from unittest.mock import MagicMock
 
@@ -66,7 +65,7 @@ def real_get_model_paths(monkeypatch):
 def fake_umap(monkeypatch):
     module = MagicMock()
     module.UMAP = _FakeReducer
-    monkeypatch.setitem(sys.modules, "umap", module)
+    monkeypatch.setattr(generate_umap_reference, "umap_lib", module)
     return module
 
 

@@ -5,11 +5,11 @@ Unit tests for generate_morphologist_graphs.py
 """
 
 from pathlib import Path
-from unittest.mock import MagicMock, call, patch
+from unittest.mock import call, patch
 
 import pytest
 
-from champollion_pipeline.generate_morphologist_graphs import GenerateMorphologistGraphs
+from champollion_pipeline.generate_morphologist_graphs import GenerateMorphologistGraphs, main
 
 
 class TestGenerateMorphologistGraphsInit:
@@ -281,25 +281,23 @@ class TestRunMethod:
 class TestMainFunction:
     """Test the main entry point."""
 
-    def test_main_creates_script_and_runs(self, temp_dir):
-        """Test that main creates script and calls build().print_args().run()."""
-        with patch("champollion_pipeline.generate_morphologist_graphs.GenerateMorphologistGraphs") as MockScript:
-            mock_instance = MagicMock()
-            mock_instance.build.return_value = mock_instance
-            mock_instance.print_args.return_value = mock_instance
-            mock_instance.run.return_value = 0
-            MockScript.return_value = mock_instance
-
-            from champollion_pipeline.generate_morphologist_graphs import main
-
-            with patch("sys.argv", ["script", temp_dir, temp_dir]):
+    def test_main_inits_then_returns_script_main(self):
+        """main() calls init_pipeline_process(), then returns the script's ScriptBuilder.main() result."""
+        calls = []
+        with patch(
+            "champollion_pipeline.generate_morphologist_graphs.init_pipeline_process",
+            side_effect=lambda: calls.append("init"),
+        ):
+            script_main = {"return_value.main.side_effect": lambda: calls.append("main") or 3}
+            with patch(
+                "champollion_pipeline.generate_morphologist_graphs.GenerateMorphologistGraphs", **script_main
+            ) as MockScript:
                 result = main()
 
-                MockScript.assert_called_once()
-                mock_instance.build.assert_called_once()
-                mock_instance.print_args.assert_called_once()
-                mock_instance.run.assert_called_once()
-                assert result == 0
+        MockScript.assert_called_once_with()
+        MockScript.return_value.main.assert_called_once_with()
+        assert calls == ["init", "main"]
+        assert result == 3
 
 
 class TestCommandFlags:

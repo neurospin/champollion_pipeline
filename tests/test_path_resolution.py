@@ -16,6 +16,11 @@ from unittest.mock import patch
 import pytest
 
 import champollion_pipeline
+from champollion_pipeline import generate_champollion_config as gcc
+from champollion_pipeline.generate_champollion_config import _DEFAULT_CHAMPOLLION_LOC
+from champollion_pipeline.put_together_embeddings import PutTogetherEmbeddings
+from champollion_pipeline.run_cortical_tiles import RunCorticalTiles
+from champollion_pipeline.train_champollion import _CONTRASTIVE_DIR
 
 # Repo root = parent of src/, i.e. two levels above the package directory.
 PACKAGE_DIR = Path(champollion_pipeline.__file__).resolve().parent
@@ -34,13 +39,11 @@ class TestExternalPathResolution:
 
     def test_default_champollion_loc_points_at_repo_root_external(self):
         """generate_champollion_config._DEFAULT_CHAMPOLLION_LOC -> <root>/external/champollion_V1."""
-        from champollion_pipeline.generate_champollion_config import _DEFAULT_CHAMPOLLION_LOC
 
         assert Path(_DEFAULT_CHAMPOLLION_LOC) == EXTERNAL_DIR / "champollion_V1"
 
     def test_reference_yaml_source_is_repo_root_reference_yaml(self):
         """generate_champollion_config copies reference.yaml from the repo root, not from src/."""
-        from champollion_pipeline import generate_champollion_config as gcc
 
         # Verify that ascending two levels from _SCRIPT_DIR reaches the repo root.
         actual = Path(gcc.dirname(gcc.dirname(gcc._SCRIPT_DIR))) / "reference.yaml"
@@ -48,13 +51,11 @@ class TestExternalPathResolution:
 
     def test_contrastive_dir_points_at_repo_root_external(self):
         """train_champollion._CONTRASTIVE_DIR -> <root>/external/champollion_V1/contrastive."""
-        from champollion_pipeline.train_champollion import _CONTRASTIVE_DIR
 
         assert Path(_CONTRASTIVE_DIR) == EXTERNAL_DIR / "champollion_V1" / "champollion"
 
     def test_put_together_embeddings_copies_csvs_to_output(self, tmp_path):
         """put_together_embeddings.run() copies per-region CSVs to output_path."""
-        from champollion_pipeline.put_together_embeddings import PutTogetherEmbeddings
 
         source = tmp_path / "mydata_embeddings"
         source.mkdir()
@@ -71,7 +72,6 @@ class TestExternalPathResolution:
 
     def test_run_cortical_tiles_invokes_repo_root_external_script(self, temp_dir):
         """run_cortical_tiles.run() invokes <root>/external/cortical_tiles/.../generate_sulcal_regions.py."""
-        from champollion_pipeline.run_cortical_tiles import RunCorticalTiles
 
         expected = EXTERNAL_DIR / "cortical_tiles" / "cortical_tiles" / "brainvisa" / "generate_sulcal_regions.py"
 

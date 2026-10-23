@@ -9,7 +9,10 @@ from ``external/``. Used by stage 3 (writer) and training (reader) so the two
 sides cannot drift apart.
 """
 
+from datetime import datetime
 from os.path import abspath, join
+
+from champollion_pipeline.utils.lib import CORTICAL_TILES_VERSION
 
 DERIVATIVES_DIRNAME = "derivatives"
 CHAMPOLLION_DERIVATIVES_FOLDER = "champollion_V1"
@@ -20,6 +23,14 @@ COMBINED_EMBEDDINGS_SUBFOLDER = "embeddings"
 SNAPSHOTS_SUBFOLDER = "snapshots"
 MODELS_CACHE_SUBFOLDER = "models_cache"
 HEMISPHERES = ("left", "right")
+MORPHOLOGIST_DERIVATIVES_FOLDER = "morphologist-6.0"
+CORTICAL_TILES_DERIVATIVES_PREFIX = "cortical_tiles-"
+RUN_LOG_DIRNAME = ".log"
+RUN_LOG_TIMESTAMP_FORMAT = "%Y%m%d-%H%M%S"
+# Stages whose run log lives in the per-mask-version folder, in pipeline order.
+CHAMPOLLION_RUN_LOG_STAGES: tuple[str, ...] = ("config", "embeddings", "combine", "snapshots", "training")
+# Every stage name accepted by compute_run_log_derivatives_dir.
+RUN_LOG_STAGES: tuple[str, ...] = ("morphologist", "cortical_tiles", *CHAMPOLLION_RUN_LOG_STAGES)
 
 
 def compute_champollion_configs_root(dataset_parent: str, dataset: str) -> str:
@@ -134,3 +145,39 @@ def compute_region_model_name(region: str, hemisphere: str) -> str:
     if hemisphere not in HEMISPHERES:
         raise ValueError(f"hemisphere must be one of {HEMISPHERES}, got {hemisphere!r}")
     return f"{region.replace('.', '')}_{hemisphere}"
+
+
+def compute_run_log_derivatives_dir(
+    stage: str,
+    root: str,
+    masks_version: str = DEFAULT_MASKS_VERSION,
+    cortical_tiles_version: str = CORTICAL_TILES_VERSION,
+) -> str:
+    """Return the derivatives folder that holds a stage's ``.log`` folder.
+
+    Args:
+        stage: one of RUN_LOG_STAGES.
+        root: dataset root, the directory holding ``derivatives/``.
+        masks_version: mask version; used only for CHAMPOLLION_RUN_LOG_STAGES.
+        cortical_tiles_version: used only for "cortical_tiles".
+
+    Raises:
+        ValueError: stage not in RUN_LOG_STAGES.
+
+    Pure, no I/O, O(1).
+    """
+    if stage not in RUN_LOG_STAGES:
+        raise ValueError(f"stage must be one of {RUN_LOG_STAGES}, got {stage!r}")
+    if stage == "morphologist":
+        return join(root, DERIVATIVES_DIRNAME, MORPHOLOGIST_DERIVATIVES_FOLDER)
+    if stage == "cortical_tiles":
+        return join(root, DERIVATIVES_DIRNAME, CORTICAL_TILES_DERIVATIVES_PREFIX + cortical_tiles_version)
+    return compute_masks_version_dir(root, masks_version)
+
+
+def compute_run_log_path(derivatives_dir: str, stage: str, started_at: datetime) -> str:
+    """Return ``<derivatives_dir>/.log/<stage>_<YYYYmmdd-HHMMSS>.log`` for a run started at started_at.
+
+    Pure, no I/O, O(1).
+    """
+    return join(derivatives_dir, RUN_LOG_DIRNAME, f"{stage}_{started_at.strftime(RUN_LOG_TIMESTAMP_FORMAT)}.log")

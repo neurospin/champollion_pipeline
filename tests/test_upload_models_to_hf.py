@@ -3,8 +3,9 @@
 """
 Unit tests for src/upload_models_to_hf.py
 
-The huggingface_hub dependency is imported lazily inside ``run()``, so every
-test injects a stub module into ``sys.modules`` instead of contacting the Hub.
+The module binds ``huggingface_hub`` at import time (None when it is not
+installed), so every test replaces that name with a stub instead of contacting
+the Hub.
 """
 
 import sys
@@ -32,7 +33,7 @@ def hf_stub(monkeypatch):
     api = MagicMock()
     module = MagicMock()
     module.HfApi = MagicMock(return_value=api)
-    monkeypatch.setitem(sys.modules, "huggingface_hub", module)
+    monkeypatch.setattr(upload_models_to_hf, "huggingface_hub", module)
     return module, api
 
 
@@ -76,7 +77,7 @@ class TestArgumentParsing:
 
 class TestRun:
     def test_returns_one_when_huggingface_hub_missing(self, tmp_path, monkeypatch, capsys):
-        monkeypatch.setitem(sys.modules, "huggingface_hub", None)
+        monkeypatch.setattr(upload_models_to_hf, "huggingface_hub", None)
         script = _make_script([str(tmp_path), "repo", "--masks-version", "v1"])
         assert script.run() == 1
         assert "huggingface_hub is required" in capsys.readouterr().out

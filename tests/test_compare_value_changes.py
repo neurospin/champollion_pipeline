@@ -10,7 +10,7 @@ from pathlib import Path
 
 import numpy as np
 
-import compare
+import compare_sulcal.brainvisa
 from compare import Compare, voxel_diff
 
 
@@ -48,7 +48,7 @@ def _install_pair(tmp_path: Path, monkeypatch, rel: str, a: np.ndarray, b: np.nd
         path.touch()
         objects[str(path.resolve())] = arr
         dirs.append(tmp_path / side)
-    monkeypatch.setattr(compare, "aims", _FakeAims(objects))
+    monkeypatch.setattr(compare_sulcal.brainvisa, "aims", _FakeAims(objects))
     return dirs[0], dirs[1]
 
 

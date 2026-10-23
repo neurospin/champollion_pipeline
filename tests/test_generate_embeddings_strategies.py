@@ -32,6 +32,7 @@ from champollion_pipeline.generate_embeddings import (
     RemoteArchiveStrategy,
     main,
 )
+from champollion_pipeline.models import fetch as models_fetch
 
 
 def make_region_logs(model_dir) -> None:
@@ -228,7 +229,7 @@ class TestHuggingFaceStrategy:
         assert os.environ["SSL_CERT_FILE"] == "/my/bundle.pem"
 
     def test_missing_huggingface_hub_raises_import_error(self, tmp_path):
-        with patch.dict(sys.modules, {"huggingface_hub": None}):
+        with patch.object(models_fetch, "huggingface_hub", None):
             with pytest.raises(ImportError, match="huggingface_hub is required"):
                 HuggingFaceStrategy().fetch("neurospin/X", str(tmp_path))
 
@@ -411,7 +412,7 @@ class TestFetchModels:
     def test_masks_version_is_passed_as_hf_subfolder(self):
         script = self._script(["--masks-version", "canonical_25"])
         with (
-            patch.object(ge, "HuggingFaceStrategy", wraps=ge.HuggingFaceStrategy) as cls,
+            patch.object(models_fetch, "HuggingFaceStrategy", wraps=models_fetch.HuggingFaceStrategy) as cls,
         ):
             cls.return_value = MagicMock(can_handle=MagicMock(return_value=True), fetch=MagicMock(return_value="/hf"))
             script.fetch_models("neurospin/X")
@@ -707,22 +708,16 @@ class TestRunPipelineCkaHook:
 class TestMain:
     """Test the main() entry point."""
 
-    def test_main_builds_prints_and_runs(self, monkeypatch):
+    def test_main_inits_then_returns_script_main(self, monkeypatch):
+        """main() calls init_pipeline_process(), then returns the script's ScriptBuilder.main() result."""
         calls = []
 
         class FakeScript:
-            def build(self):
-                calls.append("build")
-                return self
+            def main(self):
+                calls.append("main")
+                return 3
 
-            def print_args(self):
-                calls.append("print_args")
-                return self
-
-            def run(self):
-                calls.append("run")
-                return 0
-
+        monkeypatch.setattr(ge, "init_pipeline_process", lambda: calls.append("init"))
         monkeypatch.setattr(ge, "GenerateEmbeddings", FakeScript)
-        assert main() == 0
-        assert calls == ["build", "print_args", "run"]
+        assert main() == 3
+        assert calls == ["init", "main"]

@@ -9,6 +9,7 @@ These tests catch environment contamination and missing dependencies early,
 before users hit cryptic errors deep in the pipeline.
 """
 
+import importlib
 import sys
 
 import pytest
@@ -25,7 +26,7 @@ def test_gmpy2_has_valid_version():
     Fix: export SYMPY_GROUND_TYPES=python
     Or:  pip install --force-reinstall --no-deps gmpy2==2.2.1
     """
-    import gmpy2
+    gmpy2 = importlib.import_module("gmpy2")
 
     assert gmpy2.__version__ is not None, (
         "gmpy2.__version__ is None — a system gmpy2 without pip metadata is "
@@ -43,7 +44,7 @@ def test_sympy_imports_cleanly():
     receive None instead of a string, raising TypeError on import.
     """
     try:
-        import sympy  # noqa: F401
+        importlib.import_module("sympy")
     except TypeError as e:
         pytest.fail(
             f"sympy import raised TypeError — likely caused by gmpy2.__version__ "
@@ -60,7 +61,7 @@ def test_torch_imports():
     wheels, etc.). The pipeline can run on CPU, but torch must import cleanly.
     """
     try:
-        import torch  # noqa: F401
+        importlib.import_module("torch")
     except ImportError as e:
         pytest.fail(
             f"torch is not importable. Re-run 'pixi run install-all' or check "
@@ -76,9 +77,10 @@ def test_champollion_utils_importable():
     pip editable install was not run ('pixi run install-utils').
     """
     try:
-        from champollion_utils.script_builder import ScriptBuilder  # noqa: F401
+        script_builder = importlib.import_module("champollion_utils.script_builder")
     except ImportError as e:
         pytest.fail(f"champollion_utils is not installed. Run: pixi run install-utils\nError: {e}")
+    assert hasattr(script_builder, "ScriptBuilder"), "champollion_utils.script_builder defines no ScriptBuilder"
 
 
 @pytest.mark.smoke
@@ -94,7 +96,7 @@ def test_cortical_tiles_importable():
     pip editable install was not run ('pixi run install-cortical-tiles').
     """
     try:
-        import cortical_tiles  # noqa: F401
+        importlib.import_module("cortical_tiles")
     except ImportError as e:
         pytest.fail(
             f"cortical_tiles is not installed.\n"
@@ -108,7 +110,7 @@ def test_cortical_tiles_importable():
 def test_pandas_available():
     """pandas must be importable (used for QC TSV filtering throughout pipeline)."""
     try:
-        import pandas  # noqa: F401
+        importlib.import_module("pandas")
     except ImportError as e:
         pytest.fail(f"pandas is not importable: {e}")
 
@@ -117,7 +119,7 @@ def test_pandas_available():
 def test_huggingface_hub_available():
     """huggingface_hub must be importable (used to download model weights)."""
     try:
-        import huggingface_hub  # noqa: F401
+        importlib.import_module("huggingface_hub")
     except ImportError as e:
         pytest.fail(f"huggingface_hub is not importable: {e}")
 
@@ -130,12 +132,13 @@ def test_pipeline_src_on_path():
     add src/ to sys.path.
     """
     try:
-        from champollion_pipeline.utils.lib import DERIVATIVES_FOLDER  # noqa: F401
+        lib = importlib.import_module("champollion_pipeline.utils.lib")
     except ImportError as e:
         pytest.fail(
             f"src/ is not on sys.path — run tests from the champollion_pipeline "
             f"root directory via 'pixi run test'.\nError: {e}"
         )
+    assert hasattr(lib, "DERIVATIVES_FOLDER"), "champollion_pipeline.utils.lib defines no DERIVATIVES_FOLDER"
 
 
 @pytest.mark.smoke

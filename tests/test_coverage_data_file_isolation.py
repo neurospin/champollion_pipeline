@@ -38,6 +38,7 @@ from pathlib import Path
 
 import pytest
 import tomllib
+from coverage.misc import substitute_variables
 
 REPO_ROOT = Path(__file__).resolve().parents[1]
 PIXI_TOML = REPO_ROOT / "pixi.toml"
@@ -141,7 +142,6 @@ def _data_file_setting(config_file: Path, specified: bool) -> str | None:
 
 
 def _resolved_data_file(pixi_config: dict, task_name: str) -> Path:
-    from coverage.misc import substitute_variables
 
     tasks = _tasks_visible_in(pixi_config, "default")
     assert task_name in tasks, f"pixi.toml defines no {task_name!r} task visible in the default environment"

@@ -27,9 +27,18 @@ Usage
 """
 
 import sys
-from os.path import abspath, isdir
+from datetime import datetime
+from os.path import abspath, dirname, isdir
 
 from champollion_utils.script_builder import ScriptBuilder
+
+from champollion_pipeline.derivatives_layout import compute_run_log_path
+from champollion_pipeline.process_setup import init_pipeline_process
+
+try:
+    import huggingface_hub
+except ImportError:
+    huggingface_hub = None
 
 
 class UploadModelsToHF(ScriptBuilder):
@@ -61,10 +70,14 @@ class UploadModelsToHF(ScriptBuilder):
             .add_flag("--private", "Create the repository as private if it does not yet exist.")
         )
 
+    def default_log_path(self) -> str:
+        """Run-log path of a bare --log: <parent of models_dir>/.log/upload_models_to_hf_<stamp>.log."""
+        return compute_run_log_path(
+            dirname(abspath(self.args.models_dir)), self.script_name, datetime.now().astimezone()
+        )
+
     def run(self) -> int:
-        try:
-            from huggingface_hub import HfApi
-        except ImportError:
+        if huggingface_hub is None:
             print("ERROR: huggingface_hub is required. Install with: pip install huggingface_hub")
             return 1
 
@@ -73,7 +86,7 @@ class UploadModelsToHF(ScriptBuilder):
             print(f"ERROR: models_dir not found: {models_dir}")
             return 1
 
-        api = HfApi(token=self.args.token)
+        api = huggingface_hub.HfApi(token=self.args.token)
         masks_version = self.args.masks_version
         repo_id = self.args.repo_id
 
@@ -100,8 +113,9 @@ class UploadModelsToHF(ScriptBuilder):
 
 
 def main():
+    init_pipeline_process()
     script = UploadModelsToHF()
-    return script.build().print_args().run()
+    return script.main()
 
 
 if __name__ == "__main__":

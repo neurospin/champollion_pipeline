@@ -10,7 +10,7 @@ requires-python = ">=3.10"
 license = { text = "CeCILL" }
 authors = [{ name = "Neurospin", email = "barth.drabczuk@gmail.com" }]
 dependencies = [
-    "champollion-utils @ git+https://github.com/neurospin/champollion_utils.git@v0.2.0",
+    "champollion-utils @ git+https://github.com/neurospin/champollion_utils.git@v0.3.0",
     "huggingface-hub>=0.20.0",
     "scipy>=1.10",
     "numpy>=1.24",
@@ -41,6 +41,7 @@ champollion-labelling-qc = "champollion_pipeline.generate_labelling_qc:main"
 
 [tool.setuptools.packages.find]
 where = ["src"]
+exclude = ["compare_sulcal*"]
 
 [tool.ruff]
 line-length = 120
@@ -52,4 +53,8 @@ markers = [
     "unit: fast unit tests",
     "integration: slower integration tests",
     "smoke: minimal smoke tests",
+    "serial: must not run concurrently with other tests (excluded from xdist; run by test-parallel's second pass)",
 ]
+
+[tool.vulture]
+paths = ["src", "tests"]

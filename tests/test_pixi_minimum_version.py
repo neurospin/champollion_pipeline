@@ -27,6 +27,7 @@ import pytest
 import tomllib
 from packaging.specifiers import SpecifierSet
 from packaging.version import Version
+from rich.console import Console
 
 PROJECT_ROOT = Path(__file__).resolve().parents[1]
 PIXI_TOML = PROJECT_ROOT / "pixi.toml"
@@ -103,7 +104,6 @@ class _StopAtFirstQuestion(Exception):
 @pytest.fixture
 def wizard_startup_output(monkeypatch) -> str:
     """Everything the wizard prints, with pixi present, before its first question."""
-    from rich.console import Console
 
     spec = importlib.util.spec_from_file_location("setup_wizard_pixiver", WIZARD)
     wizard = importlib.util.module_from_spec(spec)
