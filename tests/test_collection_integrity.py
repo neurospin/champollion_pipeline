@@ -57,7 +57,7 @@ def _syspath_insert_expressions(module_path):
 def _resolve(expression, module_path):
     """Evaluate a sys.path expression as the test module itself would."""
     namespace = {"os": os, "sys": sys, "Path": Path, "__file__": str(module_path)}
-    return eval(expression, namespace)  # noqa: S307 - test-only, inputs are our own sources
+    return eval(expression, namespace)
 
 
 @pytest.mark.smoke

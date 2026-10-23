@@ -211,7 +211,7 @@ class TrainChampollion(ScriptBuilder):
             if self.args.njobs is not None:
                 overrides.append(f"num_cpu_workers={self.args.njobs}")
 
-            cmd = ["python3", "train.py"] + overrides
+            cmd = ["python3", "train.py", *overrides]
             if isdir(config_dir):
                 if exists(join(config_dir, "config.yaml")):
                     print(

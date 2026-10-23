@@ -66,7 +66,7 @@ def _pinned_submodule_commit(submodule: str) -> str:
         check=True,
     ).stdout.strip()
     assert output, f"git ls-tree HEAD reports no entry for {submodule}"
-    # Format: "160000 commit <sha>\t<path>"
+    # Each line reads: mode 160000, the word commit, the sha, a tab, then the path
     return output.split()[2]
 
 

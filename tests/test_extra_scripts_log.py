@@ -126,9 +126,9 @@ def test_log_path_writes_run_log(tmp_path, stubbed_main, name):
     assert log_path.is_file(), f"{name} --log={log_path} wrote no run log"
 
 
-# REQ-RUNLOG-BDRABCZUK-4A2D44CE340E (compare_databases), REQ-RUNLOG-BDRABCZUK-CF3411AE01C3
-# (generate_umap_reference), REQ-RUNLOG-BDRABCZUK-A022B3C10A19 (run_cka),
-# REQ-RUNLOG-BDRABCZUK-AE0603700EE5 (upload_models_to_hf)
+# REQ-RUNLOG-BDRABCZUK-4A2D44CE340E for compare_databases, REQ-RUNLOG-BDRABCZUK-CF3411AE01C3 for
+# generate_umap_reference, REQ-RUNLOG-BDRABCZUK-A022B3C10A19 for run_cka and
+# REQ-RUNLOG-BDRABCZUK-AE0603700EE5 for upload_models_to_hf
 @pytest.mark.parametrize("name", SCRIPTS)
 def test_bare_log_writes_run_log_at_default_log_path(tmp_path, monkeypatch, stubbed_main, name):
     log_path = tmp_path / "default" / f"{name}.log"

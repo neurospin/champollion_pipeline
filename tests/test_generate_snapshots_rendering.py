@@ -355,7 +355,7 @@ class TestGenerateTilesSnapshot:
         assert snaps == [str(tmp_path / "tiles_left.png")]
 
     def test_data_root_falls_back_to_cortical_tiles_config(self, tmp_path, env):
-        modules, _, data_root, _ = env
+        modules, _, _, _ = env
         crops = self._crops(tmp_path)
         with patch.multiple(brainvisa_imports, **_as_module_attrs(modules)):
             snaps = generate_tiles_snapshot(str(crops), str(tmp_path / "tiles.png"))

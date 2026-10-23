@@ -171,7 +171,7 @@ class TestComputeOneSulcus:
 
     def test_public_use_false_creates_sample_dir(self, tmp_path):
         """public_use=False: per-subject subdirectory is created."""
-        modules, mock_aims, _, _ = _mock_aims_env()
+        modules, _, _, _ = _mock_aims_env()
         with _patched_masks_module(modules):
             _compute_one_sulcus(
                 self.SULCUS,
@@ -186,7 +186,7 @@ class TestComputeOneSulcus:
 
     def test_public_use_true_skips_sample_dir(self, tmp_path):
         """public_use=True: per-subject subdirectory is NOT created."""
-        modules, mock_aims, _, _ = _mock_aims_env()
+        modules, _, _, _ = _mock_aims_env()
         with _patched_masks_module(modules):
             _compute_one_sulcus(
                 self.SULCUS,
@@ -427,7 +427,8 @@ class TestPublicUseFlag:
             "p",
             "--output_dir",
             "/y",
-        ] + list(extra_args)
+            *extra_args,
+        ]
         with patch("sys.argv", argv):
             gm.parse_args()
         return gm

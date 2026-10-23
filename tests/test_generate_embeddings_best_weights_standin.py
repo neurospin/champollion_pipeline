@@ -119,7 +119,7 @@ def run_stage(tmp_path: Path, checkpoint_epoch: int = DEFAULT_EPOCH) -> StageRes
         error = ""
     except SystemExit as err:
         status, error = err.code, str(err.code)
-    except Exception as err:  # noqa: BLE001 - any raised error ends the stage with status 1
+    except Exception as err:
         status, error = 1, str(err)
     return StageResult(fake, status, error)
 

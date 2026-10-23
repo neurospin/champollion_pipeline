@@ -76,7 +76,7 @@ class LocalPathStrategy(ModelFetchStrategy):
 class HuggingFaceStrategy(ModelFetchStrategy):
     """Strategy for handling Hugging Face repository IDs and URLs."""
 
-    def __init__(self, subfolder: str = None):
+    def __init__(self, subfolder: str | None = None):
         self.subfolder = subfolder
 
     def can_handle(self, models_path: str) -> bool:

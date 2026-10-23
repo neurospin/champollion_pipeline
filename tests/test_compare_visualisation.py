@@ -65,7 +65,7 @@ class _FakeVolume:
     def header(self):
         return self._header
 
-    def copyHeaderFrom(self, header):  # noqa: N802 - mirrors the PyAIMS API
+    def copyHeaderFrom(self, header):
         self.copied_header = header
 
     def __array__(self, dtype=None, copy=None):
@@ -86,7 +86,7 @@ class _FakeAims:
             raise RuntimeError(f"fake aims.read failure: {path}")
         return self.objects[str(path)]
 
-    def Volume(self, array):  # noqa: N802 - mirrors the PyAIMS API
+    def Volume(self, array):
         return _FakeVolume(array)
 
     def write(self, vol, path):
@@ -439,7 +439,7 @@ class TestTask192XorFiles:
         monkeypatch.setattr(compare_sulcal.brainvisa, "aims", _FakeAims(objects, fail_write_after=1))
         run = run_recorder()
 
-        with pytest.raises(RuntimeError, match="fake aims.write failure"):
+        with pytest.raises(RuntimeError, match=r"fake aims\.write failure"):
             visualise_mask_diffs({"x.nii.gz": 3.0, "y.nii.gz": 2.0, "z.nii.gz": 1.0}, masks_a, masks_b)
 
         assert run.calls == []
@@ -453,7 +453,7 @@ class TestTask192XorFiles:
         monkeypatch.setattr(compare_sulcal.brainvisa, "aims", _FakeAims(objects, fail_read={masks_b["y.nii.gz"]}))
         run = run_recorder()
 
-        with pytest.raises(RuntimeError, match="fake aims.read failure"):
+        with pytest.raises(RuntimeError, match=r"fake aims\.read failure"):
             visualise_mask_diffs({"x.nii.gz": 2.0, "y.nii.gz": 1.0}, masks_a, masks_b)
 
         assert run.calls == []
@@ -598,7 +598,7 @@ class _AnaWindow:
         self.wtype = wtype
         self.objects = []
 
-    def addObjects(self, objs, *args, **kwargs):  # noqa: N802 - mirrors the Anatomist API
+    def addObjects(self, objs, *args, **kwargs):
         self.objects.extend(objs if isinstance(objs, (list, tuple)) else [objs])
 
     def __getattr__(self, name):
@@ -612,23 +612,23 @@ class _FakeAnatomist:
         self.windows = []
         self.links = []
 
-    def loadObject(self, path, *args, **kwargs):  # noqa: N802 - mirrors the Anatomist API
+    def loadObject(self, path, *args, **kwargs):
         obj = _AnaObject(path)
         self.loaded.append(obj)
         return obj
 
-    def fusionObjects(self, objects, *args, **kwargs):  # noqa: N802, V105 - Anatomist API, called by the script
+    def fusionObjects(self, objects, *args, **kwargs):  # noqa: V105 - Anatomist API, called by the script
         method = kwargs.get("method", args[0] if args else None)
         fusion = _AnaObject("fusion")
         self.fusions.append((list(objects), method, fusion))
         return fusion
 
-    def createWindow(self, wtype, *args, **kwargs):  # noqa: N802 - mirrors the Anatomist API
+    def createWindow(self, wtype, *args, **kwargs):
         win = _AnaWindow(wtype)
         self.windows.append(win)
         return win
 
-    def linkWindows(self, windows, *args, **kwargs):  # noqa: N802, V105 - Anatomist API, called by the script
+    def linkWindows(self, windows, *args, **kwargs):  # noqa: V105 - Anatomist API, called by the script
         self.links.append(list(windows))
 
     def __getattr__(self, name):
@@ -676,7 +676,7 @@ def _run_viewer_script(monkeypatch, entries, app):
 
     code = 0
     try:
-        exec(compile(compare._VIEWER_SCRIPT, "<viewer>", "exec"), {"__name__": "__main__"})  # noqa: S102
+        exec(compile(compare._VIEWER_SCRIPT, "<viewer>", "exec"), {"__name__": "__main__"})
     except SystemExit as exc:
         code = exc.code
     return anatomist, code

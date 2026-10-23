@@ -62,7 +62,7 @@ def conf_namespace() -> dict:
     original_sys_path = list(sys.path)
     namespace: dict = {"__file__": str(CONF_PY), "__name__": "docs_conf"}
     try:
-        exec(compile(CONF_PY.read_text(), str(CONF_PY), "exec"), namespace)  # noqa: S102
+        exec(compile(CONF_PY.read_text(), str(CONF_PY), "exec"), namespace)
         namespace["_sys_path_after_exec"] = list(sys.path)
     finally:
         sys.path[:] = original_sys_path

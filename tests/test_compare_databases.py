@@ -72,7 +72,7 @@ class TestArgumentParsing:
 
 
 # ---------------------------------------------------------------------------
-# run()
+# Tests of run()
 # ---------------------------------------------------------------------------
 
 
@@ -192,7 +192,7 @@ class TestRun:
 
 
 # ---------------------------------------------------------------------------
-# main()
+# Tests of main()
 # ---------------------------------------------------------------------------
 
 
@@ -200,7 +200,7 @@ class TestMain:
     @pytest.mark.usefixtures("two_campaigns")
     def test_main_builds_and_runs(self, tmp_path, monkeypatch):
         out = tmp_path / "main.csv"
-        monkeypatch.setattr(sys, "argv", ["compare_databases.py"] + _base_argv(tmp_path, output=out))
+        monkeypatch.setattr(sys, "argv", ["compare_databases.py", *_base_argv(tmp_path, output=out)])
         monkeypatch.setattr("champollion_utils.script_builder.check_for_updates", lambda *a, **k: None, raising=False)
         assert compare_databases.main() == 0
         assert out.is_file()

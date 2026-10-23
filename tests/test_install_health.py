@@ -14,6 +14,7 @@ from __future__ import annotations
 
 import re
 from pathlib import Path
+from typing import ClassVar
 
 import pytest
 import tomllib
@@ -64,7 +65,7 @@ class TestInstallHealthExists:
 
 @pytest.mark.smoke
 class TestInstallHealthStdlibOnly:
-    ALLOWED_THIRD_PARTY = {"rich"}  # optional — must be guarded by try/except
+    ALLOWED_THIRD_PARTY: ClassVar[set[str]] = {"rich"}  # optional — must be guarded by try/except
 
     def _module_imports(self, source: str) -> list[str]:
         """Top-level import names (not from-imports of submodules)."""

@@ -167,7 +167,7 @@ class TestWizardPlansInitialiseSubmodules:
 
     @pytest.mark.parametrize(
         "location,use_case",
-        AFFECTED_PLANS + [("1", "1"), ("3", "5")],  # install-all paths: control
+        [*AFFECTED_PLANS, ("1", "1"), ("3", "5")],  # install-all paths: control
     )
     def test_plan_reaches_init_submodules(self, pixi_config, wizard, location, use_case):
         plan = wizard.build_plan(location=location, use_case=use_case, gpu=True)

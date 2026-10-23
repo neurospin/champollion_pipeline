@@ -27,6 +27,7 @@ import sys
 from collections.abc import Iterator
 from contextlib import contextmanager
 from pathlib import Path
+from typing import ClassVar
 
 from champollion_utils.update_check import check_for_updates
 
@@ -47,7 +48,7 @@ from champollion_pipeline.process_setup import init_pipeline_process
 from champollion_pipeline.put_together_embeddings import PutTogetherEmbeddings
 from champollion_pipeline.run_cortical_tiles import RunCorticalTiles
 
-# Add src to path for imports – still needed for the optional file_indexer.pipeline_checks
+# Add src to path for imports - still needed for the optional file_indexer.pipeline_checks
 # and parallel_runner imports below.
 pipeline_src = Path(__file__).parent / "src"
 sys.path.insert(0, str(pipeline_src))
@@ -134,7 +135,7 @@ class RunCorticalTilesStage(PipelineStage):
             args.append("--bids")
 
         if self.config.dataset.regions:
-            args.extend(["--regions"] + self.config.dataset.regions)
+            args.extend(["--regions", *self.config.dataset.regions])
         return args
 
     def create_script(self) -> RunCorticalTiles:
@@ -381,7 +382,7 @@ class PipelineOrchestrator:
     """Orchestrates the execution of pipeline stages."""
 
     # Stage registry mapping names to classes
-    STAGE_REGISTRY = {
+    STAGE_REGISTRY: ClassVar[dict[str, type[PipelineStage]]] = {
         "generate_morphologist_graphs": GenerateMorphologistGraphsStage,
         "run_cortical_tiles": RunCorticalTilesStage,
         "generate_champollion_config": GenerateChampollionConfigStage,

@@ -2,8 +2,9 @@ line-length = 120
 exclude = [".pixi", "__pycache__", "external", "*.pyc"]
 
 [lint]
-select = ["E", "F", "I", "PLC0415", "UP", "B", "SIM", "C90", "PLR0913", "PLR0915"]
-extend-ignore = ["E203"]
+select = ["E", "F", "I", "PLC0415", "UP", "B", "SIM", "C90", "PLR0913", "PLR0915", "RUF", "S202", "ERA001"]
+extend-ignore = ["E203", "RUF001", "RUF002"]
+external = ["V"]
 
 [lint.mccabe]
 max-complexity = 15

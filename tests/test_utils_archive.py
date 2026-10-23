@@ -2,8 +2,12 @@
 
 import ast
 import gzip
+import io
+import re
 import tarfile
 from pathlib import Path
+
+import pytest
 
 from champollion_pipeline.utils import archive
 
@@ -20,6 +24,27 @@ def make_tar(tmp_path, name="models.tar.gz", top="models"):
     with tarfile.open(path, mode) as tar:
         tar.add(payload / "weights.txt", arcname=f"{top}/weights.txt")
     return path
+
+
+def make_tar_of(tmp_path, *members):
+    """Create models.tar.gz holding a safe regular file, then *members* (TarInfo with optional bytes)."""
+    path = tmp_path / "models.tar.gz"
+    with tarfile.open(path, "w:gz") as tar:
+        for info, data in (("safe.txt", b"safe"), *members):
+            if isinstance(info, str):
+                info = tarfile.TarInfo(info)
+            if data is not None:
+                info.size = len(data)
+            tar.addfile(info, io.BytesIO(data) if data is not None else None)
+    return path
+
+
+def link_member(name, linkname, kind):
+    """A TarInfo for a symbolic (SYMTYPE) or hard (LNKTYPE) link named *name* pointing at *linkname*."""
+    info = tarfile.TarInfo(name)
+    info.type = kind
+    info.linkname = linkname
+    return info
 
 
 class TestExtractArchive:
@@ -57,6 +82,46 @@ class TestExtractArchive:
         result = archive.extract_archive(str(source), str(target), top_level=True)
         assert result == str(target / "weights.bin")
         assert (target / "weights.bin").read_bytes() == b"payload"
+
+    def test_symlink_inside_target_extracted(self, tmp_path):
+        target = tmp_path / "out"
+        target.mkdir()
+        path = make_tar_of(tmp_path, (link_member("models/latest", "../safe.txt", tarfile.SYMTYPE), None))
+        archive.extract_archive(str(path), str(target), top_level=False)
+        assert (target / "models" / "latest").is_symlink()
+        assert (target / "models" / "latest").read_text() == "safe"
+
+
+class TestExtractArchiveRefusesUnsafeMembers:
+    """REQ-LINTRULES-BDRABCZUK-EC8903097CAD, REQ-LINTRULES-BDRABCZUK-62726A5939EA."""
+
+    @staticmethod
+    def _assert_refused(tmp_path, path, member_name):
+        target = tmp_path / "out"
+        target.mkdir()
+        with pytest.raises(ValueError, match=re.escape(member_name)):
+            archive.extract_archive(str(path), str(target), top_level=False)
+        assert list(target.iterdir()) == [], "a member was extracted before the unsafe member was refused"
+
+    def test_parent_traversal_member_refused(self, tmp_path):
+        path = make_tar_of(tmp_path, ("../escape.txt", b"evil"))
+        self._assert_refused(tmp_path, path, "../escape.txt")
+        assert not (tmp_path / "escape.txt").exists()
+
+    def test_absolute_member_refused(self, tmp_path):
+        absolute = str(tmp_path / "absolute_escape.txt")
+        path = make_tar_of(tmp_path, (absolute, b"evil"))
+        self._assert_refused(tmp_path, path, absolute)
+        assert not (tmp_path / "absolute_escape.txt").exists()
+
+    def test_symlink_outside_target_refused(self, tmp_path):
+        path = make_tar_of(tmp_path, (link_member("models/escape", "../../outside", tarfile.SYMTYPE), None))
+        self._assert_refused(tmp_path, path, "models/escape")
+
+    def test_hardlink_outside_target_refused(self, tmp_path):
+        (tmp_path / "outside.txt").write_text("outside")
+        path = make_tar_of(tmp_path, (link_member("models/escape", "../outside.txt", tarfile.LNKTYPE), None))
+        self._assert_refused(tmp_path, path, "models/escape")
 
 
 class TestReuseCachedExtraction:

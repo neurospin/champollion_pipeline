@@ -55,7 +55,7 @@ def _resolve(expression, module_path):
         "_SCRIPT_DIR": dirname(str(module_path)),
     }
     try:
-        return abspath(eval(expression, namespace))  # noqa: S307 - test-only, inputs are our own sources
+        return abspath(eval(expression, namespace))
     except NameError:
         # Depends on a runtime value (an argparse result, a computed output
         # dir); not a statically-resolvable bundled path, so out of scope.

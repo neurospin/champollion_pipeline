@@ -157,8 +157,8 @@ from compare_sulcal.masks import (
 from compare_sulcal.viewer import _VIEWER_SCRIPT, _has_usable_display, visualise_mask_diffs
 
 __all__ = [
-    "Compare",
     "_VIEWER_SCRIPT",
+    "Compare",
     "_get_subject_voxel_counts",
     "_has_usable_display",
     "_mask_stats",

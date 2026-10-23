@@ -43,7 +43,7 @@ sys.path.insert(
     0,
     osp.abspath(osp.join(osp.dirname(__file__), "..", "external", "champollion_V1", "champollion", "utils")),
 )
-from put_together_embeddings_files import get_model_paths  # noqa: E402
+from put_together_embeddings_files import get_model_paths
 
 
 def _parse_region_hemi(dir_name):

@@ -20,6 +20,7 @@ loaded by file path under a private module name.
 
 import importlib.util
 import logging
+from itertools import pairwise
 from pathlib import Path
 from unittest.mock import MagicMock, patch
 
@@ -103,8 +104,7 @@ class TestGenerateEmbeddingsStageMasksVersion:
         config = _config(main_module, hf_enabled=True)
         argv = _embeddings_argv(main_module, config)
         assert f"--model-version={NON_DEFAULT_MASKS_VERSION}" in argv or any(
-            first == "--model-version" and second == NON_DEFAULT_MASKS_VERSION
-            for first, second in zip(argv, argv[1:], strict=False)
+            first == "--model-version" and second == NON_DEFAULT_MASKS_VERSION for first, second in pairwise(argv)
         ), f"argv does not pass --model-version {NON_DEFAULT_MASKS_VERSION}: {argv!r}"
         namespace = _parse(argv)
         assert namespace.model_version == NON_DEFAULT_MASKS_VERSION

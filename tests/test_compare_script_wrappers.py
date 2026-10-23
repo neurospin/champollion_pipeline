@@ -74,7 +74,7 @@ def compare_run_calls(monkeypatch):
 
 def _run_main(module, monkeypatch, script: str, argv: list) -> None:
     """Call module.main() as if `python src/<script>.py <argv>` had been typed."""
-    monkeypatch.setattr(sys, "argv", [str(_SRC_DIR / f"{script}.py")] + argv)
+    monkeypatch.setattr(sys, "argv", [str(_SRC_DIR / f"{script}.py"), *argv])
     with contextlib.suppress(SystemExit):
         module.main()
 

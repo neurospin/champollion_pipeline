@@ -36,18 +36,18 @@ from champollion_pipeline.snapshot_types.tiles import (
 from champollion_pipeline.snapshot_types.umap import discover_umap_pairs, generate_umap_snapshot
 
 __all__ = [
+    "ICBM_MESH_DIR_FALLBACK",
+    "REGION_GRAPH_ROOT_HINT",
     "GenerateSnapshots",
-    "main",
-    "list_acquisitions",
+    "discover_umap_pairs",
+    "find_completed_regions",
     "find_sulcal_graphs",
     "find_white_mesh",
-    "find_completed_regions",
-    "discover_umap_pairs",
     "generate_sulcal_graph_snapshot",
     "generate_tiles_snapshot",
     "generate_umap_snapshot",
-    "REGION_GRAPH_ROOT_HINT",
-    "ICBM_MESH_DIR_FALLBACK",
+    "list_acquisitions",
+    "main",
 ]
 
 
