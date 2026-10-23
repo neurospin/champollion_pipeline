@@ -1,5 +1,4 @@
 #!/usr/bin/env python3
-# -*- coding: utf-8 -*-
 """
 Script to define and generate Champollion's configuration.
 
@@ -107,7 +106,7 @@ class GenerateChampollionConfig(ScriptBuilder):
                     return shape[1], shape[2], shape[3]
         minf_path = join(crop_dir, "mask", f"{side}mask_cropped.nii.gz.minf")
         if exists(minf_path):
-            with open(minf_path, "r") as f:
+            with open(minf_path) as f:
                 raw = f.read().replace("attributes = ", "").replace("'", '"')
             info = json.loads(raw)
             return info["sizeX"], info["sizeY"], info["sizeZ"]
@@ -211,7 +210,7 @@ class GenerateChampollionConfig(ScriptBuilder):
         self.execute_command(["cp", reference_yaml_src, dataset_loc], shell=False)
 
         my_lines = []
-        with open(reference_yaml_dest, "r") as f:
+        with open(reference_yaml_dest) as f:
             for line in f.readlines():
                 if self.args.external_crops:
                     # External crops: derive the full relative path from crop_path
@@ -230,7 +229,7 @@ class GenerateChampollionConfig(ScriptBuilder):
 
         print(f"generate_champollion_config.py/champollion_loc: {champollion_loc}")
 
-        with open(reference_yaml_dest, "r") as f:
+        with open(reference_yaml_dest) as f:
             ref = f.read()
         self._create_dataset_configs(self.args.crop_path, dataset_loc, ref)
         result = 0

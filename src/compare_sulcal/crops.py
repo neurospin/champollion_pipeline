@@ -277,7 +277,7 @@ def _build_crop_alignment(
     if offset is None:
         return None, None
     union_shape, pos_a, pos_b = _compute_union_grid(shape_a, shape_b, offset)
-    lo: "tuple[int, int, int]" = tuple(-p for p in pos_a)
+    lo: tuple[int, int, int] = tuple(-p for p in pos_a)
     return {"pos_a": pos_a, "pos_b": pos_b, "union_shape": union_shape}, lo
 
 

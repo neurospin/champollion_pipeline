@@ -1,5 +1,4 @@
 #!/usr/bin/env python3
-# -*- coding: utf-8 -*-
 """Documentation guards for the versioned embeddings output layout (epic EMBVER).
 
 The code now writes the stage 4-6 outputs under a mask-version folder:

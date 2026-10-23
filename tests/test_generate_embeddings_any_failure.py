@@ -1,5 +1,4 @@
 #!/usr/bin/env python3
-# -*- coding: utf-8 -*-
 """
 Per-region failure handling of GenerateEmbeddings._run_per_region (TASK-089).
 

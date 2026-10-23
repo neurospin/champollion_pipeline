@@ -1,5 +1,4 @@
 #!/usr/bin/env python3
-# -*- coding: utf-8 -*-
 """
 Script to collect per-region full_embeddings.csv files into a single output folder.
 """

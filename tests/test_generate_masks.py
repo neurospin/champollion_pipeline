@@ -1,5 +1,4 @@
 #!/usr/bin/env python3
-# -*- coding: utf-8 -*-
 """
 Unit tests for generate_masks.py:
   - get_sulci_for_regions helper
@@ -338,14 +337,13 @@ class TestLoadAndExtractSubject:
     def test_missing_graph_file_returns_none(self, tmp_path):
         """No matching .arg file → returns (sub_name, None)."""
         modules, _, _, _ = _mock_aims_env()
-        with _patched_masks_module(modules):
-            with patch("glob.glob", return_value=[]):
-                name, data = _load_and_extract_subject(
-                    self._sub(tmp_path),
-                    set(),
-                    self.VT,
-                    "/fake_bv",
-                )
+        with _patched_masks_module(modules), patch("glob.glob", return_value=[]):
+            name, data = _load_and_extract_subject(
+                self._sub(tmp_path),
+                set(),
+                self.VT,
+                "/fake_bv",
+            )
         assert name == "sub01"
         assert data is None
 
@@ -354,14 +352,13 @@ class TestLoadAndExtractSubject:
         modules, mock_aims, _, _ = _mock_aims_env()
         self._mock_graph(mock_aims)
         graph_path = [str(tmp_path / "sub01.arg")]
-        with _patched_masks_module(modules):
-            with patch("glob.glob", return_value=graph_path):
-                name, data = _load_and_extract_subject(
-                    self._sub(tmp_path),
-                    {"S.C._left"},
-                    self.VT,
-                    "/fake_bv",
-                )
+        with _patched_masks_module(modules), patch("glob.glob", return_value=graph_path):
+            name, data = _load_and_extract_subject(
+                self._sub(tmp_path),
+                {"S.C._left"},
+                self.VT,
+                "/fake_bv",
+            )
         assert name == "sub01"
         assert isinstance(data, dict)
 
@@ -389,14 +386,13 @@ class TestLoadAndExtractSubject:
             vertices=[make_vertex("S.C._left"), make_vertex("OTHER._left")],
         )
         graph_path = [str(tmp_path / "sub01.arg")]
-        with _patched_masks_module(modules):
-            with patch("glob.glob", return_value=graph_path):
-                _, data = _load_and_extract_subject(
-                    self._sub(tmp_path),
-                    {"S.C._left"},
-                    self.VT,
-                    "/fake_bv",
-                )
+        with _patched_masks_module(modules), patch("glob.glob", return_value=graph_path):
+            _, data = _load_and_extract_subject(
+                self._sub(tmp_path),
+                {"S.C._left"},
+                self.VT,
+                "/fake_bv",
+            )
         assert "S.C._left" in data
         assert "OTHER._left" not in data
 
@@ -405,14 +401,13 @@ class TestLoadAndExtractSubject:
         modules, mock_aims, _, _ = _mock_aims_env()
         self._mock_graph(mock_aims)
         graph_path = [str(tmp_path / "sub01.arg")]
-        with _patched_masks_module(modules):
-            with patch("glob.glob", return_value=graph_path):
-                _, data = _load_and_extract_subject(
-                    self._sub(tmp_path),
-                    set(),
-                    self.VT,
-                    "/fake_bv",
-                )
+        with _patched_masks_module(modules), patch("glob.glob", return_value=graph_path):
+            _, data = _load_and_extract_subject(
+                self._sub(tmp_path),
+                set(),
+                self.VT,
+                "/fake_bv",
+            )
         assert data == {}
 
 

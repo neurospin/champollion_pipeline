@@ -1,5 +1,4 @@
 #!/usr/bin/env python3
-# -*- coding: utf-8 -*-
 """
 Unit tests for the champollion_pipeline package __init__.
 
@@ -95,7 +94,7 @@ class TestGuardedImports:
         reload_with_blocked_submodules(set(GUARDED_SUBMODULES))
         assert champollion_pipeline.__version__
 
-    @pytest.mark.parametrize("submodule,class_name", list(zip(GUARDED_SUBMODULES, EXPORTED_CLASSES)))
+    @pytest.mark.parametrize("submodule,class_name", list(zip(GUARDED_SUBMODULES, EXPORTED_CLASSES, strict=False)))
     @pytest.mark.usefixtures("restore_package")
     def test_single_failing_submodule_is_tolerated(self, submodule, class_name):
         reload_with_blocked_submodules({submodule})

@@ -1,5 +1,4 @@
 #!/usr/bin/env python3
-# -*- coding: utf-8 -*-
 """
 Tests that PutTogetherEmbeddingsStage writes the combined embeddings under a
 mask-version folder: --output_path is

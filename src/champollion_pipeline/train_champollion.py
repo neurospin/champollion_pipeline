@@ -1,5 +1,4 @@
 #!/usr/bin/env python3
-# -*- coding: utf-8 -*-
 """
 Wrapper script to train a champollion_V1 self-supervised encoder for a sulcal region.
 Invokes champollion/train.py via subprocess with Hydra overrides built from

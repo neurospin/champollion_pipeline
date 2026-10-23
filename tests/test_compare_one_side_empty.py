@@ -1,5 +1,4 @@
 #!/usr/bin/env python3
-# -*- coding: utf-8 -*-
 """
 Wasserstein behaviour of src/compare.py when exactly one mask of a pair is empty.
 

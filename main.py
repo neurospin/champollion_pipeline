@@ -1,5 +1,4 @@
 #!/usr/bin/env python3
-# -*- coding: utf-8 -*-
 """
 Champollion Pipeline Orchestrator
 
@@ -25,9 +24,9 @@ import logging
 import os
 import re
 import sys
+from collections.abc import Iterator
 from contextlib import contextmanager
 from pathlib import Path
-from typing import Dict, Iterator, List, Optional
 
 from champollion_utils.update_check import check_for_updates
 
@@ -59,7 +58,7 @@ except ImportError:
     SubjectEligibilityChecker = None
     build_output_report = None
 
-_PARALLEL_RUNNER_IMPORT_ERROR: Optional[str] = None
+_PARALLEL_RUNNER_IMPORT_ERROR: str | None = None
 try:
     from parallel_runner import run_parallel_pipeline
 except ImportError as e:
@@ -85,7 +84,7 @@ class GenerateMorphologistGraphsStage(PipelineStage):
             return False
         return True
 
-    def build_args(self) -> List[str]:
+    def build_args(self) -> list[str]:
         args = [
             str(self.config.dataset.input_path),
             str(self.config.dataset.morphologist_graphs),
@@ -115,7 +114,7 @@ class RunCorticalTilesStage(PipelineStage):
             return False
         return True
 
-    def build_args(self) -> List[str]:
+    def build_args(self) -> list[str]:
         args = [
             str(self.config.dataset.morphologist_graphs),
             str(self.config.dataset.cortical_tiles_output),
@@ -141,11 +140,11 @@ class RunCorticalTilesStage(PipelineStage):
     def create_script(self) -> RunCorticalTiles:
         return RunCorticalTiles()
 
-    def subject_input_dir(self) -> Optional[str]:
+    def subject_input_dir(self) -> str | None:
         d = self.config.dataset.morphologist_graphs
         return d if d and os.path.exists(d) else None
 
-    def required_file_patterns(self) -> List[str]:
+    def required_file_patterns(self) -> list[str]:
         side = "R"
         g = self.config.dataset.path_to_graph
         s = self.config.dataset.path_sk_with_hull
@@ -159,7 +158,7 @@ class RunCorticalTilesStage(PipelineStage):
             f"{s}/{side}*.nii.gz",
         ]
 
-    def output_dir(self) -> Optional[str]:
+    def output_dir(self) -> str | None:
         d = self.config.dataset.cortical_tiles_output
         return d if d else None
 
@@ -178,7 +177,7 @@ class GenerateChampollionConfigStage(PipelineStage):
             self.logger.warning(f"Crops path does not exist yet: {crops_path}")
         return True
 
-    def build_args(self) -> List[str]:
+    def build_args(self) -> list[str]:
         return [
             str(self.config.dataset.crops_path),
             f"--dataset={self.config.dataset.name}",
@@ -193,7 +192,7 @@ _HF_REPO_ID_REQUIRED = "hf_enabled requires dataset.hf_repo_id"
 
 
 @contextmanager
-def _scoped_env(name: str, value: Optional[str]) -> Iterator[None]:
+def _scoped_env(name: str, value: str | None) -> Iterator[None]:
     """Set env var *name* to *value* for the duration of the block, then restore.
 
     A no-op when *value* is falsy.
@@ -233,7 +232,7 @@ class GenerateEmbeddingsStage(PipelineStage):
             return False
         return True
 
-    def precheck(self) -> Optional[StageResult]:
+    def precheck(self) -> StageResult | None:
         dataset = self.config.dataset
         if dataset.hf_enabled and not dataset.hf_repo_id:
             return StageResult(
@@ -244,7 +243,7 @@ class GenerateEmbeddingsStage(PipelineStage):
             )
         return None
 
-    def build_args(self) -> List[str]:
+    def build_args(self) -> list[str]:
         dataset = self.config.dataset
         models_path = dataset.hf_repo_id if dataset.hf_enabled else str(self.config.models_path)
         args = [models_path, dataset.datasets_root, f"--masks={dataset.masks_version}"]
@@ -301,7 +300,7 @@ def _compute_snapshots_output_dir(dataset: DatasetConfig) -> str:
     return ""
 
 
-def _compute_embeddings_region_names(regions: List[str]) -> List[str]:
+def _compute_embeddings_region_names(regions: list[str]) -> list[str]:
     """Return both hemispheres' model names for each distinct region, in input order. O(n)."""
     distinct_regions = dict.fromkeys(regions)
     return [compute_region_model_name(region, hemisphere) for region in distinct_regions for hemisphere in HEMISPHERES]
@@ -322,7 +321,7 @@ class PutTogetherEmbeddingsStage(PipelineStage):
             return False
         return True
 
-    def build_args(self) -> List[str]:
+    def build_args(self) -> list[str]:
         dataset = self.config.dataset
         output_path = (
             Path(compute_combined_embeddings_dir(dataset.datasets_root, dataset.masks_version))
@@ -353,7 +352,7 @@ class GenerateSnapshotsStage(PipelineStage):
             return False
         return True
 
-    def build_args(self) -> List[str]:
+    def build_args(self) -> list[str]:
         dataset = self.config.dataset
         args = [f"--output_dir={_compute_snapshots_output_dir(dataset)}"]
         if dataset.datasets_root:
@@ -394,7 +393,7 @@ class PipelineOrchestrator:
     def __init__(self, config: PipelineConfig):
         self.config = config
         self.logger = self._setup_logger()
-        self.stages: Dict[str, PipelineStage] = {}
+        self.stages: dict[str, PipelineStage] = {}
         self._register_stages()
 
     def _setup_logger(self) -> logging.Logger:
@@ -422,7 +421,7 @@ class PipelineOrchestrator:
         for stage_name, stage_class in self.STAGE_REGISTRY.items():
             self.stages[stage_name] = stage_class(name=stage_name, config=self.config, logger=self.logger)
 
-    def _get_enabled_stages(self) -> List[str]:
+    def _get_enabled_stages(self) -> list[str]:
         """Get list of enabled stages in dependency order."""
         enabled = [name for name, enabled in self.config.stages.items() if enabled]
 
@@ -447,7 +446,7 @@ class PipelineOrchestrator:
 
         return sorted_stages
 
-    def _check_dependencies(self, stage_name: str, completed: List[str]) -> bool:
+    def _check_dependencies(self, stage_name: str, completed: list[str]) -> bool:
         """Check if stage dependencies are satisfied."""
         depends_on = self.config.dependencies.get(stage_name, [])
 

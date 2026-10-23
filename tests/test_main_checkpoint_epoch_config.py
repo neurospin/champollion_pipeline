@@ -1,5 +1,4 @@
 #!/usr/bin/env python3
-# -*- coding: utf-8 -*-
 """
 Tests for the dataset.checkpoint_epoch setting of the main.py pipeline config,
 which replaces dataset.use_last_checkpoint (TASK-EPOCH80-BDRABCZUK-28E2E3809251).
@@ -63,7 +62,7 @@ def _write_yaml(tmp_path: Path, name: str, dataset: dict) -> str:
 def _saved_dataset_mapping(main_module, tmp_path: Path, config) -> dict:
     output = tmp_path / "saved.yaml"
     main_module.ConfigLoader.save_to_yaml(config, str(output))
-    with open(output, "r") as f:
+    with open(output) as f:
         return yaml.safe_load(f)["dataset"]
 
 

@@ -1,5 +1,4 @@
 #!/usr/bin/env python3
-# -*- coding: utf-8 -*-
 """
 Tests for main.py's run log of each in-process pipeline stage (TASK-RUNLOG-BDRABCZUK-C76B691F9497).
 

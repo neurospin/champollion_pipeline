@@ -1,5 +1,4 @@
 #!/usr/bin/env python3
-# -*- coding: utf-8 -*-
 """
 Unit tests for the rendering helpers and run-step dispatch of
 generate_snapshots.py.

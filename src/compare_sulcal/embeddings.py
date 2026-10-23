@@ -1,5 +1,6 @@
 """Embedding comparison (CKA, k-NN overlap, Procrustes, UMAP) of the compare embeddings mode."""
 
+import contextlib
 import csv
 import math
 import warnings
@@ -225,10 +226,10 @@ def _compute_umap_projection(
 
 def _compute_spearman(x: list, y: list) -> "float | None":
     """Spearman r of finite pairs; None if fewer than _MIN_SPEARMAN_PAIRS pairs."""
-    pairs = [(xi, yi) for xi, yi in zip(x, y) if math.isfinite(xi) and math.isfinite(yi)]
+    pairs = [(xi, yi) for xi, yi in zip(x, y, strict=False) if math.isfinite(xi) and math.isfinite(yi)]
     if len(pairs) < _MIN_SPEARMAN_PAIRS:
         return None
-    xs, ys = zip(*pairs)
+    xs, ys = zip(*pairs, strict=False)
     with warnings.catch_warnings():
         warnings.simplefilter("ignore")
         stat = spearmanr(xs, ys).statistic
@@ -260,10 +261,8 @@ def _load_covariate_csv(path: str, column: str) -> "dict[str, float] | str":
                 val = row[column]
                 if val is None or val.strip() == "":
                     continue
-                try:
+                with contextlib.suppress(ValueError, TypeError):
                     result[subject] = float(val)
-                except (ValueError, TypeError):
-                    pass
     except OSError as exc:
         return str(exc)
     return result
@@ -333,7 +332,7 @@ def _save_umap_comparison_png(
         colors_valid = np.array([v if v is not None else float("nan") for v in covariate_values])
         has_cov = np.array([v is not None for v in covariate_values])
         for ax, coords, title in zip(
-            axes, [umap_a, umap_b], ["set A (--umap_a)", "set B (--umap_b), Procrustes-aligned to A"]
+            axes, [umap_a, umap_b], ["set A (--umap_a)", "set B (--umap_b), Procrustes-aligned to A"], strict=False
         ):
             if has_cov.any():
                 sc = ax.scatter(
@@ -361,7 +360,7 @@ def _save_umap_comparison_png(
             fig.colorbar(sc, ax=axes.tolist(), label=column or "covariate")
     else:
         for ax, coords, title in zip(
-            axes, [umap_a, umap_b], ["set A (--umap_a)", "set B (--umap_b), Procrustes-aligned to A"]
+            axes, [umap_a, umap_b], ["set A (--umap_a)", "set B (--umap_b), Procrustes-aligned to A"], strict=False
         ):
             ax.scatter(coords[:, 0], coords[:, 1], s=8, rasterized=True)
             ax.set_xlim(x_lim)
@@ -461,12 +460,12 @@ def _compare_embeddings_region_side(
             umap_coords = proj  # (umap_a, umap_b_aligned)
 
     # ── Covariate ─────────────────────────────────────────────────────────
-    covariate_map: "dict | None" = options.get("covariate")
+    covariate_map: dict | None = options.get("covariate")
     covariate_mode = covariate_map is not None
 
     # ── Build rows ────────────────────────────────────────────────────────
     rows: list[dict] = []
-    for n, (subject, knn_val) in enumerate(zip(paired_subjects, knn)):
+    for n, (subject, knn_val) in enumerate(zip(paired_subjects, knn, strict=False)):
         row: dict = {"region": region, "side": side, "subject": subject, "knn_overlap": repr(float(knn_val))}
         if umap_mode:
             if umap_coords is not None:

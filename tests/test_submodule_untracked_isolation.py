@@ -1,5 +1,4 @@
 #!/usr/bin/env python3
-# -*- coding: utf-8 -*-
 """
 REQ-TESTISOL-02: the submodule-isolation guard
 (tests/test_submodule_checkout_isolation.py) must fail when its child test

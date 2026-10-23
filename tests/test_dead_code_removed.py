@@ -1,5 +1,4 @@
 #!/usr/bin/env python3
-# -*- coding: utf-8 -*-
 """
 Guards the removal of dead code confirmed by the 2026-09-30 vulture scan.
 

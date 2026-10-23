@@ -1,5 +1,4 @@
 #!/usr/bin/env python3
-# -*- coding: utf-8 -*-
 """
 Tests that main.py's RunCorticalTilesStage forwards dataset.masks_version to
 run_cortical_tiles as its --masks option (epic "Versioned embeddings output

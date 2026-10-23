@@ -1,5 +1,4 @@
 #!/usr/bin/env python3
-# -*- coding: utf-8 -*-
 """Documentation guards for the configurable checkpoint epoch (epic WIPMERGE, task EPOCH80 docs).
 
 Behaviour documented (read from the code, branch at 5339fbb):

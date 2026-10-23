@@ -19,7 +19,7 @@ class CorticalTilesConfigFactory:
     def from_pipeline_json(cls, path: str) -> "CorticalTilesConfig | None":
         if not os.path.exists(path):
             return None
-        with open(path, "r") as f:
+        with open(path) as f:
             config = json.load(f)
         masks_version = config.get("masks_version", "canonical_25")
         return CorticalTilesConfig(masks_version=masks_version, out_voxel_size=2.0)

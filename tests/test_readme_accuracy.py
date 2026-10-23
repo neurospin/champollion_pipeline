@@ -1,5 +1,4 @@
 #!/usr/bin/env python3
-# -*- coding: utf-8 -*-
 """README accuracy guards for REQ-DOCS-05, REQ-DOCS-06, REQ-DOCS-09,
 REQ-DOCS-10, REQ-DOCS-11, and REQ-DOCS-12.
 

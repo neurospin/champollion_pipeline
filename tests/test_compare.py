@@ -1,5 +1,4 @@
 #!/usr/bin/env python3
-# -*- coding: utf-8 -*-
 """
 Unit tests for src/compare.py (unified masks / cortical_tiles / databases tool).
 
@@ -211,7 +210,7 @@ class TestVisualiseMaskDiffs:
         names = [f"m{i}.nii.gz" for i in range(7)]
         objects = {}
         masks_a, masks_b = {}, {}
-        for i, name in enumerate(names):
+        for _i, name in enumerate(names):
             pa, pb = f"/a/{name}", f"/b/{name}"
             objects[pa] = _FakeVolume(_point_volume((0, 0, 0)))
             objects[pb] = _FakeVolume(_point_volume((1, 0, 0)))

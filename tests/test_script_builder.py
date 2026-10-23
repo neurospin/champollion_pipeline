@@ -1,5 +1,4 @@
 #!/usr/bin/env python3
-# -*- coding: utf-8 -*-
 """
 Unit tests for the ScriptBuilder base class.
 """
@@ -320,28 +319,32 @@ class TestScriptBuilderMain:
         script = ConcreteScriptBuilder()
         script.add_argument("input", help="Input")
 
-        with patch.object(script, "build", return_value=script) as mock_build:
-            with patch.object(script, "print_args", return_value=script) as mock_print:
-                with patch.object(script, "run", return_value=0) as mock_run:
-                    with patch("sys.argv", ["script", "test_input"]):
-                        result = script.main()
+        with (
+            patch.object(script, "build", return_value=script) as mock_build,
+            patch.object(script, "print_args", return_value=script) as mock_print,
+            patch.object(script, "run", return_value=0) as mock_run,
+            patch("sys.argv", ["script", "test_input"]),
+        ):
+            result = script.main()
 
-                        mock_build.assert_called_once()
-                        mock_print.assert_called_once()
-                        mock_run.assert_called_once()
-                        assert result == 0
+            mock_build.assert_called_once()
+            mock_print.assert_called_once()
+            mock_run.assert_called_once()
+            assert result == 0
 
     def test_main_returns_run_result(self):
         """Test that main returns the result from run."""
         script = ConcreteScriptBuilder()
         script.add_argument("input", help="Input")
 
-        with patch.object(script, "build", return_value=script):
-            with patch.object(script, "print_args", return_value=script):
-                with patch.object(script, "run", return_value=42):
-                    with patch("sys.argv", ["script", "test_input"]):
-                        result = script.main()
-                        assert result == 42
+        with (
+            patch.object(script, "build", return_value=script),
+            patch.object(script, "print_args", return_value=script),
+            patch.object(script, "run", return_value=42),
+            patch("sys.argv", ["script", "test_input"]),
+        ):
+            result = script.main()
+            assert result == 42
 
 
 @pytest.mark.unit

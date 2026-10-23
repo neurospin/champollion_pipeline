@@ -1,5 +1,4 @@
 #!/usr/bin/env python3
-# -*- coding: utf-8 -*-
 """
 Tests that main.py's GenerateChampollionConfigStage hands dataset.masks_version
 to generate_champollion_config as its --masks argument (epic "Versioned

@@ -1,5 +1,4 @@
 #!/usr/bin/env python3
-# -*- coding: utf-8 -*-
 """
 Tests for main.py's default dataset root (REQ-DEFROOT-01) and the absence of
 any champollion_V1 ``contrastive`` directory remnant in main.py (REQ-DEFROOT-02).

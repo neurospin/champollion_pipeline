@@ -1,5 +1,4 @@
 #!/usr/bin/env python3
-# -*- coding: utf-8 -*-
 """
 Guard: pipeline tests must not write into the external/ submodule checkouts
 (REQ-TESTISOL-01, REQ-TESTISOL-02).

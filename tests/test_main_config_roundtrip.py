@@ -1,5 +1,4 @@
 #!/usr/bin/env python3
-# -*- coding: utf-8 -*-
 """
 Tests for ConfigLoader.save_to_yaml / load_from_yaml round-tripping the
 pipeline configuration (REQ-CFGSAVE-01, REQ-CFGSAVE-02).
@@ -71,7 +70,7 @@ class TestConfigSaveLoadRoundTrip:
         """
         output = tmp_path / "saved.yaml"
         main_module.ConfigLoader.save_to_yaml(main_module.PipelineConfig(), str(output))
-        with open(output, "r") as f:
+        with open(output) as f:
             written = yaml.safe_load(f)
 
         pipeline_fields = {f.name for f in dataclasses.fields(main_module.PipelineConfig)}
@@ -98,7 +97,7 @@ class TestGenerateConfigWorkerSettings:
         )
 
         assert main_module.main() == 0
-        with open(output, "r") as f:
+        with open(output) as f:
             written = yaml.safe_load(f)
 
         assert (written.get("n_workers"), written.get("worker_timeout")) == (7, 99), (

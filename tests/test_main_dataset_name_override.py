@@ -1,5 +1,4 @@
 #!/usr/bin/env python3
-# -*- coding: utf-8 -*-
 """
 Tests for how main() applies ``--dataset-name`` to ``dataset.datasets_root``
 (REQ-DEFROOT-03) without rewriting an explicit ``--config`` YAML value

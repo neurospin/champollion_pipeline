@@ -1,5 +1,4 @@
 #!/usr/bin/env python3
-# -*- coding: utf-8 -*-
 """
 Guards the *package name* the pipeline source imports from the
 ``external/cortical_tiles`` submodule.

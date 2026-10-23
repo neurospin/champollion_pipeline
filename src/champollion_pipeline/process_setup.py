@@ -7,6 +7,7 @@ removes the plain StreamHandler they added, then installs the unified
 champollion_utils handlers and crash hook.
 """
 
+import contextlib
 import importlib
 import logging
 
@@ -29,11 +30,9 @@ def detach_frozen_root_handlers() -> list[logging.Handler]:
         The handlers removed from the root logger.
     """
     for module in FROZEN_LOGGING_MODULES:
-        try:
+        # Not installed in this pixi environment (e.g. no V1 in brainvisa).
+        with contextlib.suppress(ImportError):
             importlib.import_module(module)
-        except ImportError:
-            # Not installed in this pixi environment (e.g. no V1 in brainvisa).
-            pass
     root = logging.getLogger()
     removed = [h for h in root.handlers if type(h) is logging.StreamHandler]
     for handler in removed:

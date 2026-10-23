@@ -1,5 +1,4 @@
 #!/usr/bin/env python3
-# -*- coding: utf-8 -*-
 """
 ``compare.py crops``: per-subject comparison of two cortical_tiles crop sets.
 
@@ -404,7 +403,7 @@ _ALIGN_SHAPE_A = (6, 6, 6)
 _ALIGN_SHAPE_B = (4, 3, 2)
 _ALIGN_T_A = (6.0, -22.0, 84.0)
 _ALIGN_OFFSET = [1, 1, 4]
-_ALIGN_T_B = tuple(t - _VS * o for t, o in zip(_ALIGN_T_A, _ALIGN_OFFSET))  # (4,-24,76)
+_ALIGN_T_B = tuple(t - _VS * o for t, o in zip(_ALIGN_T_A, _ALIGN_OFFSET, strict=False))  # (4,-24,76)
 
 
 @pytest.fixture

@@ -1,5 +1,4 @@
 #!/usr/bin/env python3
-# -*- coding: utf-8 -*-
 """
 Behaviour of src/compare.py when PyAIMS (``soma.aims``) is not installed.
 

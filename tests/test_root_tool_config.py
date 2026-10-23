@@ -1,5 +1,4 @@
 #!/usr/bin/env python3
-# -*- coding: utf-8 -*-
 """
 Root-level tool configuration: a bare ``pytest`` or a bare ``vulture`` run from
 the repository root must behave like the pixi tasks that pass explicit paths.

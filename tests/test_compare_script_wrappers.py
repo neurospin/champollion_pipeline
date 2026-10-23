@@ -1,5 +1,4 @@
 #!/usr/bin/env python3
-# -*- coding: utf-8 -*-
 """
 The stand-alone compare scripts are thin wrappers over src/compare.py.
 
@@ -22,6 +21,7 @@ import outside BrainVISA. Task: TASK-TASK-BDRABCZUK-8D3C019A018B.
 """
 
 import ast
+import contextlib
 import subprocess
 import sys
 import textwrap
@@ -75,10 +75,8 @@ def compare_run_calls(monkeypatch):
 def _run_main(module, monkeypatch, script: str, argv: list) -> None:
     """Call module.main() as if `python src/<script>.py <argv>` had been typed."""
     monkeypatch.setattr(sys, "argv", [str(_SRC_DIR / f"{script}.py")] + argv)
-    try:
+    with contextlib.suppress(SystemExit):
         module.main()
-    except SystemExit:
-        pass
 
 
 def _set_dirs(tmp_path: Path) -> tuple:

@@ -1,5 +1,4 @@
 #!/usr/bin/env python3
-# -*- coding: utf-8 -*-
 """
 Tests for how main() applies CLI overrides to the YAML written by
 ``--generate-config`` (REQ-GENCFG-01, REQ-GENCFG-02).
@@ -43,7 +42,7 @@ def generate_config(main_module, monkeypatch, tmp_path):
         output = tmp_path / "out.yaml"
         monkeypatch.setattr("sys.argv", ["main.py", "--generate-config", str(output), *cli_args])
         assert main_module.main() == 0
-        with open(output, "r") as f:
+        with open(output) as f:
             return yaml.safe_load(f)
 
     return _run

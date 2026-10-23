@@ -1,5 +1,4 @@
 #!/usr/bin/env python3
-# -*- coding: utf-8 -*-
 """
 Tests that main.py never persists the HuggingFace token to disk
 (REQ-HFTOKEN-01), still loads legacy config YAMLs that carry one

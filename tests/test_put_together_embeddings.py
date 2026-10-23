@@ -1,5 +1,4 @@
 #!/usr/bin/env python3
-# -*- coding: utf-8 -*-
 """Unit tests for put_together_embeddings.py"""
 
 from unittest.mock import patch

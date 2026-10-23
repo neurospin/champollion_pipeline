@@ -1,5 +1,4 @@
 #!/usr/bin/env python3
-# -*- coding: utf-8 -*-
 """
 Tests that main.py's orchestrator stages hand their target script an argument
 list that script's own parser accepts (REQ-STAGEARGV-01 .. REQ-STAGEARGV-07), and that

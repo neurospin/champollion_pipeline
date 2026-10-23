@@ -1,5 +1,4 @@
 #!/usr/bin/env python3
-# -*- coding: utf-8 -*-
 """
 Tests that GenerateSnapshotsStage reads and writes under a mask-version folder:
 

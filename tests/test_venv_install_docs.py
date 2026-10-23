@@ -1,5 +1,4 @@
 #!/usr/bin/env python3
-# -*- coding: utf-8 -*-
 """Tests for REQ-INSTALL-02 — virtual-environment installation documentation.
 
 Run with: pixi run test-specific tests/test_venv_install_docs.py

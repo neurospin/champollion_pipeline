@@ -1,5 +1,4 @@
 #!/usr/bin/env python3
-# -*- coding: utf-8 -*-
 """
 Upload trained Champollion models to a HuggingFace repository.
 

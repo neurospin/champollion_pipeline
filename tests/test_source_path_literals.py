@@ -1,5 +1,4 @@
 #!/usr/bin/env python3
-# -*- coding: utf-8 -*-
 """
 Guards ``__file__``-relative path literals in the pipeline *source* tree.
 

@@ -1,5 +1,4 @@
 #!/usr/bin/env python3
-# -*- coding: utf-8 -*-
 """
 Where GenerateEmbeddings.fetch_models caches downloaded/extracted models.
 

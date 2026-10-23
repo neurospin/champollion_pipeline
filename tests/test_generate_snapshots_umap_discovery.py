@@ -1,5 +1,4 @@
 #!/usr/bin/env python3
-# -*- coding: utf-8 -*-
 """Filename contract between the combine stage and UMAP snapshot discovery.
 
 TASK-200: put_together_embeddings writes ``{region}_{hemi}_embeddings.csv``

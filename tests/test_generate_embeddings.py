@@ -1,5 +1,4 @@
 #!/usr/bin/env python3
-# -*- coding: utf-8 -*-
 """
 Unit tests for generate_embeddings.py
 """
@@ -344,9 +343,11 @@ class TestRunMethod:
         script = GenerateEmbeddings()
         script.parse_args([str(tmp_path), str(tmp_path)])
 
-        with patch.object(script, "fetch_models", return_value=str(tmp_path)):
-            with patch.object(script, "_run_per_region", return_value=0) as mock_per:
-                script.run()
+        with (
+            patch.object(script, "fetch_models", return_value=str(tmp_path)),
+            patch.object(script, "_run_per_region", return_value=0) as mock_per,
+        ):
+            script.run()
         mock_per.assert_called_once()
 
     def test_run_returns_result(self, tmp_path):
@@ -356,9 +357,11 @@ class TestRunMethod:
         script = GenerateEmbeddings()
         script.parse_args([str(tmp_path), str(tmp_path)])
 
-        with patch.object(script, "fetch_models", return_value=str(tmp_path)):
-            with patch.object(script, "_run_per_region", return_value=99):
-                result = script.run()
+        with (
+            patch.object(script, "fetch_models", return_value=str(tmp_path)),
+            patch.object(script, "_run_per_region", return_value=99),
+        ):
+            result = script.run()
         assert result == 99
 
 
@@ -375,9 +378,11 @@ class TestLegacyCropsPath:
         script = GenerateEmbeddings()
         script.parse_args([str(models_dir), str(datasets_root), *extra_args])
 
-        with patch.object(script, "fetch_models", return_value=str(models_dir)):
-            with patch.object(script, "_run_per_region", return_value=0) as mock_per:
-                script.run()
+        with (
+            patch.object(script, "fetch_models", return_value=str(models_dir)),
+            patch.object(script, "_run_per_region", return_value=0) as mock_per,
+        ):
+            script.run()
         mock_per.assert_called_once()
         return mock_per.call_args.args[1], str(datasets_root)
 
@@ -407,9 +412,11 @@ class TestGenerateEmbeddingsIntegration:
         script = GenerateEmbeddings()
         script.parse_args([str(tmp_path), str(tmp_path), "--overwrite"])
 
-        with patch.object(script, "fetch_models", return_value=str(tmp_path)):
-            with patch.object(script, "_run_per_region", return_value=0) as mock_run:
-                result = script.run()
+        with (
+            patch.object(script, "fetch_models", return_value=str(tmp_path)),
+            patch.object(script, "_run_per_region", return_value=0) as mock_run,
+        ):
+            result = script.run()
 
         assert result == 0
         mock_run.assert_called_once()
@@ -564,9 +571,11 @@ class TestRegionsFilter:
             snapshot["is_symlink"] = os.path.islink(os.path.join(script.args.models_path, "SC-sylv_left"))
             return 0
 
-        with patch.object(script, "fetch_models", return_value=str(tmp_path)):
-            with patch.object(script, "_run_per_region", side_effect=fake_per_region):
-                script.run()
+        with (
+            patch.object(script, "fetch_models", return_value=str(tmp_path)),
+            patch.object(script, "_run_per_region", side_effect=fake_per_region),
+        ):
+            script.run()
 
         assert snapshot["path"] != str(tmp_path), "should use a tmpdir, not the original path"
         assert snapshot["entries"] == ["SC-sylv_left"], "only requested region should appear"
@@ -588,11 +597,13 @@ class TestRegionsFilter:
             created_tmpdirs.append(d)
             return d
 
-        with patch.object(script, "fetch_models", return_value=str(tmp_path)):
-            with patch.object(script, "_make_regions_tmpdir", side_effect=tracking_make):
-                with patch.object(script, "_run_per_region", side_effect=RuntimeError("boom")):
-                    with pytest.raises(RuntimeError):
-                        script.run()
+        with (
+            patch.object(script, "fetch_models", return_value=str(tmp_path)),
+            patch.object(script, "_make_regions_tmpdir", side_effect=tracking_make),
+            patch.object(script, "_run_per_region", side_effect=RuntimeError("boom")),
+            pytest.raises(RuntimeError),
+        ):
+            script.run()
 
         assert len(created_tmpdirs) == 1
         assert not os.path.exists(created_tmpdirs[0]), "tmpdir must be cleaned up even on error"
@@ -601,11 +612,13 @@ class TestRegionsFilter:
         script = GenerateEmbeddings()
         script.parse_args([temp_dir, temp_dir])
 
-        with patch.object(script, "fetch_models", return_value=temp_dir):
-            with patch.object(script, "_run_per_region", return_value=0):
-                with patch.object(script, "_make_regions_tmpdir") as mock_make:
-                    script.run()
-                    mock_make.assert_not_called()
+        with (
+            patch.object(script, "fetch_models", return_value=temp_dir),
+            patch.object(script, "_run_per_region", return_value=0),
+            patch.object(script, "_make_regions_tmpdir") as mock_make,
+        ):
+            script.run()
+            mock_make.assert_not_called()
 
 
 class TestProfiling:
@@ -615,30 +628,36 @@ class TestProfiling:
         script = GenerateEmbeddings()
         script.parse_args([temp_dir, temp_dir, "--profiling"])
 
-        with patch.object(script, "_validate_inputs"):
-            with patch.object(script, "_run_with_profiling", return_value=0) as mock_prof:
-                script.run()
-                mock_prof.assert_called_once()
+        with (
+            patch.object(script, "_validate_inputs"),
+            patch.object(script, "_run_with_profiling", return_value=0) as mock_prof,
+        ):
+            script.run()
+            mock_prof.assert_called_once()
 
     def test_run_dispatches_to_normal_without_profiling_flag(self, temp_dir):
         script = GenerateEmbeddings()
         script.parse_args([temp_dir, temp_dir])
 
-        with patch.object(script, "_validate_inputs"):
-            with patch.object(script, "_run_normal", return_value=0) as mock_normal:
-                script.run()
-                mock_normal.assert_called_once()
+        with (
+            patch.object(script, "_validate_inputs"),
+            patch.object(script, "_run_normal", return_value=0) as mock_normal,
+        ):
+            script.run()
+            mock_normal.assert_called_once()
 
     def test_run_with_profiling_calls_run_normal(self, temp_dir):
         script = GenerateEmbeddings()
         script.parse_args([temp_dir, temp_dir, "--profiling"])
 
-        with patch("champollion_pipeline.generate_embeddings.cProfile.Profile"):
-            with patch("champollion_pipeline.generate_embeddings.pstats.Stats", return_value=MagicMock()):
-                with patch.object(script, "_run_normal", return_value=42) as mock_normal:
-                    result = script._run_with_profiling()
-                    mock_normal.assert_called_once()
-                    assert result == 42
+        with (
+            patch("champollion_pipeline.generate_embeddings.cProfile.Profile"),
+            patch("champollion_pipeline.generate_embeddings.pstats.Stats", return_value=MagicMock()),
+            patch.object(script, "_run_normal", return_value=42) as mock_normal,
+        ):
+            result = script._run_with_profiling()
+            mock_normal.assert_called_once()
+            assert result == 42
 
     def test_run_with_profiling_dumps_profile_file(self, temp_dir):
         script = GenerateEmbeddings()
@@ -646,11 +665,13 @@ class TestProfiling:
 
         mock_stats = MagicMock()
 
-        with patch("champollion_pipeline.generate_embeddings.cProfile.Profile"):
-            with patch("champollion_pipeline.generate_embeddings.pstats.Stats", return_value=mock_stats):
-                with patch.object(script, "_run_normal", return_value=0):
-                    script._run_with_profiling()
-                    mock_stats.dump_stats.assert_called_once_with("embeddings_profile.prof")
+        with (
+            patch("champollion_pipeline.generate_embeddings.cProfile.Profile"),
+            patch("champollion_pipeline.generate_embeddings.pstats.Stats", return_value=mock_stats),
+            patch.object(script, "_run_normal", return_value=0),
+        ):
+            script._run_with_profiling()
+            mock_stats.dump_stats.assert_called_once_with("embeddings_profile.prof")
 
     def test_run_with_profiling_dumps_on_error(self, temp_dir):
         script = GenerateEmbeddings()
@@ -658,12 +679,14 @@ class TestProfiling:
 
         mock_stats = MagicMock()
 
-        with patch("champollion_pipeline.generate_embeddings.cProfile.Profile"):
-            with patch("champollion_pipeline.generate_embeddings.pstats.Stats", return_value=mock_stats):
-                with patch.object(script, "_run_normal", side_effect=RuntimeError("boom")):
-                    with pytest.raises(RuntimeError):
-                        script._run_with_profiling()
-                    mock_stats.dump_stats.assert_called_once_with("embeddings_profile.prof")
+        with (
+            patch("champollion_pipeline.generate_embeddings.cProfile.Profile"),
+            patch("champollion_pipeline.generate_embeddings.pstats.Stats", return_value=mock_stats),
+            patch.object(script, "_run_normal", side_effect=RuntimeError("boom")),
+        ):
+            with pytest.raises(RuntimeError):
+                script._run_with_profiling()
+            mock_stats.dump_stats.assert_called_once_with("embeddings_profile.prof")
 
 
 @pytest.mark.smoke
@@ -832,9 +855,11 @@ class TestPerRegionSubjectsFile:
             executed.append(cmd)
             return 0
 
-        with patch.object(script, "fetch_models", return_value=str(models_dir)):
-            with patch.object(script, "execute_command", side_effect=fake_execute):
-                script.run()
+        with (
+            patch.object(script, "fetch_models", return_value=str(models_dir)),
+            patch.object(script, "execute_command", side_effect=fake_execute),
+        ):
+            script.run()
 
         cmds = {os.path.basename(cmd[cmd.index("-m") + 1]): cmd for cmd in executed}
         assert set(cmds) == set(self.MODEL_NAMES), f"expected one evaluate.py call per region, got {sorted(cmds)}"

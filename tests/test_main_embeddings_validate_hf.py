@@ -1,5 +1,4 @@
 #!/usr/bin/env python3
-# -*- coding: utf-8 -*-
 """
 Tests that main.py's embeddings stage validates HuggingFace mode on
 dataset.hf_repo_id rather than on a local config.models_path

@@ -1,5 +1,4 @@
 #!/usr/bin/env python3
-# -*- coding: utf-8 -*-
 """
 CSV output reporting of the src/compare.py databases subcommand.
 

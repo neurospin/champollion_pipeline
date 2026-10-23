@@ -1,5 +1,4 @@
 #!/usr/bin/env python3
-# -*- coding: utf-8 -*-
 """
 Unit tests for the model-fetch strategies and pipeline internals of
 generate_embeddings.py.
@@ -229,14 +228,18 @@ class TestHuggingFaceStrategy:
         assert os.environ["SSL_CERT_FILE"] == "/my/bundle.pem"
 
     def test_missing_huggingface_hub_raises_import_error(self, tmp_path):
-        with patch.object(models_fetch, "huggingface_hub", None):
-            with pytest.raises(ImportError, match="huggingface_hub is required"):
-                HuggingFaceStrategy().fetch("neurospin/X", str(tmp_path))
+        with (
+            patch.object(models_fetch, "huggingface_hub", None),
+            pytest.raises(ImportError, match="huggingface_hub is required"),
+        ):
+            HuggingFaceStrategy().fetch("neurospin/X", str(tmp_path))
 
     def test_download_failure_is_wrapped_in_runtime_error(self, tmp_path):
-        with patch("huggingface_hub.snapshot_download", side_effect=ValueError("403")):
-            with pytest.raises(RuntimeError, match="Failed to download from Hugging Face"):
-                HuggingFaceStrategy().fetch("neurospin/X", str(tmp_path))
+        with (
+            patch("huggingface_hub.snapshot_download", side_effect=ValueError("403")),
+            pytest.raises(RuntimeError, match="Failed to download from Hugging Face"),
+        ):
+            HuggingFaceStrategy().fetch("neurospin/X", str(tmp_path))
 
 
 class TestRemoteArchiveStrategy:
@@ -292,9 +295,11 @@ class TestRemoteArchiveStrategy:
         assert "Removing existing cache" in capsys.readouterr().out
 
     def test_download_failure_is_wrapped_in_runtime_error(self, tmp_path):
-        with patch("urllib.request.urlretrieve", side_effect=OSError("no route to host")):
-            with pytest.raises(RuntimeError, match="Failed to download or extract archive"):
-                RemoteArchiveStrategy().fetch("https://example.com/models.tar.gz", str(tmp_path))
+        with (
+            patch("urllib.request.urlretrieve", side_effect=OSError("no route to host")),
+            pytest.raises(RuntimeError, match="Failed to download or extract archive"),
+        ):
+            RemoteArchiveStrategy().fetch("https://example.com/models.tar.gz", str(tmp_path))
 
     def test_extract_archive_handles_plain_gz(self, tmp_path):
         archive = make_gz(tmp_path)
@@ -315,26 +320,28 @@ class TestInteractiveFallbackStrategy:
         assert InteractiveFallbackStrategy().can_handle("anything") is True
 
     def test_non_interactive_session_raises(self, tmp_path):
-        with patch.object(ge.sys.stdin, "isatty", return_value=False):
-            with pytest.raises(RuntimeError, match="Cannot find models at"):
-                InteractiveFallbackStrategy().fetch("weights", str(tmp_path))
+        with (
+            patch.object(ge.sys.stdin, "isatty", return_value=False),
+            pytest.raises(RuntimeError, match="Cannot find models at"),
+        ):
+            InteractiveFallbackStrategy().fetch("weights", str(tmp_path))
 
     def test_declining_exits_gracefully(self, tmp_path):
         with (
             patch.object(ge.sys.stdin, "isatty", return_value=True),
             patch("builtins.input", return_value="no"),
+            pytest.raises(SystemExit) as exc,
         ):
-            with pytest.raises(SystemExit) as exc:
-                InteractiveFallbackStrategy().fetch("weights", str(tmp_path))
+            InteractiveFallbackStrategy().fetch("weights", str(tmp_path))
         assert exc.value.code == 0
 
     def test_missing_answer_path_raises(self, tmp_path):
         with (
             patch.object(ge.sys.stdin, "isatty", return_value=True),
             patch("builtins.input", side_effect=["yes", str(tmp_path / "nope")]),
+            pytest.raises(FileNotFoundError, match="Path not found"),
         ):
-            with pytest.raises(FileNotFoundError, match="Path not found"):
-                InteractiveFallbackStrategy().fetch("weights", str(tmp_path))
+            InteractiveFallbackStrategy().fetch("weights", str(tmp_path))
 
     def test_directory_answer_is_used_directly(self, tmp_path):
         models = tmp_path / "models"

@@ -1,5 +1,4 @@
 #!/usr/bin/env python3
-# -*- coding: utf-8 -*-
 """
 Script to compare sulcal labeling between two graph annotation campaigns
 (e.g. base2018_manual vs base2018b_manual) and optionally two mask sets.

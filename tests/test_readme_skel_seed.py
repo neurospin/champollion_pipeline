@@ -1,5 +1,4 @@
 #!/usr/bin/env python3
-# -*- coding: utf-8 -*-
 """Documentation guards for the skeleton seed (skel_seed) of crop generation (epic SKELSEED, task 9/9).
 
 Behaviour documented (read from the code, WIP a367ad5):

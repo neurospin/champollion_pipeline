@@ -1,5 +1,4 @@
 #!/usr/bin/env python3
-# -*- coding: utf-8 -*-
 """
 Walk a Morphologist subjects directory and write a labelling QC TSV.
 

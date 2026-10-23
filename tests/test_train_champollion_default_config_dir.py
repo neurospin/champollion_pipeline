@@ -1,5 +1,4 @@
 #!/usr/bin/env python3
-# -*- coding: utf-8 -*-
 """
 Default --config-dir of train_champollion.py (REQ-CFGLOC-04).
 

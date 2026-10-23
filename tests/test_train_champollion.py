@@ -1,5 +1,4 @@
 #!/usr/bin/env python3
-# -*- coding: utf-8 -*-
 """
 Unit tests for train_champollion.py
 
@@ -7,6 +6,7 @@ All external side effects (subprocess execution, chdir, directory creation)
 are mocked: no champollion_V1 checkout, GPU or cluster is required.
 """
 
+import contextlib
 import os
 from pathlib import Path
 from unittest.mock import patch
@@ -347,19 +347,18 @@ class TestSwfUnsupported:
         return script, out
 
     def _run_ignoring_not_implemented(self, script, calls):
-        with patch.object(train_champollion.os, "chdir") as chdir:
-            try:
-                script.run()
-            except NotImplementedError:
-                pass
+        with (
+            patch.object(train_champollion.os, "chdir") as chdir,
+            contextlib.suppress(NotImplementedError),
+        ):
+            script.run()
         calls["chdir"] = [c.args[0] for c in chdir.call_args_list]
 
     def test_swf_raises_not_implemented_naming_the_flag(self, tmp_path):
         calls = {"execute": []}
         script, _ = self._prepare(tmp_path, calls)
-        with patch.object(train_champollion.os, "chdir"):
-            with pytest.raises(NotImplementedError, match="--swf"):
-                script.run()
+        with patch.object(train_champollion.os, "chdir"), pytest.raises(NotImplementedError, match="--swf"):
+            script.run()
 
     def test_swf_does_not_create_output_directory(self, tmp_path):
         calls = {"execute": []}

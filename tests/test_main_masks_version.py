@@ -1,5 +1,4 @@
 #!/usr/bin/env python3
-# -*- coding: utf-8 -*-
 """
 Tests for the dataset.masks_version setting of the main.py pipeline config
 (epic "Versioned embeddings output paths", task 1/8).
@@ -109,7 +108,7 @@ class TestSaveToYamlMasksVersion:
         output = tmp_path / "saved.yaml"
 
         main_module.ConfigLoader.save_to_yaml(config, str(output))
-        with open(output, "r") as f:
+        with open(output) as f:
             written = yaml.safe_load(f)
 
         assert written["dataset"].get("masks_version") == OTHER_MASKS_VERSION, (

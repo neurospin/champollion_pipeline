@@ -1,5 +1,4 @@
 #!/usr/bin/env python3
-# -*- coding: utf-8 -*-
 """
 Pytest configuration and fixtures for champollion_pipeline tests.
 """

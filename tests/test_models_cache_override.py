@@ -1,5 +1,4 @@
 #!/usr/bin/env python3
-# -*- coding: utf-8 -*-
 """
 The --models-cache PATH override of generate_embeddings.py.
 

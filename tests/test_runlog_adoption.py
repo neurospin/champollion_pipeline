@@ -1,5 +1,4 @@
 #!/usr/bin/env python3
-# -*- coding: utf-8 -*-
 """
 Adoption of the champollion_utils --log option (TASK-RUNLOG-BDRABCZUK-41F869DCB23D).
 

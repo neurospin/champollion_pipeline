@@ -1,5 +1,4 @@
 #!/usr/bin/env python3
-# -*- coding: utf-8 -*-
 """
 Stage-5 embeddings source follows stage 4's versioned default output.
 

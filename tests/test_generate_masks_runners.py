@@ -1,5 +1,4 @@
 #!/usr/bin/env python3
-# -*- coding: utf-8 -*-
 """
 Unit tests for the mask-generation runner strategies in generate_masks.py:
   - _log_invalid_subject
