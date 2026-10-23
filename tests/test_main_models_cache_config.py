@@ -1,5 +1,4 @@
 #!/usr/bin/env python3
-# -*- coding: utf-8 -*-
 """
 Tests for the dataset.models_cache setting of the main.py pipeline config
 (models_cache epic, task 4/6: the generate_embeddings --models-cache override
@@ -99,7 +98,7 @@ def _models_cache_field(main_module, req_id):
 def _saved_dataset_mapping(main_module, config, tmp_path):
     output = tmp_path / "saved.yaml"
     main_module.ConfigLoader.save_to_yaml(config, str(output))
-    with open(output, "r") as f:
+    with open(output) as f:
         return yaml.safe_load(f)["dataset"]
 
 
@@ -118,7 +117,7 @@ class TestDatasetConfigModelsCacheDefault:
             f"{REQ_FIELD}: DatasetConfig.models_cache default is {field.default!r}, expected None"
         )
         hints = typing.get_type_hints(main_module.DatasetConfig)
-        assert hints["models_cache"] == typing.Optional[str], (
+        assert hints["models_cache"] == str | None, (
             f"{REQ_FIELD}: DatasetConfig.models_cache is annotated {hints['models_cache']!r}, expected Optional[str]"
         )
 

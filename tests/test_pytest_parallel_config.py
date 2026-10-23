@@ -123,9 +123,14 @@ def _option_values(argv: list[str], short: str | None, long: str | None) -> list
                 values.append(argv[i + 1])
             elif token.startswith(opt + "="):
                 values.append(token.split("=", 1)[1])
-            elif short and opt == short and token.startswith(short) and len(token) > len(short):
-                if not token.startswith("--"):
-                    values.append(token[len(short) :].lstrip("="))
+            elif (
+                short
+                and opt == short
+                and token.startswith(short)
+                and len(token) > len(short)
+                and not token.startswith("--")
+            ):
+                values.append(token[len(short) :].lstrip("="))
     return values
 
 

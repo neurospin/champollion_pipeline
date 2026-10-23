@@ -1,5 +1,4 @@
 #!/usr/bin/env python3
-# -*- coding: utf-8 -*-
 """
 Tests for moving DatasetConfig, PipelineConfig and ConfigLoader out of main.py
 into champollion_pipeline.config, with save_to_yaml serialising through

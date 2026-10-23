@@ -1,5 +1,4 @@
 #!/usr/bin/env python3
-# -*- coding: utf-8 -*-
 """
 Stage-4 default output is versioned by mask version.
 
@@ -61,9 +60,11 @@ def _standalone_output_base(tmp_path, extra_args):
     script = GenerateEmbeddings()
     script.parse_args([str(models_dir), str(datasets_root), *extra_args])
 
-    with patch.object(script, "fetch_models", return_value=str(models_dir)):
-        with patch.object(script, "_run_per_region", return_value=0) as mock_per:
-            script.run()
+    with (
+        patch.object(script, "fetch_models", return_value=str(models_dir)),
+        patch.object(script, "_run_per_region", return_value=0) as mock_per,
+    ):
+        script.run()
     mock_per.assert_called_once()
     return mock_per.call_args.args[2], datasets_root
 

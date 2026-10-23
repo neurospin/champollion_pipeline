@@ -2,7 +2,7 @@ line-length = 120
 exclude = [".pixi", "__pycache__", "external", "*.pyc"]
 
 [lint]
-select = ["E", "F", "I", "PLC0415"]
+select = ["E", "F", "I", "PLC0415", "UP", "B", "SIM"]
 extend-ignore = ["E203"]
 
 [lint.per-file-ignores]

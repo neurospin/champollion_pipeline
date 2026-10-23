@@ -1,5 +1,4 @@
 #!/usr/bin/env python3
-# -*- coding: utf-8 -*-
 """
 Report visibility of common masks that src/compare.py skips because the two
 mask volumes differ in shape.

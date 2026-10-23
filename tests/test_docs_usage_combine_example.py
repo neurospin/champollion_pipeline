@@ -1,5 +1,4 @@
 #!/usr/bin/env python3
-# -*- coding: utf-8 -*-
 """Documentation guard for the stage-5 ``champollion-combine`` example in ``docs/usage.md``.
 
 ``put_together_embeddings.py`` (``PutTogetherEmbeddings``) takes a positional

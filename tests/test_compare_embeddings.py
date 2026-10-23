@@ -1,5 +1,4 @@
 #!/usr/bin/env python3
-# -*- coding: utf-8 -*-
 """
 ``compare.py embeddings``: per-subject comparison of two embedding versions.
 
@@ -86,7 +85,7 @@ def _write_embeddings(root, region, side, subjects, matrix):
     with open(path, "w", newline="") as f:
         writer = csv.writer(f)
         writer.writerow(["ID"] + [f"dim{i + 1}" for i in range(matrix.shape[1])])
-        for subject, row in zip(subjects, matrix):
+        for subject, row in zip(subjects, matrix, strict=False):
             writer.writerow([subject] + [repr(float(v)) for v in row])
     return path
 
@@ -133,7 +132,7 @@ def _ref_knn_sets(x, k):
 
 def _ref_knn_overlap(a, b, k):
     na, nb = _ref_knn_sets(a, k), _ref_knn_sets(b, k)
-    return np.array([len(sa & sb) / k for sa, sb in zip(na, nb)])
+    return np.array([len(sa & sb) / k for sa, sb in zip(na, nb, strict=False)])
 
 
 def _ref_cka(x, y):
@@ -407,7 +406,7 @@ class TestEmbeddingsUmapA:
         _write_umap(tmp_path / "ub", _R1, "L", _SIM_B)
         rows = _region_rows(_rows(_run(tmp_path, "--k", "4", *_umap_args(tmp_path))))
         expected = model_a.transform(umap_sets["a"])
-        for subject, (x, y) in zip(umap_sets["subjects"], expected):
+        for subject, (x, y) in zip(umap_sets["subjects"], expected, strict=False):
             assert float(rows[subject]["umap_a_x"]) == pytest.approx(x, abs=1e-5)
             assert float(rows[subject]["umap_a_y"]) == pytest.approx(y, abs=1e-5)
 
@@ -444,7 +443,7 @@ class TestEmbeddingsProcrustes:
         _write_umap(tmp_path / "ua", _R1, "L", _FakeUmap())
         _write_umap(tmp_path / "ub", _R1, "L", _SIM_B)
         rows = _region_rows(_rows(_run(tmp_path, "--k", "3", *_umap_args(tmp_path))))
-        for subject, (x, y) in zip(subjects, emb[:, :2]):
+        for subject, (x, y) in zip(subjects, emb[:, :2], strict=False):
             assert float(rows[subject]["umap_b_x"]) == pytest.approx(x, abs=1e-5)
             assert float(rows[subject]["umap_b_y"]) == pytest.approx(y, abs=1e-5)
 
@@ -560,7 +559,7 @@ class TestEmbeddingsCovariate:
 
 def _covariate_values(subjects, seed):
     rng = np.random.default_rng(seed)
-    return {s: float(v) for s, v in zip(subjects, rng.uniform(0.0, 50.0, size=len(subjects)))}
+    return {s: float(v) for s, v in zip(subjects, rng.uniform(0.0, 50.0, size=len(subjects)), strict=False)}
 
 
 class TestEmbeddingsSpearmanKnn:

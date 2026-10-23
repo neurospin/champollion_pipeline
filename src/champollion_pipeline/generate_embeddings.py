@@ -1,5 +1,4 @@
 #!/usr/bin/env python3
-# -*- coding: utf-8 -*-
 """
 Wrapper script to generate sulcal embeddings per region.
 Calls champollion/evaluate.py for each region in models_path.
@@ -494,9 +493,8 @@ class GenerateEmbeddings(ScriptBuilder):
 
         if exists(crops_2mm_dir):
             for dname in os.listdir(crops_2mm_dir):
-                if os.path.isdir(join(crops_2mm_dir, dname)):
-                    if dname.replace(".", "") == base:
-                        return dname
+                if os.path.isdir(join(crops_2mm_dir, dname)) and dname.replace(".", "") == base:
+                    return dname
         return base
 
     def _run_per_region(self, evaluate_script: str, crops_2mm_dir: str, output_base: str) -> int:

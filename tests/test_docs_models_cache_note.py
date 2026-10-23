@@ -1,5 +1,4 @@
 #!/usr/bin/env python3
-# -*- coding: utf-8 -*-
 """Documentation guards for the models_cache sync/archive exclusion note (epic DATASETS).
 
 USER DECISION 2026-10-08: the downloaded/extracted model cache lives inside the

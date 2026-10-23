@@ -1,5 +1,4 @@
 #!/usr/bin/env python3
-# -*- coding: utf-8 -*-
 """
 Integration tests for src/generate_umap_reference.py using the REAL
 ``get_model_paths`` from the champollion_V1 submodule (REQ-UMAPREF-01/02).

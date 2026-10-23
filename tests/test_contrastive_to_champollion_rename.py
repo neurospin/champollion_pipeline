@@ -1,5 +1,4 @@
 #!/usr/bin/env python3
-# -*- coding: utf-8 -*-
 """Source-text guards for REQ-REFACTOR-01.
 
 Julien renamed the ``contrastive/`` Python package in neurospin/champollion to

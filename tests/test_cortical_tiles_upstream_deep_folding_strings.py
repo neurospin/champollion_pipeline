@@ -1,5 +1,4 @@
 #!/usr/bin/env python3
-# -*- coding: utf-8 -*-
 """
 Pins the absence of the legacy package name from upstream ``cortical_tiles``
 main's tracked *paths*.

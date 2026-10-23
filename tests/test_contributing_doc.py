@@ -1,5 +1,4 @@
 #!/usr/bin/env python3
-# -*- coding: utf-8 -*-
 """Tests for REQ-CONTRIB-01 — CONTRIBUTING.md at the repository root.
 
 Run with: pixi run test-specific tests/test_contributing_doc.py

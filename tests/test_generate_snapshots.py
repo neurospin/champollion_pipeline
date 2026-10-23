@@ -1,5 +1,4 @@
 #!/usr/bin/env python3
-# -*- coding: utf-8 -*-
 """
 Unit tests for generate_snapshots.py
 """
@@ -399,9 +398,8 @@ class TestMainFunction:
 
     def test_output_dir_is_required(self):
         """Test that --output_dir is required."""
-        with patch("sys.argv", ["generate_snapshots.py"]):
-            with pytest.raises(SystemExit):
-                main()
+        with patch("sys.argv", ["generate_snapshots.py"]), pytest.raises(SystemExit):
+            main()
 
     def test_main_creates_output_dir(self, temp_dir):
         """Test that main creates the output directory."""

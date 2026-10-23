@@ -1,5 +1,4 @@
 #!/usr/bin/env python3
-# -*- coding: utf-8 -*-
 """
 Tests for the dataset.skel_seed setting of the main.py pipeline config
 (skeleton seed epic, task 8/9: skel_seed settable in the main.py YAML
@@ -103,7 +102,7 @@ class TestDatasetConfigSkelSeedDefault:
             f"{REQ_FIELD}: DatasetConfig.skel_seed default is {field.default!r}, expected None"
         )
         hints = typing.get_type_hints(main_module.DatasetConfig)
-        assert hints["skel_seed"] == typing.Optional[int], (
+        assert hints["skel_seed"] == int | None, (
             f"{REQ_FIELD}: DatasetConfig.skel_seed is annotated {hints['skel_seed']!r}, expected Optional[int]"
         )
 
@@ -170,7 +169,7 @@ class TestSaveToYamlSkelSeed:
         output = tmp_path / "saved.yaml"
 
         main_module.ConfigLoader.save_to_yaml(config, str(output))
-        with open(output, "r") as f:
+        with open(output) as f:
             written = yaml.safe_load(f)
 
         assert written["dataset"].get("skel_seed", "<no key>") == CONFIGURED_SKEL_SEED, (
@@ -183,7 +182,7 @@ class TestSaveToYamlSkelSeed:
         output = tmp_path / "saved.yaml"
 
         main_module.ConfigLoader.save_to_yaml(main_module.PipelineConfig(), str(output))
-        with open(output, "r") as f:
+        with open(output) as f:
             written = yaml.safe_load(f)
 
         assert "skel_seed" in written["dataset"], (

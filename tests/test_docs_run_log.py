@@ -1,5 +1,4 @@
 #!/usr/bin/env python3
-# -*- coding: utf-8 -*-
 """Documentation guards for the run log written by ``--log`` (epic RUNLOG, docs task).
 
 Behaviour documented (read from the code on branch req-runlog-bdrabczuk-f2f6a21fe6bb, d83a8a0,

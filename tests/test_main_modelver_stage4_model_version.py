@@ -1,5 +1,4 @@
 #!/usr/bin/env python3
-# -*- coding: utf-8 -*-
 """
 Tests that main.py's GenerateEmbeddingsStage no longer forwards the deprecated
 ``--masks-version`` option to generate_embeddings.py (epic MODELVER, main.py side).

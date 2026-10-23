@@ -1,5 +1,4 @@
 #!/usr/bin/env python3
-# -*- coding: utf-8 -*-
 """Guard for REQ-HFUPLOAD-01: exactly one HuggingFace-upload script exists.
 
 ``src/upload_models_to_hf.py`` is the tracked, tested script used to upload

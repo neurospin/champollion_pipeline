@@ -1,5 +1,4 @@
 #!/usr/bin/env python3
-# -*- coding: utf-8 -*-
 """
 Pipeline configuration: DatasetConfig, PipelineConfig and ConfigLoader (YAML load and save).
 """
@@ -7,7 +6,6 @@ Pipeline configuration: DatasetConfig, PipelineConfig and ConfigLoader (YAML loa
 import logging
 from dataclasses import asdict, dataclass, field
 from pathlib import Path
-from typing import Dict, List, Optional
 
 import yaml
 
@@ -33,8 +31,8 @@ class DatasetConfig:
     name: str = "example_dataset"
     dataset_localization: str = "local"  # noqa: V107 - YAML config field
     datasets_root: str = ""
-    datasets: List[str] = field(default_factory=lambda: ["example"])  # noqa: V107 - YAML config field
-    labels: List[str] = field(default_factory=lambda: ["Sex"])  # noqa: V107 - YAML config field
+    datasets: list[str] = field(default_factory=lambda: ["example"])  # noqa: V107 - YAML config field
+    labels: list[str] = field(default_factory=lambda: ["Sex"])  # noqa: V107 - YAML config field
 
     # Paths
     input_path: str = ""  # noqa: V107 - YAML config field
@@ -49,32 +47,32 @@ class DatasetConfig:
     path_sk_with_hull: str = "t1mri/default_acquisition/default_analysis/segmentation/mesh"
     sk_qc_path: str = ""
     masks_version: str = DEFAULT_MASKS_VERSION
-    skel_seed: Optional[int] = None  # None: the skel_seed in <derivatives>/pipeline_loop_2mm.json
+    skel_seed: int | None = None  # None: the skel_seed in <derivatives>/pipeline_loop_2mm.json
 
     # Region filter (empty = all 56 regions)
-    regions: List[str] = field(default_factory=list)
+    regions: list[str] = field(default_factory=list)
 
     # Embeddings parameters
     classifier_name: str = "svm"  # noqa: V107 - YAML config field
     overwrite: bool = False
     embeddings_only: bool = False  # noqa: V107 - YAML config field
     checkpoint_epoch: int = DEFAULT_CHECKPOINT_EPOCH
-    models_cache: Optional[str] = None  # None: <datasets_root>/derivatives/champollion_V1/models_cache
-    subsets: List[str] = field(default_factory=lambda: ["full"])  # noqa: V107 - YAML config field
-    epochs: List[Optional[int]] = field(default_factory=lambda: [None])  # noqa: V107 - YAML config field
+    models_cache: str | None = None  # None: <datasets_root>/derivatives/champollion_V1/models_cache
+    subsets: list[str] = field(default_factory=lambda: ["full"])  # noqa: V107 - YAML config field
+    epochs: list[int | None] = field(default_factory=lambda: [None])  # noqa: V107 - YAML config field
     split: str = "random"
     cv: int = 5  # noqa: V107 - YAML config field
-    splits_basedir: Optional[str] = None  # noqa: V107 - YAML config field
-    idx_region_evaluation: Optional[int] = None  # noqa: V107 - YAML config field
+    splits_basedir: str | None = None  # noqa: V107 - YAML config field
+    idx_region_evaluation: int | None = None  # noqa: V107 - YAML config field
     short_name: str = "eval"  # noqa: V107 - YAML config field
 
     # HuggingFace parameters
     hf_enabled: bool = False
-    hf_repo_id: Optional[str] = None  # noqa: V107 - YAML config field
-    hf_token: Optional[str] = None
+    hf_repo_id: str | None = None  # noqa: V107 - YAML config field
+    hf_token: str | None = None
 
     # Unused: no stage reads it. Kept so existing YAML files that set it still load.
-    config_path: Optional[str] = None
+    config_path: str | None = None
 
     # CPU mode (disable CUDA)
     cpu: bool = False
@@ -85,7 +83,7 @@ class DatasetConfig:
     # Snapshots parameters
     snapshots_path: str = ""
     reference_data_path: str = ""  # noqa: V107 - YAML config field
-    champollion_data_root: Optional[str] = None
+    champollion_data_root: str | None = None
 
 
 @dataclass
@@ -100,7 +98,7 @@ class PipelineConfig:
     champollion_v1_path: str = ""
 
     # Pipeline stages to execute
-    stages: Dict[str, bool] = field(
+    stages: dict[str, bool] = field(
         default_factory=lambda: {
             "generate_morphologist_graphs": False,
             "run_cortical_tiles": False,
@@ -112,7 +110,7 @@ class PipelineConfig:
     )
 
     # Stage dependencies
-    dependencies: Dict[str, List[str]] = field(
+    dependencies: dict[str, list[str]] = field(
         default_factory=lambda: {
             "generate_morphologist_graphs": [],
             "run_cortical_tiles": ["generate_morphologist_graphs"],
@@ -136,7 +134,7 @@ class PipelineConfig:
     log_to_file: bool = True  # noqa: V107 - YAML config field
     log_to_console: bool = True  # noqa: V107 - YAML config field
     # Run-log directory of the in-process stages: "" = each stage's default_log_path(), None = no run log.
-    log: Optional[str] = None  # noqa: V107 - YAML config field
+    log: str | None = None  # noqa: V107 - YAML config field
 
     # Dataset configuration
     dataset: DatasetConfig = field(default_factory=DatasetConfig)
@@ -148,13 +146,13 @@ class ConfigLoader:
     @staticmethod
     def load_from_yaml(config_path: str) -> PipelineConfig:
         """Load configuration from YAML file."""
-        with open(config_path, "r") as f:
+        with open(config_path) as f:
             config_dict = yaml.safe_load(f)
 
         return ConfigLoader._dict_to_config(config_dict)
 
     @staticmethod
-    def _dict_to_config(config_dict: Dict) -> PipelineConfig:
+    def _dict_to_config(config_dict: dict) -> PipelineConfig:
         """Convert dictionary to PipelineConfig object."""
         # Extract dataset config
         dataset_dict = config_dict.pop("dataset", {})

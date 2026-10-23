@@ -1,5 +1,4 @@
 #!/usr/bin/env python3
-# -*- coding: utf-8 -*-
 """Tests for ``compare.py --visualisation`` (the Anatomist viewer path).
 
 One test class per backlog task so each can be verified alone with ``-k``:
@@ -26,6 +25,7 @@ Self-contained: the fake PyAIMS below mirrors the one in tests/test_compare.py.
 """
 
 import ast
+import contextlib
 import json
 import math
 import re
@@ -466,10 +466,8 @@ class TestTask192XorFiles:
         monkeypatch.setattr(compare_sulcal.brainvisa, "aims", _FakeAims(objects))
         run_recorder(raises=OSError("cannot spawn"))
 
-        try:
+        with contextlib.suppress(OSError):
             visualise_mask_diffs({"x.nii.gz": 1.0}, masks_a, masks_b)
-        except OSError:
-            pass
 
         assert list(tmp_root.iterdir()) == []
 

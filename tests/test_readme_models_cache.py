@@ -1,5 +1,4 @@
 #!/usr/bin/env python3
-# -*- coding: utf-8 -*-
 """Documentation guards for the models_cache location and the --models-cache override (epic DATASETS).
 
 Behaviour documented (read from the code, WIP 5f00c94):

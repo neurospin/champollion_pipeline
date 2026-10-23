@@ -1,5 +1,4 @@
 #!/usr/bin/env python3
-# -*- coding: utf-8 -*-
 """
 Stage-5 (champollion-combine) help text and docstring name the versioned source.
 

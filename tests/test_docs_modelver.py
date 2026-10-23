@@ -1,5 +1,4 @@
 #!/usr/bin/env python3
-# -*- coding: utf-8 -*-
 """Documentation guards for the model-version work (epic MODELVER).
 
 ``generate_embeddings`` now takes ``--model-version`` (the Hugging Face model-set

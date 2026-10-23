@@ -1,5 +1,4 @@
 #!/usr/bin/env python3
-# -*- coding: utf-8 -*-
 """Tests for REQ-DOCS-04 — Morphologist BIDS-filename crash troubleshooting entry.
 
 Run with: pixi run test-specific tests/test_morphologist_troubleshooting_doc.py

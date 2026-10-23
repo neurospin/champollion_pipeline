@@ -1,5 +1,4 @@
 #!/usr/bin/env python3
-# -*- coding: utf-8 -*-
 """
 Deterministic skeleton seed for stage 2 (TASK-SKELSEED 5/7).
 
@@ -71,11 +70,13 @@ def _run(input_dir, output_dir, extra_args=()):
             *extra_args,
         ]
     )
-    with patch.object(script, "validate_paths", return_value=True):
-        with patch.object(script, "execute_command", return_value=0) as mock_exec:
-            with patch("champollion_pipeline.run_cortical_tiles.chdir"):
-                with patch("champollion_pipeline.run_cortical_tiles.getcwd", return_value="/original"):
-                    script.run()
+    with (
+        patch.object(script, "validate_paths", return_value=True),
+        patch.object(script, "execute_command", return_value=0) as mock_exec,
+        patch("champollion_pipeline.run_cortical_tiles.chdir"),
+        patch("champollion_pipeline.run_cortical_tiles.getcwd", return_value="/original"),
+    ):
+        script.run()
     cmd = mock_exec.call_args[0][0]
     assert any(str(token).endswith("generate_sulcal_regions.py") for token in cmd), cmd
     return script, cmd

@@ -1,5 +1,4 @@
 #!/usr/bin/env python3
-# -*- coding: utf-8 -*-
 """
 Regression tests for the morphologist-cli command built by
 generate_morphologist_graphs.py (REQ-MORPHO-01).

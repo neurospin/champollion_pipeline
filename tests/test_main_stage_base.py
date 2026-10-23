@@ -1,5 +1,4 @@
 #!/usr/bin/env python3
-# -*- coding: utf-8 -*-
 """
 Tests for the template-method base class of main.py's six pipeline stages
 (TASK-REFACTOR-BDRABCZUK-F57652FA703A).

@@ -1,5 +1,4 @@
 #!/usr/bin/env python3
-# -*- coding: utf-8 -*-
 """
 Script to generate sulcal regions with cortical_tiles from Morphologist's graphs.
 
@@ -219,7 +218,7 @@ class RunCorticalTiles(ScriptBuilder):
         # when they are "$local". Since -d is now the subjects dir (not the
         # dataset root), we set them explicitly so outputs land in the right place.
         if exists(config_file_path):
-            with open(config_file_path, "r") as f:
+            with open(config_file_path) as f:
                 config = json.load(f)
             config["graphs_dir"] = input_abs
             config["output_dir"] = join(abspath(self.args.output), DERIVATIVES_FOLDER)

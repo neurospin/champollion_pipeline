@@ -1,5 +1,4 @@
 #!/usr/bin/env python3
-# -*- coding: utf-8 -*-
 """
 Pins the upstream merge state of the ``external/cortical_tiles`` submodule.
 

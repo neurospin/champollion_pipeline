@@ -1,5 +1,4 @@
 #!/usr/bin/env python3
-# -*- coding: utf-8 -*-
 """
 Package metadata in `champollion_pipeline/__init__.py` agrees with the manifests.
 

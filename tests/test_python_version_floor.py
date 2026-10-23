@@ -1,5 +1,4 @@
 #!/usr/bin/env python3
-# -*- coding: utf-8 -*-
 """
 Python version floor consistency across pyproject.toml, pixi.toml and README.md.
 

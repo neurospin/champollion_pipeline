@@ -1,5 +1,4 @@
 #!/usr/bin/env python3
-# -*- coding: utf-8 -*-
 """
 --bucket_step validation of the src/compare.py masks and cortical_tiles subcommands.
 

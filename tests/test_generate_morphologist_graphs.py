@@ -1,5 +1,4 @@
 #!/usr/bin/env python3
-# -*- coding: utf-8 -*-
 """
 Unit tests for generate_morphologist_graphs.py
 """
@@ -175,9 +174,11 @@ class TestValidatePaths:
         script = GenerateMorphologistGraphs()
         script.parse_args(["/nonexistent/input", "/nonexistent/output"])
 
-        with patch.object(script, "validate_paths", return_value=False):
-            with pytest.raises(ValueError, match="Please input valid paths"):
-                script.run()
+        with (
+            patch.object(script, "validate_paths", return_value=False),
+            pytest.raises(ValueError, match="Please input valid paths"),
+        ):
+            script.run()
 
 
 class TestRunMethod:
@@ -190,14 +191,16 @@ class TestRunMethod:
         script = GenerateMorphologistGraphs()
         script.parse_args([temp_dir, temp_dir])
 
-        with patch.object(script, "validate_paths", return_value=True):
-            with patch.object(script, "_get_input_files", return_value=["test.nii.gz"]):
-                with patch.object(script, "execute_command", return_value=0):
-                    script.run()
+        with (
+            patch.object(script, "validate_paths", return_value=True),
+            patch.object(script, "_get_input_files", return_value=["test.nii.gz"]),
+            patch.object(script, "execute_command", return_value=0),
+        ):
+            script.run()
 
-                    # Check that chdir was called to input and back
-                    assert call(temp_dir) in mock_chdir.call_args_list
-                    assert call("/original/dir") in mock_chdir.call_args_list
+            # Check that chdir was called to input and back
+            assert call(temp_dir) in mock_chdir.call_args_list
+            assert call("/original/dir") in mock_chdir.call_args_list
 
     def test_run_builds_correct_command(self, temp_dir):
         """Test that run builds correct morphologist-cli command."""
@@ -210,56 +213,56 @@ class TestRunMethod:
 
         test_files = ["subject1.nii.gz", "subject2.nii.gz"]
 
-        with patch.object(script, "validate_paths", return_value=True):
-            with patch.object(script, "_get_input_files", return_value=test_files):
-                with patch.object(script, "execute_command", return_value=0) as mock_exec:
-                    with patch("champollion_pipeline.generate_morphologist_graphs.chdir"):
-                        with patch(
-                            "champollion_pipeline.generate_morphologist_graphs.getcwd", return_value="/original"
-                        ):
-                            script.run()
+        with (
+            patch.object(script, "validate_paths", return_value=True),
+            patch.object(script, "_get_input_files", return_value=test_files),
+            patch.object(script, "execute_command", return_value=0) as mock_exec,
+            patch("champollion_pipeline.generate_morphologist_graphs.chdir"),
+            patch("champollion_pipeline.generate_morphologist_graphs.getcwd", return_value="/original"),
+        ):
+            script.run()
 
-                            # Check the command
-                            cmd = mock_exec.call_args[0][0]
-                            assert "morphologist-cli" in cmd
-                            assert "subject1.nii.gz" in cmd
-                            assert "subject2.nii.gz" in cmd
-                            assert output_dir in cmd
-                            assert "--" in cmd
-                            assert "--of" in cmd
-                            assert "morphologist-auto-nonoverlap-1.0" in cmd
+            # Check the command
+            cmd = mock_exec.call_args[0][0]
+            assert "morphologist-cli" in cmd
+            assert "subject1.nii.gz" in cmd
+            assert "subject2.nii.gz" in cmd
+            assert output_dir in cmd
+            assert "--" in cmd
+            assert "--of" in cmd
+            assert "morphologist-auto-nonoverlap-1.0" in cmd
 
     def test_run_with_shell_true(self, temp_dir):
         """Test that run executes command with shell=True."""
         script = GenerateMorphologistGraphs()
         script.parse_args([temp_dir, temp_dir])
 
-        with patch.object(script, "validate_paths", return_value=True):
-            with patch.object(script, "_get_input_files", return_value=["test.nii"]):
-                with patch.object(script, "execute_command", return_value=0) as mock_exec:
-                    with patch("champollion_pipeline.generate_morphologist_graphs.chdir"):
-                        with patch(
-                            "champollion_pipeline.generate_morphologist_graphs.getcwd", return_value="/original"
-                        ):
-                            script.run()
+        with (
+            patch.object(script, "validate_paths", return_value=True),
+            patch.object(script, "_get_input_files", return_value=["test.nii"]),
+            patch.object(script, "execute_command", return_value=0) as mock_exec,
+            patch("champollion_pipeline.generate_morphologist_graphs.chdir"),
+            patch("champollion_pipeline.generate_morphologist_graphs.getcwd", return_value="/original"),
+        ):
+            script.run()
 
-                            # Check that shell=True was passed
-                            assert mock_exec.call_args[1]["shell"] is True
+            # Check that shell=True was passed
+            assert mock_exec.call_args[1]["shell"] is True
 
     def test_run_returns_command_result(self, temp_dir):
         """Test that run returns the result from execute_command."""
         script = GenerateMorphologistGraphs()
         script.parse_args([temp_dir, temp_dir])
 
-        with patch.object(script, "validate_paths", return_value=True):
-            with patch.object(script, "_get_input_files", return_value=["test.nii"]):
-                with patch.object(script, "execute_command", return_value=42):
-                    with patch("champollion_pipeline.generate_morphologist_graphs.chdir"):
-                        with patch(
-                            "champollion_pipeline.generate_morphologist_graphs.getcwd", return_value="/original"
-                        ):
-                            result = script.run()
-                            assert result == 42
+        with (
+            patch.object(script, "validate_paths", return_value=True),
+            patch.object(script, "_get_input_files", return_value=["test.nii"]),
+            patch.object(script, "execute_command", return_value=42),
+            patch("champollion_pipeline.generate_morphologist_graphs.chdir"),
+            patch("champollion_pipeline.generate_morphologist_graphs.getcwd", return_value="/original"),
+        ):
+            result = script.run()
+            assert result == 42
 
     def test_run_restores_directory_on_success(self, temp_dir):
         """Test that original directory is restored after successful run."""
@@ -267,15 +270,17 @@ class TestRunMethod:
         script.parse_args([temp_dir, temp_dir])
         original_dir = "/original/dir"
 
-        with patch("champollion_pipeline.generate_morphologist_graphs.getcwd", return_value=original_dir):
-            with patch("champollion_pipeline.generate_morphologist_graphs.chdir") as mock_chdir:
-                with patch.object(script, "validate_paths", return_value=True):
-                    with patch.object(script, "_get_input_files", return_value=["test.nii"]):
-                        with patch.object(script, "execute_command", return_value=0):
-                            script.run()
+        with (
+            patch("champollion_pipeline.generate_morphologist_graphs.getcwd", return_value=original_dir),
+            patch("champollion_pipeline.generate_morphologist_graphs.chdir") as mock_chdir,
+            patch.object(script, "validate_paths", return_value=True),
+            patch.object(script, "_get_input_files", return_value=["test.nii"]),
+            patch.object(script, "execute_command", return_value=0),
+        ):
+            script.run()
 
-                            # Verify we returned to original directory
-                            assert mock_chdir.call_args_list[-1] == call(original_dir)
+            # Verify we returned to original directory
+            assert mock_chdir.call_args_list[-1] == call(original_dir)
 
 
 class TestMainFunction:

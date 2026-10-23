@@ -43,7 +43,7 @@ class TestSavedConfigHasNoUseBestModel:
     def test_saved_dataset_mapping_has_no_use_best_model_key(self, main_module, tmp_path):
         output = tmp_path / "saved.yaml"
         main_module.ConfigLoader.save_to_yaml(main_module.PipelineConfig(), str(output))
-        with open(output, "r") as f:
+        with open(output) as f:
             written = yaml.safe_load(f)
         assert "use_best_model" not in written["dataset"], "save_to_yaml still writes dataset.use_best_model"
 

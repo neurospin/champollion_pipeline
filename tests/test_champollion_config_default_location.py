@@ -1,5 +1,4 @@
 #!/usr/bin/env python3
-# -*- coding: utf-8 -*-
 """
 Default output location of generate_champollion_config.py (REQ-CFGLOC-01, -03, -05).
 

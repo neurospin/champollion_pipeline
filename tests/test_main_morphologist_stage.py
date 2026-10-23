@@ -1,5 +1,4 @@
 #!/usr/bin/env python3
-# -*- coding: utf-8 -*-
 """
 Tests for main.py's GenerateMorphologistGraphsStage argument wiring (REQ-BIDS-04).
 

@@ -1,5 +1,4 @@
 #!/usr/bin/env python3
-# -*- coding: utf-8 -*-
 """
 Characterization tests pinning the command-line surfaces that
 champollion_sulcal_mcp calls, and the stage modules' main() entry points.

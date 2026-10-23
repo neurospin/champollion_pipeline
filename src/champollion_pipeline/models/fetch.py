@@ -138,12 +138,12 @@ class HuggingFaceStrategy(ModelFetchStrategy):
             if self.subfolder:
                 downloaded_path = join(downloaded_path, self.subfolder)
 
-        except ImportError:
+        except ImportError as e:
             raise ImportError(
                 "huggingface_hub is required for Hugging Face downloads. Install it with: pip install huggingface_hub"
-            )
+            ) from e
         except Exception as e:
-            raise RuntimeError(f"Failed to download from Hugging Face: {e}")
+            raise RuntimeError(f"Failed to download from Hugging Face: {e}") from e
         if self.subfolder:
             self._ensure_model_set_marker(downloaded_path)
         print(f"Successfully downloaded from Hugging Face to: {downloaded_path}")
@@ -210,7 +210,7 @@ class RemoteArchiveStrategy(ModelFetchStrategy):
             return extracted_path
 
         except Exception as e:
-            raise RuntimeError(f"Failed to download or extract archive: {e}")
+            raise RuntimeError(f"Failed to download or extract archive: {e}") from e
 
     def _extract_archive(self, archive_path: str, extract_to: str) -> str:
         """Extract archive and return path to its top-level entry."""
@@ -306,9 +306,8 @@ def fetch_model_set(models_path: str, extract_to: str, model_version: str | None
     # Resolve relative paths to absolute for local file strategies
     # This ensures relative paths like ../../models.tar.xz work
     resolved_path = models_path
-    if not urlparse(models_path).scheme:  # Not a URL
-        if not models_path.startswith("/"):  # Relative path
-            resolved_path = abspath(models_path)
+    if not urlparse(models_path).scheme and not models_path.startswith("/"):  # Relative local path
+        resolved_path = abspath(models_path)
 
     # Try local path strategy with resolved path
     local_strategy = LocalPathStrategy()

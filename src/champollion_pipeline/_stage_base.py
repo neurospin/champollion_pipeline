@@ -9,7 +9,7 @@ from abc import ABC, abstractmethod
 from dataclasses import dataclass
 from datetime import datetime
 from os.path import join
-from typing import ClassVar, List, Optional
+from typing import ClassVar
 
 from champollion_utils.run_log import RunLogCapture
 from champollion_utils.script_builder import ScriptBuilder
@@ -46,7 +46,7 @@ class PipelineStage(ABC):
         pass
 
     @abstractmethod
-    def build_args(self) -> List[str]:
+    def build_args(self) -> list[str]:
         """Return the argv of the stage's script."""
         pass
 
@@ -55,11 +55,11 @@ class PipelineStage(ABC):
         """Return a fresh instance of the stage's script."""
         pass
 
-    def precheck(self) -> Optional[StageResult]:
+    def precheck(self) -> StageResult | None:
         """Return a result to stop the stage before any logging, or None to run it."""
         return None
 
-    def run_log_path(self, script: ScriptBuilder) -> Optional[str]:
+    def run_log_path(self, script: ScriptBuilder) -> str | None:
         """Run-log file: None without config.log, the script default for "", else DIR/<stage>_<stamp>.log."""
         log = self.config.log
         if not isinstance(log, str):
@@ -119,14 +119,14 @@ class PipelineStage(ABC):
         self.logger.info(f"{status}: {self.name} - {result.message}")
         self.logger.info(f"{'=' * 60}\n")
 
-    def subject_input_dir(self) -> Optional[str]:  # noqa: V105 - used by main.py
+    def subject_input_dir(self) -> str | None:  # noqa: V105 - used by main.py
         """Return the subjects directory to index before this stage. None = skip."""
         return None
 
-    def required_file_patterns(self) -> List[str]:  # noqa: V105 - used by main.py
+    def required_file_patterns(self) -> list[str]:  # noqa: V105 - used by main.py
         """Glob patterns (relative to subject dir) required per subject."""
         return []
 
-    def output_dir(self) -> Optional[str]:
+    def output_dir(self) -> str | None:
         """Return the output directory to index after this stage. None = skip."""
         return None

@@ -1,5 +1,4 @@
 #!/usr/bin/env python3
-# -*- coding: utf-8 -*-
 """
 Script to generate sulcal mask files from manually labelled graph data.
 """
@@ -103,7 +102,7 @@ def get_sulci_for_regions(regions, sides, json_path):
     collects all sulcus sub-keys, strips the side suffix, and returns a
     deduplicated set of bare sulcus names.
     """
-    with open(json_path, "r") as f:
+    with open(json_path) as f:
         brain_regions = json.load(f)["brain"]
 
     sulci = set()
@@ -205,7 +204,7 @@ def _load_and_extract_subject(sub, sulci_full_set, voxel_size_tuple, brainvisa_d
             bucket = vertex.get(bucket_name)
             if bucket is None:
                 continue
-            vr = np.asarray([g_to_icbm.transform(np.array(v) * voxel_size_in) for v in bucket[0].keys()])
+            vr = np.asarray([g_to_icbm.transform(np.array(v) * voxel_size_in) for v in bucket[0].keys()])  # noqa: SIM118 - AIMS (SIP) bucket, not a dict; keep explicit keys() iteration
             if vr.shape[0] == 0:
                 continue
             all_parts.setdefault(vname, []).append(np.round(vr / voxel_size_tuple).astype(np.int32))
@@ -388,7 +387,7 @@ class BufferedRunner(MaskRunner):
                     )
                     for sf in sorted_sulci_full
                 )
-                run_results = {sulci_to_run[sf]: r for sf, r in zip(sorted_sulci_full, job_outputs)}
+                run_results = {sulci_to_run[sf]: r for sf, r in zip(sorted_sulci_full, job_outputs, strict=False)}
             except Exception as e:
                 run_results = {sulci_to_run[sf]: f"failed: {e}" for sf in sorted_sulci_full}
 

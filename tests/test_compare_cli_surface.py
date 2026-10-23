@@ -1,5 +1,4 @@
 #!/usr/bin/env python3
-# -*- coding: utf-8 -*-
 """
 Characterization tests pinning the command-line surface of the compare tools.
 
@@ -197,7 +196,7 @@ def _run_script(script: str, argv: list, cwd: Path) -> subprocess.CompletedProce
     return subprocess.run([sys.executable, "-c", code], cwd=str(cwd), capture_output=True, text=True, timeout=180)
 
 
-@functools.lru_cache(maxsize=None)
+@functools.cache
 def _help(script: str, subcommand: str | None = None) -> subprocess.CompletedProcess:
     argv = ([subcommand] if subcommand else []) + ["--help"]
     return _run_script(script, argv, _REPO_ROOT)

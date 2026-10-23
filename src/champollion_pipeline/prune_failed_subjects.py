@@ -1,5 +1,4 @@
 #!/usr/bin/env python3
-# -*- coding: utf-8 -*-
 """
 Remove cortical_tiles outputs for subjects that failed QC.
 
