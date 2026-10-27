@@ -8,7 +8,7 @@
 #
 # Environment:
 #   DEMO_REPO_URL  repository to clone (default: the public GitHub repository)
-#   DEMO_SPEED     agg playback speed-up (default: 4)
+#   DEMO_SPEED     agg playback speed-up (default: 10, keeps the README GIF under 3 MB)
 #
 # The demo runs non-interactively in a fresh temporary directory with a neutral
 # "$ " prompt and a minimal environment, so no home path, hostname or data path
@@ -22,16 +22,14 @@ readonly IDLE_TIME_LIMIT=2
 readonly COLS=100
 readonly ROWS=30
 readonly TYPING_DELAY=0.04
+readonly GIF_IDLE_TIME_LIMIT=1
+readonly GIF_FPS_CAP=8
 
 cast_file="${1:-docs/_static/install-demo.cast}"
 gif_file="${2:-${cast_file%.cast}.gif}"
 repo_url="${DEMO_REPO_URL:-$DEFAULT_REPO_URL}"
-speed="${DEMO_SPEED:-4}"
+speed="${DEMO_SPEED:-10}"
 
-if [[ -z "$cast_file" ]]; then
-    echo "ERROR: an explicit cast filename is required." >&2
-    exit 2
-fi
 if ! command -v asciinema >/dev/null 2>&1; then
     echo "ERROR: asciinema not found; install it (e.g. apt install asciinema)." >&2
     exit 1
@@ -82,11 +80,11 @@ EOF
 echo "Cast written to $cast_file"
 
 if command -v agg >/dev/null 2>&1; then
-    agg --speed "$speed" --idle-time-limit "$IDLE_TIME_LIMIT" \
+    agg --speed "$speed" --idle-time-limit "$GIF_IDLE_TIME_LIMIT" --fps-cap "$GIF_FPS_CAP" \
         --last-frame-duration 5 --theme asciinema "$cast_file" "$gif_file"
     echo "GIF written to $gif_file"
 else
     echo "agg not found; to build the GIF, install it with" >&2
     echo "  cargo install --git https://github.com/asciinema/agg" >&2
-    echo "then run: agg --speed $speed $cast_file $gif_file" >&2
+    echo "then run: agg --speed $speed --idle-time-limit $GIF_IDLE_TIME_LIMIT --fps-cap $GIF_FPS_CAP $cast_file $gif_file" >&2
 fi

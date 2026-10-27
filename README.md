@@ -80,6 +80,10 @@ cd champollion_pipeline
 pixi run install-all
 ```
 
+![Terminal recording of a fresh install: cloning the repository, then pixi run install-all installing dependencies, running the smoke tests and ending with the install health check reporting all checks passed](docs/_static/install-demo.gif)
+
+The recording is played back ten times faster than real time. To record it again, run `scripts/record_install_demo.sh`.
+
 `install-all` initializes the git submodules (`champollion_V1` and `cortical_tiles`), installs them in editable mode, clones `champollion_utils`, and creates the `data/` directory.
 
 Prefer an interactive, guided setup instead? Run `./install.sh` (or `pixi run setup` once `pixi install -e default` has run) — the install wizard asks where you're running the pipeline and what you'll use it for, then runs the matching install command for you.
