@@ -10,7 +10,7 @@ from pathlib import Path
 import yaml
 
 from champollion_pipeline.derivatives_layout import DEFAULT_MASKS_VERSION
-from champollion_pipeline.generate_embeddings import DEFAULT_CHECKPOINT_EPOCH
+from champollion_pipeline.models.checkpoint import DEFAULT_CHECKPOINT_EPOCH
 
 # Dataset config keys that no longer exist; old YAML files still carrying them load with a warning.
 _REMOVED_DATASET_KEYS = {
