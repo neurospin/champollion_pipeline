@@ -41,6 +41,7 @@ LOG_CONVERTED_MODULES: tuple[str, ...] = (
     "compare_sulcal.databases",
     "compare_sulcal.embeddings",
     "compare_sulcal.viewer",
+    "champollion_pipeline.models.fetch",
 )
 
 
