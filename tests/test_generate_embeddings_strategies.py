@@ -32,6 +32,7 @@ from champollion_pipeline.generate_embeddings import (
     main,
 )
 from champollion_pipeline.models import fetch as models_fetch
+from tests.log_assertions import LOG, OUTPUT
 
 
 def make_region_logs(model_dir) -> None:
@@ -556,7 +557,7 @@ class TestRunPerRegion:
         with pytest.raises(ValueError, match="No region model directories"):
             script._run_per_region("evaluate.py", str(tmp_path), str(tmp_path))
 
-    def test_existing_embeddings_are_skipped(self, tmp_path, capsys):
+    def test_existing_embeddings_are_skipped(self, tmp_path, pipeline_caplog):
         models = tmp_path / "models"
         make_region_logs(models / "SOr_left")
         out = tmp_path / "out"
@@ -566,7 +567,7 @@ class TestRunPerRegion:
         script = make_script([str(models), "/d"])
         script.execute_command = lambda cmd, shell=False: pytest.fail("must not run evaluate.py")
         script._run_per_region("evaluate.py", str(tmp_path), str(out))
-        assert "[SKIP] SOr_left" in capsys.readouterr().out
+        pipeline_caplog.assert_logged(LOG, "[SKIP] SOr_left")
 
     def test_overwrite_recomputes_existing_embeddings(self, tmp_path):
         models = tmp_path / "models"
@@ -631,17 +632,17 @@ class TestRunCkaTest:
         # REQ-EMBED-02: champollion_V1 evaluate.py writes subject IDs in "ID".
         assert kwargs["subject_column"] == "ID"
 
-    def test_failure_is_warned_but_not_raised(self, tmp_path, capsys):
+    def test_failure_is_warned_but_not_raised(self, tmp_path, pipeline_caplog):
         script = make_script(["/m", "/d"])
         with patch.object(ge, "test_models_coherence_from_directory", side_effect=RuntimeError("no data")):
             script._run_cka_test(str(tmp_path))
-        assert "Warning: CKA test failed - no data" in capsys.readouterr().out
+        pipeline_caplog.assert_logged(logging.WARNING, "CKA test failed - no data")
 
-    def test_success_is_reported(self, tmp_path, capsys):
+    def test_success_is_reported(self, tmp_path, pipeline_caplog):
         script = make_script(["/m", "/d"])
         with patch.object(ge, "test_models_coherence_from_directory"):
             script._run_cka_test(str(tmp_path))
-        assert "CKA coherence test completed." in capsys.readouterr().out
+        pipeline_caplog.assert_logged(OUTPUT, "CKA coherence test completed.")
 
 
 class TestRunCkaTestOnEvaluateOutput:

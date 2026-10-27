@@ -29,6 +29,7 @@ from tests.test_generate_embeddings_best_weights import (
     ckpt_dir_of,
     lines_naming,
     make_model_dir,
+    record_text,
     snapshot_tree,
     write_converted_ckpt,
     write_weights,
@@ -251,7 +252,7 @@ class TestEpochNCkptLogged:
     """REQ-EPOCHSEL-...-00A1091ADECB: one console line names the region and the epoch-N
     checkpoint's path under the region model dir."""
 
-    def test_one_line_names_region_and_epoch_n_ckpt(self, tmp_path, capsys):
+    def test_one_line_names_region_and_epoch_n_ckpt(self, tmp_path, pipeline_caplog):
         model_dir = make_model_dir(tmp_path)
         write_weights(model_dir, BEST_STATE)
         write_epoch_ckpt(model_dir, 2, 3936, version=0)
@@ -259,5 +260,5 @@ class TestEpochNCkptLogged:
 
         run_region(tmp_path)
 
-        out = capsys.readouterr().out
+        out = record_text(pipeline_caplog.records)
         assert len(lines_naming(out, REGION, str(epoch_n))) == 1, out
