@@ -13,6 +13,8 @@ from unittest.mock import MagicMock
 
 import pytest
 
+from tests.log_assertions import PipelineLogCapture
+
 # Keep src/ on path for non-package scripts (compare tools, file_indexer, etc.)
 sys.path.insert(0, os.path.abspath(os.path.join(os.path.dirname(__file__), "../src")))
 
@@ -72,3 +74,16 @@ def restore_logging_and_excepthooks():
     root.setLevel(level)
     sys.excepthook = excepthook
     threading.excepthook = thread_excepthook
+
+
+@pytest.fixture
+def pipeline_caplog(caplog):
+    """Capture the champollion_pipeline records, whatever its propagate flag and level.
+
+    Returns a PipelineLogCapture: ``records`` and ``assert_logged(level, text)``.
+    The champollion_pipeline logger is restored when the test finishes.
+    """
+    capture = PipelineLogCapture(caplog)
+    capture.start()
+    yield capture
+    capture.stop()
