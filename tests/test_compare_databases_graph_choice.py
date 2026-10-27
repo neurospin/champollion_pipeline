@@ -11,6 +11,7 @@ several matches), REQ-COMPARE-85 (single-match characterization).
 """
 
 import glob
+import logging
 import re
 import sys
 
@@ -82,8 +83,12 @@ def _sub():
     return {"subject": SUBJECT, "dir": GRAPH_DIR, "graph_file": f"L{SUBJECT}*.arg"}
 
 
-def _warning_lines(text):
-    return [line for line in text.splitlines() if "WARNING" in line]
+DATABASES_LOGGER = "compare_sulcal.databases"
+
+
+def _warning_messages(caplog):
+    """Messages of the WARNING records logged on compare_sulcal.databases."""
+    return [r.getMessage() for r in caplog.records if r.name == DATABASES_LOGGER and r.levelno == logging.WARNING]
 
 
 class TestMultipleGraphsSortedChoice:
@@ -102,14 +107,14 @@ class TestMultipleGraphsSortedChoice:
 
 
 class TestMultipleGraphsWarning:
-    """REQ-COMPARE-84: several matches -> one WARNING line on stdout."""
+    """REQ-LOGGING-BDRABCZUK-657C1BA1FD24 (supersedes REQ-COMPARE-84): several matches -> one WARNING record."""
 
-    def test_one_warning_line_names_subject_selected_path_and_match_count(self, install, capsys):
+    def test_one_warning_line_names_subject_selected_path_and_match_count(self, install, caplog):
         install(UNSORTED_MATCHES)
+        caplog.set_level(logging.WARNING, logger=DATABASES_LOGGER)
         _get_subject_voxel_counts(_sub(), sys.path[0])
-        out = capsys.readouterr().out
-        lines = _warning_lines(out)
-        assert len(lines) == 1, f"expected one WARNING line on stdout, got: {out!r}"
+        lines = _warning_messages(caplog)
+        assert len(lines) == 1, f"expected one WARNING record on {DATABASES_LOGGER}, got: {lines!r}"
         line = lines[0]
         assert SUBJECT in line
         assert PATH_A in line
@@ -129,8 +134,8 @@ class TestSingleGraphCharacterization:
         assert fake.read_paths == [PATH_B]
         assert (name, counts) == (SUBJECT, {"S.C._left": 2})
 
-    def test_single_match_prints_no_warning(self, install, capsys):
+    def test_single_match_prints_no_warning(self, install, caplog):
         install([PATH_B])
+        caplog.set_level(logging.WARNING, logger=DATABASES_LOGGER)
         _get_subject_voxel_counts(_sub(), sys.path[0])
-        captured = capsys.readouterr()
-        assert _warning_lines(captured.out + captured.err) == []
+        assert _warning_messages(caplog) == []

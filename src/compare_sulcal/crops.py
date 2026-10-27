@@ -1,11 +1,14 @@
 """Crop alignment and per-subject comparison of the compare crops mode."""
 
 import csv
+import logging
 from pathlib import Path
 
 import numpy as np
 
 from compare_sulcal import brainvisa, masks
+
+logger = logging.getLogger(__name__)
 
 # --------------------------------------------------------------------------- #
 # Crop-set comparison (crops mode)
@@ -266,7 +269,7 @@ def _unaligned_skip_reason(
     """
     if reason not in _CROP_INFO_ABSENT or shape_a != shape_b:
         return reason
-    print(f"WARNING: {key}: {reason}, comparing directly (equal shapes {shape_a}).")
+    logger.warning(f"{key}: {reason}, comparing directly (equal shapes {shape_a}).")
     return None
 
 

@@ -1,6 +1,7 @@
 """Per-subject sulcal voxel counts and mask statistics of the compare databases mode."""
 
 import glob
+import logging
 import os
 import sys
 from os.path import join
@@ -8,6 +9,8 @@ from os.path import join
 import numpy as np
 
 from compare_sulcal import brainvisa
+
+logger = logging.getLogger(__name__)
 
 # --------------------------------------------------------------------------- #
 # Database-mode module-level workers (must be picklable for joblib)
@@ -23,7 +26,7 @@ def _get_subject_voxel_counts(sub, brainvisa_dir):
     if not matches:
         return sub["subject"], None
     if len(matches) > 1:
-        print(f"WARNING: {len(matches)} graphs match subject {sub['subject']}; using {matches[0]}")
+        logger.warning(f"{len(matches)} graphs match subject {sub['subject']}; using {matches[0]}")
 
     graph = brainvisa.aims.read(matches[0])
     counts: dict = {}

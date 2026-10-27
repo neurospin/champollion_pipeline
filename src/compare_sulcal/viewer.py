@@ -1,13 +1,18 @@
 """Anatomist viewer of the most changed masks (compare masks/cortical_tiles --visualisation)."""
 
 import json
+import logging
 import os
 import subprocess
 import sys
 import tempfile
 from pathlib import Path
 
+import champollion_utils.logger  # noqa: F401 - installs Logger.trace/output/fail
+
 from compare_sulcal import masks
+
+logger = logging.getLogger(__name__)
 
 VIEWER_TOP_K = 5
 
@@ -77,7 +82,7 @@ def _launch_viewer(entries: list[dict]) -> int:
     """Run the Anatomist viewer subprocess; return 1 (stderr note) if it exits non-zero."""
     rc = subprocess.run([sys.executable, "-c", _VIEWER_SCRIPT, json.dumps(entries)], check=False).returncode
     if rc != 0:
-        print(f"ERROR: Anatomist viewer exited with return code {rc}.", file=sys.stderr)
+        logger.error(f"Anatomist viewer exited with return code {rc}.")
         return 1
     return 0
 
@@ -115,16 +120,15 @@ def visualise_mask_diffs(
     """
     names = _compute_top_changed_masks(scores, top_k)
     if not names:
-        print("No changed masks to visualise.")
+        logger.trace("No changed masks to visualise.")
         return 0
     if not _has_usable_display():
-        print(
-            "Skipping --visualisation: no usable display (DISPLAY/WAYLAND_DISPLAY unset or QT_QPA_PLATFORM=offscreen).",
-            file=sys.stderr,
+        logger.warning(
+            "Skipping --visualisation: no usable display (DISPLAY/WAYLAND_DISPLAY unset or QT_QPA_PLATFORM=offscreen)."
         )
         return 0
 
-    print(f"\nOpening Anatomist for the {len(names)} most-changed mask(s)...")
+    logger.trace(f"Opening Anatomist for the {len(names)} most-changed mask(s)...")
     if xor_dir is not None:
         return _launch_viewer(_make_viewer_entries(names, masks_a, masks_b, Path(xor_dir)))
     with tempfile.TemporaryDirectory(prefix="compare_xor_") as tmp:
