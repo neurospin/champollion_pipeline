@@ -48,6 +48,10 @@ LOG_CONVERTED_MODULES: tuple[str, ...] = (
     "champollion_pipeline.snapshot_types.tiles",
     "champollion_pipeline.snapshot_types.umap",
     "champollion_pipeline.train_champollion",
+    "champollion_pipeline.generate_champollion_config",
+    "champollion_pipeline.prune_failed_subjects",
+    "champollion_pipeline.purge_subject",
+    "champollion_pipeline.put_together_embeddings",
 )
 
 

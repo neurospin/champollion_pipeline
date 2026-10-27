@@ -8,6 +8,7 @@ Handles:
   - Aggregated .npy arrays (Rskeleton.npy, Rlabel.npy, ...) filtered by subject CSV
 """
 
+import logging
 import shutil
 from datetime import datetime
 from os.path import exists, join
@@ -19,6 +20,8 @@ from champollion_utils.script_builder import ScriptBuilder
 
 from champollion_pipeline.derivatives_layout import compute_run_log_path
 from champollion_pipeline.process_setup import init_pipeline_process
+
+logger = logging.getLogger(__name__)
 
 
 class PurgeSubject(ScriptBuilder):
@@ -39,9 +42,10 @@ class PurgeSubject(ScriptBuilder):
             .add_flag("--dry-run", "Print what would be deleted without deleting.")
         )
 
-    def _log(self, msg):
+    def _log(self, msg: str) -> None:
+        """Log one deletion action at OUTPUT; the message starts with "[dry-run] " under --dry-run."""
         prefix = "[dry-run] " if self.args.dry_run else ""
-        print(f"{prefix}{msg}")
+        logger.output(f"{prefix}{msg}")
 
     def _remove_file(self, path):
         self._log(f"Delete file: {path}")
@@ -120,7 +124,7 @@ class PurgeSubject(ScriptBuilder):
                         subjects_filtered.to_csv(str(csv_path), index=False)
 
         if not found_in_any:
-            print(f"Subject '{subject}' not found in any aggregated array.")
+            logger.warning(f"Subject '{subject}' not found in any aggregated array.")
 
     def default_log_path(self) -> str:
         """Run-log path of a bare --log: <dataset>/derivatives/.log/purge_subject_<stamp>.log."""
@@ -136,17 +140,17 @@ class PurgeSubject(ScriptBuilder):
         crops_2mm = join(derivatives, "crops", "2mm")
         subject = self.args.subject
 
-        print(f"Purging subject '{subject}' from: {derivatives}")
+        logger.trace(f"Purging subject '{subject}' from: {derivatives}")
 
         self._purge_per_subject_dirs(derivatives)
         if exists(crops_2mm):
             self._purge_per_subject_crop_files(crops_2mm)
             self._purge_aggregated_arrays(crops_2mm)
         else:
-            print("No crops/2mm directory found — skipping crop purge.")
+            logger.warning("No crops/2mm directory found — skipping crop purge.")
 
         action = "Would remove" if self.args.dry_run else "Removed"
-        print(f"\nDone. {action} all data for subject '{subject}'.")
+        logger.output(f"Done. {action} all data for subject '{subject}'.")
         return 0
 
 

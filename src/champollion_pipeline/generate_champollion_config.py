@@ -12,6 +12,7 @@ container environments).  ``--champollion_loc`` is read-only by default.
 
 import glob
 import json
+import logging
 import os
 from datetime import datetime
 from os.path import abspath, dirname, exists, join
@@ -27,6 +28,8 @@ from champollion_pipeline.derivatives_layout import (
 )
 from champollion_pipeline.process_setup import init_pipeline_process
 from champollion_pipeline.utils.lib import DERIVATIVES_FOLDER, find_dataset_folder
+
+logger = logging.getLogger(__name__)
 
 # Get the script's directory for reliable path resolution
 _SCRIPT_DIR = dirname(abspath(__file__))
@@ -139,9 +142,9 @@ class GenerateChampollionConfig(ScriptBuilder):
                 result_file = join(dataset_loc, f"{dataset_name}.yaml")
                 with open(result_file, "w") as f:
                     f.write(filedata)
-                print(result_file)
+                logger.output(f"Dataset config written: {result_file}")
         if skipped:
-            print(f"Skipped {len(skipped)} sulci (no .minf or .npy found): {skipped}")
+            logger.warning(f"Skipped {len(skipped)} sulci (no .minf or .npy found): {skipped}")
 
     def _validate_inputs(self):
         """Validate input paths."""
@@ -155,7 +158,7 @@ class GenerateChampollionConfig(ScriptBuilder):
         os.makedirs(dirname(dest_path), exist_ok=True)
         with open(dest_path, "w") as f:
             f.write(_LOCALIZATION_TEMPLATE.format(dataset_folder=dataset_folder))
-        print(f"Localization config written: {dest_path}")
+        logger.output(f"Localization config written: {dest_path}")
 
     def _find_checkout_dataset_configs(self, champollion_loc: str) -> str | None:
         """Return <champollion_loc>/champollion/configs/dataset/<dataset> if that dir exists, else None.
@@ -227,7 +230,7 @@ class GenerateChampollionConfig(ScriptBuilder):
         with open(reference_yaml_dest, "w") as f:
             f.writelines(my_lines)
 
-        print(f"generate_champollion_config.py/champollion_loc: {champollion_loc}")
+        logger.trace(f"generate_champollion_config.py/champollion_loc: {champollion_loc}")
 
         with open(reference_yaml_dest) as f:
             ref = f.read()
@@ -251,8 +254,8 @@ class GenerateChampollionConfig(ScriptBuilder):
         # for regions absent from configs_root, but their presence is worth flagging as clutter.
         stale = self._find_checkout_dataset_configs(champollion_loc)
         if stale:
-            print(
-                f"Notice: stale in-checkout dataset configs at {stale} are now a fallback "
+            logger.warning(
+                f"stale in-checkout dataset configs at {stale} are now a fallback "
                 f"(only used for regions not found in {configs_root}); consider deleting them."
             )
 

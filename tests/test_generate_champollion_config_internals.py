@@ -9,6 +9,7 @@ ScriptBuilder ``execute_command`` shell-outs are replaced by in-process
 equivalents).
 """
 
+import logging
 import os
 import shutil
 from pathlib import Path
@@ -151,7 +152,8 @@ class TestCreateDatasetConfigs:
         script._create_dataset_configs(str(crops), str(out), self.REF)
         assert list(out.iterdir()) == []
 
-    def test_sulci_without_size_information_are_reported_as_skipped(self, temp_dir, capsys):
+    def test_sulci_without_size_information_are_reported_as_skipped(self, temp_dir, pipeline_caplog):
+        """REQ-LOGGING-BDRABCZUK-D596BEC255BD: the skipped crop sides are a WARNING record."""
         crops = Path(temp_dir) / "crops"
         (crops / "S.Or." / "mask").mkdir(parents=True)
         out = Path(temp_dir) / "out"
@@ -160,8 +162,11 @@ class TestCreateDatasetConfigs:
         script = make_script([str(crops), "--dataset", "TEST01"])
         script._create_dataset_configs(str(crops), str(out), self.REF)
 
-        captured = capsys.readouterr().out
-        assert "Skipped 2 sulci" in captured
+        record = pipeline_caplog.assert_logged(logging.WARNING, "Skipped 2 sulci")
+        skipped = record.getMessage().split("Skipped 2 sulci", 1)[1]
+        assert "S.Or./L" in skipped
+        assert "S.Or./R" in skipped
+        assert record.name == "champollion_pipeline.generate_champollion_config"
         assert list(out.iterdir()) == []
 
 

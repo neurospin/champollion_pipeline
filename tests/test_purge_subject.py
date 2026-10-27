@@ -3,11 +3,14 @@
 Unit tests for purge_subject.py
 """
 
+import logging
+
 import numpy as np
 import pandas as pd
 import pytest
 
 from champollion_pipeline.purge_subject import PurgeSubject
+from tests.log_assertions import OUTPUT
 
 # ---------------------------------------------------------------------------
 # Helpers
@@ -79,12 +82,14 @@ class TestRunValidation:
         with pytest.raises(ValueError, match="not found"):
             script.run()
 
-    def test_skips_crop_purge_when_crops_2mm_missing(self, tmp_path, capsys):
+    def test_skips_crop_purge_when_crops_2mm_missing(self, tmp_path, pipeline_caplog):
+        """REQ-LOGGING-BDRABCZUK-D1792CAE3479: the skipped crop purge is a WARNING record."""
         tmp_path.mkdir(exist_ok=True)
         script = _make_script(str(tmp_path), "sub-01")
         result = script.run()
         assert result == 0
-        assert "skipping crop purge" in capsys.readouterr().out.lower()
+        record = pipeline_caplog.assert_logged(logging.WARNING, "skipping crop purge")
+        assert record.name == "champollion_pipeline.purge_subject"
 
     def test_returns_zero_on_success(self, tmp_path):
         crops_2mm = tmp_path / "crops" / "2mm"
@@ -150,16 +155,18 @@ class TestPurgePerSubjectDirs:
 
         assert skel_dir.exists()
 
-    def test_dry_run_prints_delete_dir(self, tmp_path, capsys):
+    def test_dry_run_prints_delete_dir(self, tmp_path, pipeline_caplog):
+        """REQ-LOGGING-BDRABCZUK-B32699DFEAA6 and -8C8D59E9888B: the dry-run listing is an OUTPUT record."""
         subject = "sub-01"
         (tmp_path / "skeletons" / subject).mkdir(parents=True)
 
         script = _make_script(str(tmp_path), subject, dry_run=True)
         script._purge_per_subject_dirs(str(tmp_path))
 
-        out = capsys.readouterr().out
-        assert "dry-run" in out.lower()
-        assert "skeletons" in out
+        record = pipeline_caplog.assert_logged(OUTPUT, "Delete dir:")
+        assert record.getMessage().startswith("[dry-run]")
+        assert str(tmp_path / "skeletons" / subject) in record.getMessage()
+        assert record.name == "champollion_pipeline.purge_subject"
 
 
 # ---------------------------------------------------------------------------
@@ -252,15 +259,17 @@ class TestPurgeAggregatedArrays:
         assert "sub-01" in remaining
         assert "sub-03" in remaining
 
-    def test_handles_subject_not_in_any_array(self, tmp_path, capsys):
+    def test_handles_subject_not_in_any_array(self, tmp_path, pipeline_caplog):
+        """REQ-LOGGING-BDRABCZUK-C1CBF454947E: a subject in no aggregated array is a WARNING record."""
         crops_2mm = tmp_path / "crops" / "2mm"
         _make_aggregated_array(crops_2mm, "region_a", "Lskeleton", ["sub-01"])
 
         script = _make_script(str(tmp_path), "sub-99")
         script._purge_aggregated_arrays(str(crops_2mm))
 
-        out = capsys.readouterr().out
-        assert "not found" in out.lower()
+        record = pipeline_caplog.assert_logged(logging.WARNING, "not found")
+        assert "sub-99" in record.getMessage().split("not found", 1)[0]
+        assert record.name == "champollion_pipeline.purge_subject"
 
     def test_processes_multiple_regions(self, tmp_path):
         crops_2mm = tmp_path / "crops" / "2mm"
