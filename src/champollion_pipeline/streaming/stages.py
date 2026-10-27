@@ -1,7 +1,8 @@
 """Per-scan producer runners of a streaming run: Morphologist graph and cortical_tiles for one scan.
 
 compute_scan_tiles_dir and find_scan_crops_root are the only place the per-scan tiles layout
-<cortical_tiles_output>/scans/<str(scan)> and its crops root are computed; the barrier, the dataset
+<cortical_tiles_output>/scans/<scan path_prefix> (= scans/<subject>/t1mri/<acquisition>, Morphologist's own
+layout) and its crops root are computed; the barrier, the dataset
 config and the consumer import them.
 """
 
@@ -25,16 +26,19 @@ SCAN_TILES_DIRNAME = "scans"
 
 
 class Scan(Protocol):
-    """What the producer runners read from a scan identity (ScanId satisfies it)."""
+    """What the producer runners read from a scan identity (file_indexer.ScanId satisfies it)."""
 
     @property
     def path_prefix(self) -> str:
-        """Subject, then '/' and the session when the session is set."""
+        """The scan's Morphologist folder <subject>/t1mri/<acquisition>, relative to the subjects directory."""
         ...
 
 
 def make_single_scan_dir(subjects_dir: str, path_prefix: str) -> tempfile.TemporaryDirectory:
-    """Return a temporary directory whose only content links <path_prefix> to <subjects_dir>/<path_prefix>."""
+    """Return a temporary directory holding a link <path_prefix> to <subjects_dir>/<path_prefix>.
+
+    It holds only that link's parent directories besides.
+    """
     tmp = tempfile.TemporaryDirectory(prefix="champollion_scan_")
     link = os.path.join(tmp.name, path_prefix)
     try:
@@ -47,8 +51,8 @@ def make_single_scan_dir(subjects_dir: str, path_prefix: str) -> tempfile.Tempor
 
 
 def compute_scan_tiles_dir(cortical_tiles_output: str, scan: Scan) -> str:
-    """Return <cortical_tiles_output>/scans/<str(scan)>."""
-    return os.path.join(cortical_tiles_output, SCAN_TILES_DIRNAME, str(scan))
+    """Return <cortical_tiles_output>/scans/<scan path_prefix>, e.g. <out>/scans/sub-01/t1mri/ses-1_run-1."""
+    return os.path.join(cortical_tiles_output, SCAN_TILES_DIRNAME, scan.path_prefix)
 
 
 def find_scan_crops_root(scan_tiles_dir: str, masks_version: str) -> str | None:
@@ -60,7 +64,12 @@ def find_scan_crops_root(scan_tiles_dir: str, masks_version: str) -> str | None:
 def _cortical_tiles_argv(
     input_dir: str, output_dir: str, settings: StreamingSettings, dataset: DatasetConfig
 ) -> list[str]:
-    """RunCorticalTiles arguments of one scan, in main.py's order, with the per-worker job count."""
+    """RunCorticalTiles arguments of one scan, in main.py's order, with the per-worker job count.
+
+    path_to_graph and path_sk_with_hull are passed through unchanged. Datasets whose classic scans sit in
+    acquisition folders other than the one these paths name (usually t1mri/default_acquisition/...) must set
+    them to t1mri/*/...; the single-scan directory exposes only the scan's own acquisition, so * matches it alone.
+    """
     argv = [
         input_dir,
         output_dir,
@@ -82,23 +91,24 @@ def _cortical_tiles_argv(
 
 def run_cortical_tiles_for_scan(scan: Scan, settings: StreamingSettings, dataset: DatasetConfig) -> None:
     """Run cortical_tiles on one scan; a non-zero return code raises RuntimeError."""
-    scan_input = os.path.join(settings.subjects_dir, scan.path_prefix)
+    p = scan.path_prefix
+    scan_input = os.path.join(settings.subjects_dir, p)
     if not os.path.isdir(scan_input):
-        raise FileNotFoundError(f"cortical_tiles input for scan {scan} not found: {scan_input}")
+        raise FileNotFoundError(f"cortical_tiles input for scan {p} not found: {scan_input}")
     out = compute_scan_tiles_dir(dataset.cortical_tiles_output, scan)
     os.makedirs(out, exist_ok=True)
-    with make_single_scan_dir(settings.subjects_dir, scan.path_prefix) as input_dir:
-        logger.trace(f"cortical_tiles: scan {scan}")
+    with make_single_scan_dir(settings.subjects_dir, p) as input_dir:
+        logger.trace(f"cortical_tiles: scan {p}")
         script = RunCorticalTiles()
         script.parse_args(_cortical_tiles_argv(input_dir, out, settings, dataset))
         code = script.run()
     if code != 0:
-        raise RuntimeError(f"cortical_tiles failed for scan {scan} with return code {code}")
+        raise RuntimeError(f"cortical_tiles failed for scan {p} with return code {code}")
     crops = find_scan_crops_root(out, dataset.masks_version)
     if crops is None:
-        logger.warning(f"cortical_tiles QC: no {dataset.masks_version} 2mm crops for scan {scan} under {out}")
+        logger.warning(f"cortical_tiles QC: no {dataset.masks_version} 2mm crops for scan {p} under {out}")
         return
-    logger.output(f"cortical_tiles crops for scan {scan}: {crops}")
+    logger.output(f"cortical_tiles crops for scan {p}: {crops}")
 
 
 def run_morphologist_for_scan(raw_scan: str, settings: StreamingSettings, dataset: DatasetConfig) -> None:  # noqa: V107 - uniform producer runner signature

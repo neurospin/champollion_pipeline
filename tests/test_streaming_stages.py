@@ -1,11 +1,14 @@
-"""Tests for the per-scan producer runners of a streaming run (TASK-STREAMING-BDRABCZUK-976F253B3EF1).
+"""Tests for the per-scan producer runners of a streaming run.
+
+Tasks TASK-STREAMING-BDRABCZUK-E489672EF410 (runners) and TASK-STREAMING-BDRABCZUK-B96FC9F850D8
+(Morphologist layout rework: a scan is <subject>/t1mri/<acquisition>, ScanId.path_prefix).
 
 Morphologist and cortical_tiles never run: the script classes are replaced by
-recording stand-ins, and every input is a synthetic directory tree.
+recording stand-ins, and every input is a synthetic Morphologist subjects tree.
 
 Requirements:
-- REQ-STREAMING-BDRABCZUK-46989274D669 single-scan directory
-- REQ-STREAMING-BDRABCZUK-2E2105DAB2D5 per-scan tiles directory
+- REQ-STREAMING-BDRABCZUK-DF79EDAB9E0D single-scan directory in the Morphologist layout
+- REQ-STREAMING-BDRABCZUK-4F52C8B8F477 per-scan tiles directory in the Morphologist layout
 - REQ-STREAMING-BDRABCZUK-5D6608194C0A per-scan crops root
 - REQ-STREAMING-BDRABCZUK-12550265A4F0 tiles input is the single-scan directory
 - REQ-STREAMING-BDRABCZUK-2C273B5F35B8 tiles output is the per-scan tiles directory
@@ -14,10 +17,10 @@ Requirements:
 - REQ-STREAMING-BDRABCZUK-F40CA50E003B tiles --regions
 - REQ-STREAMING-BDRABCZUK-B2E6D8F46CBA tiles --sk_qc_path
 - REQ-STREAMING-BDRABCZUK-864832B0CA24 tiles --skel-seed
-- REQ-STREAMING-BDRABCZUK-4108D564774F tiles non-zero code raises
+- REQ-STREAMING-BDRABCZUK-23EB245D68C6 tiles non-zero code raises naming the scan folder
 - REQ-STREAMING-BDRABCZUK-A4F61AE8D57D tiles removes the single-scan directory
 - REQ-STREAMING-BDRABCZUK-CC2A9B2BB067 tiles missing scan input
-- REQ-STREAMING-BDRABCZUK-E572A6C64A7D tiles QC warning on missing crops
+- REQ-STREAMING-BDRABCZUK-449229795FBD tiles QC warning on missing crops naming the scan folder
 - REQ-STREAMING-BDRABCZUK-A6BD1A4FB2E7 Morphologist single-scan input
 - REQ-STREAMING-BDRABCZUK-FFBF0819F5CA Morphologist arguments
 - REQ-STREAMING-BDRABCZUK-F1956D4BFE22 Morphologist non-zero code raises
@@ -33,12 +36,12 @@ import importlib.util
 import logging
 import os
 import re
-from dataclasses import dataclass
 from pathlib import Path
 
 import pytest
 
 from champollion_pipeline.config import DatasetConfig
+from champollion_pipeline.file_indexer import ScanId
 from champollion_pipeline.run_cortical_tiles import RunCorticalTiles
 from champollion_pipeline.streaming import stages
 from champollion_pipeline.streaming.settings import StreamingSettings
@@ -48,20 +51,11 @@ STAGES_MODULE = "champollion_pipeline.streaming.stages"
 PATH_TO_GRAPH = "t1mri/default_acquisition/default_analysis/folds/3.3/base"
 PATH_SK_WITH_HULL = "t1mri/default_acquisition/default_analysis/segmentation/mesh"
 
-
-@dataclass(frozen=True)
-class _Scan:
-    """Synthetic stand-in for ScanId: path_prefix and str() as the ScanId requirements state."""
-
-    subject: str
-    session: str | None = None
-
-    @property
-    def path_prefix(self) -> str:
-        return self.subject if self.session is None else f"{self.subject}/{self.session}"
-
-    def __str__(self) -> str:
-        return self.subject if self.session is None else f"{self.subject}_{self.session}"
+# One scan per Morphologist flavour: classic (str() is the subject alone) and BIDS (str() is
+# sub-01_ses-1_run-1); each subject also holds another acquisition that must stay out of sight.
+CLASSIC_SCAN = ScanId("subj01", "default_acquisition")
+BIDS_SCAN = ScanId("sub-01", "ses-1_run-1", bids=True)
+SCANS = pytest.mark.parametrize("scan", [CLASSIC_SCAN, BIDS_SCAN], ids=["classic", "bids"])
 
 
 class _ScriptRecorder:
@@ -104,9 +98,15 @@ def _tree_entries(root: str) -> set[tuple[str, bool, str | None]]:
 
 @pytest.fixture
 def subjects_dir(tmp_path: Path) -> Path:
-    """Synthetic Morphologist subjects directory: two subjects, the first with two sessions."""
+    """Synthetic Morphologist subjects directory: <subject>/t1mri/<acquisition>, two acquisitions per subject."""
     root = tmp_path / "subjects"
-    for rel in ("sub-01/ses-1", "sub-01/ses-2", "sub-02/ses-1", "subj01"):
+    for rel in (
+        "sub-01/t1mri/ses-1_run-1",
+        "sub-01/t1mri/ses-2_run-1",
+        "sub-02/t1mri/ses-1_run-1",
+        "subj01/t1mri/default_acquisition",
+        "subj01/t1mri/ses-V2",
+    ):
         (root / rel).mkdir(parents=True)
     return root
 
@@ -184,24 +184,23 @@ def _tiles_namespace(argv: list[str]):
     return RunCorticalTiles().parse_args(argv)
 
 
+def _single_scan_entries(scan: ScanId, subjects_dir: Path) -> set[tuple[str, bool, str | None]]:
+    """Expected single-scan tree: the <subject> and <subject>/t1mri directories, then the acquisition link."""
+    return {
+        (scan.subject, False, None),
+        (f"{scan.subject}/t1mri", False, None),
+        (scan.path_prefix, True, os.path.realpath(subjects_dir / scan.path_prefix)),
+    }
+
+
 # --- make_single_scan_dir -------------------------------------------------------------------------
 
 
-def test_single_scan_dir_links_path_prefix(subjects_dir: Path) -> None:
-    tmp = stages.make_single_scan_dir(str(subjects_dir), "subj01")
+@SCANS
+def test_single_scan_dir_links_one_acquisition(subjects_dir: Path, scan: ScanId) -> None:
+    tmp = stages.make_single_scan_dir(str(subjects_dir), scan.path_prefix)
     try:
-        assert _tree_entries(tmp.name) == {("subj01", True, os.path.realpath(subjects_dir / "subj01"))}
-    finally:
-        tmp.cleanup()
-
-
-def test_single_scan_dir_links_session_only(subjects_dir: Path) -> None:
-    tmp = stages.make_single_scan_dir(str(subjects_dir), "sub-01/ses-1")
-    try:
-        assert _tree_entries(tmp.name) == {
-            ("sub-01", False, None),
-            ("sub-01/ses-1", True, os.path.realpath(subjects_dir / "sub-01" / "ses-1")),
-        }
+        assert _tree_entries(tmp.name) == _single_scan_entries(scan, subjects_dir)
     finally:
         tmp.cleanup()
 
@@ -209,11 +208,16 @@ def test_single_scan_dir_links_session_only(subjects_dir: Path) -> None:
 # --- compute_scan_tiles_dir and find_scan_crops_root ----------------------------------------------
 
 
-def test_compute_scan_tiles_dir() -> None:
-    scan = _Scan("sub-01", "ses-1")
-    assert stages.compute_scan_tiles_dir("/data/derivatives", scan) == os.path.join(
-        "/data/derivatives", "scans", "sub-01_ses-1"
-    )
+@pytest.mark.parametrize(
+    ("scan", "expected"),
+    [
+        (CLASSIC_SCAN, "/data/derivatives/scans/subj01/t1mri/default_acquisition"),
+        (BIDS_SCAN, "/data/derivatives/scans/sub-01/t1mri/ses-1_run-1"),
+    ],
+    ids=["classic", "bids"],
+)
+def test_compute_scan_tiles_dir_mirrors_path_prefix(scan: ScanId, expected: str) -> None:
+    assert stages.compute_scan_tiles_dir("/data/derivatives", scan) == expected
 
 
 def test_find_scan_crops_root_present(tmp_path: Path) -> None:
@@ -231,24 +235,22 @@ def test_find_scan_crops_root_absent(tmp_path: Path) -> None:
 # --- run_cortical_tiles_for_scan: arguments -------------------------------------------------------
 
 
-def test_tiles_input_is_single_scan_dir(tiles, settings, dataset, subjects_dir) -> None:
-    stages.run_cortical_tiles_for_scan(_Scan("sub-01", "ses-1"), settings, dataset)
+@SCANS
+def test_tiles_input_is_single_scan_dir(tiles, settings, dataset, subjects_dir, scan: ScanId) -> None:
+    stages.run_cortical_tiles_for_scan(scan, settings, dataset)
     assert tiles.runs == 1
-    assert tiles.input_entries == {
-        ("sub-01", False, None),
-        ("sub-01/ses-1", True, os.path.realpath(subjects_dir / "sub-01" / "ses-1")),
-    }
+    assert tiles.input_entries == _single_scan_entries(scan, subjects_dir)
 
 
-def test_tiles_output_is_existing_scan_tiles_dir(tiles, settings, dataset) -> None:
-    scan = _Scan("sub-01", "ses-1")
+@SCANS
+def test_tiles_output_is_existing_scan_tiles_dir(tiles, settings, dataset, scan: ScanId) -> None:
     stages.run_cortical_tiles_for_scan(scan, settings, dataset)
     assert _tiles_namespace(tiles.argv).output == stages.compute_scan_tiles_dir(dataset.cortical_tiles_output, scan)
     assert tiles.output_existed is True
 
 
 def test_tiles_base_options(tiles, settings, dataset) -> None:
-    stages.run_cortical_tiles_for_scan(_Scan("subj01"), settings, dataset)
+    stages.run_cortical_tiles_for_scan(CLASSIC_SCAN, settings, dataset)
     args = _tiles_namespace(tiles.argv)
     assert args.path_to_graph == PATH_TO_GRAPH
     assert args.path_sk_with_hull == PATH_SK_WITH_HULL
@@ -259,45 +261,45 @@ def test_tiles_base_options(tiles, settings, dataset) -> None:
 @pytest.mark.parametrize("bids", [True, False])
 def test_tiles_bids_flag(tiles, settings, dataset, bids: bool) -> None:
     dataset.bids = bids
-    stages.run_cortical_tiles_for_scan(_Scan("sub-01", "ses-1"), settings, dataset)
+    stages.run_cortical_tiles_for_scan(BIDS_SCAN, settings, dataset)
     assert ("--bids" in tiles.argv) is bids
 
 
 def test_tiles_regions_forwarded(tiles, settings, dataset) -> None:
     dataset.regions = ["S.C.-sylv.", "F.I.P."]
-    stages.run_cortical_tiles_for_scan(_Scan("subj01"), settings, dataset)
+    stages.run_cortical_tiles_for_scan(CLASSIC_SCAN, settings, dataset)
     assert _tiles_namespace(tiles.argv).regions == ["S.C.-sylv.", "F.I.P."]
 
 
 def test_tiles_no_regions_when_empty(tiles, settings, dataset) -> None:
     dataset.regions = []
-    stages.run_cortical_tiles_for_scan(_Scan("subj01"), settings, dataset)
+    stages.run_cortical_tiles_for_scan(CLASSIC_SCAN, settings, dataset)
     assert tiles.argv is not None
     assert "--regions" not in tiles.argv
 
 
 def test_tiles_sk_qc_path_forwarded(tiles, settings, dataset) -> None:
     dataset.sk_qc_path = "/synthetic/qc.tsv"
-    stages.run_cortical_tiles_for_scan(_Scan("subj01"), settings, dataset)
+    stages.run_cortical_tiles_for_scan(CLASSIC_SCAN, settings, dataset)
     assert _tiles_namespace(tiles.argv).sk_qc_path == "/synthetic/qc.tsv"
 
 
 def test_tiles_no_sk_qc_path_when_empty(tiles, settings, dataset) -> None:
     dataset.sk_qc_path = ""
-    stages.run_cortical_tiles_for_scan(_Scan("subj01"), settings, dataset)
+    stages.run_cortical_tiles_for_scan(CLASSIC_SCAN, settings, dataset)
     assert tiles.argv is not None
     assert not [arg for arg in tiles.argv if arg.startswith("--sk_qc_path")]
 
 
 def test_tiles_skel_seed_forwarded(tiles, settings, dataset) -> None:
     dataset.skel_seed = 0
-    stages.run_cortical_tiles_for_scan(_Scan("subj01"), settings, dataset)
+    stages.run_cortical_tiles_for_scan(CLASSIC_SCAN, settings, dataset)
     assert _tiles_namespace(tiles.argv).skel_seed == 0
 
 
 def test_tiles_no_skel_seed_when_none(tiles, settings, dataset) -> None:
     dataset.skel_seed = None
-    stages.run_cortical_tiles_for_scan(_Scan("subj01"), settings, dataset)
+    stages.run_cortical_tiles_for_scan(CLASSIC_SCAN, settings, dataset)
     assert tiles.argv is not None
     assert not [arg for arg in tiles.argv if arg.startswith("--skel-seed")]
 
@@ -305,16 +307,17 @@ def test_tiles_no_skel_seed_when_none(tiles, settings, dataset) -> None:
 # --- run_cortical_tiles_for_scan: failures, cleanup, input check and QC ---------------------------
 
 
-def test_tiles_nonzero_code_raises(tiles, settings, dataset) -> None:
+@SCANS
+def test_tiles_nonzero_code_raises(tiles, settings, dataset, scan: ScanId) -> None:
     tiles.return_code = 37
     with pytest.raises(RuntimeError) as excinfo:
-        stages.run_cortical_tiles_for_scan(_Scan("sub-01", "ses-1"), settings, dataset)
-    assert "sub-01_ses-1" in str(excinfo.value)
+        stages.run_cortical_tiles_for_scan(scan, settings, dataset)
+    assert scan.path_prefix in str(excinfo.value)
     assert re.search(r"\b37\b", str(excinfo.value))
 
 
 def test_tiles_single_scan_dir_removed_after_success(tiles, settings, dataset) -> None:
-    stages.run_cortical_tiles_for_scan(_Scan("subj01"), settings, dataset)
+    stages.run_cortical_tiles_for_scan(CLASSIC_SCAN, settings, dataset)
     assert tiles.argv is not None
     assert not os.path.exists(tiles.argv[0])
 
@@ -322,24 +325,29 @@ def test_tiles_single_scan_dir_removed_after_success(tiles, settings, dataset) -
 def test_tiles_single_scan_dir_removed_after_failure(tiles, settings, dataset) -> None:
     tiles.return_code = 1
     with pytest.raises(RuntimeError):
-        stages.run_cortical_tiles_for_scan(_Scan("subj01"), settings, dataset)
+        stages.run_cortical_tiles_for_scan(CLASSIC_SCAN, settings, dataset)
     assert tiles.argv is not None
     assert not os.path.exists(tiles.argv[0])
 
 
-def test_tiles_missing_scan_input_raises(tiles, settings, dataset, subjects_dir) -> None:
-    scan = _Scan("sub-09", "ses-1")
+@pytest.mark.parametrize(
+    "scan",
+    [ScanId("sub-09", "ses-1_run-1", bids=True), ScanId("subj01", "missing_acquisition")],
+    ids=["missing-subject", "missing-acquisition"],
+)
+def test_tiles_missing_scan_input_raises(tiles, settings, dataset, subjects_dir, scan: ScanId) -> None:
     with pytest.raises(FileNotFoundError) as excinfo:
         stages.run_cortical_tiles_for_scan(scan, settings, dataset)
     assert str(subjects_dir / scan.path_prefix) in str(excinfo.value)
     assert tiles.runs == 0
 
 
-def test_tiles_qc_missing_crops_warns_without_raising(tiles, settings, dataset, stages_records) -> None:
-    result = stages.run_cortical_tiles_for_scan(_Scan("sub-01", "ses-1"), settings, dataset)
+@SCANS
+def test_tiles_qc_missing_crops_warns_without_raising(tiles, settings, dataset, stages_records, scan: ScanId) -> None:
+    result = stages.run_cortical_tiles_for_scan(scan, settings, dataset)
     assert result is None
     assert tiles.runs == 1
-    warnings = [r for r in stages_records if r.levelno == logging.WARNING and "sub-01_ses-1" in r.getMessage()]
+    warnings = [r for r in stages_records if r.levelno == logging.WARNING and scan.path_prefix in r.getMessage()]
     assert warnings, [(r.levelname, r.getMessage()) for r in stages_records]
 
 
