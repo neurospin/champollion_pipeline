@@ -20,12 +20,17 @@ from joblib import Parallel, delayed
 
 from champollion_pipeline.derivatives_layout import compute_run_log_path
 from champollion_pipeline.process_setup import init_pipeline_process
+from champollion_pipeline.utils.lib import (
+    LABELLING_SESSION_CANDIDATES,
+    ExplicitLabellingSession,
+    labelling_session_candidates,
+)
 
 # ---------------------------------------------------------------------------
 # Constants
 # ---------------------------------------------------------------------------
 
-LABELLING_SESSION_DEFAULT = "deepcnn_session_auto"
+LABELLING_SESSION_DEFAULT = LABELLING_SESSION_CANDIDATES[0]
 SIDES = ("L", "R")
 QC_COLUMNS = ("participant_id", "qc", "labelled_L", "labelled_R", "reason")
 GRAPH_WILDCARD = "*"
@@ -101,8 +106,16 @@ def compute_reason(has_session_dir: bool, is_session_empty: bool, labelled: dict
     return REASON_OK
 
 
+def find_session(graph_dir: str, sessions: tuple[str, ...]) -> str | None:
+    """First of sessions whose folder exists under graph_dir (an empty folder counts), or None."""
+    for session in sessions:
+        if os.path.isdir(os.path.join(graph_dir, session)):
+            return session
+    return None
+
+
 def fetch_subject_row(
-    subjects_dir: str, subject: str, path_to_graph: str, labelling_session: str, is_bids: bool
+    subjects_dir: str, subject: str, path_to_graph: str, sessions: tuple[str, ...], is_bids: bool
 ) -> dict:
     """Build one TSV row for a subject; all dict values are strings."""
     subject_dir = os.path.join(subjects_dir, subject)
@@ -128,10 +141,9 @@ def fetch_subject_row(
             "reason": REASON_NO_SESSION_DIR,
         }
 
-    session_dir = os.path.join(graph_dir, labelling_session)
-    has_session_dir = os.path.isdir(session_dir)
+    labelling_session = find_session(graph_dir, sessions)
 
-    if not has_session_dir:
+    if labelling_session is None:
         return {
             "participant_id": subject,
             "qc": "0",
@@ -140,6 +152,7 @@ def fetch_subject_row(
             "reason": REASON_NO_SESSION_DIR,
         }
 
+    session_dir = os.path.join(graph_dir, labelling_session)
     entries = os.listdir(session_dir)
     is_session_empty = len(entries) == 0
 
@@ -209,10 +222,15 @@ class GenerateLabellingQC(ScriptBuilder):
                 "(same as --path_to_graph in run_cortical_tiles.py). "
                 "With --bids, may contain a '*' wildcard.",
             )
-            .add_optional_argument(
+            .add_argument(
                 "--labelling_session",
-                f"Name of the labelling session subdirectory (default: {LABELLING_SESSION_DEFAULT}).",
+                action=ExplicitLabellingSession,
                 default=LABELLING_SESSION_DEFAULT,
+                help=(
+                    "Name of the labelling session subdirectory. When given, only that session is checked; "
+                    "when omitted, each subject uses the first existing folder of "
+                    f"{', '.join(LABELLING_SESSION_CANDIDATES)}."
+                ),
             )
             .add_flag(
                 "--bids",
@@ -237,12 +255,13 @@ class GenerateLabellingQC(ScriptBuilder):
             raise ValueError(f"Input is not a directory: {subjects_dir}")
 
         subject_names = fetch_subject_names(subjects_dir)
+        sessions = labelling_session_candidates(self.args)
         rows = Parallel(n_jobs=self.args.njobs)(
             delayed(fetch_subject_row)(
                 subjects_dir,
                 subject,
                 self.args.path_to_graph,
-                self.args.labelling_session,
+                sessions,
                 self.args.bids,
             )
             for subject in subject_names

@@ -1,8 +1,27 @@
+import argparse
 from pathlib import Path
 
 # Version used for derivatives folder naming (e.g., cortical_tiles-2026)
 CORTICAL_TILES_VERSION = "2026"
 DERIVATIVES_FOLDER = f"cortical_tiles-{CORTICAL_TILES_VERSION}"
+
+# Morphologist labelling sessions searched for a labelled graph, in priority order.
+LABELLING_SESSION_CANDIDATES: tuple[str, ...] = ("deepcnn_session_auto", "default_session_auto")
+
+
+class ExplicitLabellingSession(argparse.Action):
+    """Store --labelling_session and record that it was given on the command line."""
+
+    def __call__(self, _parser, namespace, values, _option_string=None):
+        namespace.labelling_session = values
+        namespace.labelling_session_explicit = True
+
+
+def labelling_session_candidates(args: argparse.Namespace) -> tuple[str, ...]:
+    """Sessions to search: only the given --labelling_session, else LABELLING_SESSION_CANDIDATES."""
+    if getattr(args, "labelling_session_explicit", False):
+        return (args.labelling_session,)
+    return LABELLING_SESSION_CANDIDATES
 
 
 def find_dataset_folder(path: str, dataset_name: str) -> str:
