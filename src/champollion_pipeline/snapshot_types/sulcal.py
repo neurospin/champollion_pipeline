@@ -6,6 +6,8 @@ import os.path as osp
 
 from champollion_pipeline.snapshot_types import brainvisa_imports
 
+HEMISPHERES = ("left", "right")
+
 
 def list_acquisitions(subject_dir):
     """Return acquisition folder names that contain at least one sulcal graph.
@@ -165,3 +167,33 @@ def _detect_hemi(graph_path):
     if fname.startswith("r") or "_r" in fname or "right" in fname:
         return "right"
     return "left"
+
+
+def list_sulcal_subjects(morphologist_dir, subject=None):
+    """Return ``[subject]`` when given, else the sorted subdirectory names of ``morphologist_dir``."""
+    if subject:
+        return [subject]
+    return sorted(name for name in os.listdir(morphologist_dir) if osp.isdir(osp.join(morphologist_dir, name)))
+
+
+def find_sulcal_graphs_by_hemi(morphologist_dir, subject, acquisition=None):
+    """Return one subject's sorted sulcal graphs grouped as ``{"left": [...], "right": [...]}``."""
+    by_hemi = {hemi: [] for hemi in HEMISPHERES}
+    for graph in sorted(find_sulcal_graphs(morphologist_dir, subject=subject, acquisition=acquisition)):
+        by_hemi[_detect_hemi(graph)].append(graph)
+    return by_hemi
+
+
+def find_first_kept_subject_graphs(morphologist_dir, subject=None, acquisition=None, excluded=frozenset()):
+    """Return the graphs by hemisphere of the first non-excluded subject that has a sulcal graph.
+
+    Subjects are taken in ``list_sulcal_subjects`` order; when none qualifies,
+    both hemisphere lists are empty.
+    """
+    for name in list_sulcal_subjects(morphologist_dir, subject):
+        if name in excluded:
+            continue
+        by_hemi = find_sulcal_graphs_by_hemi(morphologist_dir, name, acquisition)
+        if any(by_hemi.values()):
+            return by_hemi
+    return {hemi: [] for hemi in HEMISPHERES}

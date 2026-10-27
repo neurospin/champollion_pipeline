@@ -20,8 +20,18 @@ from champollion_utils.script_builder import ScriptBuilder
 
 from champollion_pipeline.derivatives_layout import compute_run_log_path
 from champollion_pipeline.process_setup import init_pipeline_process
+from champollion_pipeline.snapshot_types.input_qc import (
+    SnapshotsInputQC,
+    check_embedding_inputs,
+    check_sulcal_inputs,
+    find_crop_regions_without_mask,
+    find_missing_region_graphs,
+    find_missing_umap_references,
+    print_warning,
+)
 from champollion_pipeline.snapshot_types.sulcal import (
     _detect_hemi,
+    find_first_kept_subject_graphs,
     find_sulcal_graphs,
     find_white_mesh,
     generate_sulcal_graph_snapshot,
@@ -33,12 +43,13 @@ from champollion_pipeline.snapshot_types.tiles import (
     find_completed_regions,
     generate_tiles_snapshot,
 )
-from champollion_pipeline.snapshot_types.umap import discover_umap_pairs, generate_umap_snapshot
+from champollion_pipeline.snapshot_types.umap import discover_umap_pairs, generate_umap_snapshot, list_embedding_csvs
 
 __all__ = [
     "ICBM_MESH_DIR_FALLBACK",
     "REGION_GRAPH_ROOT_HINT",
     "GenerateSnapshots",
+    "_detect_hemi",
     "discover_umap_pairs",
     "find_completed_regions",
     "find_sulcal_graphs",
@@ -49,6 +60,9 @@ __all__ = [
     "list_acquisitions",
     "main",
 ]
+
+# Camera orientation (x, y, z, w) of each hemisphere's sulcal graph snapshot
+SULCAL_VIEW_QUATERNIONS = {"left": (0.5, 0.5, 0.5, 0.5), "right": (0.5, -0.5, -0.5, 0.5)}
 
 
 class GenerateSnapshots(ScriptBuilder):
@@ -92,29 +106,23 @@ class GenerateSnapshots(ScriptBuilder):
         return compute_run_log_path(self.args.output_dir, "snapshots", datetime.now().astimezone())
 
     def run(self) -> int:
-        """Run all requested snapshot generation steps."""
+        """Run the input QC, then all requested snapshot generation steps; always returns 0."""
         os.makedirs(self.args.output_dir, exist_ok=True)
 
-        only_flags = (
-            self.args.sulcal_only,
-            self.args.tiles_only,
-            self.args.umap_only,
-        )
-        run_sulcal = not any(only_flags) or self.args.sulcal_only
-        run_tiles = not any(only_flags) or self.args.tiles_only
-        run_umap = not any(only_flags) or self.args.umap_only
+        run_sulcal, run_tiles, run_umap = self._selected_steps()
+        excluded = self._run_input_qc(run_sulcal, run_tiles, run_umap)
 
         size = (self.args.width, self.args.height)
         all_snapshots = []
 
         if run_sulcal:
-            all_snapshots.extend(self._run_sulcal(size))
+            all_snapshots.extend(self._run_sulcal(size, excluded=excluded))
 
         if run_tiles:
             all_snapshots.extend(self._run_tiles(size))
 
         if run_umap:
-            all_snapshots.extend(self._run_umap(size))
+            all_snapshots.extend(self._run_umap(size, excluded=excluded))
 
         print(f"\nGenerated {len(all_snapshots)} snapshot(s)")
 
@@ -125,8 +133,75 @@ class GenerateSnapshots(ScriptBuilder):
 
         return 0
 
-    def _run_sulcal(self, size):
-        """Generate sulcal graph snapshots."""
+    def _selected_steps(self) -> tuple[bool, bool, bool]:
+        """Return (run_sulcal, run_tiles, run_umap) from the --*-only flags (none set runs all)."""
+        only_flags = (self.args.sulcal_only, self.args.tiles_only, self.args.umap_only)
+        run_all = not any(only_flags)
+        return run_all or self.args.sulcal_only, run_all or self.args.tiles_only, run_all or self.args.umap_only
+
+    def _morphologist_dir(self) -> str | None:
+        """Return --morphologist_dir when given and existing, else None."""
+        morphologist_dir = self.args.morphologist_dir
+        return morphologist_dir if morphologist_dir and osp.exists(morphologist_dir) else None
+
+    def _umap_dirs(self) -> tuple[str, str] | None:
+        """Return (embeddings_dir, reference_data_dir) when both are given and exist, else None."""
+        dirs = (self.args.embeddings_dir, self.args.reference_data_dir)
+        return dirs if all(d and osp.exists(d) for d in dirs) else None
+
+    def _umap_regions(self) -> list[str] | None:
+        """Return the --umap_region names, or None when no filter is given."""
+        umap_region = getattr(self.args, "umap_region", None)
+        return [r.strip() for r in umap_region.split(",")] if umap_region else None
+
+    def _crops_dir(self) -> str | None:
+        """Return the crops directory (<dir>/crops/2mm when present) of an existing --cortical_tiles_dir."""
+        tiles_dir = self.args.cortical_tiles_dir
+        if not tiles_dir or not osp.exists(tiles_dir):
+            return None
+        candidate = osp.join(tiles_dir, "crops", "2mm")
+        return candidate if osp.isdir(candidate) else tiles_dir
+
+    def _run_input_qc(self, run_sulcal, run_tiles, run_umap) -> frozenset[str]:
+        """Check the selected steps' inputs, write the QC file, warn, and return the excluded subjects."""
+        report = SnapshotsInputQC()
+        morphologist_dir = self._morphologist_dir()
+        if run_sulcal and morphologist_dir:
+            check_sulcal_inputs(
+                report,
+                morphologist_dir,
+                getattr(self.args, "subject", None),
+                getattr(self.args, "acquisition", None),
+            )
+        umap_dirs = self._umap_dirs() if run_umap else None
+        csvs = list_embedding_csvs(umap_dirs[0], self._umap_regions()) if umap_dirs else []
+        check_embedding_inputs(report, csvs)
+
+        qc_path = report.write(self.args.output_dir)
+        excluded = report.excluded()
+        print_warning(f"snapshots input QC excluded {len(excluded)} subject(s), see {qc_path}", excluded)
+        if umap_dirs:
+            reference_data_dir = umap_dirs[1]
+            print_warning(
+                f"missing UMAP reference file(s) in {reference_data_dir}",
+                find_missing_umap_references(reference_data_dir, csvs),
+            )
+        crops_dir = self._crops_dir() if run_tiles else None
+        if crops_dir:
+            print_warning(
+                f"crop region folder(s) of {crops_dir} with no Lmask_skeleton.nii.gz or "
+                "Rmask_skeleton.nii.gz under mask/",
+                find_crop_regions_without_mask(crops_dir),
+            )
+            if self.args.champollion_data_root:
+                print_warning(
+                    "missing region graph file(s)",
+                    find_missing_region_graphs(self.args.champollion_data_root, crops_dir, self.args.tiles_level),
+                )
+        return frozenset(excluded)
+
+    def _run_sulcal(self, size, excluded=frozenset()):
+        """Generate sulcal graph snapshots of the first subject not excluded by the input QC."""
         snapshots = []
         morphologist_dir = self.args.morphologist_dir
         if not morphologist_dir or not osp.exists(morphologist_dir):
@@ -138,29 +213,9 @@ class GenerateSnapshots(ScriptBuilder):
         subject = getattr(self.args, "subject", None)
         acquisition = getattr(self.args, "acquisition", None)
 
-        graphs = find_sulcal_graphs(morphologist_dir, subject=subject, acquisition=acquisition)
-
-        # Group by hemisphere — keep one graph per side
-        by_hemi = {"left": [], "right": []}
-        for g in graphs:
-            by_hemi[_detect_hemi(g)].append(g)
-
-        # Warn if multiple acquisitions exist and user hasn't disambiguated
+        by_hemi = find_first_kept_subject_graphs(morphologist_dir, subject, acquisition, excluded)
         if not acquisition:
-            for hemi, hemi_graphs in by_hemi.items():
-                if len(hemi_graphs) > 1:
-                    subject_dir = osp.join(morphologist_dir, subject) if subject else morphologist_dir
-                    acqs = list_acquisitions(subject_dir)
-                    acq_list = ", ".join(acqs) if acqs else "unknown"
-                    print(
-                        f"  Warning: {len(hemi_graphs)} {hemi} graphs found "
-                        f"(acquisitions: {acq_list}). "
-                        f"Using the first one. Re-run with --acquisition <name> "
-                        f"to select a specific one."
-                    )
-                    break
-
-        QUAT = {"left": (0.5, 0.5, 0.5, 0.5), "right": (0.5, -0.5, -0.5, 0.5)}
+            self._warn_multiple_acquisitions(by_hemi, morphologist_dir, subject)
 
         total = sum(len(v) for v in by_hemi.values())
         print(f"  Found {total} sulcal graph(s)")
@@ -179,7 +234,7 @@ class GenerateSnapshots(ScriptBuilder):
                     graph_path,
                     out,
                     size,
-                    view_quaternion=QUAT[hemi],
+                    view_quaternion=SULCAL_VIEW_QUATERNIONS[hemi],
                     mesh_path=white_mesh,
                 )
                 snapshots.append(snap)
@@ -188,16 +243,27 @@ class GenerateSnapshots(ScriptBuilder):
 
         return snapshots
 
+    def _warn_multiple_acquisitions(self, by_hemi, morphologist_dir, subject):
+        """Warn once when a hemisphere has several graphs and no --acquisition was given."""
+        for hemi, hemi_graphs in by_hemi.items():
+            if len(hemi_graphs) > 1:
+                subject_dir = osp.join(morphologist_dir, subject) if subject else morphologist_dir
+                acqs = list_acquisitions(subject_dir)
+                acq_list = ", ".join(acqs) if acqs else "unknown"
+                print(
+                    f"  Warning: {len(hemi_graphs)} {hemi} graphs found "
+                    f"(acquisitions: {acq_list}). "
+                    f"Using the first one. Re-run with --acquisition <name> "
+                    f"to select a specific one."
+                )
+                break
+
     def _run_tiles(self, size):
         """Generate cortical tiles snapshots."""
         snapshots = []
-        if self.args.cortical_tiles_dir and osp.exists(self.args.cortical_tiles_dir):
-            # Accept either the crops/2mm/ path directly or the cortical_tiles root;
-            # auto-detect crops/2mm/ subdirectory when the root is given.
-            crops_dir = self.args.cortical_tiles_dir
-            candidate = osp.join(crops_dir, "crops", "2mm")
-            if osp.isdir(candidate):
-                crops_dir = candidate
+        # Accept either the crops/2mm/ path directly or the cortical_tiles root
+        crops_dir = self._crops_dir()
+        if crops_dir:
             print("\nGenerating cortical tiles snapshots...")
             out = osp.join(self.args.output_dir, "tiles_masks.png")
             try:
@@ -217,7 +283,7 @@ class GenerateSnapshots(ScriptBuilder):
             print(f"Cortical tiles directory not found: {self.args.cortical_tiles_dir}")
         return snapshots
 
-    def _run_umap(self, size):
+    def _run_umap(self, size, excluded=frozenset()):
         """Generate UMAP scatter plots."""
         snapshots = []
 
@@ -232,10 +298,8 @@ class GenerateSnapshots(ScriptBuilder):
             print(f"Reference data directory not found: {self.args.reference_data_dir}")
             return snapshots
 
-        regions = None
-        umap_region = getattr(self.args, "umap_region", None)
-        if umap_region:
-            regions = [r.strip() for r in umap_region.split(",")]
+        regions = self._umap_regions()
+        if regions:
             print(f"\nUMAP region filter: {', '.join(regions)}")
 
         print("\nGenerating UMAP scatter plots...")
@@ -247,6 +311,7 @@ class GenerateSnapshots(ScriptBuilder):
                 out,
                 size,
                 regions=regions,
+                exclude_ids=excluded,
             )
             snapshots.extend(snaps)
         except Exception as e:

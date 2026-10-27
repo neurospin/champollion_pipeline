@@ -8,6 +8,7 @@ import os
 from pathlib import Path
 from unittest.mock import patch
 
+import numpy as np
 import pytest
 
 from champollion_pipeline.generate_snapshots import (
@@ -18,6 +19,7 @@ from champollion_pipeline.generate_snapshots import (
     find_white_mesh,
     main,
 )
+from champollion_pipeline.utils.qc_report import read_qc_tsv
 
 
 class TestFindSulcalGraphs:
@@ -519,3 +521,334 @@ class TestGenerateSnapshotsSmoke:
     def test_main_is_callable(self):
         """Test that main is callable."""
         assert callable(main)
+
+
+# --- Stage 6 input QC (TASK-NTUI-BDRABCZUK-8C1AE0C0AD63) ---
+
+QC_FILE = "snapshots_input_qc.tsv"
+_RENDER_SULCAL = "champollion_pipeline.generate_snapshots.generate_sulcal_graph_snapshot"
+_RENDER_TILES = "champollion_pipeline.generate_snapshots.generate_tiles_snapshot"
+_LOAD_UMAP_MODEL = "champollion_pipeline.snapshot_types.umap.joblib.load"
+
+
+def _morphologist_subject(morph_dir, subject, graphs=("L", "R"), meshes=("L", "R")):
+    """Create one Morphologist subject with the given sulcal graph and white mesh sides."""
+    analysis = Path(morph_dir) / subject / "t1mri" / "default_acquisition" / "0"
+    (analysis / "folds" / "3.1").mkdir(parents=True)
+    (analysis / "segmentation" / "mesh").mkdir(parents=True)
+    for side in graphs:
+        (analysis / "folds" / "3.1" / f"{side}sulci_{subject}.arg").touch()
+    for side in meshes:
+        (analysis / "segmentation" / "mesh" / f"{subject}_{side}white.gii").touch()
+
+
+def _embeddings_csv(embeddings_dir, region, hemi, rows):
+    """Write {region}_{hemi}_embeddings.csv with an ID column and two dimensions."""
+    Path(embeddings_dir).mkdir(parents=True, exist_ok=True)
+    lines = ["ID,dim1,dim2", *(f"{subject},{d1},{d2}" for subject, d1, d2 in rows)]
+    (Path(embeddings_dir) / f"{region}_{hemi}_embeddings.csv").write_text("\n".join(lines) + "\n")
+
+
+def _umap_reference(reference_dir, region, hemi, model=True, coords=True):
+    """Create the UMAP model and reference coordinates files of one region and hemisphere."""
+    Path(reference_dir).mkdir(parents=True, exist_ok=True)
+    if model:
+        (Path(reference_dir) / f"umap_{region}_{hemi}.pkl").touch()
+    if coords:
+        np.save(Path(reference_dir) / f"umap_{region}_{hemi}_coords.npy", np.zeros((3, 2)))
+
+
+class _RecordingUmapModel:
+    """UMAP model stand-in that records each array passed to transform."""
+
+    def __init__(self, on_transform=None):
+        self.inputs = []
+        self.on_transform = on_transform
+
+    def transform(self, values):
+        if self.on_transform is not None:
+            self.on_transform()
+        self.inputs.append(np.array(values))
+        return np.zeros((len(values), 2))
+
+
+def _run_snapshots(args):
+    """Parse args and run GenerateSnapshots, returning its exit value."""
+    script = GenerateSnapshots()
+    script.parse_args(args)
+    return script.run()
+
+
+def _qc_rows(output_dir):
+    """Read snapshots_input_qc.tsv of output_dir, keyed by participant_id."""
+    return {row["participant_id"]: row for row in read_qc_tsv(os.path.join(output_dir, QC_FILE))}
+
+
+def _lines(captured):
+    """Return the stdout then stderr lines of a pytest capture."""
+    return (captured.out + captured.err).splitlines()
+
+
+class TestSnapshotsInputQC:
+    """Stage 6 input QC: per-subject QC file, exclusions, and up-front missing-input warnings."""
+
+    def test_qc_file_rows_written_before_rendering(self, temp_dir):
+        """REQ C7139FD8D38A: one row per sulcal subject and embeddings ID, written before rendering."""
+        morph = os.path.join(temp_dir, "morphologist")
+        _morphologist_subject(morph, "sub-01")
+        _morphologist_subject(morph, "sub-02")
+        embeddings = os.path.join(temp_dir, "embeddings")
+        _embeddings_csv(embeddings, "S.Or.", "left", [("sub-02", 0.1, 0.2), ("sub-03", 0.3, 0.4)])
+        reference = os.path.join(temp_dir, "reference")
+        _umap_reference(reference, "S.Or.", "left")
+        output_dir = os.path.join(temp_dir, "out")
+        qc_present_at_render = []
+
+        def render(graph_path, out, *args, **kwargs):
+            qc_present_at_render.append(os.path.exists(os.path.join(output_dir, QC_FILE)))
+            return out
+
+        with patch(_RENDER_SULCAL, side_effect=render), patch(_LOAD_UMAP_MODEL, return_value=_RecordingUmapModel()):
+            _run_snapshots(
+                [
+                    "--output_dir",
+                    output_dir,
+                    "--morphologist_dir",
+                    morph,
+                    "--embeddings_dir",
+                    embeddings,
+                    "--reference_data_dir",
+                    reference,
+                ]
+            )
+
+        assert set(_qc_rows(output_dir)) == {"sub-01", "sub-02", "sub-03"}
+        assert qc_present_at_render and all(qc_present_at_render)
+
+    def test_missing_right_graph_excludes_subject(self, temp_dir):
+        """REQ 02280180FCF2: a subject with no right sulcal graph gets qc 0, reason missing_sulcal_graph_right."""
+        morph = os.path.join(temp_dir, "morphologist")
+        _morphologist_subject(morph, "sub-01", graphs=("L",), meshes=("L",))
+        _morphologist_subject(morph, "sub-02")
+        output_dir = os.path.join(temp_dir, "out")
+
+        with patch(_RENDER_SULCAL, side_effect=lambda graph_path, out, *a, **k: out):
+            _run_snapshots(["--output_dir", output_dir, "--morphologist_dir", morph, "--sulcal-only"])
+
+        rows = _qc_rows(output_dir)
+        assert (rows["sub-01"]["qc"], rows["sub-01"]["reason"]) == (0, "missing_sulcal_graph_right")
+        assert (rows["sub-02"]["qc"], rows["sub-02"]["reason"]) == (1, "")
+
+    def test_missing_white_mesh_column_keeps_subject(self, temp_dir):
+        """REQ C191487CA1E0: a missing right white mesh is listed in missing_white_mesh, qc stays 1."""
+        morph = os.path.join(temp_dir, "morphologist")
+        _morphologist_subject(morph, "sub-01", meshes=("L",))
+        output_dir = os.path.join(temp_dir, "out")
+
+        with patch(_RENDER_SULCAL, side_effect=lambda graph_path, out, *a, **k: out):
+            _run_snapshots(["--output_dir", output_dir, "--morphologist_dir", morph, "--sulcal-only"])
+
+        row = _qc_rows(output_dir)["sub-01"]
+        assert (row["qc"], row.get("missing_white_mesh")) == (1, "right")
+
+    def test_subject_missing_from_one_csv_is_excluded(self, temp_dir):
+        """REQ 912F3EB96130: no row in one selected embeddings CSV gives missing_embedding_<region>_<hemi>."""
+        embeddings = os.path.join(temp_dir, "embeddings")
+        _embeddings_csv(embeddings, "S.Or.", "left", [("sub-01", 0.1, 0.2), ("sub-02", 0.3, 0.4)])
+        _embeddings_csv(embeddings, "S.Or.", "right", [("sub-01", 0.5, 0.6)])
+        reference = os.path.join(temp_dir, "reference")
+        _umap_reference(reference, "S.Or.", "left")
+        _umap_reference(reference, "S.Or.", "right")
+        output_dir = os.path.join(temp_dir, "out")
+
+        with patch(_LOAD_UMAP_MODEL, side_effect=lambda path: _RecordingUmapModel()):
+            _run_snapshots(
+                [
+                    "--output_dir",
+                    output_dir,
+                    "--embeddings_dir",
+                    embeddings,
+                    "--reference_data_dir",
+                    reference,
+                    "--umap-only",
+                ]
+            )
+
+        rows = _qc_rows(output_dir)
+        assert (rows["sub-02"]["qc"], rows["sub-02"]["reason"]) == (0, "missing_embedding_S.Or._right")
+        assert (rows["sub-01"]["qc"], rows["sub-01"]["reason"]) == (1, "")
+
+    def test_nan_embedding_row_excludes_subject(self, temp_dir):
+        """REQ D68BA15849DA: an empty embeddings cell gives qc 0, reason nonfinite_embedding_<region>_<hemi>."""
+        embeddings = os.path.join(temp_dir, "embeddings")
+        _embeddings_csv(embeddings, "S.Or.", "left", [("sub-01", 0.1, 0.2), ("sub-02", "", 0.4)])
+        reference = os.path.join(temp_dir, "reference")
+        _umap_reference(reference, "S.Or.", "left")
+        output_dir = os.path.join(temp_dir, "out")
+
+        with patch(_LOAD_UMAP_MODEL, return_value=_RecordingUmapModel()):
+            _run_snapshots(
+                [
+                    "--output_dir",
+                    output_dir,
+                    "--embeddings_dir",
+                    embeddings,
+                    "--reference_data_dir",
+                    reference,
+                    "--umap-only",
+                ]
+            )
+
+        rows = _qc_rows(output_dir)
+        assert (rows["sub-02"]["qc"], rows["sub-02"]["reason"]) == (0, "nonfinite_embedding_S.Or._left")
+
+    def test_several_reasons_joined_by_semicolons(self, temp_dir):
+        """REQ 6FC91D82C46C: a subject failing two checks gets both reasons joined by semicolons."""
+        morph = os.path.join(temp_dir, "morphologist")
+        (Path(morph) / "sub-01" / "t1mri").mkdir(parents=True)
+        output_dir = os.path.join(temp_dir, "out")
+
+        with patch(_RENDER_SULCAL, side_effect=lambda graph_path, out, *a, **k: out):
+            _run_snapshots(["--output_dir", output_dir, "--morphologist_dir", morph, "--sulcal-only"])
+
+        row = _qc_rows(output_dir)["sub-01"]
+        assert row["qc"] == 0
+        assert set(row["reason"].split(";")) == {"missing_sulcal_graph_left", "missing_sulcal_graph_right"}
+
+    def test_excluded_subjects_named_in_one_warning_and_exit_zero(self, temp_dir, capsys):
+        """REQ 100D13B8E6A5: excluded subjects are named on one warning line and the run returns 0."""
+        morph = os.path.join(temp_dir, "morphologist")
+        _morphologist_subject(morph, "sub-01")
+        _morphologist_subject(morph, "sub-02", graphs=("R",), meshes=("R",))
+        _morphologist_subject(morph, "sub-03", graphs=("L",), meshes=("L",))
+        output_dir = os.path.join(temp_dir, "out")
+
+        with patch(_RENDER_SULCAL, side_effect=lambda graph_path, out, *a, **k: out):
+            result = _run_snapshots(["--output_dir", output_dir, "--morphologist_dir", morph, "--sulcal-only"])
+
+        naming_lines = [line for line in _lines(capsys.readouterr()) if "sub-02" in line and "sub-03" in line]
+        assert result == 0
+        assert len(naming_lines) == 1
+        assert os.path.exists(os.path.join(output_dir, QC_FILE))
+
+    def test_sulcal_step_skips_excluded_subject(self, temp_dir):
+        """REQ BE44D168C384: the sulcal step renders no graph of a subject with qc 0."""
+        morph = os.path.join(temp_dir, "morphologist")
+        _morphologist_subject(morph, "sub-01", graphs=("L",), meshes=("L",))
+        output_dir = os.path.join(temp_dir, "out")
+
+        with patch(_RENDER_SULCAL, side_effect=lambda graph_path, out, *a, **k: out) as render:
+            _run_snapshots(
+                ["--output_dir", output_dir, "--morphologist_dir", morph, "--subject", "sub-01", "--sulcal-only"]
+            )
+
+        assert _qc_rows(output_dir)["sub-01"]["qc"] == 0
+        render.assert_not_called()
+
+    def test_umap_projects_only_kept_rows(self, temp_dir):
+        """REQ 61D89615C8AF: the UMAP model receives only the embeddings rows of qc 1 subjects."""
+        embeddings = os.path.join(temp_dir, "embeddings")
+        _embeddings_csv(embeddings, "S.Or.", "left", [("sub-01", 0.1, 0.2), ("sub-02", "", 0.4)])
+        reference = os.path.join(temp_dir, "reference")
+        _umap_reference(reference, "S.Or.", "left")
+        output_dir = os.path.join(temp_dir, "out")
+        model = _RecordingUmapModel()
+
+        with patch(_LOAD_UMAP_MODEL, return_value=model):
+            _run_snapshots(
+                [
+                    "--output_dir",
+                    output_dir,
+                    "--embeddings_dir",
+                    embeddings,
+                    "--reference_data_dir",
+                    reference,
+                    "--umap-only",
+                ]
+            )
+
+        assert len(model.inputs) == 1
+        np.testing.assert_allclose(model.inputs[0], np.array([[0.1, 0.2]]), rtol=1e-6)
+
+    def test_missing_umap_reference_files_in_one_warning(self, temp_dir, capsys):
+        """REQ 08776847068C: missing UMAP model and coords files are named on one line before any projection."""
+        embeddings = os.path.join(temp_dir, "embeddings")
+        for hemi in ("left", "right"):
+            _embeddings_csv(embeddings, "S.Or.", hemi, [("sub-01", 0.1, 0.2)])
+        _embeddings_csv(embeddings, "S.Pe.C.", "left", [("sub-01", 0.1, 0.2)])
+        reference = os.path.join(temp_dir, "reference")
+        _umap_reference(reference, "S.Or.", "left", coords=False)
+        _umap_reference(reference, "S.Pe.C.", "left")
+        output_dir = os.path.join(temp_dir, "out")
+        before_projection = []
+        model = _RecordingUmapModel(on_transform=lambda: before_projection.extend(_lines(capsys.readouterr())))
+
+        with patch(_LOAD_UMAP_MODEL, return_value=model):
+            _run_snapshots(
+                [
+                    "--output_dir",
+                    output_dir,
+                    "--embeddings_dir",
+                    embeddings,
+                    "--reference_data_dir",
+                    reference,
+                    "--umap-only",
+                ]
+            )
+
+        missing = ("umap_S.Or._left_coords.npy", "umap_S.Or._right.pkl", "umap_S.Or._right_coords.npy")
+        assert model.inputs, "the complete S.Pe.C. left pair was not projected"
+        assert len([line for line in before_projection if all(name in line for name in missing)]) == 1
+
+    def test_crop_region_without_mask_in_one_warning(self, temp_dir, capsys):
+        """REQ 1EDE1833EB60: crop regions with no mask skeleton are named on one line before the tiles render."""
+        crops = Path(temp_dir) / "cortical_tiles" / "crops" / "2mm"
+        (crops / "RegionA" / "mask").mkdir(parents=True)
+        (crops / "RegionB" / "mask").mkdir(parents=True)
+        (crops / "RegionB" / "mask" / "Lmask_skeleton.nii.gz").touch()
+        (crops / "RegionC").mkdir(parents=True)
+        output_dir = os.path.join(temp_dir, "out")
+        before_render = []
+
+        def render(*args, **kwargs):
+            before_render.extend(_lines(capsys.readouterr()))
+            return []
+
+        with patch(_RENDER_TILES, side_effect=render):
+            _run_snapshots(
+                ["--output_dir", output_dir, "--cortical_tiles_dir", str(crops.parent.parent), "--tiles-only"]
+            )
+
+        naming = [line for line in before_render if "RegionA" in line and "RegionC" in line]
+        assert len(naming) == 1
+        assert "RegionB" not in naming[0]
+
+    def test_missing_region_graph_in_one_warning(self, temp_dir, capsys):
+        """REQ 5EC4D9061B22: a missing region graph of a completed hemisphere is named before the render."""
+        crops = Path(temp_dir) / "cortical_tiles" / "crops" / "2mm"
+        (crops / "RegionB" / "mask").mkdir(parents=True)
+        (crops / "RegionB" / "mask" / "Lmask_skeleton.nii.gz").touch()
+        data_root = Path(temp_dir) / "champollion_data"
+        (data_root / "mask" / "2mm" / "regions" / "meshes").mkdir(parents=True)
+        output_dir = os.path.join(temp_dir, "out")
+        before_render = []
+
+        def render(*args, **kwargs):
+            before_render.extend(_lines(capsys.readouterr()))
+            return []
+
+        with patch(_RENDER_TILES, side_effect=render):
+            _run_snapshots(
+                [
+                    "--output_dir",
+                    output_dir,
+                    "--cortical_tiles_dir",
+                    str(crops.parent.parent),
+                    "--champollion_data_root",
+                    str(data_root),
+                    "--tiles-only",
+                ]
+            )
+
+        assert len([line for line in before_render if "Lregions_model_1.arg" in line]) == 1
+        assert not [line for line in before_render if "Rregions_model_1.arg" in line]

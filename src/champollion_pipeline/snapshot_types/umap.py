@@ -44,23 +44,45 @@ def _parse_embedding_csv_name(name):
     return None, None
 
 
+def compute_umap_reference_paths(reference_data_dir, region, hemi):
+    """Return (UMAP model path, reference coordinates path) of one region and hemisphere."""
+    return (
+        osp.join(reference_data_dir, f"umap_{region}_{hemi}.pkl"),
+        osp.join(reference_data_dir, f"umap_{region}_{hemi}_coords.npy"),
+    )
+
+
+def _iter_embedding_csvs(embeddings_dir):
+    """Yield (path, region, hemi) per ``*_embeddings.csv`` in sorted order; (None, None) when unparseable."""
+    for csv_path in sorted(glob.glob(osp.join(embeddings_dir, "*_embeddings.csv"))):
+        region, hemi = _parse_embedding_csv_name(osp.basename(csv_path))
+        yield csv_path, region, hemi
+
+
+def list_embedding_csvs(embeddings_dir, regions=None):
+    """Return the parseable embeddings CSVs as (path, region, hemi), sorted, kept by the region filter."""
+    return [
+        (csv_path, region, hemi)
+        for csv_path, region, hemi in _iter_embedding_csvs(embeddings_dir)
+        if region is not None and (not regions or region in regions)
+    ]
+
+
 def discover_umap_pairs(embeddings_dir, reference_data_dir, regions=None):
-    csv_files = sorted(glob.glob(osp.join(embeddings_dir, "*_embeddings.csv")))
+    csv_files = list(_iter_embedding_csvs(embeddings_dir))
     if not csv_files:
         print(f"  No *_embeddings.csv files found in: {embeddings_dir}")
         return []
     print(f"  Found {len(csv_files)} embedding CSV file(s)")
 
     pairs = []
-    for csv_path in csv_files:
-        region, hemi = _parse_embedding_csv_name(osp.basename(csv_path))
+    for csv_path, region, hemi in csv_files:
         if region is None:
             print(f"  Unrecognized filename format: {osp.basename(csv_path)}")
             continue
         if regions and region not in regions:
             continue
-        model_path = osp.join(reference_data_dir, f"umap_{region}_{hemi}.pkl")
-        coords_path = osp.join(reference_data_dir, f"umap_{region}_{hemi}_coords.npy")
+        model_path, coords_path = compute_umap_reference_paths(reference_data_dir, region, hemi)
         if osp.exists(model_path) and osp.exists(coords_path):
             pairs.append((csv_path, model_path, coords_path, region, hemi))
         else:
@@ -71,7 +93,9 @@ def discover_umap_pairs(embeddings_dir, reference_data_dir, regions=None):
     return pairs
 
 
-def generate_umap_snapshot(embeddings_dir, reference_data_dir, output_path, size=(800, 600), regions=None):
+def generate_umap_snapshot(  # noqa: PLR0913 - snapshot API; keyword-only QC exclusion set
+    embeddings_dir, reference_data_dir, output_path, size=(800, 600), regions=None, *, exclude_ids=frozenset()
+):
     """Generate UMAP scatter plots for embedding regions.
 
     Discovers embedding CSV files in ``embeddings_dir`` and generates a UMAP
@@ -87,6 +111,8 @@ def generate_umap_snapshot(embeddings_dir, reference_data_dir, output_path, size
         size: Tuple of (width, height) in pixels.
         regions: Optional list of region names to include.  ``None`` means
             generate plots for all available regions.
+        exclude_ids: Subject IDs whose rows are dropped before projection
+            (subjects excluded by the stage input QC).
 
     Returns:
         List of generated snapshot file paths.
@@ -102,47 +128,59 @@ def generate_umap_snapshot(embeddings_dir, reference_data_dir, output_path, size
         print("  No matching (embedding CSV, UMAP model) pairs found")
         return snapshots
 
-    for csv_path, model_path, coords_path, region, hemi in pairs:
-        model = joblib.load(model_path)
-        ref_coords = np.load(coords_path)
-        print(f"  [{region} {hemi}] Loaded {ref_coords.shape[0]} reference points")
-
-        df = pd.read_csv(csv_path)
-        X_new = df.drop(columns=["ID"]).values.astype(np.float32)
-        new_coords = model.transform(X_new)
-        print(f"  [{region} {hemi}] Projected {X_new.shape[0]} new subject(s)")
-
-        fig, ax = plt.subplots(figsize=(size[0] / 100, size[1] / 100))
-        ax.scatter(
-            ref_coords[:, 0],
-            ref_coords[:, 1],
-            s=1,
-            c="#4a90d9",
-            alpha=0.08,
-            label=f"UKB40 (n={ref_coords.shape[0]:,})",
-            rasterized=True,
-        )
-        ax.scatter(
-            new_coords[:, 0],
-            new_coords[:, 1],
-            s=80,
-            c="#e74c3c",
-            edgecolors="white",
-            linewidths=0.8,
-            zorder=5,
-            label=f"Your subject(s) (n={X_new.shape[0]})",
-        )
-        ax.set_title(f"{region} \u2014 {hemi}", fontsize=12)
-        ax.legend(loc="best", fontsize=9, framealpha=0.9)
-        ax.set_xlabel("UMAP 1", fontsize=9)
-        ax.set_ylabel("UMAP 2", fontsize=9)
-        ax.tick_params(labelsize=8)
-        plt.tight_layout()
-
-        snap = f"{basename}_{region}_{hemi}{ext}"
-        plt.savefig(snap, dpi=150)
-        plt.close(fig)
-        snapshots.append(snap)
-        print(f"  Saved: {snap}")
+    for pair in pairs:
+        region, hemi = pair[3], pair[4]
+        snap = _plot_umap_pair(pair, size, f"{basename}_{region}_{hemi}{ext}", exclude_ids)
+        if snap:
+            snapshots.append(snap)
 
     return snapshots
+
+
+def _plot_umap_pair(pair, size, snap, exclude_ids):
+    """Project one CSV's kept rows onto its UMAP reference and save the plot; None when no row is kept."""
+    csv_path, model_path, coords_path, region, hemi = pair
+    model = joblib.load(model_path)
+    ref_coords = np.load(coords_path)
+    print(f"  [{region} {hemi}] Loaded {ref_coords.shape[0]} reference points")
+
+    df = pd.read_csv(csv_path, dtype={"ID": str})
+    df = df[~df["ID"].isin(exclude_ids)]
+    if df.empty:
+        print(f"  [{region} {hemi}] No kept subject to project, skipping")
+        return None
+    X_new = df.drop(columns=["ID"]).values.astype(np.float32)
+    new_coords = model.transform(X_new)
+    print(f"  [{region} {hemi}] Projected {X_new.shape[0]} new subject(s)")
+
+    fig, ax = plt.subplots(figsize=(size[0] / 100, size[1] / 100))
+    ax.scatter(
+        ref_coords[:, 0],
+        ref_coords[:, 1],
+        s=1,
+        c="#4a90d9",
+        alpha=0.08,
+        label=f"UKB40 (n={ref_coords.shape[0]:,})",
+        rasterized=True,
+    )
+    ax.scatter(
+        new_coords[:, 0],
+        new_coords[:, 1],
+        s=80,
+        c="#e74c3c",
+        edgecolors="white",
+        linewidths=0.8,
+        zorder=5,
+        label=f"Your subject(s) (n={X_new.shape[0]})",
+    )
+    ax.set_title(f"{region} \u2014 {hemi}", fontsize=12)
+    ax.legend(loc="best", fontsize=9, framealpha=0.9)
+    ax.set_xlabel("UMAP 1", fontsize=9)
+    ax.set_ylabel("UMAP 2", fontsize=9)
+    ax.tick_params(labelsize=8)
+    plt.tight_layout()
+
+    plt.savefig(snap, dpi=150)
+    plt.close(fig)
+    print(f"  Saved: {snap}")
+    return snap
