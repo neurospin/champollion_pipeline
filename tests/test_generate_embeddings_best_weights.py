@@ -287,6 +287,11 @@ class TestUserModelDirUnchanged:
 # --------------------------------------------------------------------------- #
 
 
+def record_text(records) -> str:
+    """The captured pipeline log records as console-like lines: ``<LEVEL> <message>``, one per record."""
+    return "\n".join(f"{record.levelname} {record.getMessage()}" for record in records)
+
+
 def lines_naming(output: str, region: str, weights_path: str) -> list[str]:
     """Lines holding weights_path and, outside any path, the region name.
 
@@ -304,29 +309,32 @@ def lines_naming(output: str, region: str, weights_path: str) -> list[str]:
 
 
 class TestWeightsFileLogged:
-    """REQ-CKPTREFRESH-08: one console line per region names region + source weights file."""
+    """REQ-CKPTREFRESH-08: one console line per region names region + source weights file.
 
-    def test_best_weights_named_when_native_ckpt_present(self, tmp_path, capsys):
+    The line is a pipeline log record (LOGGING convention, TASK-LOGGING-BDRABCZUK-7132B94434A5).
+    """
+
+    def test_best_weights_named_when_native_ckpt_present(self, tmp_path, pipeline_caplog):
         model_dir = make_model_dir(tmp_path)
         weights = write_weights(model_dir, BEST_STATE)
         write_native_ckpt(model_dir, "epoch=79-step=104960.ckpt", NATIVE_STATE)
 
         run_region(tmp_path)
 
-        assert len(lines_naming(capsys.readouterr().out, REGION, str(weights))) == 1
+        assert len(lines_naming(record_text(pipeline_caplog.records), REGION, str(weights))) == 1
 
-    def test_best_weights_named_when_only_best_weights(self, tmp_path, capsys):
+    def test_best_weights_named_when_only_best_weights(self, tmp_path, pipeline_caplog):
         model_dir = make_model_dir(tmp_path)
         weights = write_weights(model_dir, BEST_STATE)
 
         run_region(tmp_path)
 
-        assert len(lines_naming(capsys.readouterr().out, REGION, str(weights))) == 1
+        assert len(lines_naming(record_text(pipeline_caplog.records), REGION, str(weights))) == 1
 
-    def test_native_ckpt_named_when_no_best_weights(self, tmp_path, capsys):
+    def test_native_ckpt_named_when_no_best_weights(self, tmp_path, pipeline_caplog):
         model_dir = make_model_dir(tmp_path)
         native = write_native_ckpt(model_dir, "epoch=80-step=106272.ckpt", NATIVE_STATE)
 
         run_region(tmp_path)
 
-        assert len(lines_naming(capsys.readouterr().out, REGION, str(native))) == 1
+        assert len(lines_naming(record_text(pipeline_caplog.records), REGION, str(native))) == 1

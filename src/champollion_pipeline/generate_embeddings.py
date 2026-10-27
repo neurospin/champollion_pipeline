@@ -6,6 +6,7 @@ Calls champollion/evaluate.py for each region in models_path.
 
 import argparse
 import cProfile
+import logging
 import os
 import pstats
 import re
@@ -62,6 +63,8 @@ if _CHAMPOLLION_DIR not in sys.path:
     sys.path.insert(0, _CHAMPOLLION_DIR)
 
 from champollion.metrics.cka_coherence import test_models_coherence_from_directory  # noqa: E402
+
+logger = logging.getLogger(__name__)
 
 
 def _parse_non_negative_int(value: str) -> int:
@@ -218,7 +221,7 @@ class GenerateEmbeddings(ScriptBuilder):
                 yaml_file.write_text(new_text)
                 patched += 1
         if patched:
-            print(f"Patched {patched} YAML file(s): derivatives folder → {target_folder}")
+            logger.trace(f"Patched {patched} YAML file(s): derivatives folder → {target_folder}")
 
     def _compute_extract_dir(self) -> str:
         """Return the absolute models cache dir: --models-cache if given, else the dataset-tree default."""
@@ -369,7 +372,7 @@ class GenerateEmbeddings(ScriptBuilder):
         os.makedirs(output_base, exist_ok=True)
         path = join(output_base, PROVENANCE_FILE_NAME)
         write_json_atomic(path, provenance)
-        print(f"Provenance written: {path}")
+        logger.output(f"Provenance written: {path}")
         return path
 
     def _validate_inputs(self):
@@ -405,14 +408,15 @@ class GenerateEmbeddings(ScriptBuilder):
             stats = pstats.Stats(profiler)
             stats.sort_stats("cumulative")
             stats.dump_stats("embeddings_profile.prof")
-            print("\nProfiling results saved to embeddings_profile.prof")
-            print("View with: python -m pstats embeddings_profile.prof")
-            # Print top 20 functions
+            logger.output(
+                "Profiling results saved to embeddings_profile.prof "
+                "(view with: python -m pstats embeddings_profile.prof)"
+            )
             stream = StringIO()
             stats_print = pstats.Stats(profiler, stream=stream)
             stats_print.sort_stats("cumulative")
             stats_print.print_stats(20)
-            print(stream.getvalue())
+            logger.output(stream.getvalue())
 
         return result
 
@@ -426,7 +430,7 @@ class GenerateEmbeddings(ScriptBuilder):
         # Force CPU usage if requested
         if self.args.cpu:
             os.environ["CUDA_VISIBLE_DEVICES"] = ""
-            print("CPU mode enabled: CUDA_VISIBLE_DEVICES set to empty string")
+            logger.trace("CPU mode enabled: CUDA_VISIBLE_DEVICES set to empty string")
 
         try:
             return self._run_pipeline(local_dir)
@@ -511,12 +515,15 @@ class GenerateEmbeddings(ScriptBuilder):
             raise ValueError(f"No region model directories (containing logs/) found under {models_path}")
         check_region_weights(region_dirs, models_path, epoch)
 
-        print(f"\nGenerating embeddings for {len(region_dirs)} regions → {output_base}")
+        n_regions = len(region_dirs)
+        logger.trace(f"Generating embeddings for {n_regions} regions → {output_base}")
 
         failed_regions: list[str] = []
         first_failure = 0
-        for model_path in region_dirs:
+        for fold, model_path in enumerate(region_dirs, start=1):
             region = resolve_region_name(model_path, models_path)
+            # Machine-read by champollion_sulcal_mcp (FOLD_RE): one record per region directory.
+            logger.trace(f"Fold {fold}/{n_regions}: {region}")
             side = "L" if region.endswith("_left") else "R"
             crop_name = self._find_crop_dir(crops_2mm_dir, region)
             mask_dir = join(crops_2mm_dir, crop_name, "mask")
@@ -525,7 +532,7 @@ class GenerateEmbeddings(ScriptBuilder):
             saving_path = join(output_base, region, "full_embeddings.csv")
 
             if exists(saving_path) and not getattr(self.args, "overwrite", False):
-                print(f"  [SKIP] {region} — already exists (--overwrite to recompute)")
+                logger.trace(f"[SKIP] {region} — already exists (--overwrite to recompute)")
                 continue
 
             with evaluation_model_dir(model_path, epoch) as eval_model_path:
@@ -548,10 +555,10 @@ class GenerateEmbeddings(ScriptBuilder):
                 ]
 
                 weights = weights_source(model_path, epoch) or "<none found>"
-                print(f"\n[Region {region}] weights: {weights}")
+                logger.trace(f"[Region {region}] weights: {weights}")
                 if uses_best_weights_stand_in(model_path, epoch):
-                    print(
-                        f"[Region {region}] WARNING: no epoch={epoch} checkpoint; "
+                    logger.warning(
+                        f"[Region {region}] no epoch={epoch} checkpoint; "
                         f"best_model_weights.pt stands in for epoch {epoch} (interim)"
                     )
                 code = self.execute_command(cmd, shell=False)
@@ -562,18 +569,13 @@ class GenerateEmbeddings(ScriptBuilder):
                     os.remove(saving_path)
 
         if failed_regions:
-            print(f"\n[FAILED] {len(failed_regions)} region(s) failed: {', '.join(failed_regions)}")
+            logger.fail(f"[FAILED] {len(failed_regions)} region(s) failed: {', '.join(failed_regions)}")
         return first_failure
 
     def _run_cka_test(self, output_base: str) -> None:
         """Run CKA coherence test on the generated embeddings."""
-        print("\n" + "=" * 60)
-        print("Running CKA Coherence Test")
-        print("=" * 60)
-
         cka_output = join(output_base, "cka_results")
-        print(f"Embeddings dir: {output_base}")
-        print(f"CKA output: {cka_output}")
+        logger.trace(f"Running CKA coherence test: embeddings {output_base}, output {cka_output}")
 
         try:
             test_models_coherence_from_directory(
@@ -582,9 +584,9 @@ class GenerateEmbeddings(ScriptBuilder):
                 output_dir=cka_output,
                 subject_column="ID",
             )
-            print("CKA coherence test completed.")
+            logger.output("CKA coherence test completed.")
         except Exception as e:
-            print(f"Warning: CKA test failed - {e}")
+            logger.warning(f"CKA test failed - {e}")
 
 
 def main():

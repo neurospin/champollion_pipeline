@@ -8,16 +8,21 @@ raises and reports failure only as a non-zero return code, so it is replaced
 here by a fake returning a scripted code per region. No real evaluate.py runs.
 """
 
+import logging
 from pathlib import Path
 from unittest.mock import patch
 
 import pytest
 
 from champollion_pipeline.generate_embeddings import GenerateEmbeddings
+from tests.log_assertions import LOG
+from tests.test_generate_embeddings_best_weights import record_text
 
 pytestmark = pytest.mark.unit  # noqa: V107
 
 MARKER = "<<fake-evaluate-done>>"
+# Pipeline log records are captured in emission order, so the marker orders them by region.
+MARKER_LOGGER = logging.getLogger("champollion_pipeline.tests.fake_evaluate")
 
 
 def make_models(tmp_path: Path, regions: list[str]) -> Path:
@@ -61,7 +66,7 @@ class FakeEvaluate:
             out = Path(cmd[cmd.index("-s") + 1])
             out.parent.mkdir(parents=True, exist_ok=True)
             out.write_text(self.content)
-        print(MARKER)
+        MARKER_LOGGER.log(LOG, MARKER)
         return code
 
 
@@ -97,14 +102,14 @@ class TestRunReturnsNonZeroOnAnyRegionFailure:
 class TestFailedRegionsReported:
     """REQ-EMBED-ANY-FAILURE-02."""
 
-    def test_failed_region_names_printed_after_last_region(self, tmp_path, capsys):
+    def test_failed_region_names_printed_after_last_region(self, tmp_path, pipeline_caplog):
         models = make_models(tmp_path, REGIONS)
         script = make_script([str(models), "/d"])
         script.execute_command = FakeEvaluate({"Aaa_left": 1, "Bbb_left": 1})
         script._run_per_region("evaluate.py", str(tmp_path), str(tmp_path / "out"))
 
-        stdout = capsys.readouterr().out
-        after_last_region = stdout.rsplit(MARKER, 1)[1]
+        logged = record_text(pipeline_caplog.records)
+        after_last_region = logged.rsplit(MARKER, 1)[1]
         assert "Aaa_left" in after_last_region
         assert "Bbb_left" in after_last_region
 

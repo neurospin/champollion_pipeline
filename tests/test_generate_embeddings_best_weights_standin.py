@@ -26,6 +26,7 @@ from tests.test_generate_embeddings_best_weights import (
     HYDRA_CONFIG,
     NATIVE_STATE,
     OLD_STATE,
+    record_text,
     snapshot_tree,
     write_converted_ckpt,
     write_native_ckpt,
@@ -205,16 +206,16 @@ class TestStandInWarning:
 
     @pytest.mark.parametrize("epoch", [DEFAULT_EPOCH, 50])
     @pytest.mark.parametrize("layout", STAND_IN_LAYOUTS)
-    def test_one_warning_line_per_stand_in_region(self, tmp_path, capsys, layout, epoch):
+    def test_one_warning_line_per_stand_in_region(self, tmp_path, pipeline_caplog, layout, epoch):
         STAND_IN_LAYOUTS[layout](make_region_dir(tmp_path, STAND_IN))
 
         result = run_stage(tmp_path, checkpoint_epoch=epoch)
 
         assert result.status == 0, result.error
-        lines = warning_lines(capsys.readouterr().out, STAND_IN, epoch)
+        lines = warning_lines(record_text(pipeline_caplog.records), STAND_IN, epoch)
         assert len(lines) == 1, f"expected one stand-in warning for {STAND_IN}, got {lines}"
 
-    def test_warning_only_names_its_own_region(self, tmp_path, capsys):
+    def test_warning_only_names_its_own_region(self, tmp_path, pipeline_caplog):
         """Beside a region holding the epoch-N checkpoint, the stand-in region still gets one warning."""
         stand_in_best_weights_only(make_region_dir(tmp_path, STAND_IN))
         write_epoch_ckpt(make_region_dir(tmp_path, "Bbb_left"), DEFAULT_EPOCH, 106272)
@@ -225,7 +226,7 @@ class TestStandInWarning:
 
         assert script._run_per_region("evaluate.py", str(tmp_path / "crops"), str(tmp_path / "out")) == 0
 
-        assert len(warning_lines(capsys.readouterr().out, STAND_IN, DEFAULT_EPOCH)) == 1
+        assert len(warning_lines(record_text(pipeline_caplog.records), STAND_IN, DEFAULT_EPOCH)) == 1
 
 
 # --------------------------------------------------------------------------- #
