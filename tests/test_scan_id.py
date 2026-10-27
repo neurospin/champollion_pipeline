@@ -2,18 +2,27 @@
 """
 Tests for ``champollion_pipeline.file_indexer.ScanId``.
 
-ScanId is the unit of work of the scan-centric streaming mode: one subject,
-plus the BIDS session and acquisition when the database has them. Its string
-form names per-scan log and embedding folders, so for a BIDS scan without
-acquisition it must equal the stage-1 ``--bids`` participant id
-(``sub-<label>`` then ``_ses-<label>``).
+ScanId is the unit of work of the scan-centric streaming mode. It follows the
+Morphologist layout strictly: graphs live at
+``<subjects_dir>/<subject>/t1mri/<acquisition>/default_analysis/folds/...``,
+so a scan is one subject plus one acquisition folder name kept verbatim
+(``default_acquisition``, ``ses-V1``, or a BIDS key such as ``ses-1_run-1``),
+never split into session and run.
 
-Covers REQ-STREAMING-BDRABCZUK-932C0A773718 (path_prefix),
-REQ-STREAMING-BDRABCZUK-5A0B08634E45 (str without acquisition),
-REQ-STREAMING-BDRABCZUK-C7FC55C0F216 (str with acquisition suffix),
-REQ-STREAMING-BDRABCZUK-39BDD4DA073E (frozen fields),
-REQ-STREAMING-BDRABCZUK-E9A8B59033D0 (equality and hash),
-REQ-STREAMING-BDRABCZUK-56B2F5790F3B (ordering, None first) and
+Its string form is the embeddings CSV ID and matches the sequential
+cortical_tiles subject identifier exactly: the subject alone in the classic
+format, the subject plus the ses-/acq-/run- entities found in the path with
+--bids (cortical_tiles generate_skeletons.get_skeleton_filename, mirrored here).
+
+Covers REQ-STREAMING-BDRABCZUK-9AB08EE49DFD (three fields, acquisition verbatim),
+REQ-STREAMING-BDRABCZUK-A1A589AC7DB7 (bids defaults to False),
+REQ-STREAMING-BDRABCZUK-C9BE1D914854 (acquisition mandatory),
+REQ-STREAMING-BDRABCZUK-2CAAB8E6C69A (path_prefix),
+REQ-STREAMING-BDRABCZUK-8B899B3A9B10 (frozen fields),
+REQ-STREAMING-BDRABCZUK-FA8B330C15BF (equality and hash),
+REQ-STREAMING-BDRABCZUK-E4B5FD8209E6 (ordering),
+REQ-STREAMING-BDRABCZUK-B18FBDA4F9A8 (str, classic format),
+REQ-STREAMING-BDRABCZUK-AFC4B66C3DC6 (str, BIDS format) and
 REQ-STREAMING-BDRABCZUK-22A200032839 (package-level export).
 """
 
@@ -25,102 +34,126 @@ from champollion_pipeline import file_indexer
 from champollion_pipeline.file_indexer.scan_id import ScanId
 
 
-def _fields(scan: ScanId) -> tuple:
-    return (scan.subject, scan.session, scan.acquisition)
+@pytest.mark.unit
+class TestScanIdFields:
+    """REQ-STREAMING-BDRABCZUK-9AB08EE49DFD, -A1A589AC7DB7 and -C9BE1D914854."""
+
+    def test_exactly_subject_acquisition_bids(self):
+        assert [field.name for field in dataclasses.fields(ScanId)] == ["subject", "acquisition", "bids"]
+
+    @pytest.mark.parametrize("acquisition", ["default_acquisition", "ses-V1", "ses-1_run-1", "ses-1_acq-T1w_run-2"])
+    def test_acquisition_kept_verbatim(self, acquisition):
+        scan = ScanId("sub-01", acquisition)
+        assert dataclasses.astuple(scan) == ("sub-01", acquisition, False)
+
+    def test_bids_defaults_to_false(self):
+        assert ScanId("sub-01", "ses-1_run-1").bids is False
+
+    def test_acquisition_is_required(self):
+        with pytest.raises(TypeError):
+            ScanId("sub-01")
 
 
 @pytest.mark.unit
 class TestScanIdPathPrefix:
-    """REQ-STREAMING-BDRABCZUK-932C0A773718: subject, then '/<session>' when set; acquisition ignored."""
+    """REQ-STREAMING-BDRABCZUK-2CAAB8E6C69A: '<subject>/t1mri/<acquisition>'."""
 
     @pytest.mark.parametrize(
-        ("scan_args", "expected"),
+        ("subject", "acquisition", "expected"),
         [
-            (("sub-001",), "sub-001"),
-            (("sub-001", None, "acq-T1w"), "sub-001"),
-            (("sub-001", "ses-01"), "sub-001/ses-01"),
-            (("sub-001", "ses-01", "acq-T1w"), "sub-001/ses-01"),
+            ("sub-01", "ses-1_run-1", "sub-01/t1mri/ses-1_run-1"),
+            ("subject_A", "default_acquisition", "subject_A/t1mri/default_acquisition"),
+            ("sub-01", "ses-V1", "sub-01/t1mri/ses-V1"),
         ],
     )
-    def test_path_prefix(self, scan_args, expected):
-        assert ScanId(*scan_args).path_prefix == expected
+    def test_path_prefix(self, subject, acquisition, expected):
+        assert ScanId(subject, acquisition).path_prefix == expected
 
 
 @pytest.mark.unit
-class TestScanIdStr:
-    """REQ-STREAMING-BDRABCZUK-5A0B08634E45: subject, then '_<session>' when set (no acquisition)."""
+class TestScanIdStrClassic:
+    """REQ-STREAMING-BDRABCZUK-B18FBDA4F9A8: bids False -> the subject alone, whatever the acquisition."""
 
-    def test_subject_only(self):
-        assert str(ScanId("sub-001")) == "sub-001"
+    @pytest.mark.parametrize(
+        ("subject", "acquisition"),
+        [
+            ("subject_A", "default_acquisition"),
+            ("sub-01", "ses-V1"),
+            ("sub-01", "ses-1_run-1"),
+        ],
+    )
+    def test_subject_alone(self, subject, acquisition):
+        assert str(ScanId(subject, acquisition, bids=False)) == subject
 
-    def test_non_bids_subject_name(self):
-        assert str(ScanId("subject_A")) == "subject_A"
-
-    def test_subject_and_session_match_stage1_bids_participant_id(self):
-        assert str(ScanId("sub-01", "ses-01")) == "sub-01_ses-01"
+    def test_two_acquisitions_of_one_subject_share_the_id(self):
+        """Accepted caveat, as in the sequential pipeline."""
+        assert str(ScanId("sub-01", "default_acquisition")) == str(ScanId("sub-01", "ses-V1"))
 
 
 @pytest.mark.unit
-class TestScanIdStrWithAcquisition:
-    """REQ-STREAMING-BDRABCZUK-C7FC55C0F216: subject, then '_<session>' when set, then '_<acquisition>'."""
+class TestScanIdStrBids:
+    """REQ-STREAMING-BDRABCZUK-AFC4B66C3DC6: subject, then '_ses-X', '_acq-Y', '_run-Z' found in path_prefix."""
 
     @pytest.mark.parametrize(
-        ("scan_args", "expected"),
+        ("acquisition", "expected"),
         [
-            (("sub-01", "ses-01", "acq-T1w"), "sub-01_ses-01_acq-T1w"),
-            (("sub-01", None, "acq-T1w"), "sub-01_acq-T1w"),
+            ("ses-1_run-1", "sub-01_ses-1_run-1"),
+            ("ses-1_acq-T1w_run-2", "sub-01_ses-1_acq-T1w_run-2"),
+            ("ses-V1", "sub-01_ses-V1"),
+            ("acq-T1w", "sub-01_acq-T1w"),
+            ("run-1_ses-2", "sub-01_ses-2_run-1"),
+            ("ses-1_rec-norm_run-1", "sub-01_ses-1_run-1"),
+            ("default_acquisition", "sub-01"),
         ],
     )
-    def test_acquisition_suffix(self, scan_args, expected):
-        assert str(ScanId(*scan_args)) == expected
+    def test_entities_in_fixed_order(self, acquisition, expected):
+        assert str(ScanId("sub-01", acquisition, bids=True)) == expected
 
 
 @pytest.mark.unit
 class TestScanIdValueSemantics:
-    """REQ-STREAMING-BDRABCZUK-39BDD4DA073E and -E9A8B59033D0."""
+    """REQ-STREAMING-BDRABCZUK-8B899B3A9B10 and -FA8B330C15BF."""
 
-    @pytest.mark.parametrize("field", ["subject", "session", "acquisition"])
+    @pytest.mark.parametrize("field", ["subject", "acquisition"])
     def test_fields_are_frozen(self, field):
-        scan = ScanId("sub-01", "ses-01", "acq-T1w")
+        scan = ScanId("sub-01", "ses-1_run-1")
         with pytest.raises(dataclasses.FrozenInstanceError):
             setattr(scan, field, "changed")
 
-    @pytest.mark.parametrize(
-        "scan_args",
-        [("sub-01",), ("sub-01", "ses-01"), ("sub-01", None, "acq-T1w"), ("sub-01", "ses-01", "acq-T1w")],
-    )
+    @pytest.mark.parametrize("scan_args", [("sub-01", "default_acquisition"), ("sub-01", "ses-1_run-1")])
     def test_equal_values_equal_hash(self, scan_args):
         first, second = ScanId(*scan_args), ScanId(*scan_args)
         assert first is not second
         assert first == second
         assert hash(first) == hash(second)
 
-    def test_different_values_not_equal(self):
-        assert ScanId("sub-01", "ses-01") != ScanId("sub-01", "ses-02")
+    def test_bids_flag_does_not_change_identity(self):
+        first, second = ScanId("sub-01", "ses-1_run-1", bids=True), ScanId("sub-01", "ses-1_run-1")
+        assert first == second
+        assert hash(first) == hash(second)
+
+    def test_different_acquisition_not_equal(self):
+        assert ScanId("sub-01", "ses-1_run-1") != ScanId("sub-01", "ses-1_run-2")
 
 
 @pytest.mark.unit
 class TestScanIdOrdering:
-    """REQ-STREAMING-BDRABCZUK-56B2F5790F3B: subject, session, acquisition; None before any label."""
+    """REQ-STREAMING-BDRABCZUK-E4B5FD8209E6: subject, then acquisition, as strings."""
 
     def test_sorted_order(self):
         scans = [
-            ScanId("sub-02"),
-            ScanId("sub-01", "ses-02"),
-            ScanId("sub-01", "ses-01", "acq-b"),
-            ScanId("sub-01", "ses-01"),
-            ScanId("sub-01", None, "acq-a"),
-            ScanId("sub-01", "ses-01", "acq-a"),
-            ScanId("sub-01"),
+            ScanId("sub-02", "default_acquisition"),
+            ScanId("sub-01", "ses-2_run-1"),
+            ScanId("sub-01", "ses-1_run-2"),
+            ScanId("sub-01", "default_acquisition"),
+            ScanId("sub-01", "ses-1_run-1"),
         ]
-        assert [_fields(scan) for scan in sorted(scans)] == [
-            ("sub-01", None, None),
-            ("sub-01", None, "acq-a"),
-            ("sub-01", "ses-01", None),
-            ("sub-01", "ses-01", "acq-a"),
-            ("sub-01", "ses-01", "acq-b"),
-            ("sub-01", "ses-02", None),
-            ("sub-02", None, None),
+        assert [dataclasses.astuple(scan) for scan in sorted(scans)] == [
+            ("sub-01", "default_acquisition", False),
+            ("sub-01", "ses-1_run-1", False),
+            ("sub-01", "ses-1_run-2", False),
+            ("sub-01", "ses-2_run-1", False),
+            ("sub-02", "default_acquisition", False),
         ]
 
 

@@ -8,7 +8,6 @@ so they are checked, never trusted.
 
 from __future__ import annotations
 
-import glob
 import json
 import logging
 import os
@@ -25,8 +24,8 @@ from .scan_id import ScanId
 logger = logging.getLogger(__name__)
 
 BIDS_SUBJECT_PREFIX = "sub-"
-BIDS_SESSION_PREFIX = "ses-"
-BIDS_ACQUISITION_PREFIX = "acq-"
+# Morphologist's per-subject T1 folder; must equal the middle segment of ScanId.path_prefix.
+T1MRI_DIR = "t1mri"
 WILDCARD_CHARS = "*?["
 # Upper bound of a range query: every key starting with a literal sorts below literal + this.
 _KEY_MAX_SUFFIX = "\U0010ffff"
@@ -68,7 +67,12 @@ class SubjectEligibilityReport:
 
 
 class SubjectEligibilityChecker:
-    """Index ``subjects_dir`` and check the required patterns of each scan."""
+    """Index ``subjects_dir`` and check the required patterns of each scan.
+
+    A scan is one Morphologist acquisition folder ``<subject>/t1mri/<acquisition>``; patterns are
+    relative to it. ``path_to_graph`` only records the dataset's graph sub-path for the caller and
+    is read by no method. Not thread-safe: use one instance per polling thread.
+    """
 
     def __init__(  # noqa: PLR0913 - mirrors the options main.py forwards
         self,
@@ -94,18 +98,22 @@ class SubjectEligibilityChecker:
         self.btree_order = btree_order
         self.include_hidden = include_hidden
         self._tree: BTree | None = None
+        self._warned_subjects: set[str] = set()
 
     def list_scans(self) -> list[ScanId]:
         """Return the scans found under ``subjects_dir``, sorted."""
         if not os.path.isdir(self.subjects_dir):
             logger.warning("Subjects directory not found or not a directory: %s", self.subjects_dir)
             return []
-        scans: set[ScanId] = set()
-        for name in self._visible_dirs(self.subjects_dir):
-            if not self.bids:
-                scans.add(ScanId(name))
-            elif name.startswith(BIDS_SUBJECT_PREFIX):
-                scans.update(self._bids_scans(name))
+        scans: list[ScanId] = []
+        for subject in self._visible_dirs(self.subjects_dir):
+            if self.bids and not subject.startswith(BIDS_SUBJECT_PREFIX):
+                continue
+            acquisitions = self._acquisitions(subject)
+            if not acquisitions:
+                self._warn_no_acquisition(subject)
+                continue
+            scans.extend(ScanId(subject, acquisition, bids=self.bids) for acquisition in acquisitions)
         return sorted(scans)
 
     def scan_has_pattern(self, scan_id: ScanId, pattern: str) -> bool:
@@ -166,24 +174,31 @@ class SubjectEligibilityChecker:
             if entry.is_dir() and (self.include_hidden or not _is_hidden(entry.name))
         )
 
-    def _bids_scans(self, subject: str) -> set[ScanId]:
-        """Scans of one BIDS subject: path_to_graph matches, else ses- folders, else the subject alone."""
-        subject_dir = join(self.subjects_dir, subject)
-        scans: set[ScanId] = set()
-        if self.path_to_graph:
-            for match in glob.glob(self.path_to_graph, root_dir=subject_dir, include_hidden=self.include_hidden):
-                segments = match.replace(os.sep, "/").split("/")
-                session = next((s for s in segments if s.startswith(BIDS_SESSION_PREFIX)), None)
-                acquisition = next((s for s in segments if s.startswith(BIDS_ACQUISITION_PREFIX)), None)
-                scans.add(ScanId(subject, session, acquisition))
-        if not scans:
-            sessions = [d for d in self._visible_dirs(subject_dir) if d.startswith(BIDS_SESSION_PREFIX)]
-            scans = {ScanId(subject, session) for session in sessions} or {ScanId(subject)}
-        return scans
+    def _acquisitions(self, subject: str) -> list[str]:
+        """Acquisition folder names under ``<subject>/t1mri``, verbatim; empty when there is none."""
+        t1mri = join(self.subjects_dir, subject, T1MRI_DIR)
+        if not os.path.isdir(t1mri):
+            return []
+        try:
+            return self._visible_dirs(t1mri)
+        except OSError:
+            logger.debug("Cannot list %s; no acquisition taken from it", t1mri, exc_info=True)
+            return []
+
+    def _warn_no_acquisition(self, subject: str) -> None:
+        """Warn once per subject, per checker, that it holds no acquisition folder."""
+        if subject in self._warned_subjects:
+            return
+        self._warned_subjects.add(subject)
+        logger.warning(
+            "Subject folder %s holds no %s/<acquisition> folder: no scan listed for it",
+            join(self.subjects_dir, subject),
+            T1MRI_DIR,
+        )
 
     @staticmethod
     def _full_pattern(scan_id: ScanId, pattern: str) -> str:
-        """The single place a scan and a pattern are composed (acquisition is not part of the path yet)."""
+        """The single place a scan and a pattern are composed: ``<subject>/t1mri/<acquisition>/<pattern>``."""
         return f"{scan_id.path_prefix}/{pattern}"
 
     def _save_index(self, path: str) -> None:

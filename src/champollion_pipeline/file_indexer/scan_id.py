@@ -1,50 +1,45 @@
-"""ScanId: identity of one processable scan (subject, session, acquisition)."""
+"""ScanId: identity of one processable scan in the Morphologist layout (subject, acquisition folder)."""
 
 from __future__ import annotations
 
-import functools
-from dataclasses import dataclass
+import re
+from dataclasses import dataclass, field
+
+# Mirrors cortical_tiles (read-only submodule)
+# external/cortical_tiles/cortical_tiles/brainvisa/generate_skeletons.py,
+# GraphConvert2Skeleton.get_skeleton_filename: with --bids the sequential subject ID is the subject
+# followed by '_' + the first match of each pattern, in this fixed order, a missing entity skipped.
+# Inlined, not imported: upstream it is an inline method body that needs aims.
+_BIDS_ENTITY_PATTERNS: tuple[str, ...] = ("ses-([^_/]+)", "acq-([^_/]+)", "run-([^_/]+)")
 
 
-@functools.total_ordering
-@dataclass(frozen=True)
+@dataclass(frozen=True, order=True)
 class ScanId:
-    """Identity of a single processable scan.
+    """Identity of a single processable scan, in Morphologist's layout.
 
-    ``subject`` is the top-level subject folder name; ``session`` and
-    ``acquisition`` are BIDS labels with their prefix (``ses-01``, ``acq-T1w``),
-    or None when absent. A field is set when it is not None. Scans sort by
-    subject, then session, then acquisition, a missing label before any label.
+    Morphologist writes a scan's graphs under ``<subject>/t1mri/<acquisition>/``. ``subject`` is the
+    top-level subject folder name and ``acquisition`` the acquisition folder name, kept verbatim and
+    never split (``default_acquisition``, ``ses-V1``, ``ses-1_run-1``). Identity, hash and ordering are
+    ``(subject, acquisition)``; ``bids`` (the subjects follow --bids naming) is not part of identity.
+    ``str()`` is the sequential pipeline's subject ID: the subject alone, or with ``bids`` the subject
+    followed by the ses-, acq- and run- entities found in ``path_prefix``, in that order.
     """
 
     subject: str
-    session: str | None = None
-    acquisition: str | None = None
+    acquisition: str
+    bids: bool = field(default=False, compare=False)
 
     @property
     def path_prefix(self) -> str:
-        """Relative folder of the scan: ``subject/session`` when a session is set, else ``subject``."""
-        return f"{self.subject}/{self.session}" if self.session is not None else self.subject
+        """Relative folder of the scan: ``<subject>/t1mri/<acquisition>``."""
+        return f"{self.subject}/t1mri/{self.acquisition}"
 
     def __str__(self) -> str:
+        if not self.bids:
+            return self.subject
         parts = [self.subject]
-        if self.session is not None:
-            parts.append(self.session)
-        if self.acquisition is not None:
-            parts.append(self.acquisition)
+        for pattern in _BIDS_ENTITY_PATTERNS:
+            match = re.search(pattern, self.path_prefix)
+            if match:
+                parts.append(match[0])
         return "_".join(parts)
-
-    def __lt__(self, other: object) -> bool:
-        if not isinstance(other, ScanId):
-            return NotImplemented
-        return self._sort_key() < other._sort_key()
-
-    def _sort_key(self) -> tuple[str, bool, str, bool, str]:
-        """Comparison key in which a missing session or acquisition sorts before any label."""
-        return (
-            self.subject,
-            self.session is not None,
-            self.session or "",
-            self.acquisition is not None,
-            self.acquisition or "",
-        )
