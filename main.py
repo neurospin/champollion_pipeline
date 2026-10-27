@@ -66,6 +66,8 @@ except ImportError as e:
     run_parallel_pipeline = None
     _PARALLEL_RUNNER_IMPORT_ERROR = str(e)
 
+logger = logging.getLogger("champollion_pipeline.main")
+
 
 # ====================== Pipeline Stage Strategy Pattern ======================
 
@@ -741,15 +743,15 @@ def main() -> int:
         config = create_default_config()
         _apply_cli_overrides(config, args, from_default=True)
         ConfigLoader.save_to_yaml(config, args.generate_config)
-        print(f"✅ Configuration template generated: {args.generate_config}")
+        logger.output(f"✅ Configuration template generated: {args.generate_config}")
         return 0
 
     # Load configuration
     if args.config:
-        print(f"Loading configuration from: {args.config}")
+        logger.trace(f"Loading configuration from: {args.config}")
         config = ConfigLoader.load_from_yaml(args.config)
     else:
-        print("Using default configuration")
+        logger.trace("Using default configuration")
         config = create_default_config()
 
     # Apply command-line overrides
@@ -758,14 +760,12 @@ def main() -> int:
     # Run pipeline
     if config.mode == "streaming":
         if not config.dataset.embeddings_only:
-            print(
-                "Error: --mode streaming requires --embeddings-only "
-                "(training aggregates subjects and must remain batch).",
-                file=sys.stderr,
+            logger.error(
+                "--mode streaming requires --embeddings-only (training aggregates subjects and must remain batch)."
             )
             return 1
         if run_parallel_pipeline is None:
-            print(f"Error: could not import parallel_runner: {_PARALLEL_RUNNER_IMPORT_ERROR}", file=sys.stderr)
+            logger.error(f"could not import parallel_runner: {_PARALLEL_RUNNER_IMPORT_ERROR}")
             return 1
         subjects_dir = config.dataset.input_path or config.dataset.morphologist_graphs
         output_dir = config.outputs_path
