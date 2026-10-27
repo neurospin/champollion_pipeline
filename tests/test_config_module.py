@@ -7,7 +7,8 @@ dataclasses.asdict (REQ-REFACTOR-BDRABCZUK-B104FC70DD5F, -D1E056EE6D11,
 
 The golden YAML texts below were written by ConfigLoader.save_to_yaml of
 main.py at commit cc8d67c (hand-built dict, before the move), plus one
-'log: null' line after log_to_console (PipelineConfig.log, REQ-RUNLOG-BDRABCZUK-4C2F09533A2D);
+'log: null' line after log_to_console (PipelineConfig.log, REQ-RUNLOG-BDRABCZUK-4C2F09533A2D)
+and one dataset 'labelling_session' line after skel_seed (REQ-WHOLEBRAIN-BDRABCZUK-3DBF0C9F422F);
 the serialiser must reproduce them byte for byte (REQ-REFACTOR-BDRABCZUK-679F9A49A534,
 superseding -2636D42F82B1) so existing config files stay compatible.
 dataset.hf_token is set in the custom case and must stay absent.
@@ -83,6 +84,7 @@ dataset:
   sk_qc_path: ''
   masks_version: canonical_25
   skel_seed: null
+  labelling_session: ''
   regions: []
   classifier_name: svm
   overwrite: false
@@ -151,6 +153,7 @@ dataset:
   sk_qc_path: /qc.tsv
   masks_version: canonical_28
   skel_seed: 42
+  labelling_session: 0_auto
   regions:
   - S.C.-sylv._left
   classifier_name: logistic
@@ -222,6 +225,7 @@ _CUSTOM_DATASET_VALUES = {
     "sk_qc_path": "/qc.tsv",
     "masks_version": "canonical_28",
     "skel_seed": 42,
+    "labelling_session": "0_auto",
     "classifier_name": "logistic",
     "overwrite": True,
     "embeddings_only": True,

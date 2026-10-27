@@ -127,6 +127,8 @@ class RunCorticalTilesStage(PipelineStage):
 
         if self.config.dataset.skel_seed is not None:
             args.append(f"--skel-seed={self.config.dataset.skel_seed}")
+        if self.config.dataset.labelling_session:
+            args.append(f"--labelling_session={self.config.dataset.labelling_session}")
 
         if self.config.dataset.sk_qc_path:
             args.append(f"--sk_qc_path={self.config.dataset.sk_qc_path}")
