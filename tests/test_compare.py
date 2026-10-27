@@ -9,6 +9,7 @@ dependencies are injected as stub modules, so nothing touches real data.
 
 import csv
 import json
+import logging
 import subprocess
 import sys
 import types
@@ -36,7 +37,7 @@ from compare import (
     voxel_diff,
     wasserstein_distance,
 )
-from tests.log_assertions import LOG
+from tests.log_assertions import COMPARE_LOGGER_NAME, LOG, OUTPUT, logged_messages
 
 # ---------------------------------------------------------------------------
 # Helpers
@@ -388,11 +389,12 @@ class TestDispatch:
         monkeypatch.setattr(Compare, "_run_databases", lambda self: 44)
         assert script.run() == 44
 
-    def test_unknown_mode_returns_one(self, capsys):
+    def test_unknown_mode_returns_one(self, caplog):
+        caplog.set_level(1, logger=COMPARE_LOGGER_NAME)
         script = Compare()
         script.args = Namespace(mode="bogus")
         assert script.run() == 1
-        assert "unknown mode 'bogus'" in capsys.readouterr().out
+        assert "unknown mode 'bogus'" in "\n".join(logged_messages(caplog, "compare_sulcal.cli", logging.ERROR))
 
 
 class TestFindMasks:
@@ -475,19 +477,21 @@ class TestCompareNiftiMasks:
         assert report["wasserstein_per_mask"]["L/shared.nii.gz"] == pytest.approx(2.0)
         assert "diffs_per_mask" not in report
 
-    def test_both_metrics_and_console_summary(self, mask_sets, tmp_path, capsys):
+    def test_both_metrics_and_console_summary(self, mask_sets, tmp_path, caplog):
+        caplog.set_level(1, logger=COMPARE_LOGGER_NAME)
         dir_a, dir_b = mask_sets
         out = tmp_path / "both.json"
         script = _make_script(
             ["masks", "--set_a", str(dir_a), "--set_b", str(dir_b), "--output", str(out), "--metric", "both"]
         )
         assert script.run() == 0
-        printed = capsys.readouterr().out
+        printed = "\n".join(logged_messages(caplog, "compare_sulcal.cli", OUTPUT))
         assert "Wasserstein buckets (step=1.0)" in printed
         assert "Diff buckets (step=1.0)" in printed
         assert "Unchanged masks: 0/1" in printed
 
-    def test_shape_mismatch_is_skipped(self, tmp_path, monkeypatch, capsys):
+    def test_shape_mismatch_is_skipped(self, tmp_path, monkeypatch, caplog):
+        caplog.set_level(1, logger=COMPARE_LOGGER_NAME)
         dir_a = _make_tree(tmp_path / "a", ["L/shared.nii.gz"])
         dir_b = _make_tree(tmp_path / "b", ["L/shared.nii.gz"])
         monkeypatch.setattr(
@@ -503,7 +507,7 @@ class TestCompareNiftiMasks:
         out = tmp_path / "r.json"
         script = _make_script(["masks", "--set_a", str(dir_a), "--set_b", str(dir_b), "--output", str(out)])
         assert script.run() == 0
-        assert "shape mismatch" in capsys.readouterr().out
+        assert "shape mismatch" in "\n".join(logged_messages(caplog, "compare_sulcal.cli", logging.WARNING))
         assert json.loads(out.read_text())["diffs_per_mask"] == {}
 
     def test_xor_dir_writes_volumes(self, mask_sets, tmp_path):
@@ -663,12 +667,13 @@ class TestLoadDatabase:
         patterns = subjects_mod.get_all_subjects_as_dictionary.call_args.args[1]
         assert patterns == ["%(subject)s/folds/3.3/a/%(side)s%(subject)s*.arg"]
 
-    def test_warns_when_subject_has_no_graph(self, tmp_path, stub_deep_folding, monkeypatch, capsys):
+    def test_warns_when_subject_has_no_graph(self, tmp_path, stub_deep_folding, monkeypatch, caplog):
+        caplog.set_level(1, logger=COMPARE_LOGGER_NAME)
         stub_deep_folding([{"subject": "sub-99", "dir": "d", "graph_file": "g"}])
         monkeypatch.setattr(compare_sulcal.databases, "_get_subject_voxel_counts", lambda sub, _bv: ("sub-99", None))
         script = _make_script(_db_argv(tmp_path))
         assert script._load_database("p", ["L"], str(tmp_path), 1, str(tmp_path)) == {}
-        assert "no graph for sub-99" in capsys.readouterr().out
+        assert "no graph for sub-99" in "\n".join(logged_messages(caplog, "compare_sulcal.cli", logging.WARNING))
 
 
 @pytest.fixture  # noqa: V103
@@ -694,10 +699,11 @@ class TestRunDatabases:
         assert float(rows["S.C."]["vox_ratio_B_over_A"]) == pytest.approx(2.333, abs=1e-3)
 
     @pytest.mark.usefixtures("two_campaigns")
-    def test_reports_subject_set_overlap(self, tmp_path, capsys):
+    def test_reports_subject_set_overlap(self, tmp_path, caplog):
+        caplog.set_level(1, logger=COMPARE_LOGGER_NAME)
         script = _make_script(_db_argv(tmp_path, output=tmp_path / "db.csv"))
         script.run()
-        printed = capsys.readouterr().out
+        printed = "\n".join(logged_messages(caplog, "compare_sulcal.cli", OUTPUT))
         assert "Subjects in A only:  1" in printed
         assert "Subjects in both:        1" in printed
 

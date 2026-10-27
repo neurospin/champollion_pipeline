@@ -142,6 +142,7 @@ Embeddings comparison (embeddings)
 
 import sys
 
+from champollion_pipeline.process_setup import init_pipeline_process
 from compare_sulcal.cli import Compare, main, run_subcommand
 from compare_sulcal.databases import _get_subject_voxel_counts, _mask_stats
 from compare_sulcal.embeddings import knn_overlap, linear_cka, procrustes_align
@@ -178,4 +179,5 @@ __all__ = [
 ]
 
 if __name__ == "__main__":
+    init_pipeline_process()
     sys.exit(main())

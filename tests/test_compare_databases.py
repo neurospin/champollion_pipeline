@@ -17,6 +17,7 @@ import compare
 import compare_databases
 import compare_sulcal.databases
 from compare_databases import CompareDatabases
+from tests.log_assertions import COMPARE_LOGGER_NAME, OUTPUT, logged_messages
 
 # ---------------------------------------------------------------------------
 # Helpers
@@ -103,10 +104,11 @@ class TestRun:
         assert float(rows["S.C."]["vox_ratio_B_over_A"]) == pytest.approx(2.333, abs=1e-3)
 
     @pytest.mark.usefixtures("two_campaigns")
-    def test_reports_subject_set_overlap(self, tmp_path, capsys):
+    def test_reports_subject_set_overlap(self, tmp_path, caplog):
+        caplog.set_level(1, logger=COMPARE_LOGGER_NAME)
         script = _make_script(_base_argv(tmp_path, output=tmp_path / "db.csv"))
         script.run()
-        printed = capsys.readouterr().out
+        printed = "\n".join(logged_messages(caplog, "compare_sulcal.cli", OUTPUT))
         assert "Subjects in A only:  1" in printed
         assert "Subjects in B only:  1" in printed
         assert "Subjects in both:        1" in printed

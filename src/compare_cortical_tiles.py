@@ -32,6 +32,7 @@ import sys
 
 from champollion_utils.script_builder import ScriptBuilder
 
+from champollion_pipeline.process_setup import init_pipeline_process
 from compare import bucket_label, find_masks, load_mask_vol, run_subcommand, voxel_diff, wasserstein_distance
 
 __all__ = [
@@ -89,6 +90,7 @@ class CompareCorticalTiles(ScriptBuilder):
 
 
 def main():
+    init_pipeline_process()
     script = CompareCorticalTiles()
     return script.main()
 

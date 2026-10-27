@@ -12,12 +12,18 @@ written and stdout names its absolute --output path).
 ``Compare._load_database`` is replaced by a fake serving in-memory
 {subject: {sulcus: voxel_count}} dicts, so neither soma nor graph files are
 needed; PyAIMS is stubbed in conftest.py.
+
+The messages are compare_sulcal.cli log records (TASK-LOGGING-BDRABCZUK-E09CA1C56517); the
+autouse ``cli_logging`` fixture installs the stdout/stderr routing ``Compare.main()`` sets up
+(``setup_logging()`` on the root logger), so stdout carries them as it does at run time. A
+routed line is prefixed with the time, level and provenance, so a line ends with the message.
 """
 
 import csv
 from os.path import abspath
 
 import pytest
+from champollion_utils.logger import setup_logging
 
 from compare import Compare
 
@@ -39,6 +45,12 @@ _NON_EMPTY = (
     {"sub-01": {"S.C._left": 100, "F.C.M._left": 40}},
     {"sub-01": {"S.C._left": 120}},
 )
+
+
+@pytest.fixture(autouse=True)  # noqa: V103 - autouse
+def cli_logging():
+    """The root routing Compare.main() installs; conftest's restore_logging_and_excepthooks undoes it."""
+    setup_logging()
 
 
 def _run_databases(monkeypatch, data_a, data_b, output):
@@ -140,5 +152,5 @@ class TestDatabasesNonEmptyReportsWrittenPath:
         _run_databases(monkeypatch, *_NON_EMPTY, relative_output)
 
         expected = f"{_CSV_WRITTEN}: {abspath(relative_output)}"
-        assert expected in capsys.readouterr().out.splitlines()
+        assert any(line.endswith(expected) for line in capsys.readouterr().out.splitlines())
         assert (tmp_path / relative_output).is_file()

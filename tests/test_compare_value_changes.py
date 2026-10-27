@@ -12,6 +12,7 @@ import numpy as np
 
 import compare_sulcal.brainvisa
 from compare import Compare, voxel_diff
+from tests.log_assertions import COMPARE_LOGGER_NAME, OUTPUT, logged_messages
 
 
 class _FakeAims:
@@ -133,7 +134,8 @@ class TestReqCompare89BucketFromChanged:
 class TestReqCompare90UnchangedCount:
     """[REQ-COMPARE-90](REQUIREMENTS.md#req-compare-90) value-only masks are not reported as unchanged."""
 
-    def test_value_only_mask_not_counted_unchanged(self, tmp_path, monkeypatch, capsys):
+    def test_value_only_mask_not_counted_unchanged(self, tmp_path, monkeypatch, caplog):
+        caplog.set_level(1, logger=COMPARE_LOGGER_NAME)
         a, b = _value_only_pair()
         _run_masks(tmp_path, monkeypatch, a, b)
-        assert "Unchanged masks: 0/1" in capsys.readouterr().out
+        assert "Unchanged masks: 0/1" in logged_messages(caplog, "compare_sulcal.cli", OUTPUT)
