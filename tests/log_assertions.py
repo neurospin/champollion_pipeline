@@ -42,6 +42,11 @@ LOG_CONVERTED_MODULES: tuple[str, ...] = (
     "compare_sulcal.embeddings",
     "compare_sulcal.viewer",
     "champollion_pipeline.models.fetch",
+    "champollion_pipeline.generate_snapshots",
+    "champollion_pipeline.snapshot_types.input_qc",
+    "champollion_pipeline.snapshot_types.sulcal",
+    "champollion_pipeline.snapshot_types.tiles",
+    "champollion_pipeline.snapshot_types.umap",
 )
 
 

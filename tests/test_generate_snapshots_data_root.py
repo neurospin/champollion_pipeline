@@ -4,8 +4,11 @@ Hermetic per ARCHITECTURE.md#snapshot-mesh-fallback-hermetic: Anatomist,
 PyAIMS and cortical_tiles are patched as module attributes of snapshot_types.brainvisa_imports; every path the
 code touches lives under ``tmp_path`` and ``ICBM_MESH_DIR_FALLBACK`` is
 redirected there, so nothing depends on /neurospin being mounted or not.
+The message is read as one WARNING log record through pipeline_caplog
+(REQ-LOGGING-BDRABCZUK-047543C19136).
 """
 
+import logging
 from unittest.mock import MagicMock, patch
 
 import pytest
@@ -23,6 +26,13 @@ def _as_module_attrs(modules):
 
 
 OPTION = "--champollion_data_root"
+
+
+def _graph_warning(capture, graph_path):
+    """Message of the one WARNING record naming ``graph_path``."""
+    naming = [r for r in capture.records if r.levelno == logging.WARNING and graph_path in r.getMessage()]
+    assert len(naming) == 1, [(r.levelname, r.getMessage()) for r in capture.records]
+    return naming[0].getMessage()
 
 
 @pytest.fixture
@@ -79,24 +89,22 @@ def _expected_graph_path(root, side="L", level=1):
 class TestTilesMissingRegionGraphMessage:
     """REQ-TILESROOT-01: missing region graph -> message names the file path and --champollion_data_root."""
 
-    def test_explicit_root_message_names_path_and_option(self, tmp_path, tiles_env, capsys):
+    def test_explicit_root_message_names_path_and_option(self, tmp_path, tiles_env, pipeline_caplog):
         """REQ-TILESROOT-01: explicit champollion_data_root lacking the region graph."""
         modules, empty_root, crops = tiles_env
         with patch.multiple(brainvisa_imports, **_as_module_attrs(modules)):
             snaps = generate_tiles_snapshot(
                 str(crops), str(tmp_path / "tiles.png"), champollion_data_root=str(empty_root)
             )
-        out = capsys.readouterr().out
         assert snaps == []
-        assert _expected_graph_path(empty_root) in out
-        assert OPTION in out, f"no mention of {OPTION} in output:\n{out}"
+        message = _graph_warning(pipeline_caplog, _expected_graph_path(empty_root))
+        assert OPTION in message, f"no mention of {OPTION} in the warning: {message}"
 
-    def test_config_default_root_message_names_path_and_option(self, tmp_path, tiles_env, capsys):
+    def test_config_default_root_message_names_path_and_option(self, tmp_path, tiles_env, pipeline_caplog):
         """REQ-TILESROOT-01: cortical_tiles config default root lacking the region graph (TASK-201 case)."""
         modules, empty_root, crops = tiles_env
         with patch.multiple(brainvisa_imports, **_as_module_attrs(modules)):
             snaps = generate_tiles_snapshot(str(crops), str(tmp_path / "tiles.png"))
-        out = capsys.readouterr().out
         assert snaps == []
-        assert _expected_graph_path(empty_root) in out
-        assert OPTION in out, f"no mention of {OPTION} in output:\n{out}"
+        message = _graph_warning(pipeline_caplog, _expected_graph_path(empty_root))
+        assert OPTION in message, f"no mention of {OPTION} in the warning: {message}"

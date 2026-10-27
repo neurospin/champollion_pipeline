@@ -1,10 +1,15 @@
 """Sulcal graph snapshots: subject, graph and white-mesh discovery and the Anatomist render."""
 
 import glob
+import logging
 import os
 import os.path as osp
 
+import champollion_utils.logger  # noqa: F401 - installs Logger.trace/output/fail (LOG 22, OUTPUT 25, FAIL 45)
+
 from champollion_pipeline.snapshot_types import brainvisa_imports
+
+logger = logging.getLogger(__name__)
 
 HEMISPHERES = ("left", "right")
 
@@ -57,9 +62,9 @@ def find_sulcal_graphs(morphologist_dir, subject=None, acquisition=None):
         candidates = [m for m in glob.glob(osp.join(morphologist_dir, "**", subject), recursive=True) if osp.isdir(m)]
         if candidates:
             root = candidates[0]
-            print(f"  Subject found at: {root}")
+            logger.trace(f"Subject found at: {root}")
         else:
-            print(f"  Subject directory not found for '{subject}' under {morphologist_dir}")
+            logger.warning(f"Subject directory not found for '{subject}' under {morphologist_dir}")
             return []
     pattern = osp.join(root, "**", "*.arg")
     graphs = glob.glob(pattern, recursive=True)
@@ -152,7 +157,7 @@ def generate_sulcal_graph_snapshot(  # noqa: PLR0913 - snapshot API; keyword def
 
     image = win.snapshotImage(size[0], size[1])
     image.save(output_path)
-    print(f"  Saved: {output_path}")
+    logger.output(f"Saved: {output_path}")
 
     a.removeObjects(objects, [win])
     a.closeWindows([win])

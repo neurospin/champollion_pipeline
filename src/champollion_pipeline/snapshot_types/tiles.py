@@ -1,13 +1,18 @@
 """Cortical tiles snapshots: completed-region discovery and the Anatomist render of the region graphs."""
 
+import logging
 import os
 import os.path as osp
 
+import champollion_utils.logger  # noqa: F401 - installs Logger.trace/output/fail (LOG 22, OUTPUT 25, FAIL 45)
+
 from champollion_pipeline.snapshot_types import brainvisa_imports
 
-# Hint printed when the tiles snapshot cannot find the region graphs under the data root
+logger = logging.getLogger(__name__)
+
+# Hint appended to the missing region graph warning: where the region graphs are looked up
 REGION_GRAPH_ROOT_HINT = (
-    "  Pass --champollion_data_root <dir> (or set CHAMPOLLION_DATA_ROOT before launch) "
+    "Pass --champollion_data_root <dir> (or set CHAMPOLLION_DATA_ROOT before launch) "
     "to a directory containing mask/2mm/regions/meshes/."
 )
 
@@ -85,7 +90,7 @@ def generate_tiles_snapshot(crops_dir, output_path, size=(800, 600), level=1, ch
     completed = find_completed_regions(crops_dir)
     total = sum(len(v) for v in completed.values())
     if total == 0:
-        print("  No completed regions found in crops directory")
+        logger.warning("No completed regions found in crops directory")
         return []
 
     root = champollion_data_root if champollion_data_root else config.config().get_champollion_data_root_dir()
@@ -116,12 +121,11 @@ def generate_tiles_snapshot(crops_dir, output_path, size=(800, 600), level=1, ch
         if not region_names:
             continue
 
-        print(f"  {hemi_name}: {len(region_names)} region(s)")
+        logger.trace(f"{hemi_name}: {len(region_names)} region(s)")
 
         graph_path = compute_region_graph_path(root, side, level)
         if not osp.exists(graph_path):
-            print(f"  Region graph not found: {graph_path}")
-            print(REGION_GRAPH_ROOT_HINT)
+            logger.warning(f"Region graph not found: {graph_path}; {REGION_GRAPH_ROOT_HINT}")
             continue
 
         reg_graph = a.loadObject(graph_path)
@@ -129,7 +133,7 @@ def generate_tiles_snapshot(crops_dir, output_path, size=(800, 600), level=1, ch
 
         mesh_path = osp.join(icbm_mesh_dir, mesh_file)
         if not osp.exists(mesh_path):
-            print(f"  ICBM mesh not found: {mesh_path}")
+            logger.warning(f"ICBM mesh not found: {mesh_path}")
             continue
 
         mesh = a.loadObject(mesh_path)
@@ -154,7 +158,7 @@ def generate_tiles_snapshot(crops_dir, output_path, size=(800, 600), level=1, ch
         image = win.snapshotImage(size[0], size[1])
         image.save(snap_path)
         snapshots.append(snap_path)
-        print(f"  Saved: {snap_path}")
+        logger.output(f"Saved: {snap_path}")
 
         a.removeObjects([reg_graph, mesh], [win])
         a.closeWindows([win])
