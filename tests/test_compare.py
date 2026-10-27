@@ -36,6 +36,7 @@ from compare import (
     voxel_diff,
     wasserstein_distance,
 )
+from tests.log_assertions import LOG
 
 # ---------------------------------------------------------------------------
 # Helpers
@@ -196,11 +197,18 @@ class TestSaveXorVol:
 class TestVisualiseMaskDiffs:
     # Updated for REQ-COMPARE-45/47/49: visualise_mask_diffs takes a scores dict
     # (mask name -> ranking score), returns an exit code, and skips without a display.
-    def test_no_changed_masks_returns_early(self, monkeypatch, capsys):
+    # REQ-LOGGING-BDRABCZUK-1B8E58FA45EB: the note is a LOG record on the compare_sulcal.viewer logger.
+    def test_no_changed_masks_returns_early(self, monkeypatch, caplog):
+        caplog.set_level(LOG, logger="compare_sulcal.viewer")
         run = MagicMock()
         monkeypatch.setattr("subprocess.run", run)
         assert visualise_mask_diffs({"m": 0.0}, {}, {}) == 0
-        assert "No changed masks to visualise." in capsys.readouterr().out
+        assert any(
+            r.name == "compare_sulcal.viewer"
+            and r.levelno == LOG
+            and "No changed masks to visualise." in r.getMessage()
+            for r in caplog.records
+        )
         run.assert_not_called()
 
     def test_spawns_viewer_for_top_changed_masks(self, tmp_path, monkeypatch):

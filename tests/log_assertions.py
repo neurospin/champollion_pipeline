@@ -31,7 +31,12 @@ LEVEL_BY_KIND: dict[str, int] = {
 
 # Import names of the modules that follow the LOGGING convention; each later
 # LOGGING task adds its modules here.
-LOG_CONVERTED_MODULES: tuple[str, ...] = ()
+LOG_CONVERTED_MODULES: tuple[str, ...] = (
+    "compare_sulcal.crops",
+    "compare_sulcal.databases",
+    "compare_sulcal.embeddings",
+    "compare_sulcal.viewer",
+)
 
 
 class PipelineLogCapture:

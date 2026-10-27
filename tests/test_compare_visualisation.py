@@ -27,6 +27,7 @@ Self-contained: the fake PyAIMS below mirrors the one in tests/test_compare.py.
 import ast
 import contextlib
 import json
+import logging
 import math
 import re
 import subprocess
@@ -37,12 +38,14 @@ from pathlib import Path
 
 import numpy as np
 import pytest
+from champollion_utils.logger import setup_logging
 
 import compare
 import compare_sulcal.brainvisa
 import compare_sulcal.masks
 import compare_sulcal.viewer
 from compare import Compare, visualise_mask_diffs
+from tests.log_assertions import LOG
 
 pytestmark = pytest.mark.unit  # noqa: V107
 
@@ -122,6 +125,15 @@ def _make_tree(root: Path, rel_paths) -> Path:
     return root
 
 
+def _viewer_messages(caplog, level, text):
+    """Messages of the compare_sulcal.viewer records at ``level`` containing ``text`` (case-insensitive)."""
+    return [
+        r.getMessage()
+        for r in caplog.records
+        if r.name == "compare_sulcal.viewer" and r.levelno == level and text.lower() in r.getMessage().lower()
+    ]
+
+
 def _make_script(argv) -> Compare:
     script = Compare()
     script.args = script.parse_args(argv)
@@ -155,6 +167,17 @@ def display_env(monkeypatch):
     monkeypatch.setenv("DISPLAY", ":99")
     monkeypatch.delenv("WAYLAND_DISPLAY", raising=False)
     monkeypatch.delenv("QT_QPA_PLATFORM", raising=False)
+
+
+@pytest.fixture  # noqa: V103 - used through usefixtures
+def cli_logging():
+    """The root routing Compare.main() installs (setup_logging: WARNING and above to stderr), restored afterwards."""
+    root = logging.getLogger()
+    handlers, level = list(root.handlers), root.level
+    setup_logging()
+    yield
+    root.handlers[:] = handlers
+    root.setLevel(level)
 
 
 @pytest.fixture
@@ -254,10 +277,12 @@ class TestTask191Ranking:
         assert [e["name"] for e in run.entries()] == ["b.nii.gz"]
 
     @pytest.mark.usefixtures("display_env")
-    def test_all_zero_scores_skip_viewer(self, monkeypatch, run_recorder, capsys):
+    def test_all_zero_scores_skip_viewer(self, monkeypatch, run_recorder, caplog):
+        # REQ-LOGGING-BDRABCZUK-1B8E58FA45EB: the note is a LOG record on the compare_sulcal.viewer logger.
+        caplog.set_level(LOG, logger="compare_sulcal.viewer")
         run = run_recorder()
         assert visualise_mask_diffs({"m.nii.gz": 0.0}, {"m.nii.gz": "/a/m"}, {"m.nii.gz": "/b/m"}) == 0
-        assert "No changed masks to visualise." in capsys.readouterr().out
+        assert _viewer_messages(caplog, LOG, "No changed masks to visualise.")
         assert run.calls == []
 
     def test_run_passes_changed_counts_for_diff(self, mask_tree, tmp_path, monkeypatch):
@@ -479,13 +504,15 @@ class TestTask192XorFiles:
 
 class TestTask187ViewerFailure:
     @pytest.mark.usefixtures("display_env")
-    def test_nonzero_return_code_reported_on_stderr(self, monkeypatch, run_recorder, tmp_root, capsys):
+    def test_nonzero_return_code_logged_at_error(self, monkeypatch, run_recorder, tmp_root, caplog):
+        # REQ-LOGGING-BDRABCZUK-07EA64A2D67D: an ERROR record on the compare_sulcal.viewer logger;
+        # the CLI-level tests below still check that the return code reaches stderr.
         objects, masks_a, masks_b = _mask_pairs(["m.nii.gz"])
         monkeypatch.setattr(compare_sulcal.brainvisa, "aims", _FakeAims(objects))
         run_recorder(returncode=139)
 
         assert visualise_mask_diffs({"m.nii.gz": 1.0}, masks_a, masks_b) == 1
-        assert "139" in capsys.readouterr().err
+        assert _viewer_messages(caplog, logging.ERROR, "139")
 
     @pytest.mark.usefixtures("display_env")
     def test_returns_zero_when_viewer_succeeds(self, monkeypatch, run_recorder, tmp_root, capsys):
@@ -503,7 +530,7 @@ class TestTask187ViewerFailure:
         ],
         ids=["masks", "cortical_tiles"],
     )
-    @pytest.mark.usefixtures("display_env")
+    @pytest.mark.usefixtures("display_env", "cli_logging")
     def test_run_exits_one_and_writes_report_on_viewer_failure(  # noqa: PLR0913 - pytest fixtures and parametrize arguments
         self, mode, rel, mask_tree, tmp_path, run_recorder, tmp_root, capsys
     ):
@@ -551,7 +578,9 @@ class TestTask188DisplayCheck:
         [{}, {"DISPLAY": ":0", "QT_QPA_PLATFORM": "offscreen"}],
         ids=["no_display", "offscreen"],
     )
-    def test_skips_viewer_without_usable_display(self, monkeypatch, run_recorder, tmp_root, capsys, env):
+    def test_skips_viewer_without_usable_display(self, monkeypatch, run_recorder, tmp_root, caplog, env):
+        # REQ-LOGGING-BDRABCZUK-E6B52DB20D7A: a WARNING record on the compare_sulcal.viewer logger;
+        # test_run_exits_zero_when_display_missing still checks that the note reaches stderr.
         for var in ("DISPLAY", "WAYLAND_DISPLAY", "QT_QPA_PLATFORM"):
             monkeypatch.delenv(var, raising=False)
         for var, value in env.items():
@@ -562,8 +591,9 @@ class TestTask188DisplayCheck:
 
         assert visualise_mask_diffs({"m.nii.gz": 1.0}, masks_a, masks_b) == 0
         assert run.calls == []
-        assert "display" in capsys.readouterr().err.lower()
+        assert _viewer_messages(caplog, logging.WARNING, "display")
 
+    @pytest.mark.usefixtures("cli_logging")
     def test_run_exits_zero_when_display_missing(self, mask_tree, tmp_path, monkeypatch, run_recorder, capsys):
         for var in ("DISPLAY", "WAYLAND_DISPLAY", "QT_QPA_PLATFORM"):
             monkeypatch.delenv(var, raising=False)
