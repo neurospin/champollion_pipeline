@@ -16,10 +16,14 @@ it overrides the ``masks_version`` field in the pipeline JSON config so that
 the correct labelled masks are used during region extraction.
 """
 
+import argparse
 import glob
 import json
+import os
+import re
 import shutil
 import sys
+import tempfile
 from datetime import datetime
 from os import chdir, getcwd
 from os.path import abspath, dirname, exists, isdir, join
@@ -36,7 +40,59 @@ from champollion_pipeline.utils.cortical_tiles_config import CorticalTilesConfig
 from champollion_pipeline.utils.lib import DERIVATIVES_FOLDER
 
 LABELLING_SESSION_DEFAULT = "deepcnn_session_auto"
+LABELLING_SESSION_CANDIDATES = (LABELLING_SESSION_DEFAULT, "default_session_auto")  # priority order
+WHOLE_BRAIN_SRC_FILENAME = "resampled_skeleton"
 INPUT_TYPES_DEFAULT = ("skeleton", "foldlabel")
+
+
+class _ExplicitLabellingSession(argparse.Action):
+    """Store --labelling_session and record that the user gave it explicitly."""
+
+    def __call__(self, parser, namespace, values, _option_string=None):
+        namespace.labelling_session = values
+        namespace.labelling_session_explicit = True
+
+
+def list_fused_subjects(skeleton_src_dir: str, src_filename: str) -> dict[str, str]:
+    """Map each subject with a fused volume in <skeleton_src_dir>/F/ to its absolute path.
+
+    The subject id is what follows ``F<src_filename>`` in the file name, with one
+    leading ``_`` stripped (cortical_tiles' own subject-id rule). Missing F/ gives {}.
+    """
+    f_dir = join(skeleton_src_dir, "F")
+    if not isdir(f_dir):
+        return {}
+    pattern = re.compile(rf"^F{re.escape(src_filename)}(.*)\.nii\.gz$")
+    fused = {}
+    for name in sorted(os.listdir(f_dir)):
+        match = pattern.match(name)
+        if match:
+            subject = match.group(1)
+            fused[subject[1:] if subject.startswith("_") else subject] = abspath(join(f_dir, name))
+    return fused
+
+
+def labelled_session_dir(morpho_dir: str, path_to_graph: str, subject: str, session: str, bids: bool) -> str:
+    """Directory holding a subject's labelled graphs for one session.
+
+    Mirrors cortical_tiles' RemoveVentricleFromVolume.get_labelled_graph: with BIDS
+    names, the subject id splits into the subject folder and the keys that replace
+    ``*`` in path_to_graph.
+    """
+    if bids:
+        parts = subject.split("_")
+        return join(morpho_dir, parts[0], path_to_graph.replace("*", "_".join(parts[1:])), session)
+    return join(morpho_dir, subject, path_to_graph, session)
+
+
+def resolve_labelling_session(
+    morpho_dir: str, path_to_graph: str, subject: str, candidates: tuple[str, ...], bids: bool
+) -> str | None:
+    """First candidate session whose labelled-graph directory exists for the subject, else None."""
+    for session in candidates:
+        if isdir(labelled_session_dir(morpho_dir, path_to_graph, subject, session, bids)):
+            return session
+    return None
 
 
 class RunCorticalTiles(ScriptBuilder):
@@ -82,11 +138,13 @@ class RunCorticalTiles(ScriptBuilder):
                 "Mask version tag (e.g. 'canonical_25'). Overrides masks_version in the pipeline JSON config.",
                 default=None,
             )
-            .add_optional_argument(
+            .add_argument(
                 "--labelling_session",
-                "Morphologist labelling session whose labelled graphs locate the ventricle "
-                f"for whole-brain removal (e.g. '0_auto'). Default: {LABELLING_SESSION_DEFAULT}.",
+                action=_ExplicitLabellingSession,
                 default=LABELLING_SESSION_DEFAULT,
+                help="Morphologist labelling session whose labelled graphs locate the ventricle "
+                "for whole-brain removal (e.g. '0_auto'). Default: per subject, the first of "
+                f"{' and '.join(LABELLING_SESSION_CANDIDATES)} that holds a labelled graph.",
             )
             .add_optional_argument(
                 "--skel-seed",
@@ -113,6 +171,7 @@ class RunCorticalTiles(ScriptBuilder):
             action="store_true",
             help="Deprecated: distbottom is skipped by default. Kept for backward compatibility.",
         )
+        self.parser.set_defaults(labelling_session_explicit=False)
 
     def _preflight_check(self, output_abs: str, config_path: str) -> bool:
         """Check for existing crops and migrate legacy flat structure if needed.
@@ -323,24 +382,80 @@ class RunCorticalTiles(ScriptBuilder):
             # which lives under external/ and is not ours to fix.
             number_subjects="all",
         )
-        remove_ventricle.remove_ventricle(
-            side="F",
-            src_dir=skeleton_src_dir,
-            morpho_dir=input_abs,
-            path_to_graph=self.args.path_to_graph,
-            # add_left_and_right_volumes' default output_filename
-            # ("resampled_skeleton") does not match remove_ventricle's
-            # default src_filename ("skeleton_generated_") -- pass it
-            # explicitly so remove_ventricle reads what was just fused.
-            src_filename="resampled_skeleton",
-            parallel=True,
-            output_dir=join(output_abs, DERIVATIVES_FOLDER, "whole_brain"),
-            transform_dir=join(output_abs, DERIVATIVES_FOLDER, "transforms"),
-            labelling_session=self.args.labelling_session,
-            bids=self.args.bids,
-        )
+        self._remove_ventricle_whole_brain(skeleton_src_dir, input_abs, output_abs)
 
         return result
+
+    def _remove_ventricle_whole_brain(self, skeleton_src_dir: str, input_abs: str, output_abs: str) -> None:
+        """Strip the ventricle from each fused volume, grouping subjects by labelling session.
+
+        remove_ventricle takes one labelling session per call and enumerates
+        subjects from <src_dir>/F/, so when subjects resolve to different
+        sessions (or some have none) each group gets a staged F/ of symlinks.
+        Subjects without a labelled graph are left out with one warning; the
+        crops are unaffected and run() still returns the crop result.
+        """
+        if self.args.labelling_session_explicit:
+            candidates = (self.args.labelling_session,)
+        else:
+            candidates = LABELLING_SESSION_CANDIDATES
+
+        fused = list_fused_subjects(skeleton_src_dir, WHOLE_BRAIN_SRC_FILENAME)
+        if not fused:
+            print(
+                f"run_cortical_tiles.py: no fused volume under {skeleton_src_dir}/F; "
+                "whole-brain ventricle removal skipped."
+            )
+            return
+
+        groups: dict[str, list[str]] = {}
+        excluded = []
+        for subject in fused:
+            session = resolve_labelling_session(input_abs, self.args.path_to_graph, subject, candidates, self.args.bids)
+            if session is None:
+                excluded.append(subject)
+            else:
+                groups.setdefault(session, []).append(subject)
+
+        if excluded:
+            print(
+                f"run_cortical_tiles.py: Warning - {len(excluded)} subject(s) excluded from whole-brain "
+                f"ventricle removal: {', '.join(sorted(excluded))}. No labelled graph under "
+                f"{' or '.join(candidates)}; sulcal recognition is required (run Morphologist with "
+                "sulcal recognition)."
+            )
+
+        def call(src_dir: str, session: str) -> None:
+            remove_ventricle.remove_ventricle(
+                side="F",
+                src_dir=src_dir,
+                morpho_dir=input_abs,
+                path_to_graph=self.args.path_to_graph,
+                # add_left_and_right_volumes' default output_filename
+                # ("resampled_skeleton") does not match remove_ventricle's
+                # default src_filename ("skeleton_generated_") -- pass it
+                # explicitly so remove_ventricle reads what was just fused.
+                src_filename=WHOLE_BRAIN_SRC_FILENAME,
+                parallel=True,
+                output_dir=join(output_abs, DERIVATIVES_FOLDER, "whole_brain"),
+                transform_dir=join(output_abs, DERIVATIVES_FOLDER, "transforms"),
+                labelling_session=session,
+                bids=self.args.bids,
+            )
+
+        if len(groups) == 1 and not excluded:
+            call(skeleton_src_dir, next(iter(groups)))
+            return
+
+        for session in candidates:
+            subjects = groups.get(session)
+            if not subjects:
+                continue
+            with tempfile.TemporaryDirectory(prefix=f"whole_brain_{session}_") as staged:
+                os.makedirs(join(staged, "F"))
+                for subject in subjects:
+                    os.symlink(fused[subject], join(staged, "F", os.path.basename(fused[subject])))
+                call(staged, session)
 
 
 def main():

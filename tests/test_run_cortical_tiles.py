@@ -3,14 +3,19 @@
 Unit tests for run_cortical_tiles.py
 """
 
+import inspect
 import json
+import logging
+import re
 import shutil
 import tempfile
+import warnings
 from pathlib import Path
 from unittest.mock import MagicMock, call, patch
 
 import numpy as np
 import pytest
+from cortical_tiles.brainvisa import remove_ventricle as remove_ventricle_module
 from hypothesis import assume, given, settings
 from hypothesis import strategies as st
 
@@ -33,6 +38,128 @@ def _stub_whole_brain_functions(monkeypatch):
         "champollion_pipeline.run_cortical_tiles.remove_ventricle.remove_ventricle",
         MagicMock(),
     )
+
+
+# Signature of the real cortical_tiles remove_ventricle(), captured before any
+# test patches it, so fakes can read its arguments however they are passed.
+_REMOVE_VENTRICLE_SIGNATURE = inspect.signature(remove_ventricle_module.remove_ventricle)
+
+_GRAPH_SUBPATH = "graphs/path"
+_FIXTURE_SUBJECT = "subj01"
+
+
+def _skeleton_dir(output_dir):
+    """Where generate_sulcal_regions.py writes L/R skeletons and the fusion writes F/."""
+    return Path(output_dir).resolve() / DERIVATIVES_FOLDER / "skeletons" / "2mm"
+
+
+def _make_subject(input_dir, output_dir, subject, sessions):
+    """Lay out one subject on disk as run() finds it after the crop and fusion steps.
+
+    ``sessions`` lists the Morphologist labelling sessions holding a labelled
+    graph for the subject, at
+    ``<input>/<subject>/<path_to_graph>/<session>/<side><subject>_<session>.arg``
+    (the layout cortical_tiles' remove_ventricle reads). The subject's L, R and
+    fused F resampled skeletons are written under the skeleton directory.
+    """
+    for session in sessions:
+        session_dir = Path(input_dir) / subject / _GRAPH_SUBPATH / session
+        session_dir.mkdir(parents=True)
+        for side in ("L", "R"):
+            (session_dir / f"{side}{subject}_{session}.arg").touch()
+    for side in ("L", "R", "F"):
+        side_dir = _skeleton_dir(output_dir) / side
+        side_dir.mkdir(parents=True, exist_ok=True)
+        (side_dir / f"{side}resampled_skeleton_{subject}.nii.gz").touch()
+
+
+def _add_fixture_subject(input_dir, output_dir):
+    """One subject labelled under the default and the '0_auto' sessions, so the
+    whole-brain step has a subject to process whichever session is requested."""
+    _make_subject(input_dir, output_dir, _FIXTURE_SUBJECT, ["deepcnn_session_auto", "0_auto"])
+
+
+class _RemoveVentricleRecorder:
+    """Fake ``remove_ventricle``: records, per subject, the labelling session of
+    every call that would process that subject.
+
+    A call processes the subjects whose fused volume
+    ``<src_dir>/<side>/<side><src_filename>_<subject>.nii.gz`` exists when it
+    is made -- the same rule cortical_tiles' ``RemoveVentricleFromVolume.compute``
+    applies. This keeps the tests independent of how run() groups subjects
+    (one call, one call per session group, staged source directories).
+    """
+
+    def __init__(self):
+        self.sessions_by_subject = {}
+
+    def __call__(self, *args, **kwargs):
+        bound = _REMOVE_VENTRICLE_SIGNATURE.bind(*args, **kwargs)
+        bound.apply_defaults()
+        params = bound.arguments
+        side = params["side"]
+        side_dir = Path(params["src_dir"]) / side
+        pattern = re.compile(rf"^{re.escape(side + params['src_filename'])}(.*)\.nii\.gz$")
+        if not side_dir.is_dir():
+            return
+        for path in sorted(side_dir.iterdir()):
+            match = pattern.match(path.name)
+            if match:
+                subject = match[1][1:] if match[1].startswith("_") else match[1]
+                self.sessions_by_subject.setdefault(subject, []).append(params["labelling_session"])
+
+
+def _run_whole_brain_step(temp_dir, subjects, extra_args=None):
+    """Run run() with the crop subprocess and fusion mocked, ``subjects`` laid out
+    on disk (``{subject: [sessions holding a labelled graph]}``), and
+    ``remove_ventricle`` replaced by a ``_RemoveVentricleRecorder``.
+
+    Returns the recorder, the Python warnings emitted during run() and run()'s return value.
+    """
+    input_dir = Path(temp_dir) / "input"
+    output_dir = Path(temp_dir) / "output"
+    input_dir.mkdir()
+    output_dir.mkdir()
+    for subject, sessions in subjects.items():
+        _make_subject(input_dir, output_dir, subject, sessions)
+
+    script = RunCorticalTiles()
+    script.parse_args(
+        [
+            str(input_dir),
+            str(output_dir),
+            "--path_to_graph",
+            _GRAPH_SUBPATH,
+            "--path_sk_with_hull",
+            "skeleton/path",
+        ]
+        + (extra_args or [])
+    )
+    recorder = _RemoveVentricleRecorder()
+
+    with (
+        warnings.catch_warnings(record=True) as caught,
+        patch.object(script, "validate_paths", return_value=True),
+        patch.object(script, "execute_command", return_value=0),
+        patch.object(script, "_generate_mask_npys"),
+        patch("champollion_pipeline.run_cortical_tiles.chdir"),
+        patch("champollion_pipeline.run_cortical_tiles.getcwd", return_value="/original"),
+        patch("champollion_pipeline.run_cortical_tiles.add_left_and_right_volumes.add_left_and_right_volumes"),
+        patch("champollion_pipeline.run_cortical_tiles.remove_ventricle.remove_ventricle", side_effect=recorder),
+    ):
+        warnings.simplefilter("always")
+        result = script.run()
+
+    return recorder, [str(w.message) for w in caught], result
+
+
+def _warnings_mentioning(text, capsys, caplog, python_warnings):
+    """Warnings emitted through logging (WARNING or above), the warnings module,
+    or a printed line containing 'warning', that mention ``text`` (case-insensitive)."""
+    captured = capsys.readouterr()
+    printed = [line for line in (captured.out + captured.err).splitlines() if "warning" in line.lower()]
+    logged = [r.getMessage() for r in caplog.records if r.levelno >= logging.WARNING]
+    return [m for m in printed + logged + python_warnings if text.lower() in m.lower()]
 
 
 class TestRunCorticalTilesInit:
@@ -1217,6 +1344,7 @@ class TestWholeBrainGeneration:
         output_dir = Path(temp_dir) / "output"
         input_dir.mkdir()
         output_dir.mkdir()
+        _add_fixture_subject(input_dir, output_dir)
 
         script = RunCorticalTiles()
         args = [
@@ -1308,7 +1436,9 @@ class TestWholeBrainGeneration:
 
     def test_remove_ventricle_called_with_default_labelling_session(self, temp_dir):
         """Without --labelling_session, remove_ventricle receives labelling_session='deepcnn_session_auto'
-        (REQ-LABELSESSION-01).
+        for the fixture subject, whose labelled graphs exist under that session
+        (REQ-LABELSESSION-01, superseded by the session auto-detection requirement;
+        see TestLabellingSessionAutoDetection).
 
         Same value as cortical_tiles.brainvisa.remove_ventricle._LABELLING_SESSION_DEFAULT,
         so existing runs keep their current behaviour -- but it must be passed
@@ -1354,6 +1484,7 @@ class TestWholeBrainGeneration:
             output_dir_path = Path(tmp) / "output"
             input_dir_path.mkdir()
             output_dir_path.mkdir()
+            _add_fixture_subject(input_dir_path, output_dir_path)
 
             script = RunCorticalTiles()
             script.parse_args(
@@ -1428,6 +1559,7 @@ class TestCropFailureStopsDownstreamSteps:
         output_dir = Path(temp_dir) / "output"
         input_dir.mkdir()
         output_dir.mkdir()
+        _add_fixture_subject(input_dir, output_dir)
 
         script = RunCorticalTiles()
         script.parse_args(
@@ -1492,6 +1624,105 @@ class TestCropFailureStopsDownstreamSteps:
         mock_gen_npys.assert_called_once()
         mock_add.assert_called_once()
         mock_remove.assert_called_once()
+        assert result == 0
+
+
+class TestLabellingSessionAutoDetection:
+    """Labelling session passed to remove_ventricle, per subject.
+
+    Without --labelling_session, each subject gets the first of
+    deepcnn_session_auto and default_session_auto whose labelled graph
+    directory exists under ``<input>/<subject>/<path_to_graph>/``; with the
+    option, the option's value. Datasets labelled only under
+    default_session_auto (FB-LABELSESSION-BDRABCZUK-C507316C48E3) otherwise
+    fail with FileNotFoundError per subject.
+    """
+
+    def test_auto_session_prefers_deepcnn_session_when_both_exist(self, temp_dir):
+        recorder, _, _ = _run_whole_brain_step(temp_dir, {"subj01": ["deepcnn_session_auto", "default_session_auto"]})
+
+        assert recorder.sessions_by_subject == {"subj01": ["deepcnn_session_auto"]}
+
+    def test_auto_session_falls_back_to_default_session_auto(self, temp_dir):
+        recorder, _, _ = _run_whole_brain_step(temp_dir, {"subj02": ["default_session_auto"]})
+
+        assert recorder.sessions_by_subject == {"subj02": ["default_session_auto"]}
+
+    def test_auto_session_is_resolved_per_subject(self, temp_dir):
+        recorder, _, _ = _run_whole_brain_step(
+            temp_dir, {"subj01": ["deepcnn_session_auto"], "subj02": ["default_session_auto"]}
+        )
+
+        assert recorder.sessions_by_subject == {
+            "subj01": ["deepcnn_session_auto"],
+            "subj02": ["default_session_auto"],
+        }
+
+    def test_auto_session_ignores_non_candidate_sessions(self, temp_dir):
+        """Only deepcnn_session_auto and default_session_auto are candidates; '0_auto' is not."""
+        recorder, _, _ = _run_whole_brain_step(temp_dir, {"subj03": ["0_auto", "default_session_auto"]})
+
+        assert recorder.sessions_by_subject == {"subj03": ["default_session_auto"]}
+
+    def test_explicit_labelling_session_is_passed_for_each_processed_subject(self, temp_dir):
+        recorder, _, _ = _run_whole_brain_step(
+            temp_dir,
+            {"subj01": ["0_auto", "deepcnn_session_auto"], "subj02": ["0_auto"]},
+            extra_args=["--labelling_session", "0_auto"],
+        )
+
+        assert recorder.sessions_by_subject == {"subj01": ["0_auto"], "subj02": ["0_auto"]}
+
+
+class TestSubjectsWithoutLabelledGraph:
+    """Subjects with no labelled graph under deepcnn_session_auto or
+    default_session_auto (no sulcal recognition run) are left out of
+    whole-brain ventricle removal, with one warning naming them.
+    """
+
+    def test_subject_without_labelled_graph_is_excluded_from_ventricle_removal(self, temp_dir):
+        recorder, _, _ = _run_whole_brain_step(temp_dir, {"subj01": ["deepcnn_session_auto"], "subj09": []})
+
+        assert recorder.sessions_by_subject == {"subj01": ["deepcnn_session_auto"]}
+
+    def test_subject_with_only_non_candidate_session_is_excluded(self, temp_dir):
+        recorder, _, _ = _run_whole_brain_step(temp_dir, {"subj01": ["deepcnn_session_auto"], "subj07": ["0_auto"]})
+
+        assert "subj07" not in recorder.sessions_by_subject
+
+    def test_no_subject_processed_when_none_has_labelled_graph(self, temp_dir):
+        recorder, _, _ = _run_whole_brain_step(temp_dir, {"subj08": [], "subj09": []})
+
+        assert recorder.sessions_by_subject == {}
+
+    def test_one_warning_lists_excluded_subjects_and_requires_sulcal_recognition(self, temp_dir, capsys, caplog):
+        caplog.set_level(logging.WARNING)
+        _, python_warnings, _ = _run_whole_brain_step(
+            temp_dir, {"subj01": ["deepcnn_session_auto"], "subj08": [], "subj09": []}
+        )
+
+        matching = _warnings_mentioning("sulcal recognition", capsys, caplog, python_warnings)
+        assert len(matching) == 1
+        assert "subj08" in matching[0]
+        assert "subj09" in matching[0]
+        assert "subj01" not in matching[0]
+
+    def test_no_sulcal_recognition_warning_when_no_subject_is_excluded(self, temp_dir, capsys, caplog):
+        caplog.set_level(logging.WARNING)
+        _, python_warnings, _ = _run_whole_brain_step(temp_dir, {"subj01": ["deepcnn_session_auto"]})
+
+        assert _warnings_mentioning("sulcal recognition", capsys, caplog, python_warnings) == []
+
+    def test_run_returns_zero_when_subjects_are_excluded_after_successful_crop(self, temp_dir):
+        """Exit status stays 0 when only whole-brain ventricle removal is skipped:
+        the crops succeeded and the skip is reported by the warning (user decision 2026-10-27)."""
+        _, _, result = _run_whole_brain_step(temp_dir, {"subj01": ["deepcnn_session_auto"], "subj08": [], "subj09": []})
+
+        assert result == 0
+
+    def test_run_returns_zero_when_every_subject_is_excluded_after_successful_crop(self, temp_dir):
+        _, _, result = _run_whole_brain_step(temp_dir, {"subj08": [], "subj09": []})
+
         assert result == 0
 
 
