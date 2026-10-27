@@ -8,7 +8,9 @@ are mocked: no champollion_V1 checkout, GPU or cluster is required.
 
 import contextlib
 import csv
+import logging
 import os
+import re
 from pathlib import Path
 from unittest.mock import patch
 
@@ -17,6 +19,7 @@ from torch.utils.tensorboard import SummaryWriter
 
 from champollion_pipeline import train_champollion
 from champollion_pipeline.train_champollion import TrainChampollion, main
+from tests.log_assertions import LOG, OUTPUT
 
 
 def make_script(argv):
@@ -207,13 +210,16 @@ class TestRunTraining:
         captured["chdir_calls"] = [c.args[0] for c in chdir.call_args_list]
         return captured
 
-    def test_skips_when_output_exists_and_no_overwrite(self, tmp_path, capsys):
+    def test_skips_when_output_exists_and_no_overwrite(self, tmp_path, pipeline_caplog):
+        """REQ-LOGGING-BDRABCZUK-E209AAB195A9: the kept output directory is logged at LOG."""
         out = tmp_path / "models"
         out.mkdir()
         script = make_script([*BASE_ARGS, "--output_dir", str(out)])
         script.execute_command = lambda cmd, shell=False: pytest.fail("must not run training")
         assert script._run_training(str(tmp_path)) == 0
-        assert "Use --overwrite to force retraining" in capsys.readouterr().out
+        record = pipeline_caplog.assert_logged(LOG, "--overwrite")
+        assert str(out) in record.getMessage()
+        assert record.name == "champollion_pipeline.train_champollion"
 
     def test_overwrite_reruns_even_when_output_exists(self, tmp_path):
         out = tmp_path / "models"
@@ -621,8 +627,95 @@ class TestTrainingOutputQc:
         assert "0" in [row["qc"] for row in self._read(out)[1]]
         assert result == status
 
-    def test_failing_checks_printed(self, tmp_path, capsys):
+    def test_failing_checks_logged_at_warning(self, tmp_path, pipeline_caplog):
+        """REQ-NTUI-BDRABCZUK-9A3DDF02B08C: one WARNING record names the report and each failing check."""
         out, _ = self._run(tmp_path, files=(), hydra=None, losses={"Loss/Val": [float("nan")]})
         report = str(out / QC_FILE)
-        lines = capsys.readouterr().out.splitlines()
-        assert any(report in line and all(check in line for check in QC_CHECKS) for line in lines), lines
+        record = pipeline_caplog.assert_logged(logging.WARNING, report)
+        assert all(check in record.getMessage() for check in QC_CHECKS), record.getMessage()
+        assert record.name == "champollion_pipeline.train_champollion"
+
+
+# --- LOGGING convention (TASK-LOGGING-BDRABCZUK-52AC4F301BB0): records instead of print() ---
+
+TRAIN_LOGGER = "champollion_pipeline.train_champollion"
+# Fold-progress pattern the MCP server parses from stage output; training emits no fold progress.
+MCP_FOLD_REGEX = re.compile(r"[Ff]old\s+(\d+)\s*(?:/|of)\s*(\d+)")
+
+
+class TestTrainChampollionLogging:
+    """REQ-LOGGING-BDRABCZUK-CA69BBB48DA7, -60D8BE7221EB, -93BD0D03F352, -F63B92136553, -55EA86606FE2.
+
+    (-E209AAB195A9: TestRunTraining::test_skips_when_output_exists_and_no_overwrite; REQ-NTUI-BDRABCZUK-9A3DDF02B08C:
+    TestTrainingOutputQc::test_failing_checks_logged_at_warning; REQ-LOGGING-BDRABCZUK-C96C8DAAF703 and
+    -22ABEF2F2CBD: tests/test_logging_convention.py, through LOG_CONVERTED_MODULES.)
+    """
+
+    def _run(self, tmp_path, extra_args=(), status=0, **model):
+        """run() with train.py replaced by a fake that builds the model folder; return (out, status)."""
+        out = tmp_path / "model"
+        script = make_script([*BASE_ARGS, "--output_dir", str(out), *extra_args])
+        script._validate_inputs = lambda: None
+
+        def fake_train(cmd, shell=False):
+            _build_model_dir(out, **model)
+            return status
+
+        script.execute_command = fake_train
+        with patch.object(train_champollion.os, "chdir"):
+            result = script.run()
+        return out, result
+
+    def test_cpu_mode_logged_at_log(self, tmp_path, monkeypatch, pipeline_caplog):
+        monkeypatch.delenv("CUDA_VISIBLE_DEVICES", raising=False)
+        self._run(tmp_path, extra_args=["--cpu"], losses=FINITE_LOSSES)
+
+        record = pipeline_caplog.assert_logged(LOG, "CUDA_VISIBLE_DEVICES")
+        assert record.name == TRAIN_LOGGER
+
+    def test_config_yaml_replacement_logged_at_warning(self, tmp_path, pipeline_caplog):
+        config_dir = tmp_path / "cfg"
+        config_dir.mkdir()
+        (config_dir / "config.yaml").write_text("seed: 1\n")
+        self._run(tmp_path, extra_args=["--config-dir", str(config_dir)], losses=FINITE_LOSSES)
+
+        record = pipeline_caplog.assert_logged(logging.WARNING, os.path.join(str(config_dir), "config.yaml"))
+        assert record.name == TRAIN_LOGGER
+
+    def test_qc_not_written_logged_at_warning(self, tmp_path, pipeline_caplog):
+        with patch.object(train_champollion, "write_run_qc_tsv", side_effect=OSError("disk full")):
+            self._run(tmp_path, losses=FINITE_LOSSES)
+
+        record = pipeline_caplog.assert_logged(logging.WARNING, "OSError")
+        assert record.name == TRAIN_LOGGER
+
+    def test_qc_passed_logged_at_output(self, tmp_path, pipeline_caplog):
+        out, _ = self._run(tmp_path, losses=FINITE_LOSSES)
+
+        record = pipeline_caplog.assert_logged(OUTPUT, str(out / QC_FILE))
+        assert record.name == TRAIN_LOGGER
+
+    @pytest.mark.parametrize(
+        "case",
+        ["qc_passed", "qc_failed", "cpu_and_config_yaml", "existing_output"],
+    )
+    def test_no_record_matches_mcp_fold_regex(self, tmp_path, monkeypatch, pipeline_caplog, case):
+        monkeypatch.delenv("CUDA_VISIBLE_DEVICES", raising=False)
+        if case == "qc_passed":
+            self._run(tmp_path, losses=FINITE_LOSSES)
+        elif case == "qc_failed":
+            self._run(tmp_path, files=(), hydra=None, losses={"Loss/Train": [float("nan")]})
+        elif case == "cpu_and_config_yaml":
+            config_dir = tmp_path / "cfg"
+            config_dir.mkdir()
+            (config_dir / "config.yaml").write_text("seed: 1\n")
+            self._run(tmp_path, extra_args=["--cpu", "--config-dir", str(config_dir)], losses=FINITE_LOSSES)
+        else:
+            (tmp_path / "model").mkdir()
+            self._run(tmp_path)
+
+        messages = [record.getMessage() for record in pipeline_caplog.records]
+        # Non-vacuous guard: the run logged something to check.
+        assert messages, "no champollion_pipeline record captured during the training run"
+        matching = [message for message in messages if MCP_FOLD_REGEX.search(message)]
+        assert not matching, f"records match the MCP fold regex: {matching}"
