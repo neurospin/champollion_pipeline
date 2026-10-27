@@ -41,6 +41,12 @@ from champollion_pipeline.utils.lib import DERIVATIVES_FOLDER, LABELLING_SESSION
 
 LABELLING_SESSION_DEFAULT = LABELLING_SESSION_CANDIDATES[0]
 WHOLE_BRAIN_SRC_FILENAME = "resampled_skeleton"
+GRAPH_WILDCARD = "*"  # the only wildcard read in --path_to_graph
+# Whole-brain exclusion reasons; tuple order is the clause order in the warning.
+EXCLUDED_NO_GRAPH_FOLDER = "no_graph_folder"  # non-BIDS: --path_to_graph matches no folder
+EXCLUDED_SEVERAL_GRAPH_FOLDERS = "several_graph_folders"  # non-BIDS: it matches two or more folders
+EXCLUDED_NO_LABELLED_GRAPH = "no_labelled_graph"  # graph folder found, no candidate session dir in it
+EXCLUSION_REASONS = (EXCLUDED_NO_GRAPH_FOLDER, EXCLUDED_SEVERAL_GRAPH_FOLDERS, EXCLUDED_NO_LABELLED_GRAPH)
 INPUT_TYPES_DEFAULT = ("skeleton", "foldlabel")
 
 
@@ -92,6 +98,52 @@ def resolve_labelling_session(
         if isdir(labelled_session_dir(morpho_dir, path_to_graph, subject, session, bids)):
             return session
     return None
+
+
+def resolve_graph_paths(morpho_dir: str, path_to_graph: str, subject: str) -> list[str]:
+    """Folders under ``<morpho_dir>/<subject>`` that path_to_graph matches (non-BIDS).
+
+    ``*`` is the only wildcard (other glob characters are literal); each match is
+    returned relative to the subject folder. A subject id that is not a plain
+    folder name, or a path leaving the subject folder, matches nothing.
+    """
+    if subject in ("", os.curdir, os.pardir) or os.sep in subject:
+        return []
+    subject_dir = join(morpho_dir, subject)
+    pattern = GRAPH_WILDCARD.join(glob.escape(part) for part in path_to_graph.split(GRAPH_WILDCARD))
+    rels = set()
+    for match in glob.glob(join(glob.escape(subject_dir), pattern)):
+        if not isdir(match):
+            continue
+        rel = os.path.relpath(match, subject_dir)
+        if rel in (os.curdir, os.pardir) or rel.startswith(os.pardir + os.sep):
+            continue
+        rels.add(rel)
+    return sorted(rels)
+
+
+def exclusion_warning(excluded: dict[str, list[str]], path_to_graph: str, candidates: tuple[str, ...]) -> str:
+    """One-line warning naming the subjects left out of whole-brain removal, by reason."""
+    clause_for = {
+        EXCLUDED_NO_GRAPH_FOLDER: f"--path_to_graph {path_to_graph!r} matches no folder for {{ids}}",
+        EXCLUDED_SEVERAL_GRAPH_FOLDERS: (
+            f"--path_to_graph {path_to_graph!r} matches several folders for {{ids}} (ambiguous, not guessed)"
+        ),
+        EXCLUDED_NO_LABELLED_GRAPH: (
+            f"no labelled graph under {' or '.join(candidates)} for {{ids}} (run Morphologist with sulcal recognition)"
+        ),
+    }
+    clauses = [
+        clause_for[reason].format(ids=", ".join(sorted(excluded[reason])))
+        for reason in EXCLUSION_REASONS
+        if excluded.get(reason)
+    ]
+    n = sum(len(ids) for ids in excluded.values())
+    return (
+        f"run_cortical_tiles.py: Warning - {n} subject(s) excluded from whole-brain ventricle removal, which "
+        "requires sulcal recognition (one labelled graph per subject, found through --path_to_graph): "
+        f"{'; '.join(clauses)}."
+    )
 
 
 class RunCorticalTiles(ScriptBuilder):
@@ -391,8 +443,10 @@ class RunCorticalTiles(ScriptBuilder):
         remove_ventricle takes one labelling session per call and enumerates
         subjects from <src_dir>/F/, so when subjects resolve to different
         sessions (or some have none) each group gets a staged F/ of symlinks.
-        Subjects without a labelled graph are left out with one warning; the
-        crops are unaffected and run() still returns the crop result.
+        Without --bids, a ``*`` in path_to_graph is resolved per subject, so
+        groups are keyed by (session, graph path). Subjects that cannot be
+        resolved are left out with one warning; the crops are unaffected and
+        run() still returns the crop result.
         """
         if self.args.labelling_session_explicit:
             candidates = (self.args.labelling_session,)
@@ -407,29 +461,16 @@ class RunCorticalTiles(ScriptBuilder):
             )
             return
 
-        groups: dict[str, list[str]] = {}
-        excluded = []
-        for subject in fused:
-            session = resolve_labelling_session(input_abs, self.args.path_to_graph, subject, candidates, self.args.bids)
-            if session is None:
-                excluded.append(subject)
-            else:
-                groups.setdefault(session, []).append(subject)
-
+        groups, excluded = self._group_whole_brain_subjects(list(fused), input_abs, candidates)
         if excluded:
-            print(
-                f"run_cortical_tiles.py: Warning - {len(excluded)} subject(s) excluded from whole-brain "
-                f"ventricle removal: {', '.join(sorted(excluded))}. No labelled graph under "
-                f"{' or '.join(candidates)}; sulcal recognition is required (run Morphologist with "
-                "sulcal recognition)."
-            )
+            print(exclusion_warning(excluded, self.args.path_to_graph, candidates))
 
-        def call(src_dir: str, session: str) -> None:
+        def call(src_dir: str, session: str, graph_path: str) -> None:
             remove_ventricle.remove_ventricle(
                 side="F",
                 src_dir=src_dir,
                 morpho_dir=input_abs,
-                path_to_graph=self.args.path_to_graph,
+                path_to_graph=graph_path,
                 # add_left_and_right_volumes' default output_filename
                 # ("resampled_skeleton") does not match remove_ventricle's
                 # default src_filename ("skeleton_generated_") -- pass it
@@ -443,18 +484,39 @@ class RunCorticalTiles(ScriptBuilder):
             )
 
         if len(groups) == 1 and not excluded:
-            call(skeleton_src_dir, next(iter(groups)))
+            call(skeleton_src_dir, *next(iter(groups)))
             return
 
-        for session in candidates:
-            subjects = groups.get(session)
-            if not subjects:
-                continue
-            with tempfile.TemporaryDirectory(prefix=f"whole_brain_{session}_") as staged:
+        for session, graph_path in sorted(groups, key=lambda key: (candidates.index(key[0]), key[1])):
+            with tempfile.TemporaryDirectory(prefix="whole_brain_") as staged:
                 os.makedirs(join(staged, "F"))
-                for subject in subjects:
+                for subject in groups[(session, graph_path)]:
                     os.symlink(fused[subject], join(staged, "F", os.path.basename(fused[subject])))
-                call(staged, session)
+                call(staged, session, graph_path)
+
+    def _group_whole_brain_subjects(
+        self, subjects: list[str], input_abs: str, candidates: tuple[str, ...]
+    ) -> tuple[dict[tuple[str, str], list[str]], dict[str, list[str]]]:
+        """Group subjects by (labelling session, resolved graph path); sort the rest by exclusion reason."""
+        groups: dict[tuple[str, str], list[str]] = {}
+        excluded: dict[str, list[str]] = {}
+        for subject in subjects:
+            if self.args.bids:
+                graph_paths = [self.args.path_to_graph]
+            else:
+                graph_paths = resolve_graph_paths(input_abs, self.args.path_to_graph, subject)
+            if not graph_paths:
+                excluded.setdefault(EXCLUDED_NO_GRAPH_FOLDER, []).append(subject)
+                continue
+            if len(graph_paths) > 1:
+                excluded.setdefault(EXCLUDED_SEVERAL_GRAPH_FOLDERS, []).append(subject)
+                continue
+            session = resolve_labelling_session(input_abs, graph_paths[0], subject, candidates, self.args.bids)
+            if session is None:
+                excluded.setdefault(EXCLUDED_NO_LABELLED_GRAPH, []).append(subject)
+            else:
+                groups.setdefault((session, graph_paths[0]), []).append(subject)
+        return groups, excluded
 
 
 def main():
