@@ -31,7 +31,12 @@ LEVEL_BY_KIND: dict[str, int] = {
 
 # Import names of the modules that follow the LOGGING convention; each later
 # LOGGING task adds its modules here.
-LOG_CONVERTED_MODULES: tuple[str, ...] = ()
+LOG_CONVERTED_MODULES: tuple[str, ...] = (
+    "champollion_pipeline.generate_champollion_config",
+    "champollion_pipeline.prune_failed_subjects",
+    "champollion_pipeline.purge_subject",
+    "champollion_pipeline.put_together_embeddings",
+)
 
 
 class PipelineLogCapture:

@@ -8,6 +8,7 @@ This brings the output directory to the same state as if --sk_qc_path had been
 passed to run_cortical_tiles.py from the start.
 """
 
+import logging
 import os
 from datetime import datetime
 from os.path import exists, join
@@ -19,6 +20,8 @@ from champollion_utils.script_builder import ScriptBuilder
 from champollion_pipeline.derivatives_layout import compute_run_log_path
 from champollion_pipeline.process_setup import init_pipeline_process
 from champollion_pipeline.utils.lib import DERIVATIVES_FOLDER
+
+logger = logging.getLogger(__name__)
 
 
 class PruneFailedSubjects(ScriptBuilder):
@@ -91,10 +94,10 @@ class PruneFailedSubjects(ScriptBuilder):
         to_remove = all_subjects - passing_subjects
 
         if not to_remove:
-            print(f"All {len(all_subjects)} subjects pass QC. Nothing to prune.")
+            logger.output(f"All {len(all_subjects)} subjects pass QC. Nothing to prune.")
             return 0
 
-        print(f"Subjects to remove ({len(to_remove)}): {sorted(to_remove)}")
+        logger.output(f"Subjects to remove ({len(to_remove)}): {sorted(to_remove)}")
 
         deleted = 0
         for root, _dirs, files in os.walk(derivatives_dir):
@@ -118,14 +121,14 @@ class PruneFailedSubjects(ScriptBuilder):
                 if any(sub in stem for sub in to_remove):
                     fpath = join(root, fname)
                     if self.args.dry_run:
-                        print(f"[dry-run] Would delete: {fpath}")
+                        logger.output(f"[dry-run] Would delete: {fpath}")
                     else:
                         os.remove(fpath)
-                        print(f"Removed: {fpath}")
+                        logger.output(f"Removed: {fpath}")
                     deleted += 1
 
         action = "Would delete" if self.args.dry_run else "Deleted"
-        print(f"\nSummary: {len(to_remove)} subjects removed, {action.lower()} {deleted} files.")
+        logger.output(f"Summary: {len(to_remove)} subjects removed, {action.lower()} {deleted} files.")
         return 0
 
 

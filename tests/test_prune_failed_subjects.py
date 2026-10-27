@@ -9,6 +9,7 @@ import pytest
 
 from champollion_pipeline.prune_failed_subjects import PruneFailedSubjects
 from champollion_pipeline.utils.lib import DERIVATIVES_FOLDER
+from tests.log_assertions import OUTPUT
 
 # ---------------------------------------------------------------------------
 # Helpers
@@ -233,15 +234,16 @@ class TestRun:
         names = {f.name for f in region_dir.iterdir()}
         assert "sub-02.nii.gz" in names
 
-    def test_dry_run_output_mentions_would_delete(self, tmp_path, capsys):
+    def test_dry_run_output_mentions_would_delete(self, tmp_path, pipeline_caplog):
+        """REQ-LOGGING-BDRABCZUK-728A1E8B1120: the dry-run listing is an OUTPUT record."""
         _make_crops(tmp_path, ["region_a"], ["sub-02"])
         qc = _make_qc_tsv(tmp_path / "qc.tsv", [("sub-01", 1)])
         script = _make_script_with_args(tmp_path, qc, dry_run=True)
         script.run()
 
-        out = capsys.readouterr().out
-        assert "dry-run" in out.lower()
-        assert "sub-02" in out
+        listed = tmp_path / DERIVATIVES_FOLDER / "crops" / "2mm" / "region_a" / "sub-02.nii.gz"
+        record = pipeline_caplog.assert_logged(OUTPUT, f"[dry-run] Would delete: {listed}")
+        assert record.name == "champollion_pipeline.prune_failed_subjects"
 
     def test_deletes_files_across_subdirectories(self, tmp_path):
         """Non-crop subdirs (e.g. skeletons) should also have failing-subject files removed."""
@@ -265,10 +267,12 @@ class TestRun:
         script = _make_script_with_args(tmp_path, qc)
         assert script.run() == 0
 
-    def test_no_subjects_in_crops_returns_early(self, tmp_path, capsys):
+    def test_no_subjects_in_crops_returns_early(self, tmp_path, pipeline_caplog):
+        """REQ-LOGGING-BDRABCZUK-09E839CCB79E: nothing to prune is an OUTPUT record."""
         (tmp_path / DERIVATIVES_FOLDER / "crops" / "2mm").mkdir(parents=True)
         qc = _make_qc_tsv(tmp_path / "qc.tsv", [("sub-01", 1)])
         script = _make_script_with_args(tmp_path, qc)
         result = script.run()
         assert result == 0
-        assert "nothing" in capsys.readouterr().out.lower()
+        record = pipeline_caplog.assert_logged(OUTPUT, "Nothing to prune")
+        assert record.name == "champollion_pipeline.prune_failed_subjects"
