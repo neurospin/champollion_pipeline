@@ -1,5 +1,6 @@
 """Model set fetch strategies (local path, Hugging Face, remote archive, interactive fallback) and their order."""
 
+import logging
 import os
 import sys
 import urllib.request
@@ -14,8 +15,12 @@ try:
 except ImportError:
     huggingface_hub = None
 
+import champollion_utils.logger  # noqa: F401 - installs Logger.trace/output/fail
+
 from champollion_pipeline.models.cache import MODEL_SET_FILE_NAME, ModelSet, write_model_set
 from champollion_pipeline.utils.archive import extract_archive, remove_stale_cache, reuse_cached_extraction
+
+logger = logging.getLogger(__name__)
 
 
 class ModelFetchStrategy(ABC):
@@ -43,7 +48,7 @@ class LocalPathStrategy(ModelFetchStrategy):
         """Return the local path as-is, or extract if it's an archive."""
         # If it's a directory, use it directly
         if os.path.isdir(models_path):
-            print(f"Models found at local path: {models_path}")
+            logger.trace(f"Models found at local path: {models_path}")
             return models_path
 
         # If it's an archive file, check cache or extract
@@ -56,16 +61,16 @@ class LocalPathStrategy(ModelFetchStrategy):
             cached_path = join(extract_to, archive_name)
 
             if reuse_cached_extraction(cached_path, no_cache, require_content=True):
-                print("(Use --no-cache to force re-extraction)")
+                logger.trace("Use --no-cache to force re-extraction")
                 return cached_path
 
-            print(f"Local archive found: {models_path}")
-            print(f"Extracting to: {cached_path}")
+            logger.trace(f"Local archive found: {models_path}")
+            logger.trace(f"Extracting to: {cached_path}")
             remove_stale_cache(cached_path, no_cache)
             return self._extract_archive(models_path, cached_path)
 
         # Otherwise, assume it's a regular file/directory and return as-is
-        print(f"Models found at local path: {models_path}")
+        logger.trace(f"Models found at local path: {models_path}")
         return models_path
 
     def _extract_archive(self, archive_path: str, extract_to: str) -> str:
@@ -111,9 +116,9 @@ class HuggingFaceStrategy(ModelFetchStrategy):
         try:
             # Extract repo ID from URL if needed
             repo_id = self._extract_repo_id(models_path)
-            print(f"Attempting to download from Hugging Face: {repo_id}")
+            logger.trace(f"Attempting to download from Hugging Face: {repo_id}")
             if self.subfolder:
-                print(f"  model version subfolder: {self.subfolder}")
+                logger.trace(f"Model version subfolder: {self.subfolder}")
             if huggingface_hub is None:
                 raise ImportError("huggingface_hub not installed")
 
@@ -146,7 +151,7 @@ class HuggingFaceStrategy(ModelFetchStrategy):
             raise RuntimeError(f"Failed to download from Hugging Face: {e}") from e
         if self.subfolder:
             self._ensure_model_set_marker(downloaded_path)
-        print(f"Successfully downloaded from Hugging Face to: {downloaded_path}")
+        logger.output(f"Successfully downloaded from Hugging Face to: {downloaded_path}")
         return downloaded_path
 
     def _ensure_model_set_marker(self, model_set_dir: str) -> None:
@@ -164,7 +169,7 @@ class HuggingFaceStrategy(ModelFetchStrategy):
                 stacklevel=2,
             )
             return
-        print(f"  model set marker written: {path}")
+        logger.output(f"Model set marker written: {path}")
 
 
 class RemoteArchiveStrategy(ModelFetchStrategy):
@@ -188,18 +193,18 @@ class RemoteArchiveStrategy(ModelFetchStrategy):
         cached_path = join(extract_to, archive_name)
 
         if reuse_cached_extraction(cached_path, no_cache):
-            print("(Use --no-cache to force re-download)")
+            logger.trace("Use --no-cache to force re-download")
             return cached_path
         remove_stale_cache(cached_path, no_cache)
 
-        print(f"Downloading archive from: {models_path}")
+        logger.trace(f"Downloading archive from: {models_path}")
 
         # Download to temporary file
         local_archive = join(extract_to, filename)
 
         try:
             urllib.request.urlretrieve(models_path, local_archive)
-            print(f"Downloaded to: {local_archive}")
+            logger.trace(f"Downloaded to: {local_archive}")
 
             # Extract the archive
             extracted_path = self._extract_archive(local_archive, extract_to)
@@ -214,7 +219,7 @@ class RemoteArchiveStrategy(ModelFetchStrategy):
 
     def _extract_archive(self, archive_path: str, extract_to: str) -> str:
         """Extract archive and return path to its top-level entry."""
-        print(f"Extracting {archive_path}...")
+        logger.trace(f"Extracting {archive_path}...")
         return extract_archive(archive_path, extract_to, top_level=True)
 
 
@@ -227,7 +232,7 @@ class InteractiveFallbackStrategy(ModelFetchStrategy):
 
     def fetch(self, models_path: str, extract_to: str, no_cache: bool = False) -> str:
         """Ask user for local archive path (only works in interactive mode)."""
-        print(f"\nCannot automatically retrieve models from: {models_path}")
+        logger.warning(f"Cannot automatically retrieve models from: {models_path}")
 
         # Check if we're in an interactive terminal
         if not sys.stdin.isatty():
@@ -239,11 +244,11 @@ class InteractiveFallbackStrategy(ModelFetchStrategy):
                 f"  - A HuggingFace repo ID (e.g., 'neurospin/Champollion_V1')"
             )
 
-        print("\nPlease provide a local path to the models or archive.")
+        logger.trace("Please provide a local path to the models or archive.")
         response = input("Do you have a local copy? (yes/no): ").strip()
 
         if response.lower() not in ["yes", "y"]:
-            print("Cannot proceed without models. Exiting gracefully.")
+            logger.warning("Cannot proceed without models. Exiting gracefully.")
             sys.exit(0)
 
         archive_path = input("Path to models directory or archive (tar.xz, tar.gz, .gz): ").strip()
@@ -253,7 +258,7 @@ class InteractiveFallbackStrategy(ModelFetchStrategy):
 
         # If it's a directory, use it directly
         if os.path.isdir(archive_path):
-            print(f"Using models from directory: {archive_path}")
+            logger.trace(f"Using models from directory: {archive_path}")
             return archive_path
 
         # Check for cached extraction
@@ -263,11 +268,11 @@ class InteractiveFallbackStrategy(ModelFetchStrategy):
         cached_path = join(extract_to, archive_name)
 
         if reuse_cached_extraction(cached_path, no_cache):
-            print("(Use --no-cache to force re-extraction)")
+            logger.trace("Use --no-cache to force re-extraction")
             return cached_path
         remove_stale_cache(cached_path, no_cache)
 
-        print(f"Extracting archive: {archive_path}")
+        logger.trace(f"Extracting archive: {archive_path}")
         return self._extract_archive(archive_path, extract_to)
 
     def _extract_archive(self, archive_path: str, extract_to: str) -> str:
@@ -291,7 +296,7 @@ def fetch_model_set(models_path: str, extract_to: str, model_version: str | None
                 "subfolder": model_version,
             }
         except Exception as e:
-            print(f"HuggingFace strategy failed: {e}")
+            logger.warning(f"HuggingFace strategy failed: {e}")
             # Continue to other strategies
 
     remote_strategy = RemoteArchiveStrategy()
@@ -300,7 +305,7 @@ def fetch_model_set(models_path: str, extract_to: str, model_version: str | None
             fetched = remote_strategy.fetch(models_path, extract_to, no_cache)
             return fetched, {"type": "url", "url": models_path}
         except Exception as e:
-            print(f"Remote archive strategy failed: {e}")
+            logger.warning(f"Remote archive strategy failed: {e}")
             # Continue to other strategies
 
     # Resolve relative paths to absolute for local file strategies
@@ -316,7 +321,7 @@ def fetch_model_set(models_path: str, extract_to: str, model_version: str | None
             fetched = local_strategy.fetch(resolved_path, extract_to, no_cache)
             return fetched, {"type": "local", "path": os.path.abspath(resolved_path)}
         except Exception as e:
-            print(f"Local path strategy failed: {e}")
+            logger.warning(f"Local path strategy failed: {e}")
             # Continue to fallback
 
     # Fallback: ask user interactively
