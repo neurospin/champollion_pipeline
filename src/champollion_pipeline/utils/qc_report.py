@@ -2,6 +2,8 @@
 """
 Shared per-subject QC report: a tab-separated file with the columns
 participant_id, qc (1 keep, 0 exclude), optional extra columns, then reason.
+A per-run report (write_run_qc_tsv) has one row per check instead: check,
+qc, reason.
 
 Every NTUI QC step writes its report through write_qc_tsv and reads one back
 through read_qc_tsv. The file stays readable by cortical_tiles --sk_qc_path
@@ -17,6 +19,7 @@ from collections.abc import Iterable, Mapping, Sequence
 ID_COLUMN = "participant_id"
 QC_COLUMN = "qc"
 REASON_COLUMN = "reason"
+CHECK_COLUMN = "check"
 _RESERVED = (ID_COLUMN, QC_COLUMN, REASON_COLUMN)
 
 
@@ -81,23 +84,56 @@ def write_qc_tsv(
     checked = [_row_cells(i, row, seen_ids) for i, row in enumerate(rows)]
 
     header = [ID_COLUMN, QC_COLUMN, *extra_columns, REASON_COLUMN]
+    _write_atomic(
+        path,
+        header,
+        (
+            {
+                ID_COLUMN: row[ID_COLUMN],
+                QC_COLUMN: row[QC_COLUMN],
+                **{name: _cell(row.get(name)) for name in (*extra_columns, REASON_COLUMN)},
+            }
+            for row in checked
+        ),
+    )
+
+
+def write_run_qc_tsv(path: str | os.PathLike, rows: Iterable[Mapping[str, object]]) -> None:
+    """Write one tab-separated row per check (check, qc, reason), atomically.
+
+    Every row is validated before the file system is touched; a missing or
+    repeated check name or a qc other than 0 or 1 raises ValueError naming the
+    row index, and leaves any existing file at ``path`` unchanged.
+    """
+    checked = []
+    seen: set[str] = set()
+    for index, row in enumerate(rows):
+        name = row.get(CHECK_COLUMN)
+        if name is None or str(name) == "":
+            raise ValueError(f"row {index}: missing check")
+        name = str(name)
+        if name in seen:
+            raise ValueError(f"row {index} ({name}): check repeats an earlier row")
+        seen.add(name)
+        qc = _qc_value(row.get(QC_COLUMN))
+        if qc is None:
+            raise ValueError(f"row {index} ({name}): qc must be 0 or 1, got {row.get(QC_COLUMN)!r}")
+        checked.append({CHECK_COLUMN: name, QC_COLUMN: qc, REASON_COLUMN: _cell(row.get(REASON_COLUMN))})
+    _write_atomic(path, [CHECK_COLUMN, QC_COLUMN, REASON_COLUMN], checked)
+
+
+def _write_atomic(path: str | os.PathLike, header: Sequence[str], rows: Iterable[Mapping[str, str]]) -> None:
+    """Write ``rows`` under ``header`` to a temporary file, then move it onto ``path``."""
     directory = os.path.dirname(os.path.abspath(os.fspath(path)))
     os.makedirs(directory, exist_ok=True)
     fd, tmp_path = tempfile.mkstemp(dir=directory, prefix=".qc_", suffix=".tmp")
     try:
         with os.fdopen(fd, "w", encoding="utf-8", newline="") as handle:
             writer = csv.DictWriter(
-                handle, fieldnames=header, delimiter="\t", lineterminator="\n", extrasaction="ignore"
+                handle, fieldnames=list(header), delimiter="\t", lineterminator="\n", extrasaction="ignore"
             )
             writer.writeheader()
-            for row in checked:
-                writer.writerow(
-                    {
-                        ID_COLUMN: row[ID_COLUMN],
-                        QC_COLUMN: row[QC_COLUMN],
-                        **{name: _cell(row.get(name)) for name in (*extra_columns, REASON_COLUMN)},
-                    }
-                )
+            writer.writerows(rows)
         os.replace(tmp_path, path)
     except BaseException:
         if os.path.exists(tmp_path):

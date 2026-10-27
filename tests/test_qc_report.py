@@ -216,3 +216,50 @@ def test_write_and_read_without_toolchain(tmp_path):
     proc = subprocess.run([sys.executable, "-c", code], cwd=str(tmp_path), capture_output=True, text=True, timeout=120)
     assert proc.returncode == 0, proc.stderr
     assert proc.stdout.strip() == str([{"participant_id": "s01", "qc": 0, "reason": "x"}])
+
+
+# ---------------------------------------------------------------------------
+# Per-run report (TASK-NTUI-BDRABCZUK-D959214C1E4D): one row per check
+# ---------------------------------------------------------------------------
+
+
+def test_write_run_header_and_rows(tmp_path):
+    out = tmp_path / "run_qc.tsv"
+    qc_report.write_run_qc_tsv(
+        out,
+        [{"check": "weights", "qc": 1, "reason": ""}, {"check": "losses", "qc": False, "reason": "nan"}],
+    )
+    assert _lines(out) == ["check\tqc\treason", "weights\t1\t", "losses\t0\tnan"]
+
+
+def test_write_run_replaces_existing_file(tmp_path):
+    out = tmp_path / "run_qc.tsv"
+    qc_report.write_run_qc_tsv(out, [{"check": "a", "qc": 0, "reason": "x"}])
+    qc_report.write_run_qc_tsv(out, [{"check": "a", "qc": 1}])
+    assert _lines(out) == ["check\tqc\treason", "a\t1\t"]
+    assert [p.name for p in tmp_path.iterdir()] == ["run_qc.tsv"]
+
+
+@pytest.mark.parametrize(
+    "rows",
+    [
+        pytest.param([{"qc": 1}], id="no_check"),
+        pytest.param([{"check": "", "qc": 1}], id="empty_check"),
+        pytest.param([{"check": "a", "qc": 1}, {"check": "a", "qc": 0}], id="repeated_check"),
+        pytest.param([{"check": "a", "qc": 2}], id="qc_2"),
+        pytest.param([{"check": "a"}], id="qc_missing"),
+    ],
+)
+def test_write_run_rejects_invalid_rows(tmp_path, rows):
+    out = tmp_path / "run_qc.tsv"
+    out.write_text("kept\n")
+    with pytest.raises(ValueError):
+        qc_report.write_run_qc_tsv(out, rows)
+    assert out.read_text() == "kept\n"
+
+
+def test_read_refuses_run_report(tmp_path):
+    out = tmp_path / "run_qc.tsv"
+    qc_report.write_run_qc_tsv(out, [{"check": "weights", "qc": 1}])
+    with pytest.raises(ValueError, match="participant_id"):
+        qc_report.read_qc_tsv(out)
