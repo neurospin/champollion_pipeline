@@ -33,9 +33,9 @@ from soma import aims
 from champollion_pipeline.derivatives_layout import compute_run_log_path
 from champollion_pipeline.process_setup import init_pipeline_process
 from champollion_pipeline.utils.cortical_tiles_config import CorticalTilesConfigFactory, versioned_crops_exist
-from champollion_pipeline.utils.lib import DERIVATIVES_FOLDER
+from champollion_pipeline.utils.lib import DERIVATIVES_FOLDER, LABELLING_SESSION_CANDIDATES
 
-LABELLING_SESSION_DEFAULT = "deepcnn_session_auto"
+LABELLING_SESSION_DEFAULT = LABELLING_SESSION_CANDIDATES[0]
 INPUT_TYPES_DEFAULT = ("skeleton", "foldlabel")
 
 

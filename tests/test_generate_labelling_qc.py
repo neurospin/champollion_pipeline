@@ -20,6 +20,10 @@ Requirements:
     REQ-LABELQC-07  default labelling session deepcnn_session_auto
     REQ-LABELQC-08  --njobs option, output independent of its value
     REQ-LABELQC-09  runs where soma.aims cannot be imported
+    REQ-NTUI-BDRABCZUK-91F835328521  without --labelling_session: first existing folder of
+                                     deepcnn_session_auto, default_session_auto (supersedes LABELQC-07)
+    REQ-NTUI-BDRABCZUK-E64219B58CE2  utils.lib.LABELLING_SESSION_CANDIDATES value and order
+    REQ-NTUI-BDRABCZUK-0A642185F530  QC and run_cortical_tiles share that one constant object
 """
 
 import csv
@@ -41,6 +45,8 @@ BIDS_PATH = "t1mri/*/default_analysis/folds/3.1"
 BIDS_KEYS = "ses-1_run-1"
 COLUMNS = ["participant_id", "qc", "labelled_L", "labelled_R", "reason"]
 MODULE = "champollion_pipeline.generate_labelling_qc"
+FALLBACK_SESSION = "default_session_auto"
+LIB_MODULE = "champollion_pipeline.utils.lib"
 
 
 # ---------------------------------------------------------------------------
@@ -314,6 +320,69 @@ class TestLabellingSession:
         rows = _run(subjects, output, "--labelling_session", "0_auto")
         assert _row(rows, "s01")["reason"] == "no_session_dir"
         assert _row(rows, "s02")["qc"] == "1"
+
+
+# ---------------------------------------------------------------------------
+# REQ-NTUI-BDRABCZUK-91F835328521: session candidates when --labelling_session is omitted
+# ---------------------------------------------------------------------------
+
+
+class TestSessionCandidates:
+    def test_fallback_session_found_when_preferred_folder_absent(self, subjects, output):
+        _make_subject(subjects, "s01", session=FALLBACK_SESSION)
+        row = _row(_run(subjects, output), "s01")
+        assert (row["qc"], row["labelled_L"], row["labelled_R"], row["reason"]) == ("1", "True", "True", "")
+
+    def test_fallback_session_missing_hemisphere_reported(self, subjects, output):
+        _make_subject(subjects, "s01", session=FALLBACK_SESSION, sides=("L",))
+        row = _row(_run(subjects, output), "s01")
+        assert (row["qc"], row["labelled_L"], row["labelled_R"], row["reason"]) == ("0", "True", "False", "missing_R")
+
+    def test_subjects_resolve_their_session_independently(self, subjects, output):
+        _make_subject(subjects, "s01", session=SESSION)
+        _make_subject(subjects, "s02", session=FALLBACK_SESSION)
+        rows = _run(subjects, output)
+        assert [(r["participant_id"], r["qc"]) for r in rows] == [("s01", "1"), ("s02", "1")]
+
+    def test_fallback_session_found_through_bids_wildcard_path(self, subjects, output):
+        _make_subject(subjects, "s01", session=FALLBACK_SESSION, path_to_graph=BIDS_PATH.replace("*", BIDS_KEYS))
+        assert _row(_run_bids(subjects, output), "s01")["qc"] == "1"
+
+    def test_preferred_session_wins_when_both_folders_exist(self, subjects, output):
+        _make_subject(subjects, "s01", session=SESSION, sides=("L",))
+        _make_subject(subjects, "s01", session=FALLBACK_SESSION)
+        assert _row(_run(subjects, output), "s01")["reason"] == "missing_R"
+
+    def test_existing_empty_preferred_folder_is_not_skipped(self, subjects, output):
+        _make_subject(subjects, "s01", session=SESSION, sides=())
+        _make_subject(subjects, "s01", session=FALLBACK_SESSION)
+        assert _row(_run(subjects, output), "s01")["reason"] == "empty_session_dir"
+
+    def test_no_candidate_folder_gives_no_session_dir(self, subjects, output):
+        _make_subject(subjects, "s01", session="0_auto")
+        assert _row(_run(subjects, output), "s01")["reason"] == "no_session_dir"
+
+    def test_given_session_disables_fallback(self, subjects, output):
+        _make_subject(subjects, "s01", session=FALLBACK_SESSION)
+        rows = _run(subjects, output, "--labelling_session", SESSION)
+        assert _row(rows, "s01")["reason"] == "no_session_dir"
+
+
+# ---------------------------------------------------------------------------
+# REQ-NTUI-BDRABCZUK-E64219B58CE2 / REQ-NTUI-BDRABCZUK-0A642185F530: one shared constant
+# ---------------------------------------------------------------------------
+
+
+class TestSharedSessionCandidates:
+    def test_candidates_value_and_order(self):
+        lib = importlib.import_module(LIB_MODULE)
+        assert lib.LABELLING_SESSION_CANDIDATES == (SESSION, FALLBACK_SESSION)
+
+    @pytest.mark.parametrize("module", [MODULE, "champollion_pipeline.run_cortical_tiles"])
+    def test_modules_share_lib_constant(self, module):
+        """Identity, not equality: one constant, imported, never redefined."""
+        shared = importlib.import_module(LIB_MODULE).LABELLING_SESSION_CANDIDATES
+        assert getattr(importlib.import_module(module), "LABELLING_SESSION_CANDIDATES", None) is shared
 
 
 # ---------------------------------------------------------------------------
