@@ -21,6 +21,11 @@ ICBM_MESH_DIR_FALLBACK = (
 )
 
 
+def compute_region_graph_path(champollion_data_root, side, level):
+    """Return the region graph path of one hemisphere side ("L" or "R") at a threshold level."""
+    return osp.join(f"{champollion_data_root}/mask/2mm/regions/meshes", f"{side}regions_model_{level}.arg")
+
+
 def find_completed_regions(crops_dir):
     """Scan the crops directory to find which regions were processed.
 
@@ -84,7 +89,6 @@ def generate_tiles_snapshot(crops_dir, output_path, size=(800, 600), level=1, ch
         return []
 
     root = champollion_data_root if champollion_data_root else config.config().get_champollion_data_root_dir()
-    regions_graph_dir = f"{root}/mask/2mm/regions/meshes"
 
     nom = aims.read(aims.carto.Paths.findResourceFile("nomenclature/hierarchy/champollion_v1.hie"))
     anom = a.toAObject(nom)
@@ -114,7 +118,7 @@ def generate_tiles_snapshot(crops_dir, output_path, size=(800, 600), level=1, ch
 
         print(f"  {hemi_name}: {len(region_names)} region(s)")
 
-        graph_path = osp.join(regions_graph_dir, f"{side}regions_model_{level}.arg")
+        graph_path = compute_region_graph_path(root, side, level)
         if not osp.exists(graph_path):
             print(f"  Region graph not found: {graph_path}")
             print(REGION_GRAPH_ROOT_HINT)
