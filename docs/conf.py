@@ -42,6 +42,7 @@ autodoc_mock_imports = [
     "huggingface_hub",
     "torch",
     "matplotlib",
+    "tensorboard",
 ]
 
 autodoc_default_options = {

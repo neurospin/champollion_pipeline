@@ -7,11 +7,13 @@ are mocked: no champollion_V1 checkout, GPU or cluster is required.
 """
 
 import contextlib
+import csv
 import os
 from pathlib import Path
 from unittest.mock import patch
 
 import pytest
+from torch.utils.tensorboard import SummaryWriter
 
 from champollion_pipeline import train_champollion
 from champollion_pipeline.train_champollion import TrainChampollion, main
@@ -461,3 +463,166 @@ class TestMain:
         MockScript.return_value.main.assert_called_once_with()
         assert calls == ["init", "main"]
         assert result == 3
+
+
+# --- Training output QC (NTUI): <output_dir>/training_qc.tsv written after train.py returns ---
+
+QC_FILE = "training_qc.tsv"
+QC_CHECKS = ("weights", "hydra_config", "losses")
+EPOCH_80_CKPT = "logs/lightning_logs/version_0/checkpoints/epoch=80-step=1620.ckpt"
+BEST_WEIGHTS = "logs/best_model_weights.pt"
+HYDRA_CONFIG = ".hydra/config.yaml"
+FINITE_LOSSES = {"Loss/Train": [1.0, 0.5], "Loss/Val": [1.1, 0.6]}
+
+
+def _write_scalars(log_dir, tag, values):
+    """Write one TensorBoard event file holding ``values`` under ``tag`` (CPU only)."""
+    writer = SummaryWriter(log_dir=str(log_dir))
+    for epoch, value in enumerate(values):
+        writer.add_scalar(tag, value, epoch)
+    writer.close()
+
+
+def _build_model_dir(out, files=(EPOCH_80_CKPT, BEST_WEIGHTS), hydra="seed: 1\n", losses=None):
+    """Fake champollion_V1 train.py output in ``out``: weights files, .hydra/config.yaml, event files."""
+    for rel in files:
+        path = out / rel
+        path.parent.mkdir(parents=True, exist_ok=True)
+        path.write_bytes(b"weights")
+    if hydra is not None:
+        (out / ".hydra").mkdir(parents=True, exist_ok=True)
+        (out / HYDRA_CONFIG).write_text(hydra)
+    for tag, values in (losses or {}).items():
+        _write_scalars(out / "logs" / "lightning_logs" / "version_0", tag, values)
+
+
+class TestTrainingOutputQc:
+    """NTUI training output QC: the model folder is checked for what the embeddings stage needs."""
+
+    def _run(self, tmp_path, status=0, **model):
+        """run() with train.py replaced by a fake that builds the model folder; return (out, status)."""
+        out = tmp_path / "model"
+        script = make_script([*BASE_ARGS, "--output_dir", str(out)])
+        script._validate_inputs = lambda: None
+
+        def fake_train(cmd, shell=False):
+            _build_model_dir(out, **model)
+            return status
+
+        script.execute_command = fake_train
+        with patch.object(train_champollion.os, "chdir"):
+            result = script.run()
+        return out, result
+
+    def _read(self, out):
+        """Return (header, rows) of <out>/training_qc.tsv."""
+        with open(out / QC_FILE, encoding="utf-8", newline="") as handle:
+            reader = csv.DictReader(handle, delimiter="\t")
+            return reader.fieldnames, list(reader)
+
+    def _row(self, out, check):
+        rows = [row for row in self._read(out)[1] if row["check"] == check]
+        assert len(rows) == 1, f"expected one {check} row in {QC_FILE}, got {rows}"
+        return rows[0]
+
+    @pytest.mark.parametrize(
+        "model",
+        [
+            {"losses": FINITE_LOSSES},
+            {"files": (), "hydra": None},
+        ],
+        ids=["complete_model_dir", "empty_model_dir"],
+    )
+    def test_report_has_one_row_per_check(self, tmp_path, model):
+        out, _ = self._run(tmp_path, **model)
+        header, rows = self._read(out)
+        assert header == ["check", "qc", "reason"]
+        assert sorted(row["check"] for row in rows) == sorted(QC_CHECKS)
+        assert {row["qc"] for row in rows} <= {"0", "1"}
+
+    @pytest.mark.parametrize(
+        "files, expected",
+        [
+            ((EPOCH_80_CKPT, BEST_WEIGHTS), "1"),
+            ((EPOCH_80_CKPT,), "1"),
+            ((BEST_WEIGHTS,), "1"),
+            (("logs/lightning_logs/version_1/checkpoints/epoch=80-step=1700.ckpt",), "1"),
+            (("logs/lightning_logs/version_0/checkpoints/epoch=79-step=1600.ckpt",), "0"),
+            (("logs/lightning_logs/version_0/checkpoints/last.ckpt",), "0"),
+            (("logs/model_weights_evolution/model_weights_epoch80.pt",), "0"),
+            ((), "0"),
+        ],
+        ids=[
+            "epoch80_and_best",
+            "epoch80_only",
+            "best_weights_only",
+            "epoch80_in_version_1",
+            "epoch79_only",
+            "unnamed_ckpt_only",
+            "weights_evolution_only",
+            "no_weights",
+        ],
+    )
+    def test_weights_row(self, tmp_path, files, expected):
+        out, _ = self._run(tmp_path, files=files)
+        assert self._row(out, "weights")["qc"] == expected
+
+    @pytest.mark.parametrize(
+        "hydra, expected",
+        [
+            ("seed: 1\nmodel: SimCLR\n", "1"),
+            (None, "0"),
+            ("- a\n- b\n", "0"),
+            ("key: [unclosed\n", "0"),
+            ("", "0"),
+        ],
+        ids=["mapping", "missing", "list", "unparsable", "empty"],
+    )
+    def test_hydra_config_row(self, tmp_path, hydra, expected):
+        out, _ = self._run(tmp_path, hydra=hydra)
+        assert self._row(out, "hydra_config")["qc"] == expected
+
+    @pytest.mark.parametrize(
+        "losses, expected",
+        [
+            (None, "1"),
+            (FINITE_LOSSES, "1"),
+            ({"Loss/Train": [1.0, float("nan")]}, "0"),
+            ({"Loss/Val": [float("inf")]}, "0"),
+            ({"val_loss": [0.5, float("nan")]}, "0"),
+            ({"LossInv/Train": [float("-inf")]}, "0"),
+            ({"accuracy": [float("nan")]}, "1"),
+        ],
+        ids=["no_event_file", "finite", "nan_train", "inf_val", "nan_val_loss", "neg_inf_loss_inv", "nan_not_loss"],
+    )
+    def test_losses_row(self, tmp_path, losses, expected):
+        out, _ = self._run(tmp_path, losses=losses)
+        assert self._row(out, "losses")["qc"] == expected
+
+    def test_reason_empty_when_check_passes(self, tmp_path):
+        out, _ = self._run(tmp_path, losses=FINITE_LOSSES)
+        rows = self._read(out)[1]
+        assert [row["qc"] for row in rows] == ["1"] * len(QC_CHECKS)
+        assert [row["reason"] for row in rows] == [""] * len(QC_CHECKS)
+
+    def test_reason_names_failing_path(self, tmp_path):
+        out, _ = self._run(tmp_path, files=(), hydra=None, losses={"Loss/Train": [float("nan")]})
+        weights = self._row(out, "weights")["reason"]
+        assert BEST_WEIGHTS in weights or "epoch=80" in weights
+        assert HYDRA_CONFIG in self._row(out, "hydra_config")["reason"]
+        (event_file,) = (out / "logs").rglob("events.out.tfevents*")
+        assert str(event_file.relative_to(out)) in self._row(out, "losses")["reason"]
+        for check in QC_CHECKS:
+            assert str(tmp_path) not in self._row(out, check)["reason"]
+
+    @pytest.mark.parametrize("status", [0, 1, 3])
+    def test_exit_status_is_train_status(self, tmp_path, status):
+        out, result = self._run(tmp_path, status=status, files=(), hydra=None)
+        assert "0" in [row["qc"] for row in self._read(out)[1]]
+        assert result == status
+
+    def test_failing_checks_printed(self, tmp_path, capsys):
+        out, _ = self._run(tmp_path, files=(), hydra=None, losses={"Loss/Val": [float("nan")]})
+        report = str(out / QC_FILE)
+        lines = capsys.readouterr().out.splitlines()
+        assert any(report in line and all(check in line for check in QC_CHECKS) for line in lines), lines
