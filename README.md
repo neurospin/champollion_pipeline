@@ -174,7 +174,7 @@ ls /data/myproject/derivatives/cortical_tiles-2026/crops/canonical_25/2mm
 
 ### Whole-brain volume
 
-After the per-region crops, the same run fuses the left and right hemisphere skeletons into a single whole-brain volume and strips the ventricle from it. The result is written to `{output}/cortical_tiles-2026/whole_brain/F/` (one volume per subject). The ventricle is located from each subject's labelled Morphologist graph for the session given by `--labelling_session` (default `deepcnn_session_auto`).
+After the per-region crops, the same run fuses the left and right hemisphere skeletons into a single whole-brain volume and strips the ventricle from it. The result is written to `{output}/cortical_tiles-2026/whole_brain/F/` (one volume per subject). The ventricle is located from each subject's labelled Morphologist graph. By default the session is chosen per subject: the first of `deepcnn_session_auto` and `default_session_auto` that holds a labelled graph; `--labelling_session` forces one session for all subjects. Subjects with no labelled graph in the session(s) searched (sulcal recognition is required: typically Morphologist was run without it) are left out of the whole-brain output with one warning naming them; their crops are unaffected and the stage still exits 0.
 
 If crop generation fails (the cortical_tiles subprocess exits with a non-zero code), the command returns that code immediately: mask `.npy` generation and whole-brain fusion are skipped for that run, so no whole-brain volume is built from incomplete hemisphere data.
 
@@ -223,7 +223,7 @@ Pass `--masks canonical_25` (or another version) to override the default.
 | `--masks` | Mask version tag |
 | `--regions` | Restrict to specific sulcal regions (space-separated) |
 | `--skel-seed` | Skeleton seed for the 2 mm re-skeletonization. Without the option, the `skel_seed` key of `{output}/pipeline_loop_2mm.json` sets the seed. Pipeline config: `dataset.skel_seed`; null (the default) leaves the `pipeline_loop_2mm.json` value in effect. |
-| `--labelling_session` | Morphologist labelling session whose labelled graphs locate the ventricle for whole-brain removal (e.g. `0_auto`). Default: `deepcnn_session_auto`. |
+| `--labelling_session` | Morphologist labelling session whose labelled graphs locate the ventricle for whole-brain removal (e.g. `0_auto`). Default: per subject, the first of `deepcnn_session_auto` and `default_session_auto` that holds a labelled graph. |
 | `--overwrite` | Regenerate crops even if crops for the requested mask version already exist; without it the run stops instead. Also removes legacy unversioned `crops/2mm/` crops when they conflict with versioned ones. |
 
 </details>
@@ -571,7 +571,7 @@ Installing the package provides these entry points, declared in
 | `champollion-train` | `train_champollion.py` | Optional — train a `champollion_V1` encoder for one sulcal region |
 | `champollion-prune` | `prune_failed_subjects.py` | Maintenance — delete cortical_tiles outputs for QC-failing subjects |
 | `champollion-purge` | `purge_subject.py` | Maintenance — delete all cortical_tiles derivatives for one subject |
-| `champollion-labelling-qc` | `generate_labelling_qc.py` | QC — flag subjects whose Morphologist labelled graphs (e.g. `deepcnn_session_auto`) are missing, so the whole-brain ventricle step will fail for them |
+| `champollion-labelling-qc` | `generate_labelling_qc.py` | QC — flag subjects whose Morphologist labelled graphs (e.g. `deepcnn_session_auto`) are missing, so they will be left out of the whole-brain output |
 
 `generate_masks.py` also ships in the package but declares no console script.
 
