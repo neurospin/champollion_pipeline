@@ -52,6 +52,9 @@ LOG_CONVERTED_MODULES: tuple[str, ...] = (
     "champollion_pipeline.prune_failed_subjects",
     "champollion_pipeline.purge_subject",
     "champollion_pipeline.put_together_embeddings",
+    "generate_umap_reference",
+    "run_cka",
+    "upload_models_to_hf",
 )
 
 

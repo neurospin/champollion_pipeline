@@ -24,6 +24,7 @@ Typical usage::
         --output_dir reference_data/
 """
 
+import logging
 import os
 import os.path as osp
 import sys
@@ -44,6 +45,8 @@ sys.path.insert(
     osp.abspath(osp.join(osp.dirname(__file__), "..", "external", "champollion_V1", "champollion", "utils")),
 )
 from put_together_embeddings_files import get_model_paths
+
+logger = logging.getLogger(__name__)
 
 
 def _parse_region_hemi(dir_name):
@@ -93,7 +96,7 @@ def generate_umap_reference(  # noqa: PLR0913 - public API mirroring the CLI opt
     models_dir = osp.abspath(models_dir)
     model_paths = get_model_paths(models_dir)
     if not model_paths:
-        print(f"No model directories found in: {models_dir}")
+        logger.warning(f"No model directories found in: {models_dir}")
         return []
 
     # Group embedding arrays by (region, hemi)
@@ -105,26 +108,26 @@ def generate_umap_reference(  # noqa: PLR0913 - public API mirroring the CLI opt
 
         region, hemi = _parse_region_hemi(region_hemi)
         if region is None:
-            print(f"  Skipping unrecognised dir name: {region_hemi}")
+            logger.warning(f"Skipping unrecognised dir name: {region_hemi}")
             continue
 
         csv_path = osp.join(model_path, reference_subpath)
         if not osp.exists(csv_path):
-            print(f"  [{region} {hemi}] Reference CSV not found: {csv_path}")
+            logger.warning(f"[{region} {hemi}] Reference CSV not found: {csv_path}")
             continue
 
         try:
             df = pd.read_csv(csv_path)
             X = df.drop(columns=["ID"], errors="ignore").values.astype(np.float32)
         except Exception as e:
-            print(f"  [{region} {hemi}] Could not load {csv_path}: {e}")
+            logger.warning(f"[{region} {hemi}] Could not load {csv_path}: {e}")
             continue
 
         key = (region, hemi)
         embeddings_by_roi.setdefault(key, []).append(X)
 
     if not embeddings_by_roi:
-        print("No reference embeddings found. Check --models_dir and --reference_subpath.")
+        logger.warning("No reference embeddings found. Check --models_dir and --reference_subpath.")
         return []
 
     generated = []
@@ -134,12 +137,14 @@ def generate_umap_reference(  # noqa: PLR0913 - public API mirroring the CLI opt
         coords_out = osp.join(output_dir, f"umap_{region}_{hemi}_coords.npy")
 
         if not overwrite and osp.exists(model_out) and osp.exists(coords_out):
-            print(f"  [{i}/{total}] {region} {hemi} — already exists, skipping (use --overwrite to regenerate)")
+            logger.trace(f"[{i}/{total}] {region} {hemi} — already exists, skipping (use --overwrite to regenerate)")
             generated.append((region, hemi))
             continue
 
         X_ref = np.vstack(arrays)
-        print(f"  [{i}/{total}] {region} {hemi} — fitting UMAP on {X_ref.shape[0]:,} points ({X_ref.shape[1]} dims)...")
+        logger.trace(
+            f"[{i}/{total}] {region} {hemi} — fitting UMAP on {X_ref.shape[0]:,} points ({X_ref.shape[1]} dims)..."
+        )
 
         reducer = umap_lib.UMAP(
             n_neighbors=n_neighbors,
@@ -150,7 +155,7 @@ def generate_umap_reference(  # noqa: PLR0913 - public API mirroring the CLI opt
 
         joblib.dump(reducer, model_out)
         np.save(coords_out, ref_coords)
-        print(f"    Saved: {osp.basename(model_out)}, {osp.basename(coords_out)}")
+        logger.output(f"Saved: {osp.basename(model_out)}, {osp.basename(coords_out)}")
         generated.append((region, hemi))
 
     return generated
@@ -191,16 +196,15 @@ class GenerateUmapReference(ScriptBuilder):
         return compute_run_log_path(self.args.output_dir, self.script_name, datetime.now().astimezone())
 
     def run(self) -> int:
-        print(f"Models directory : {self.args.models_dir}")
-        print(f"Reference subpath: {self.args.reference_subpath}")
-        print(f"Output directory : {self.args.output_dir}")
-        print(
+        logger.trace(f"Models directory : {self.args.models_dir}")
+        logger.trace(f"Reference subpath: {self.args.reference_subpath}")
+        logger.trace(f"Output directory : {self.args.output_dir}")
+        logger.trace(
             f"UMAP params      : n_neighbors={self.args.n_neighbors}, "
             f"min_dist={self.args.min_dist}, random_state={self.args.random_state}"
         )
         if self.args.overwrite:
-            print("Overwrite mode   : ON")
-        print()
+            logger.trace("Overwrite mode   : ON")
 
         generated = generate_umap_reference(
             models_dir=self.args.models_dir,
@@ -212,7 +216,7 @@ class GenerateUmapReference(ScriptBuilder):
             overwrite=self.args.overwrite,
         )
 
-        print(f"\nDone: {len(generated)} UMAP reference model(s) available.")
+        logger.output(f"Done: {len(generated)} UMAP reference model(s) available.")
         return 0
 
 
