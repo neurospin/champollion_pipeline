@@ -48,6 +48,7 @@ class DatasetConfig:
     sk_qc_path: str = ""
     masks_version: str = DEFAULT_MASKS_VERSION
     skel_seed: int | None = None  # None: the skel_seed in <derivatives>/pipeline_loop_2mm.json
+    labelling_session: str = ""  # "": run_cortical_tiles picks the session per subject
 
     # Region filter (empty = all 56 regions)
     regions: list[str] = field(default_factory=list)
