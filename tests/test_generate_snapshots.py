@@ -4,7 +4,9 @@ Unit tests for generate_snapshots.py
 """
 
 import json
+import logging
 import os
+import re
 from pathlib import Path
 from unittest.mock import patch
 
@@ -20,6 +22,7 @@ from champollion_pipeline.generate_snapshots import (
     main,
 )
 from champollion_pipeline.utils.qc_report import read_qc_tsv
+from tests.log_assertions import LOG
 
 
 class TestFindSulcalGraphs:
@@ -585,9 +588,9 @@ def _qc_rows(output_dir):
     return {row["participant_id"]: row for row in read_qc_tsv(os.path.join(output_dir, QC_FILE))}
 
 
-def _lines(captured):
-    """Return the stdout then stderr lines of a pytest capture."""
-    return (captured.out + captured.err).splitlines()
+def _warnings(capture):
+    """Messages of the WARNING records captured so far by pipeline_caplog."""
+    return [record.getMessage() for record in capture.records if record.levelno == logging.WARNING]
 
 
 class TestSnapshotsInputQC:
@@ -728,8 +731,8 @@ class TestSnapshotsInputQC:
         assert row["qc"] == 0
         assert set(row["reason"].split(";")) == {"missing_sulcal_graph_left", "missing_sulcal_graph_right"}
 
-    def test_excluded_subjects_named_in_one_warning_and_exit_zero(self, temp_dir, capsys):
-        """REQ 100D13B8E6A5: excluded subjects are named on one warning line and the run returns 0."""
+    def test_excluded_subjects_named_in_one_warning_and_exit_zero(self, temp_dir, pipeline_caplog):
+        """REQ-NTUI-BDRABCZUK-1D96922B292C: one WARNING record names the excluded subjects; the run returns 0."""
         morph = os.path.join(temp_dir, "morphologist")
         _morphologist_subject(morph, "sub-01")
         _morphologist_subject(morph, "sub-02", graphs=("R",), meshes=("R",))
@@ -739,7 +742,7 @@ class TestSnapshotsInputQC:
         with patch(_RENDER_SULCAL, side_effect=lambda graph_path, out, *a, **k: out):
             result = _run_snapshots(["--output_dir", output_dir, "--morphologist_dir", morph, "--sulcal-only"])
 
-        naming_lines = [line for line in _lines(capsys.readouterr()) if "sub-02" in line and "sub-03" in line]
+        naming_lines = [line for line in _warnings(pipeline_caplog) if "sub-02" in line and "sub-03" in line]
         assert result == 0
         assert len(naming_lines) == 1
         assert os.path.exists(os.path.join(output_dir, QC_FILE))
@@ -785,8 +788,8 @@ class TestSnapshotsInputQC:
         assert len(model.inputs) == 1
         np.testing.assert_allclose(model.inputs[0], np.array([[0.1, 0.2]]), rtol=1e-6)
 
-    def test_missing_umap_reference_files_in_one_warning(self, temp_dir, capsys):
-        """REQ 08776847068C: missing UMAP model and coords files are named on one line before any projection."""
+    def test_missing_umap_reference_files_in_one_warning(self, temp_dir, pipeline_caplog):
+        """REQ-NTUI-BDRABCZUK-EE04F68B4D58: one WARNING record names the missing UMAP files before any projection."""
         embeddings = os.path.join(temp_dir, "embeddings")
         for hemi in ("left", "right"):
             _embeddings_csv(embeddings, "S.Or.", hemi, [("sub-01", 0.1, 0.2)])
@@ -796,7 +799,7 @@ class TestSnapshotsInputQC:
         _umap_reference(reference, "S.Pe.C.", "left")
         output_dir = os.path.join(temp_dir, "out")
         before_projection = []
-        model = _RecordingUmapModel(on_transform=lambda: before_projection.extend(_lines(capsys.readouterr())))
+        model = _RecordingUmapModel(on_transform=lambda: before_projection.extend(_warnings(pipeline_caplog)))
 
         with patch(_LOAD_UMAP_MODEL, return_value=model):
             _run_snapshots(
@@ -815,8 +818,8 @@ class TestSnapshotsInputQC:
         assert model.inputs, "the complete S.Pe.C. left pair was not projected"
         assert len([line for line in before_projection if all(name in line for name in missing)]) == 1
 
-    def test_crop_region_without_mask_in_one_warning(self, temp_dir, capsys):
-        """REQ 1EDE1833EB60: crop regions with no mask skeleton are named on one line before the tiles render."""
+    def test_crop_region_without_mask_in_one_warning(self, temp_dir, pipeline_caplog):
+        """REQ-NTUI-BDRABCZUK-2A4305E4AB27: one WARNING record names the maskless crop regions before the render."""
         crops = Path(temp_dir) / "cortical_tiles" / "crops" / "2mm"
         (crops / "RegionA" / "mask").mkdir(parents=True)
         (crops / "RegionB" / "mask").mkdir(parents=True)
@@ -826,7 +829,7 @@ class TestSnapshotsInputQC:
         before_render = []
 
         def render(*args, **kwargs):
-            before_render.extend(_lines(capsys.readouterr()))
+            before_render.extend(_warnings(pipeline_caplog))
             return []
 
         with patch(_RENDER_TILES, side_effect=render):
@@ -838,8 +841,8 @@ class TestSnapshotsInputQC:
         assert len(naming) == 1
         assert "RegionB" not in naming[0]
 
-    def test_missing_region_graph_in_one_warning(self, temp_dir, capsys):
-        """REQ 5EC4D9061B22: a missing region graph of a completed hemisphere is named before the render."""
+    def test_missing_region_graph_in_one_warning(self, temp_dir, pipeline_caplog):
+        """REQ-NTUI-BDRABCZUK-E2B47FBEBD58: one WARNING record names a missing region graph before the render."""
         crops = Path(temp_dir) / "cortical_tiles" / "crops" / "2mm"
         (crops / "RegionB" / "mask").mkdir(parents=True)
         (crops / "RegionB" / "mask" / "Lmask_skeleton.nii.gz").touch()
@@ -849,7 +852,7 @@ class TestSnapshotsInputQC:
         before_render = []
 
         def render(*args, **kwargs):
-            before_render.extend(_lines(capsys.readouterr()))
+            before_render.extend(_warnings(pipeline_caplog))
             return []
 
         with patch(_RENDER_TILES, side_effect=render):
@@ -867,3 +870,102 @@ class TestSnapshotsInputQC:
 
         assert len([line for line in before_render if "Lregions_model_1.arg" in line]) == 1
         assert not [line for line in before_render if "Rregions_model_1.arg" in line]
+
+    @pytest.mark.parametrize(
+        "content",
+        [b"subject,dim1\nsub-01,0.1\n", b"ID,dim1\nsub-01,\xff\xfe\n"],
+        ids=["no_id_column", "undecodable"],
+    )
+    def test_unusable_embeddings_csv_logged_once_at_warning(self, temp_dir, pipeline_caplog, content):
+        """REQ-LOGGING-BDRABCZUK-F57459A1F680: an embeddings CSV without a readable ID column gives one WARNING."""
+        embeddings = Path(temp_dir) / "embeddings"
+        embeddings.mkdir()
+        csv_path = embeddings / "S.Or._left_embeddings.csv"
+        csv_path.write_bytes(content)
+        reference = os.path.join(temp_dir, "reference")
+        _umap_reference(reference, "S.Or.", "left")
+        output_dir = os.path.join(temp_dir, "out")
+
+        with patch(_LOAD_UMAP_MODEL, return_value=_RecordingUmapModel()):
+            result = _run_snapshots(
+                [
+                    "--output_dir",
+                    output_dir,
+                    "--embeddings_dir",
+                    str(embeddings),
+                    "--reference_data_dir",
+                    reference,
+                    "--umap-only",
+                ]
+            )
+
+        assert result == 0
+        assert len([line for line in _warnings(pipeline_caplog) if str(csv_path) in line]) == 1
+
+
+# --- LOGGING convention (TASK-LOGGING-BDRABCZUK-C116B9DAE13C) ---
+
+# Copy of champollion_sulcal_mcp runner.FOLD_RE (it reads the stage output line by line).
+MCP_FOLD_RE = re.compile(r"[Ff]old\s+(\d+)\s*(?:/|of)\s*(\d+)")
+
+
+def _all_steps_args(temp_dir):
+    """Command line of a run with the sulcal, tiles and UMAP inputs of one subject on disk."""
+    morph = os.path.join(temp_dir, "morphologist")
+    _morphologist_subject(morph, "sub-01")
+    crops = Path(temp_dir) / "cortical_tiles" / "crops" / "2mm"
+    (crops / "S.Or." / "mask").mkdir(parents=True)
+    (crops / "S.Or." / "mask" / "Lmask_skeleton.nii.gz").touch()
+    embeddings = os.path.join(temp_dir, "embeddings")
+    _embeddings_csv(embeddings, "S.Or.", "left", [("sub-01", 0.1, 0.2)])
+    reference = os.path.join(temp_dir, "reference")
+    _umap_reference(reference, "S.Or.", "left")
+    return [
+        "--output_dir",
+        os.path.join(temp_dir, "out"),
+        "--morphologist_dir",
+        morph,
+        "--cortical_tiles_dir",
+        str(crops.parent.parent),
+        "--embeddings_dir",
+        embeddings,
+        "--reference_data_dir",
+        reference,
+    ]
+
+
+def _run_all_steps(temp_dir, extra=()):
+    """Run GenerateSnapshots on _all_steps_args with the Anatomist renders and the UMAP model patched."""
+    with (
+        patch(_RENDER_SULCAL, side_effect=lambda graph_path, out, *a, **k: out),
+        patch(_RENDER_TILES, return_value=[]),
+        patch(_LOAD_UMAP_MODEL, return_value=_RecordingUmapModel()),
+    ):
+        return _run_snapshots([*_all_steps_args(temp_dir), *extra])
+
+
+class TestSnapshotsLogging:
+    """Stage 6 messages go to the champollion_pipeline loggers at the mapped levels."""
+
+    @pytest.mark.parametrize(
+        "flag,label",
+        [
+            ("--sulcal-only", "sulcal graph snapshots"),
+            ("--tiles-only", "cortical tiles snapshots"),
+            ("--umap-only", "UMAP scatter plots"),
+        ],
+    )
+    def test_step_start_logged_at_log(self, temp_dir, pipeline_caplog, flag, label):
+        """REQ-LOGGING-BDRABCZUK-2F9F33DD0DC3: each step start is logged at LOG with the step label."""
+        _run_all_steps(temp_dir, [flag])
+
+        record = pipeline_caplog.assert_logged(LOG, label)
+        assert record.name == "champollion_pipeline.generate_snapshots"
+
+    def test_no_record_matches_mcp_fold_regex(self, temp_dir, pipeline_caplog):
+        """REQ-LOGGING-BDRABCZUK-419301F92319: no stage 6 record reads as MCP fold progress."""
+        assert _run_all_steps(temp_dir) == 0
+
+        messages = [record.getMessage() for record in pipeline_caplog.records]
+        assert messages, "the run logged no champollion_pipeline record"
+        assert [m for m in messages if MCP_FOLD_RE.search(m)] == []

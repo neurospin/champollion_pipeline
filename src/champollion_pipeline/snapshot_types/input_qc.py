@@ -8,6 +8,7 @@ graphs) are reported as single warning lines and never give a row.
 """
 
 import csv
+import logging
 import math
 import os
 import os.path as osp
@@ -22,6 +23,8 @@ from champollion_pipeline.snapshot_types.sulcal import (
 from champollion_pipeline.snapshot_types.tiles import compute_region_graph_path, find_completed_regions
 from champollion_pipeline.snapshot_types.umap import compute_umap_reference_paths
 from champollion_pipeline.utils.qc_report import write_qc_tsv
+
+logger = logging.getLogger(__name__)
 
 QC_FILENAME = "input_qc.tsv"
 MISSING_WHITE_MESH_COLUMN = "missing_white_mesh"
@@ -116,10 +119,10 @@ def check_embedding_inputs(report, csvs: Sequence[tuple[str, str, str]]) -> None
         try:
             rows = _read_embedding_rows(csv_path)
         except (OSError, UnicodeDecodeError, csv.Error) as exc:
-            print_warning(f"snapshots input QC could not use {csv_path}", [f"{type(exc).__name__}: {exc}"])
+            log_warning(f"snapshots input QC could not use {csv_path}", [f"{type(exc).__name__}: {exc}"])
             continue
         if rows is None:
-            print_warning(f"snapshots input QC could not use {csv_path}", [f"no {EMBEDDING_ID_COLUMN} column"])
+            log_warning(f"snapshots input QC could not use {csv_path}", [f"no {EMBEDDING_ID_COLUMN} column"])
             continue
         usable.append((rows, region, hemi))
 
@@ -166,7 +169,7 @@ def find_missing_region_graphs(champollion_data_root, crops_dir, level) -> list[
     return missing
 
 
-def print_warning(label: str, names: Sequence[str]) -> None:
-    """Print one ``Warning: <label>: <names>`` line; nothing when ``names`` is empty."""
+def log_warning(label: str, names: Sequence[str]) -> None:
+    """Emit one WARNING record ``<label>: <names>``; nothing when ``names`` is empty."""
     if names:
-        print(f"Warning: {label}: {', '.join(names)}")
+        logger.warning(f"{label}: {', '.join(names)}")

@@ -1,14 +1,18 @@
 """UMAP snapshots: embedding CSV discovery and the matplotlib scatter plots."""
 
 import glob
+import logging
 import os.path as osp
 import re
 
+import champollion_utils.logger  # noqa: F401 - installs Logger.trace/output/fail (LOG 22, OUTPUT 25, FAIL 45)
 import joblib
 import matplotlib
 import matplotlib.pyplot as plt
 import numpy as np
 import pandas as pd
+
+logger = logging.getLogger(__name__)
 
 # Embeddings CSV names accepted by UMAP discovery, tried in order (first match wins).
 _EMBEDDING_CSV_PATTERNS = (
@@ -71,14 +75,14 @@ def list_embedding_csvs(embeddings_dir, regions=None):
 def discover_umap_pairs(embeddings_dir, reference_data_dir, regions=None):
     csv_files = list(_iter_embedding_csvs(embeddings_dir))
     if not csv_files:
-        print(f"  No *_embeddings.csv files found in: {embeddings_dir}")
+        logger.warning(f"No *_embeddings.csv files found in: {embeddings_dir}")
         return []
-    print(f"  Found {len(csv_files)} embedding CSV file(s)")
+    logger.trace(f"Found {len(csv_files)} embedding CSV file(s)")
 
     pairs = []
     for csv_path, region, hemi in csv_files:
         if region is None:
-            print(f"  Unrecognized filename format: {osp.basename(csv_path)}")
+            logger.warning(f"Unrecognized filename format: {osp.basename(csv_path)}")
             continue
         if regions and region not in regions:
             continue
@@ -86,8 +90,8 @@ def discover_umap_pairs(embeddings_dir, reference_data_dir, regions=None):
         if osp.exists(model_path) and osp.exists(coords_path):
             pairs.append((csv_path, model_path, coords_path, region, hemi))
         else:
-            print(
-                f"  UMAP model not found for {region} {hemi} — skipping "
+            logger.trace(
+                f"UMAP model not found for {region} {hemi} — skipping "
                 f"(expected {osp.basename(model_path)} in reference_data_dir)"
             )
     return pairs
@@ -125,7 +129,7 @@ def generate_umap_snapshot(  # noqa: PLR0913 - snapshot API; keyword-only QC exc
 
     pairs = discover_umap_pairs(embeddings_dir, reference_data_dir, regions=regions)
     if not pairs:
-        print("  No matching (embedding CSV, UMAP model) pairs found")
+        logger.warning("No matching (embedding CSV, UMAP model) pairs found")
         return snapshots
 
     for pair in pairs:
@@ -142,16 +146,16 @@ def _plot_umap_pair(pair, size, snap, exclude_ids):
     csv_path, model_path, coords_path, region, hemi = pair
     model = joblib.load(model_path)
     ref_coords = np.load(coords_path)
-    print(f"  [{region} {hemi}] Loaded {ref_coords.shape[0]} reference points")
+    logger.trace(f"[{region} {hemi}] Loaded {ref_coords.shape[0]} reference points")
 
     df = pd.read_csv(csv_path, dtype={"ID": str})
     df = df[~df["ID"].isin(exclude_ids)]
     if df.empty:
-        print(f"  [{region} {hemi}] No kept subject to project, skipping")
+        logger.trace(f"[{region} {hemi}] No kept subject to project, skipping")
         return None
     X_new = df.drop(columns=["ID"]).values.astype(np.float32)
     new_coords = model.transform(X_new)
-    print(f"  [{region} {hemi}] Projected {X_new.shape[0]} new subject(s)")
+    logger.trace(f"[{region} {hemi}] Projected {X_new.shape[0]} new subject(s)")
 
     fig, ax = plt.subplots(figsize=(size[0] / 100, size[1] / 100))
     ax.scatter(
@@ -182,5 +186,5 @@ def _plot_umap_pair(pair, size, snap, exclude_ids):
 
     plt.savefig(snap, dpi=150)
     plt.close(fig)
-    print(f"  Saved: {snap}")
+    logger.output(f"Saved: {snap}")
     return snap

@@ -31,7 +31,13 @@ LEVEL_BY_KIND: dict[str, int] = {
 
 # Import names of the modules that follow the LOGGING convention; each later
 # LOGGING task adds its modules here.
-LOG_CONVERTED_MODULES: tuple[str, ...] = ()
+LOG_CONVERTED_MODULES: tuple[str, ...] = (
+    "champollion_pipeline.generate_snapshots",
+    "champollion_pipeline.snapshot_types.input_qc",
+    "champollion_pipeline.snapshot_types.sulcal",
+    "champollion_pipeline.snapshot_types.tiles",
+    "champollion_pipeline.snapshot_types.umap",
+)
 
 
 class PipelineLogCapture:

@@ -11,6 +11,7 @@ Requires the BrainVISA/Anatomist environment (runs in headless mode).
 """
 
 import json
+import logging
 import os
 import os.path as osp
 import sys
@@ -27,7 +28,7 @@ from champollion_pipeline.snapshot_types.input_qc import (
     find_crop_regions_without_mask,
     find_missing_region_graphs,
     find_missing_umap_references,
-    print_warning,
+    log_warning,
 )
 from champollion_pipeline.snapshot_types.sulcal import (
     _detect_hemi,
@@ -44,6 +45,8 @@ from champollion_pipeline.snapshot_types.tiles import (
     generate_tiles_snapshot,
 )
 from champollion_pipeline.snapshot_types.umap import discover_umap_pairs, generate_umap_snapshot, list_embedding_csvs
+
+logger = logging.getLogger(__name__)
 
 __all__ = [
     "ICBM_MESH_DIR_FALLBACK",
@@ -124,12 +127,12 @@ class GenerateSnapshots(ScriptBuilder):
         if run_umap:
             all_snapshots.extend(self._run_umap(size, excluded=excluded))
 
-        print(f"\nGenerated {len(all_snapshots)} snapshot(s)")
+        logger.output(f"Generated {len(all_snapshots)} snapshot(s)")
 
         manifest_path = osp.join(self.args.output_dir, "snapshots_manifest.json")
         with open(manifest_path, "w") as f:
             json.dump({"snapshots": all_snapshots}, f, indent=2)
-        print(f"Manifest saved to: {manifest_path}")
+        logger.output(f"Manifest saved to: {manifest_path}")
 
         return 0
 
@@ -179,22 +182,22 @@ class GenerateSnapshots(ScriptBuilder):
 
         qc_path = report.write(self.args.output_dir)
         excluded = report.excluded()
-        print_warning(f"snapshots input QC excluded {len(excluded)} subject(s), see {qc_path}", excluded)
+        log_warning(f"snapshots input QC excluded {len(excluded)} subject(s), see {qc_path}", excluded)
         if umap_dirs:
             reference_data_dir = umap_dirs[1]
-            print_warning(
+            log_warning(
                 f"missing UMAP reference file(s) in {reference_data_dir}",
                 find_missing_umap_references(reference_data_dir, csvs),
             )
         crops_dir = self._crops_dir() if run_tiles else None
         if crops_dir:
-            print_warning(
+            log_warning(
                 f"crop region folder(s) of {crops_dir} with no Lmask_skeleton.nii.gz or "
                 "Rmask_skeleton.nii.gz under mask/",
                 find_crop_regions_without_mask(crops_dir),
             )
             if self.args.champollion_data_root:
-                print_warning(
+                log_warning(
                     "missing region graph file(s)",
                     find_missing_region_graphs(self.args.champollion_data_root, crops_dir, self.args.tiles_level),
                 )
@@ -206,10 +209,10 @@ class GenerateSnapshots(ScriptBuilder):
         morphologist_dir = self.args.morphologist_dir
         if not morphologist_dir or not osp.exists(morphologist_dir):
             if morphologist_dir:
-                print(f"Morphologist directory not found: {morphologist_dir}")
+                logger.warning(f"Morphologist directory not found: {morphologist_dir}")
             return snapshots
 
-        print("\nGenerating sulcal graph snapshots...")
+        logger.trace("Generating sulcal graph snapshots...")
         subject = getattr(self.args, "subject", None)
         acquisition = getattr(self.args, "acquisition", None)
 
@@ -218,7 +221,7 @@ class GenerateSnapshots(ScriptBuilder):
             self._warn_multiple_acquisitions(by_hemi, morphologist_dir, subject)
 
         total = sum(len(v) for v in by_hemi.values())
-        print(f"  Found {total} sulcal graph(s)")
+        logger.trace(f"Found {total} sulcal graph(s)")
 
         for hemi, hemi_graphs in by_hemi.items():
             if not hemi_graphs:
@@ -226,7 +229,7 @@ class GenerateSnapshots(ScriptBuilder):
             graph_path = hemi_graphs[0]
             white_mesh = find_white_mesh(graph_path)
             if white_mesh:
-                print(f"  White mesh: {white_mesh}")
+                logger.trace(f"White mesh: {white_mesh}")
             acq_tag = f"_{acquisition}" if acquisition else ""
             out = osp.join(self.args.output_dir, f"sulcal_graph{acq_tag}_{hemi}.png")
             try:
@@ -239,7 +242,7 @@ class GenerateSnapshots(ScriptBuilder):
                 )
                 snapshots.append(snap)
             except Exception as e:
-                print(f"  Error processing {graph_path}: {e}")
+                logger.error(f"Error processing {graph_path}: {e}")
 
         return snapshots
 
@@ -250,8 +253,8 @@ class GenerateSnapshots(ScriptBuilder):
                 subject_dir = osp.join(morphologist_dir, subject) if subject else morphologist_dir
                 acqs = list_acquisitions(subject_dir)
                 acq_list = ", ".join(acqs) if acqs else "unknown"
-                print(
-                    f"  Warning: {len(hemi_graphs)} {hemi} graphs found "
+                logger.warning(
+                    f"{len(hemi_graphs)} {hemi} graphs found "
                     f"(acquisitions: {acq_list}). "
                     f"Using the first one. Re-run with --acquisition <name> "
                     f"to select a specific one."
@@ -264,7 +267,7 @@ class GenerateSnapshots(ScriptBuilder):
         # Accept either the crops/2mm/ path directly or the cortical_tiles root
         crops_dir = self._crops_dir()
         if crops_dir:
-            print("\nGenerating cortical tiles snapshots...")
+            logger.trace("Generating cortical tiles snapshots...")
             out = osp.join(self.args.output_dir, "tiles_masks.png")
             try:
                 snaps = generate_tiles_snapshot(
@@ -276,11 +279,11 @@ class GenerateSnapshots(ScriptBuilder):
                 )
                 snapshots.extend(snaps)
             except ImportError as e:
-                print(f"  Anatomist not available for tiles snapshot: {e}")
+                logger.error(f"Anatomist not available for tiles snapshot: {e}")
             except Exception as e:
-                print(f"  Error generating tiles snapshot: {e}")
+                logger.error(f"Error generating tiles snapshot: {e}")
         elif self.args.cortical_tiles_dir:
-            print(f"Cortical tiles directory not found: {self.args.cortical_tiles_dir}")
+            logger.warning(f"Cortical tiles directory not found: {self.args.cortical_tiles_dir}")
         return snapshots
 
     def _run_umap(self, size, excluded=frozenset()):
@@ -290,19 +293,19 @@ class GenerateSnapshots(ScriptBuilder):
         if not self.args.embeddings_dir:
             return snapshots
         if not osp.exists(self.args.embeddings_dir):
-            print(f"Embeddings directory not found: {self.args.embeddings_dir}")
+            logger.warning(f"Embeddings directory not found: {self.args.embeddings_dir}")
             return snapshots
         if not self.args.reference_data_dir:
             return snapshots
         if not osp.exists(self.args.reference_data_dir):
-            print(f"Reference data directory not found: {self.args.reference_data_dir}")
+            logger.warning(f"Reference data directory not found: {self.args.reference_data_dir}")
             return snapshots
 
         regions = self._umap_regions()
         if regions:
-            print(f"\nUMAP region filter: {', '.join(regions)}")
+            logger.trace(f"UMAP region filter: {', '.join(regions)}")
 
-        print("\nGenerating UMAP scatter plots...")
+        logger.trace("Generating UMAP scatter plots...")
         out = osp.join(self.args.output_dir, "umap.png")
         try:
             snaps = generate_umap_snapshot(
@@ -315,7 +318,7 @@ class GenerateSnapshots(ScriptBuilder):
             )
             snapshots.extend(snaps)
         except Exception as e:
-            print(f"  Error generating UMAP snapshot: {e}")
+            logger.error(f"Error generating UMAP snapshot: {e}")
         return snapshots
 
 

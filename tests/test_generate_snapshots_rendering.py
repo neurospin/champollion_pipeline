@@ -7,9 +7,13 @@ Anatomist, PyAIMS and deep_folding are patched as module attributes of snapshot_
 so no BrainVISA install, X display or GPU is needed.  The UMAP plots are
 rendered for real through matplotlib's Agg backend using tiny synthetic
 coordinate arrays and a stubbed UMAP model.
+
+Messages are asserted as champollion_pipeline log records through pipeline_caplog
+(TASK-LOGGING-BDRABCZUK-C116B9DAE13C, REQ-LOGGING-BDRABCZUK-* named per test).
 """
 
 import json
+import logging
 import os
 import os.path as osp
 from unittest.mock import MagicMock, patch
@@ -32,6 +36,7 @@ from champollion_pipeline.generate_snapshots import (
 from champollion_pipeline.snapshot_types import brainvisa_imports
 from champollion_pipeline.snapshot_types import tiles as tiles_module
 from champollion_pipeline.snapshot_types.umap import _parse_embedding_csv_name
+from tests.log_assertions import LOG, OUTPUT
 
 _MODULE_ATTRS = {"anatomist.headless": "ana", "cortical_tiles.config": "config", "soma.aims": "aims"}
 
@@ -48,6 +53,11 @@ def anatomist_modules(anatomist_instance):
     package = MagicMock()
     package.headless = headless
     return {"anatomist": package, "anatomist.headless": headless}
+
+
+def _records_at(capture, level, text):
+    """Captured champollion_pipeline records at ``level`` whose message contains ``text``."""
+    return [r for r in capture.records if r.levelno == level and text in r.getMessage()]
 
 
 def make_script(argv):
@@ -101,18 +111,22 @@ class TestListAcquisitions:
 class TestFindSulcalGraphsSubjectLookup:
     """Test the subject / acquisition filtering branches of find_sulcal_graphs."""
 
-    def test_subject_found_via_recursive_search(self, tmp_path, capsys):
+    def test_subject_found_via_recursive_search(self, tmp_path, pipeline_caplog):
+        """REQ-LOGGING-BDRABCZUK-BA8FC0099CBC: the folder found by search is logged at LOG on the sulcal logger."""
         nested = tmp_path / "cohort" / "sub_0001" / "folds"
         nested.mkdir(parents=True)
         (nested / "Lsulci.arg").touch()
         graphs = find_sulcal_graphs(str(tmp_path), subject="sub_0001")
         assert len(graphs) == 1
-        assert "Subject found at:" in capsys.readouterr().out
+        record = pipeline_caplog.assert_logged(LOG, str(tmp_path / "cohort" / "sub_0001"))
+        assert record.name == "champollion_pipeline.snapshot_types.sulcal"
 
-    def test_missing_subject_returns_empty_list(self, tmp_path, capsys):
+    def test_missing_subject_returns_empty_list(self, tmp_path, pipeline_caplog):
+        """REQ-LOGGING-BDRABCZUK-5BA7E108B378: a subject with no folder is logged at WARNING on the sulcal logger."""
         graphs = find_sulcal_graphs(str(tmp_path), subject="sub_9999")
         assert graphs == []
-        assert "Subject directory not found" in capsys.readouterr().out
+        record = pipeline_caplog.assert_logged(logging.WARNING, "sub_9999")
+        assert record.name == "champollion_pipeline.snapshot_types.sulcal"
 
     def test_acquisition_filter_keeps_only_matching_graphs(self, tmp_path):
         for acq in ("wk30", "wk40"):
@@ -270,6 +284,15 @@ class TestGenerateSulcalGraphSnapshot:
         modules["anatomist.headless"].Anatomist.assert_not_called()
         a.createWindow.assert_called_once()
 
+    def test_saved_image_is_logged_at_output(self, tmp_path, pipeline_caplog):
+        """REQ-LOGGING-BDRABCZUK-E613DEDBD610: the saved sulcal snapshot path is logged at OUTPUT."""
+        a = self._anatomist()
+        out = tmp_path / "snap.png"
+        with patch.multiple(brainvisa_imports, **_as_module_attrs(anatomist_modules(a))):
+            generate_sulcal_graph_snapshot("/graph.arg", str(out))
+        record = pipeline_caplog.assert_logged(OUTPUT, str(out))
+        assert record.name == "champollion_pipeline.snapshot_types.sulcal"
+
     def test_objects_and_windows_are_released(self, tmp_path):
         a = self._anatomist()
         with patch.multiple(brainvisa_imports, **_as_module_attrs(anatomist_modules(a))):
@@ -328,13 +351,37 @@ class TestGenerateTilesSnapshot:
             (mask / f"{prefix}mask_skeleton.nii.gz").touch()
         return crops
 
-    def test_no_completed_regions_returns_empty(self, tmp_path, env, capsys):
+    def test_no_completed_regions_returns_empty(self, tmp_path, env, pipeline_caplog):
+        """REQ-LOGGING-BDRABCZUK-E9FFBED8BA55: an empty crops directory is logged at WARNING on the tiles logger."""
         modules, _, _, _ = env
         crops = tmp_path / "empty_crops"
         crops.mkdir()
         with patch.multiple(brainvisa_imports, **_as_module_attrs(modules)):
             assert generate_tiles_snapshot(str(crops), str(tmp_path / "t.png")) == []
-        assert "No completed regions found" in capsys.readouterr().out
+        record = pipeline_caplog.assert_logged(logging.WARNING, "No completed regions found")
+        assert record.name == "champollion_pipeline.snapshot_types.tiles"
+
+    def test_saved_images_are_logged_at_output(self, tmp_path, env, pipeline_caplog):
+        """REQ-LOGGING-BDRABCZUK-E613DEDBD610: each saved tiles snapshot path is logged at OUTPUT."""
+        modules, _, data_root, _ = env
+        crops = self._crops(tmp_path)
+        with patch.multiple(brainvisa_imports, **_as_module_attrs(modules)):
+            snaps = generate_tiles_snapshot(
+                str(crops), str(tmp_path / "tiles.png"), champollion_data_root=str(data_root)
+            )
+        assert len(snaps) == 2
+        for snap in snaps:
+            record = pipeline_caplog.assert_logged(OUTPUT, snap)
+            assert record.name == "champollion_pipeline.snapshot_types.tiles"
+
+    def test_hemisphere_region_count_is_logged_at_log(self, tmp_path, env, pipeline_caplog):
+        """REQ-LOGGING-BDRABCZUK-F5BB3D5DAA66: the hemisphere name and its completed region count are logged at LOG."""
+        modules, _, data_root, _ = env
+        crops = self._crops(tmp_path, hemis=("L",))
+        with patch.multiple(brainvisa_imports, **_as_module_attrs(modules)):
+            generate_tiles_snapshot(str(crops), str(tmp_path / "tiles.png"), champollion_data_root=str(data_root))
+        record = pipeline_caplog.assert_logged(LOG, "left: 1 region(s)")
+        assert record.name == "champollion_pipeline.snapshot_types.tiles"
 
     def test_one_snapshot_per_hemisphere(self, tmp_path, env):
         modules, _, data_root, _ = env
@@ -383,17 +430,22 @@ class TestGenerateTilesSnapshot:
         assert snaps == [str(tmp_path / "tiles_left.png"), str(tmp_path / "tiles_right.png")]
         cfg.get_champollion_data_root_dir.assert_not_called()
 
-    def test_missing_region_graph_is_reported_and_skipped(self, tmp_path, env, capsys):
+    def test_missing_region_graph_is_reported_and_skipped(self, tmp_path, env, pipeline_caplog):
+        """REQ-LOGGING-BDRABCZUK-047543C19136: one WARNING record per missing graph holds its path and the hint."""
         modules, _, data_root, _ = env
-        crops = self._crops(tmp_path)
+        crops = self._crops(tmp_path, hemis=("L",))
         with patch.multiple(brainvisa_imports, **_as_module_attrs(modules)):
             snaps = generate_tiles_snapshot(
                 str(crops), str(tmp_path / "tiles.png"), level=3, champollion_data_root=str(data_root)
             )
         assert snaps == []
-        assert "Region graph not found" in capsys.readouterr().out
+        graph = str(data_root / "mask" / "2mm" / "regions" / "meshes" / "Lregions_model_3.arg")
+        naming = _records_at(pipeline_caplog, logging.WARNING, graph)
+        assert len(naming) == 1
+        assert "--champollion_data_root" in naming[0].getMessage()
+        assert naming[0].name == "champollion_pipeline.snapshot_types.tiles"
 
-    def test_missing_icbm_mesh_is_reported_and_skipped(self, tmp_path, env, capsys):
+    def test_missing_icbm_mesh_is_reported_and_skipped(self, tmp_path, env, pipeline_caplog):
         modules, _, data_root, icbm = env
         for gii in icbm.glob("*.gii"):
             gii.unlink()
@@ -403,7 +455,9 @@ class TestGenerateTilesSnapshot:
                 str(crops), str(tmp_path / "tiles.png"), champollion_data_root=str(data_root)
             )
         assert snaps == []
-        assert "ICBM mesh not found" in capsys.readouterr().out
+        mesh = str(icbm / "mni_icbm152_nlin_asym_09c_Lhemi.gii")
+        record = pipeline_caplog.assert_logged(logging.WARNING, mesh)
+        assert record.name == "champollion_pipeline.snapshot_types.tiles"
 
     @staticmethod
     def _fail_icbm_lookup(modules):
@@ -435,7 +489,7 @@ class TestGenerateTilesSnapshot:
         for side in ("L", "R"):
             assert osp.join(str(fallback), f"mni_icbm152_nlin_asym_09c_{side}hemi.gii") in loaded
 
-    def test_missing_fallback_mesh_reported_with_fallback_path(self, tmp_path, env, monkeypatch, capsys):
+    def test_missing_fallback_mesh_reported_with_fallback_path(self, tmp_path, env, monkeypatch, pipeline_caplog):
         """REQ-MESHFALLBACK-02 — absent fallback mesh is reported with its path and skipped.
 
         ICBM_MESH_DIR_FALLBACK is redirected to a tmp_path directory that does not
@@ -452,7 +506,7 @@ class TestGenerateTilesSnapshot:
             )
         assert snaps == []
         expected = osp.join(str(fallback), "mni_icbm152_nlin_asym_09c_Lhemi.gii")
-        assert f"ICBM mesh not found: {expected}" in capsys.readouterr().out
+        pipeline_caplog.assert_logged(logging.WARNING, f"ICBM mesh not found: {expected}")
 
     def test_extension_defaults_to_png(self, tmp_path, env):
         modules, _, data_root, _ = env
@@ -491,12 +545,57 @@ class TestGenerateUmapSnapshot:
         model.transform.return_value = np.array([[0.5, 0.5]], dtype=np.float32)
         return model
 
-    def test_no_pairs_returns_empty(self, tmp_path, capsys):
+    def test_no_pairs_returns_empty(self, tmp_path, pipeline_caplog):
+        """REQ-LOGGING-BDRABCZUK-9A5ED04F7B36: no embeddings CSV is logged at WARNING with the directory."""
         embeddings = tmp_path / "embeddings"
         embeddings.mkdir()
         result = generate_umap_snapshot(str(embeddings), str(tmp_path), str(tmp_path / "u.png"))
         assert result == []
-        assert "No *_embeddings.csv files found" in capsys.readouterr().out
+        record = pipeline_caplog.assert_logged(logging.WARNING, str(embeddings))
+        assert record.name == "champollion_pipeline.snapshot_types.umap"
+
+    def test_csv_count_is_logged_at_log(self, tmp_path, umap_inputs, pipeline_caplog):
+        """REQ-LOGGING-BDRABCZUK-759009D611AA: the number of embeddings CSV files found is logged at LOG."""
+        embeddings, reference = umap_inputs
+        with patch("joblib.load", return_value=self._model()):
+            generate_umap_snapshot(str(embeddings), str(reference), str(tmp_path / "umap.png"))
+        record = pipeline_caplog.assert_logged(LOG, "Found 1 embedding CSV file(s)")
+        assert record.name == "champollion_pipeline.snapshot_types.umap"
+
+    def test_reference_point_count_is_logged_at_log(self, tmp_path, umap_inputs, pipeline_caplog):
+        """REQ-LOGGING-BDRABCZUK-0140144B35E1: the number of loaded reference points is logged at LOG."""
+        embeddings, reference = umap_inputs
+        with patch("joblib.load", return_value=self._model()):
+            generate_umap_snapshot(str(embeddings), str(reference), str(tmp_path / "umap.png"))
+        record = pipeline_caplog.assert_logged(LOG, "Loaded 5 reference points")
+        assert record.name == "champollion_pipeline.snapshot_types.umap"
+
+    def test_region_without_kept_subject_is_logged_at_log(self, tmp_path, umap_inputs, pipeline_caplog):
+        """REQ-LOGGING-BDRABCZUK-146AEFAEDA2B: a region with no kept subject is logged at LOG with its name."""
+        embeddings, reference = umap_inputs
+        with patch("joblib.load", return_value=self._model()):
+            snaps = generate_umap_snapshot(
+                str(embeddings), str(reference), str(tmp_path / "umap.png"), exclude_ids=frozenset({"sub01"})
+            )
+        assert snaps == []
+        record = pipeline_caplog.assert_logged(LOG, "[SOr left] No kept subject")
+        assert record.name == "champollion_pipeline.snapshot_types.umap"
+
+    def test_projected_subject_count_is_logged_at_log(self, tmp_path, umap_inputs, pipeline_caplog):
+        """REQ-LOGGING-BDRABCZUK-35CF9D87AC02: the number of projected subjects is logged at LOG."""
+        embeddings, reference = umap_inputs
+        with patch("joblib.load", return_value=self._model()):
+            generate_umap_snapshot(str(embeddings), str(reference), str(tmp_path / "umap.png"))
+        record = pipeline_caplog.assert_logged(LOG, "Projected 1 new subject(s)")
+        assert record.name == "champollion_pipeline.snapshot_types.umap"
+
+    def test_saved_plot_is_logged_at_output(self, tmp_path, umap_inputs, pipeline_caplog):
+        """REQ-LOGGING-BDRABCZUK-E613DEDBD610: the saved UMAP plot path is logged at OUTPUT."""
+        embeddings, reference = umap_inputs
+        with patch("joblib.load", return_value=self._model()):
+            snaps = generate_umap_snapshot(str(embeddings), str(reference), str(tmp_path / "umap.png"))
+        record = pipeline_caplog.assert_logged(OUTPUT, snaps[0])
+        assert record.name == "champollion_pipeline.snapshot_types.umap"
 
     def test_plot_is_written_per_region(self, tmp_path, umap_inputs):
         embeddings, reference = umap_inputs
@@ -518,16 +617,29 @@ class TestGenerateUmapSnapshot:
             generate_umap_snapshot(str(embeddings), str(reference), str(tmp_path / "umap.png"))
         assert model.transform.call_args.args[0].shape == (1, 2)
 
-    def test_unmatched_pairs_are_reported(self, tmp_path, capsys):
+    @staticmethod
+    def _unmatched_inputs(tmp_path):
+        """Embeddings dir with one SOr left CSV and an empty reference dir."""
         embeddings = tmp_path / "embeddings"
         embeddings.mkdir()
         (embeddings / "SOr_left_001_embeddings.csv").write_text("ID,f0\nsub01,0.1\n")
         reference = tmp_path / "reference_data"
         reference.mkdir()
+        return embeddings, reference
+
+    def test_unmatched_pairs_are_reported(self, tmp_path, pipeline_caplog):
+        """REQ-LOGGING-BDRABCZUK-18FBC90E0370: a CSV without UMAP model is logged at LOG (the input QC warns)."""
+        embeddings, reference = self._unmatched_inputs(tmp_path)
         assert generate_umap_snapshot(str(embeddings), str(reference), str(tmp_path / "u.png")) == []
-        out = capsys.readouterr().out
-        assert "UMAP model not found for SOr left" in out
-        assert "No matching (embedding CSV, UMAP model) pairs found" in out
+        record = pipeline_caplog.assert_logged(LOG, "UMAP model not found for SOr left")
+        assert record.name == "champollion_pipeline.snapshot_types.umap"
+
+    def test_no_matching_pair_is_logged_at_warning(self, tmp_path, pipeline_caplog):
+        """REQ-LOGGING-BDRABCZUK-3E5F3DA565EA: no (CSV, model) pair is logged at WARNING."""
+        embeddings, reference = self._unmatched_inputs(tmp_path)
+        assert generate_umap_snapshot(str(embeddings), str(reference), str(tmp_path / "u.png")) == []
+        record = pipeline_caplog.assert_logged(logging.WARNING, "No matching (embedding CSV, UMAP model) pairs found")
+        assert record.name == "champollion_pipeline.snapshot_types.umap"
 
     def test_region_filter_excludes_other_regions(self, tmp_path, umap_inputs):
         embeddings, reference = umap_inputs
@@ -535,12 +647,14 @@ class TestGenerateUmapSnapshot:
             snaps = generate_umap_snapshot(str(embeddings), str(reference), str(tmp_path / "u.png"), regions=["Other"])
         assert snaps == []
 
-    def test_unrecognized_filename_is_reported(self, tmp_path, capsys):
+    def test_unrecognized_filename_is_reported(self, tmp_path, pipeline_caplog):
+        """REQ-LOGGING-BDRABCZUK-184B32F80D61: a CSV name with no region and hemisphere is logged at WARNING."""
         embeddings = tmp_path / "embeddings"
         embeddings.mkdir()
         (embeddings / "weird_embeddings.csv").write_text("ID\n")
         generate_umap_snapshot(str(embeddings), str(tmp_path), str(tmp_path / "u.png"))
-        assert "Unrecognized filename format" in capsys.readouterr().out
+        record = pipeline_caplog.assert_logged(logging.WARNING, "weird_embeddings.csv")
+        assert record.name == "champollion_pipeline.snapshot_types.umap"
 
 
 class TestRunSulcalStep:
@@ -552,10 +666,12 @@ class TestRunSulcalStep:
     def test_no_morphologist_dir_returns_empty(self, tmp_path):
         assert self._script(tmp_path)._run_sulcal((800, 600)) == []
 
-    def test_missing_morphologist_dir_is_reported(self, tmp_path, capsys):
+    def test_missing_morphologist_dir_is_reported(self, tmp_path, pipeline_caplog):
+        """REQ-LOGGING-BDRABCZUK-811484BFA9BB: an absent --morphologist_dir is logged at WARNING with its path."""
         script = self._script(tmp_path, ["--morphologist_dir", str(tmp_path / "nope")])
         assert script._run_sulcal((800, 600)) == []
-        assert "Morphologist directory not found" in capsys.readouterr().out
+        record = pipeline_caplog.assert_logged(logging.WARNING, str(tmp_path / "nope"))
+        assert record.name == "champollion_pipeline.generate_snapshots"
 
     def test_snapshot_is_generated_per_hemisphere(self, tmp_path):
         morpho = tmp_path / "morphologist"
@@ -584,7 +700,8 @@ class TestRunSulcalStep:
             snaps = script._run_sulcal((800, 600))
         assert snaps[0].endswith("sulcal_graph_wk30_left.png")
 
-    def test_multiple_acquisitions_trigger_a_warning(self, tmp_path, capsys):
+    def test_multiple_acquisitions_trigger_a_warning(self, tmp_path, pipeline_caplog):
+        """REQ-LOGGING-BDRABCZUK-B72E4DE27276: one WARNING record names the acquisitions."""
         morpho = tmp_path / "morphologist"
         for acq in ("wk30", "wk40"):
             folds = morpho / "t1mri" / acq / "default_analysis" / "folds"
@@ -594,11 +711,27 @@ class TestRunSulcalStep:
         script = self._script(tmp_path, ["--morphologist_dir", str(morpho)])
         with patch.object(gs, "generate_sulcal_graph_snapshot", side_effect=lambda *a, **k: a[1]):
             script._run_sulcal((800, 600))
-        out = capsys.readouterr().out
-        assert "Warning: 2 left graphs found" in out
-        assert "wk30, wk40" in out
+        naming = _records_at(pipeline_caplog, logging.WARNING, "wk30, wk40")
+        assert len(naming) == 1
+        assert "2 left graphs found" in naming[0].getMessage()
+        assert naming[0].name == "champollion_pipeline.generate_snapshots"
 
-    def test_white_mesh_is_reported_when_found(self, tmp_path, capsys):
+    def test_sulcal_graph_count_is_logged_at_log(self, tmp_path, pipeline_caplog):
+        """REQ-LOGGING-BDRABCZUK-509809CB8A89: the number of sulcal graphs found is logged at LOG."""
+        morpho = tmp_path / "morphologist"
+        folds = morpho / "sub_0001" / "t1mri" / "wk30" / "default_analysis" / "folds"
+        folds.mkdir(parents=True)
+        (folds / "Lsulci_sub_0001.arg").touch()
+        (folds / "Rsulci_sub_0001.arg").touch()
+
+        script = self._script(tmp_path, ["--morphologist_dir", str(morpho)])
+        with patch.object(gs, "generate_sulcal_graph_snapshot", side_effect=lambda *a, **k: a[1]):
+            script._run_sulcal((800, 600))
+        record = pipeline_caplog.assert_logged(LOG, "Found 2 sulcal graph(s)")
+        assert record.name == "champollion_pipeline.generate_snapshots"
+
+    def test_white_mesh_is_reported_when_found(self, tmp_path, pipeline_caplog):
+        """REQ-LOGGING-BDRABCZUK-F861502D0EA1: the white mesh path is logged at LOG."""
         morpho = tmp_path / "morphologist"
         analysis = morpho / "sub_0001" / "t1mri" / "wk30" / "default_analysis"
         folds = analysis / "folds"
@@ -611,9 +744,11 @@ class TestRunSulcalStep:
         script = self._script(tmp_path, ["--morphologist_dir", str(morpho)])
         with patch.object(gs, "generate_sulcal_graph_snapshot", side_effect=lambda *a, **k: a[1]):
             script._run_sulcal((800, 600))
-        assert "White mesh:" in capsys.readouterr().out
+        record = pipeline_caplog.assert_logged(LOG, str(mesh_dir / "sub_0001_Lwhite.gii"))
+        assert record.name == "champollion_pipeline.generate_snapshots"
 
-    def test_rendering_error_is_caught(self, tmp_path, capsys):
+    def test_rendering_error_is_caught(self, tmp_path, pipeline_caplog):
+        """REQ-LOGGING-BDRABCZUK-671F0AF0577D: a sulcal render exception is logged at ERROR with its message."""
         morpho = tmp_path / "morphologist"
         folds = morpho / "sub_0001" / "folds"
         folds.mkdir(parents=True)
@@ -622,7 +757,8 @@ class TestRunSulcalStep:
         script = self._script(tmp_path, ["--morphologist_dir", str(morpho)])
         with patch.object(gs, "generate_sulcal_graph_snapshot", side_effect=RuntimeError("no display")):
             assert script._run_sulcal((800, 600)) == []
-        assert "Error processing" in capsys.readouterr().out
+        record = pipeline_caplog.assert_logged(logging.ERROR, "no display")
+        assert record.name == "champollion_pipeline.generate_snapshots"
 
 
 class TestRunTilesStep:
@@ -634,10 +770,12 @@ class TestRunTilesStep:
     def test_no_tiles_dir_returns_empty(self, tmp_path):
         assert self._script(tmp_path)._run_tiles((800, 600)) == []
 
-    def test_missing_tiles_dir_is_reported(self, tmp_path, capsys):
+    def test_missing_tiles_dir_is_reported(self, tmp_path, pipeline_caplog):
+        """REQ-LOGGING-BDRABCZUK-811484BFA9BB: an absent --cortical_tiles_dir is logged at WARNING with its path."""
         script = self._script(tmp_path, ["--cortical_tiles_dir", str(tmp_path / "nope")])
         assert script._run_tiles((800, 600)) == []
-        assert "Cortical tiles directory not found" in capsys.readouterr().out
+        record = pipeline_caplog.assert_logged(logging.WARNING, str(tmp_path / "nope"))
+        assert record.name == "champollion_pipeline.generate_snapshots"
 
     def test_crops_2mm_subdirectory_is_auto_detected(self, tmp_path):
         root = tmp_path / "cortical_tiles"
@@ -674,21 +812,25 @@ class TestRunTilesStep:
         assert tiles.call_args.kwargs["level"] == 3
         assert tiles.call_args.kwargs["champollion_data_root"] == "/my/data"
 
-    def test_missing_anatomist_is_reported(self, tmp_path, capsys):
+    def test_missing_anatomist_is_reported(self, tmp_path, pipeline_caplog):
+        """REQ-LOGGING-BDRABCZUK-671F0AF0577D: a tiles render ImportError is logged at ERROR with its message."""
         crops = tmp_path / "crops2mm"
         crops.mkdir()
         script = self._script(tmp_path, ["--cortical_tiles_dir", str(crops)])
         with patch.object(gs, "generate_tiles_snapshot", side_effect=ImportError("no anatomist")):
             assert script._run_tiles((800, 600)) == []
-        assert "Anatomist not available" in capsys.readouterr().out
+        record = pipeline_caplog.assert_logged(logging.ERROR, "no anatomist")
+        assert record.name == "champollion_pipeline.generate_snapshots"
 
-    def test_other_errors_are_caught(self, tmp_path, capsys):
+    def test_other_errors_are_caught(self, tmp_path, pipeline_caplog):
+        """REQ-LOGGING-BDRABCZUK-671F0AF0577D: a tiles render exception is logged at ERROR with its message."""
         crops = tmp_path / "crops2mm"
         crops.mkdir()
         script = self._script(tmp_path, ["--cortical_tiles_dir", str(crops)])
         with patch.object(gs, "generate_tiles_snapshot", side_effect=RuntimeError("boom")):
             assert script._run_tiles((800, 600)) == []
-        assert "Error generating tiles snapshot" in capsys.readouterr().out
+        record = pipeline_caplog.assert_logged(logging.ERROR, "boom")
+        assert record.name == "champollion_pipeline.generate_snapshots"
 
 
 class TestRunUmapStep:
@@ -700,10 +842,12 @@ class TestRunUmapStep:
     def test_no_embeddings_dir_returns_empty(self, tmp_path):
         assert self._script(tmp_path)._run_umap((800, 600)) == []
 
-    def test_missing_embeddings_dir_is_reported(self, tmp_path, capsys):
+    def test_missing_embeddings_dir_is_reported(self, tmp_path, pipeline_caplog):
+        """REQ-LOGGING-BDRABCZUK-811484BFA9BB: an absent --embeddings_dir is logged at WARNING with its path."""
         script = self._script(tmp_path, ["--embeddings_dir", str(tmp_path / "nope")])
         assert script._run_umap((800, 600)) == []
-        assert "Embeddings directory not found" in capsys.readouterr().out
+        record = pipeline_caplog.assert_logged(logging.WARNING, str(tmp_path / "nope"))
+        assert record.name == "champollion_pipeline.generate_snapshots"
 
     def test_no_reference_data_dir_returns_empty(self, tmp_path):
         embeddings = tmp_path / "embeddings"
@@ -711,7 +855,8 @@ class TestRunUmapStep:
         script = self._script(tmp_path, ["--embeddings_dir", str(embeddings)])
         assert script._run_umap((800, 600)) == []
 
-    def test_missing_reference_data_dir_is_reported(self, tmp_path, capsys):
+    def test_missing_reference_data_dir_is_reported(self, tmp_path, pipeline_caplog):
+        """REQ-LOGGING-BDRABCZUK-811484BFA9BB: an absent --reference_data_dir is logged at WARNING with its path."""
         embeddings = tmp_path / "embeddings"
         embeddings.mkdir()
         script = self._script(
@@ -719,7 +864,8 @@ class TestRunUmapStep:
             ["--embeddings_dir", str(embeddings), "--reference_data_dir", str(tmp_path / "nope")],
         )
         assert script._run_umap((800, 600)) == []
-        assert "Reference data directory not found" in capsys.readouterr().out
+        record = pipeline_caplog.assert_logged(logging.WARNING, str(tmp_path / "nope"))
+        assert record.name == "champollion_pipeline.generate_snapshots"
 
     def test_snapshots_are_returned(self, tmp_path):
         embeddings = tmp_path / "embeddings"
@@ -733,7 +879,8 @@ class TestRunUmapStep:
         with patch.object(gs, "generate_umap_snapshot", return_value=["/u.png"]):
             assert script._run_umap((800, 600)) == ["/u.png"]
 
-    def test_region_filter_is_parsed_and_forwarded(self, tmp_path, capsys):
+    def test_region_filter_is_parsed_and_forwarded(self, tmp_path, pipeline_caplog):
+        """REQ-LOGGING-BDRABCZUK-3F24A3A89F5A: the parsed --umap_region names are logged at LOG."""
         embeddings = tmp_path / "embeddings"
         embeddings.mkdir()
         reference = tmp_path / "reference"
@@ -752,9 +899,11 @@ class TestRunUmapStep:
         with patch.object(gs, "generate_umap_snapshot", return_value=[]) as umap:
             script._run_umap((800, 600))
         assert umap.call_args.kwargs["regions"] == ["FColl-SRh", "S.Or."]
-        assert "UMAP region filter: FColl-SRh, S.Or." in capsys.readouterr().out
+        record = pipeline_caplog.assert_logged(LOG, "FColl-SRh, S.Or.")
+        assert record.name == "champollion_pipeline.generate_snapshots"
 
-    def test_errors_are_caught(self, tmp_path, capsys):
+    def test_errors_are_caught(self, tmp_path, pipeline_caplog):
+        """REQ-LOGGING-BDRABCZUK-671F0AF0577D: a UMAP render exception is logged at ERROR with its message."""
         embeddings = tmp_path / "embeddings"
         embeddings.mkdir()
         reference = tmp_path / "reference"
@@ -765,7 +914,8 @@ class TestRunUmapStep:
         )
         with patch.object(gs, "generate_umap_snapshot", side_effect=RuntimeError("boom")):
             assert script._run_umap((800, 600)) == []
-        assert "Error generating UMAP snapshot" in capsys.readouterr().out
+        record = pipeline_caplog.assert_logged(logging.ERROR, "boom")
+        assert record.name == "champollion_pipeline.generate_snapshots"
 
 
 class TestRunDispatch:
@@ -819,12 +969,23 @@ class TestRunDispatch:
         manifest = json.loads((tmp_path / "out" / "snapshots_manifest.json").read_text())
         assert manifest == {"snapshots": ["s.png", "t.png", "u.png"]}
 
-    def test_snapshot_count_is_reported(self, tmp_path, capsys):
+    def test_snapshot_count_is_reported(self, tmp_path, pipeline_caplog):
+        """REQ-LOGGING-BDRABCZUK-9A4319CAB8FA: the snapshot count is logged at OUTPUT."""
         script = self._script(tmp_path)
         sulcal, tiles, umap = self._patched(script)
         with sulcal, tiles, umap:
             script.run()
-        assert "Generated 3 snapshot(s)" in capsys.readouterr().out
+        record = pipeline_caplog.assert_logged(OUTPUT, "Generated 3 snapshot(s)")
+        assert record.name == "champollion_pipeline.generate_snapshots"
+
+    def test_manifest_path_is_logged_at_output(self, tmp_path, pipeline_caplog):
+        """REQ-LOGGING-BDRABCZUK-370FE7DB3537: the snapshots_manifest.json path is logged at OUTPUT."""
+        script = self._script(tmp_path)
+        sulcal, tiles, umap = self._patched(script)
+        with sulcal, tiles, umap:
+            script.run()
+        record = pipeline_caplog.assert_logged(OUTPUT, str(tmp_path / "out" / "snapshots_manifest.json"))
+        assert record.name == "champollion_pipeline.generate_snapshots"
 
     def test_custom_size_is_forwarded_to_each_step(self, tmp_path):
         script = self._script(tmp_path, ["--width", "1024", "--height", "768"])
