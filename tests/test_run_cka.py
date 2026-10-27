@@ -6,12 +6,22 @@ The CKA subprocess is never launched: ``execute_command`` is replaced by a
 recorder so that only path discovery and pair-matching logic is exercised.
 """
 
+import logging
 import sys
 
 import pytest
 
 import run_cka
 from run_cka import CKA_MODULE, RunCKA
+
+LOGGER = "run_cka"
+
+
+def _logged(caplog, logger_name: str, level: int) -> str:
+    """Messages caplog captured on ``logger_name`` at ``level``, joined by newlines."""
+    caplog_records = [r.getMessage() for r in caplog.records if r.name == logger_name and r.levelno == level]
+    return "\n".join(caplog_records)
+
 
 # ---------------------------------------------------------------------------
 # Helpers
@@ -110,11 +120,12 @@ class TestRunPairs:
         assert script._run_pairs(pairs) == 2
         assert len(script.executed) == 2
 
-    def test_warns_but_continues_on_failure(self, tmp_path, capsys):
+    def test_warns_but_continues_on_failure(self, tmp_path, caplog):
+        caplog.set_level(1, logger=LOGGER)
         script = _make_script(["--path_a", "a", "--path_b", "b", "--output_dir", str(tmp_path)])
         script.execute_command = lambda cmd, shell=False: 3
         assert script._run_pairs([("r1", "a1", "b1")]) == 1
-        assert "CKA failed for r1" in capsys.readouterr().out
+        assert "CKA failed for r1" in _logged(caplog, LOGGER, logging.WARNING)
 
 
 # ---------------------------------------------------------------------------
@@ -186,23 +197,25 @@ class TestNestedMode:
         assert script.run() == 0
         assert len(script.executed) == 2
 
-    def test_skips_region_missing_in_a(self, tmp_path, capsys):
+    def test_skips_region_missing_in_a(self, tmp_path, caplog):
+        caplog.set_level(1, logger=LOGGER)
         a = tmp_path / "a"
         (a / "SC_left").mkdir(parents=True)  # directory but no CSV
         _touch(a / "SC_right" / "full_embeddings.csv")
         b = _nested_tree(tmp_path / "b", ["SC_left", "SC_right"])
         script = _make_script(["--path_a", str(a), "--path_b", str(b), "--output_dir", str(tmp_path / "o")])
         assert script.run() == 0
-        assert "[skip] SC_left" in capsys.readouterr().out
+        assert "[skip] SC_left" in _logged(caplog, LOGGER, logging.WARNING)
         assert len(script.executed) == 1
 
-    def test_skips_region_missing_in_b(self, tmp_path, capsys):
+    def test_skips_region_missing_in_b(self, tmp_path, caplog):
+        caplog.set_level(1, logger=LOGGER)
         a = _nested_tree(tmp_path / "a", ["SC_left", "SC_right"])
         b = _nested_tree(tmp_path / "b", ["SC_right"])
         (tmp_path / "b" / "SC_left").mkdir(parents=True)
         script = _make_script(["--path_a", str(a), "--path_b", str(b), "--output_dir", str(tmp_path / "o")])
         assert script.run() == 0
-        assert "[skip] SC_left" in capsys.readouterr().out
+        assert "[skip] SC_left" in _logged(caplog, LOGGER, logging.WARNING)
         assert len(script.executed) == 1
 
     def test_region_filter_selects_one(self, tmp_path):
@@ -268,14 +281,15 @@ class TestFlatMode:
         assert script.run() == 0
         assert len(script.executed) == 2
 
-    def test_reports_unmatched_files_in_a(self, tmp_path, capsys):
+    def test_reports_unmatched_files_in_a(self, tmp_path, caplog):
+        caplog.set_level(1, logger=LOGGER)
         a, b = tmp_path / "a", tmp_path / "b"
         _touch(a / "SC_left_embeddings.csv")
         _touch(a / "extra_embeddings.csv")
         _touch(b / "SC_left_embeddings.csv")
         script = _make_script(["--path_a", str(a), "--path_b", str(b), "--output_dir", str(tmp_path / "o")])
         assert script.run() == 0
-        assert "1 file(s) in path_a have no match" in capsys.readouterr().out
+        assert "1 file(s) in path_a have no match" in _logged(caplog, LOGGER, logging.WARNING)
 
     def test_region_filter_on_basename(self, tmp_path):
         a, b = tmp_path / "a", tmp_path / "b"
@@ -317,14 +331,15 @@ class TestFlatModeModelIdFallback:
         assert script.run() == 0
         assert len(script.executed) == 1
 
-    def test_reports_unmatched_model_ids(self, tmp_path, capsys):
+    def test_reports_unmatched_model_ids(self, tmp_path, caplog):
+        caplog.set_level(1, logger=LOGGER)
         a, b = tmp_path / "a", tmp_path / "b"
         _touch(a / "SC_left_name07-58-00--111_embeddings.csv")
         _touch(a / "SC_right_name08-00-00--222_embeddings.csv")
         _touch(b / "other_name07-58-00--111_embeddings.csv")
         script = _make_script(["--path_a", str(a), "--path_b", str(b), "--output_dir", str(tmp_path / "o")])
         assert script.run() == 0
-        assert "no model-ID match" in capsys.readouterr().out
+        assert "no model-ID match" in _logged(caplog, LOGGER, logging.WARNING)
 
     def test_region_filter_on_model_id_match(self, tmp_path):
         a, b = tmp_path / "a", tmp_path / "b"

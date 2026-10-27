@@ -8,6 +8,7 @@ stubbed here so the tests run without the submodule and without fitting a real
 UMAP model.
 """
 
+import logging
 import sys
 from unittest.mock import MagicMock
 
@@ -20,8 +21,17 @@ sys.modules.setdefault("put_together_embeddings_files", MagicMock())
 
 import generate_umap_reference  # noqa: E402
 from generate_umap_reference import GenerateUmapReference, _parse_region_hemi  # noqa: E402
+from tests.log_assertions import LOG, OUTPUT  # noqa: E402
 
 generate_umap_reference_fn = generate_umap_reference.generate_umap_reference
+LOGGER = "generate_umap_reference"
+
+
+def _logged(caplog, logger_name: str, level: int) -> str:
+    """Messages caplog captured on ``logger_name`` at ``level``, joined by newlines."""
+    caplog_records = [r.getMessage() for r in caplog.records if r.name == logger_name and r.levelno == level]
+    return "\n".join(caplog_records)
+
 
 # ---------------------------------------------------------------------------
 # Helpers
@@ -95,37 +105,41 @@ class TestParseRegionHemi:
 
 
 class TestGenerateUmapReference:
-    def test_returns_empty_when_no_models(self, tmp_path, monkeypatch, capsys):
+    def test_returns_empty_when_no_models(self, tmp_path, monkeypatch, caplog):
+        caplog.set_level(1, logger=LOGGER)
         _patch_model_paths(monkeypatch, [])
         result = generate_umap_reference_fn(str(tmp_path), "emb.csv", str(tmp_path / "out"))
         assert result == []
-        assert "No model directories found" in capsys.readouterr().out
+        assert "No model directories found" in _logged(caplog, LOGGER, logging.WARNING)
 
-    def test_returns_empty_when_no_reference_csv(self, tmp_path, monkeypatch, capsys):
+    def test_returns_empty_when_no_reference_csv(self, tmp_path, monkeypatch, caplog):
+        caplog.set_level(1, logger=LOGGER)
         models_dir = tmp_path / "models"
         model_path = models_dir / "SC_left" / "run1"
         model_path.mkdir(parents=True)
         _patch_model_paths(monkeypatch, [str(model_path)])
         result = generate_umap_reference_fn(str(models_dir), "missing.csv", str(tmp_path / "out"))
         assert result == []
-        assert "Reference CSV not found" in capsys.readouterr().out
+        assert "Reference CSV not found" in _logged(caplog, LOGGER, logging.WARNING)
 
-    def test_skips_unrecognised_directory_names(self, tmp_path, monkeypatch, capsys):
+    def test_skips_unrecognised_directory_names(self, tmp_path, monkeypatch, caplog):
+        caplog.set_level(1, logger=LOGGER)
         models_dir = tmp_path / "models"
         model_path = models_dir / "models_cache" / "run1"
         model_path.mkdir(parents=True)
         _patch_model_paths(monkeypatch, [str(model_path)])
         generate_umap_reference_fn(str(models_dir), "emb.csv", str(tmp_path / "out"))
-        assert "Skipping unrecognised dir name: models_cache" in capsys.readouterr().out
+        assert "Skipping unrecognised dir name: models_cache" in _logged(caplog, LOGGER, logging.WARNING)
 
-    def test_reports_unreadable_csv(self, tmp_path, monkeypatch, capsys):
+    def test_reports_unreadable_csv(self, tmp_path, monkeypatch, caplog):
+        caplog.set_level(1, logger=LOGGER)
         models_dir = tmp_path / "models"
         model_path = _make_model_dir(models_dir, "SC_left", "emb.csv")
         _patch_model_paths(monkeypatch, [model_path])
         monkeypatch.setattr("pandas.read_csv", MagicMock(side_effect=ValueError("broken")), raising=True)
         result = generate_umap_reference_fn(str(models_dir), "emb.csv", str(tmp_path / "out"))
         assert result == []
-        assert "Could not load" in capsys.readouterr().out
+        assert "Could not load" in _logged(caplog, LOGGER, logging.WARNING)
 
     @pytest.mark.usefixtures("fake_umap")
     def test_fits_and_saves_one_roi(self, tmp_path, monkeypatch, no_disk_writes):
@@ -274,13 +288,13 @@ class TestRun:
             "overwrite": False,
         }
 
-    def test_overwrite_banner(self, monkeypatch, capsys):
+    def test_overwrite_banner(self, monkeypatch, caplog):
+        caplog.set_level(1, logger=LOGGER)
         monkeypatch.setattr(generate_umap_reference, "generate_umap_reference", lambda **k: [])
         script = _make_script(["--models_dir", "m", "--reference_subpath", "e.csv", "--overwrite"])
         assert script.run() == 0
-        out = capsys.readouterr().out
-        assert "Overwrite mode   : ON" in out
-        assert "Done: 0 UMAP reference model(s) available." in out
+        assert "Overwrite mode   : ON" in _logged(caplog, LOGGER, LOG)
+        assert "Done: 0 UMAP reference model(s) available." in _logged(caplog, LOGGER, OUTPUT)
 
 
 class TestMain:

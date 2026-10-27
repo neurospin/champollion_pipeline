@@ -25,6 +25,7 @@ Usage
         --masks-version canonical_25 --token hf_xxx
 """
 
+import logging
 import sys
 from datetime import datetime
 from os.path import abspath, dirname, isdir
@@ -33,6 +34,8 @@ from champollion_utils.script_builder import ScriptBuilder
 
 from champollion_pipeline.derivatives_layout import compute_run_log_path
 from champollion_pipeline.process_setup import init_pipeline_process
+
+logger = logging.getLogger(__name__)
 
 try:
     import huggingface_hub
@@ -77,12 +80,12 @@ class UploadModelsToHF(ScriptBuilder):
 
     def run(self) -> int:
         if huggingface_hub is None:
-            print("ERROR: huggingface_hub is required. Install with: pip install huggingface_hub")
+            logger.error("huggingface_hub is required. Install with: pip install huggingface_hub")
             return 1
 
         models_dir = abspath(self.args.models_dir)
         if not isdir(models_dir):
-            print(f"ERROR: models_dir not found: {models_dir}")
+            logger.error(f"models_dir not found: {models_dir}")
             return 1
 
         api = huggingface_hub.HfApi(token=self.args.token)
@@ -96,8 +99,7 @@ class UploadModelsToHF(ScriptBuilder):
             exist_ok=True,
         )
 
-        print(f"Uploading  {models_dir}")
-        print(f"        →  {repo_id}/{masks_version}/")
+        logger.trace(f"Uploading {models_dir} → {repo_id}/{masks_version}/")
 
         api.upload_folder(
             repo_id=repo_id,
@@ -106,8 +108,7 @@ class UploadModelsToHF(ScriptBuilder):
             repo_type="model",
         )
 
-        print("\nDone. Browse at:")
-        print(f"  https://huggingface.co/{repo_id}/tree/main/{masks_version}")
+        logger.output(f"Done. Browse at: https://huggingface.co/{repo_id}/tree/main/{masks_version}")
         return 0
 
 

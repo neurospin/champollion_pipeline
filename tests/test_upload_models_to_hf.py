@@ -7,13 +7,24 @@ installed), so every test replaces that name with a stub instead of contacting
 the Hub.
 """
 
+import logging
 import sys
 from unittest.mock import MagicMock
 
 import pytest
 
 import upload_models_to_hf
+from tests.log_assertions import OUTPUT
 from upload_models_to_hf import UploadModelsToHF
+
+LOGGER = "upload_models_to_hf"
+
+
+def _logged(caplog, logger_name: str, level: int) -> str:
+    """Messages caplog captured on ``logger_name`` at ``level``, joined by newlines."""
+    caplog_records = [r.getMessage() for r in caplog.records if r.name == logger_name and r.levelno == level]
+    return "\n".join(caplog_records)
+
 
 # ---------------------------------------------------------------------------
 # Helpers
@@ -75,17 +86,19 @@ class TestArgumentParsing:
 
 
 class TestRun:
-    def test_returns_one_when_huggingface_hub_missing(self, tmp_path, monkeypatch, capsys):
+    def test_returns_one_when_huggingface_hub_missing(self, tmp_path, monkeypatch, caplog):
+        caplog.set_level(1, logger=LOGGER)
         monkeypatch.setattr(upload_models_to_hf, "huggingface_hub", None)
         script = _make_script([str(tmp_path), "repo", "--masks-version", "v1"])
         assert script.run() == 1
-        assert "huggingface_hub is required" in capsys.readouterr().out
+        assert "huggingface_hub is required" in _logged(caplog, LOGGER, logging.ERROR)
 
-    def test_returns_one_when_models_dir_missing(self, tmp_path, hf_stub, capsys):
+    def test_returns_one_when_models_dir_missing(self, tmp_path, hf_stub, caplog):
+        caplog.set_level(1, logger=LOGGER)
         missing = tmp_path / "nope"
         script = _make_script([str(missing), "repo", "--masks-version", "v1"])
         assert script.run() == 1
-        assert "models_dir not found" in capsys.readouterr().out
+        assert "models_dir not found" in _logged(caplog, LOGGER, logging.ERROR)
 
     def test_creates_repo_and_uploads_folder(self, tmp_path, hf_stub):
         module, api = hf_stub
@@ -116,10 +129,11 @@ class TestRun:
         module.HfApi.assert_called_once_with(token="hf_abc")
         assert api.create_repo.call_args.kwargs["private"] is True
 
-    def test_prints_browse_url(self, tmp_path, hf_stub, capsys):
+    def test_prints_browse_url(self, tmp_path, hf_stub, caplog):
+        caplog.set_level(1, logger=LOGGER)
         script = _make_script([str(tmp_path), "neurospin/champollion", "--masks-version", "canonical_25"])
         script.run()
-        out = capsys.readouterr().out
+        out = _logged(caplog, LOGGER, OUTPUT)
         assert "https://huggingface.co/neurospin/champollion/tree/main/canonical_25" in out
 
 

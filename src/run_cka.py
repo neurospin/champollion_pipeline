@@ -20,6 +20,7 @@ Nested-directory mode (raw model directories with per-region subdirs):
         --output_dir /tmp/cka_comparison
 """
 
+import logging
 import os
 import re
 import sys
@@ -32,6 +33,8 @@ from champollion_utils.script_builder import ScriptBuilder
 
 from champollion_pipeline.derivatives_layout import compute_run_log_path
 from champollion_pipeline.process_setup import init_pipeline_process
+
+logger = logging.getLogger(__name__)
 
 CKA_MODULE = "champollion.metrics.cka_coherence"
 
@@ -92,11 +95,11 @@ class RunCKA(ScriptBuilder):
         """Run CKA on a list of (label, file_a, file_b) tuples."""
         found = 0
         for label, file_a, file_b in pairs:
-            print(f"\n{'=' * 60}\n{label}\n{'=' * 60}")
+            logger.trace(f"Running CKA for {label}")
             out = join(self.args.output_dir, label)
             rc = self.execute_command(self._cka_cmd(file_a, file_b, out))
             if rc != 0:
-                print(f"[warn] CKA failed for {label} (exit code {rc})")
+                logger.warning(f"CKA failed for {label} (exit code {rc})")
             found += 1
         return found
 
@@ -140,10 +143,10 @@ class RunCKA(ScriptBuilder):
                 file_a = join(path_a, region, self.args.subpath_a)
                 file_b = join(path_b, region, self.args.subpath_b)
                 if not isfile(file_a):
-                    print(f"[skip] {region}: missing {file_a}")
+                    logger.warning(f"[skip] {region}: missing {file_a}")
                     continue
                 if not isfile(file_b):
-                    print(f"[skip] {region}: missing {file_b}")
+                    logger.warning(f"[skip] {region}: missing {file_b}")
                     continue
                 pairs.append((region, file_a, file_b))
         else:
@@ -162,7 +165,7 @@ class RunCKA(ScriptBuilder):
                 pairs = [(name.removesuffix("_embeddings.csv"), csvs_a[name], csvs_b[name]) for name in common]
                 missing_b = sorted(set(csvs_a) - set(csvs_b))
                 if missing_b:
-                    print(f"[info] {len(missing_b)} file(s) in path_a have no match in path_b (skipped)")
+                    logger.warning(f"{len(missing_b)} file(s) in path_a have no match in path_b (skipped)")
             else:
                 # Fallback: match by the model timestamp ID embedded in the filename
                 # (e.g. "name07-58-00--111"), which is stable across naming conventions.
@@ -185,7 +188,7 @@ class RunCKA(ScriptBuilder):
                 ]
                 missing_b = sorted(set(id_to_a) - set(id_to_b))
                 if missing_b:
-                    print(f"[info] {len(missing_b)} file(s) in path_a have no model-ID match in path_b (skipped)")
+                    logger.warning(f"{len(missing_b)} file(s) in path_a have no model-ID match in path_b (skipped)")
 
         if not pairs:
             raise RuntimeError(
@@ -196,7 +199,7 @@ class RunCKA(ScriptBuilder):
 
         found = self._run_pairs(pairs)
         total = len(subdirs_a) if (subdirs_a and not csvs_a_list) else len(csvs_a_list)
-        print(f"\nCKA completed for {found}/{total} regions. Results in {self.args.output_dir}")
+        logger.output(f"CKA completed for {found}/{total} regions. Results in {self.args.output_dir}")
         return 0
 
 
