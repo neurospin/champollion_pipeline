@@ -1,1 +1,6 @@
-"""Scan-centric streaming mode: producers, arrival barrier and resident inference consumer."""
+"""Scan-centric streaming pipeline: producer workers, arrival barrier, one resident inference consumer, then combine."""
+
+from .settings import StreamingSettings
+
+STREAMING_EXPORTS = ["StreamingSettings"]
+__all__ = STREAMING_EXPORTS
