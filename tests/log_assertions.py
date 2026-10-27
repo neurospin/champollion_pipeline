@@ -14,6 +14,9 @@ import pytest
 # Logger every champollion_pipeline module logger descends from.
 PIPELINE_LOGGER_NAME = "champollion_pipeline"
 
+# Logger every compare_sulcal module logger descends from (not under champollion_pipeline).
+COMPARE_LOGGER_NAME = "compare_sulcal"
+
 # champollion_utils.logger levels, as numbers so conftest (which imports this module) still
 # collects without champollion_utils; test_logging_convention pins them to that module.
 LOG = 22
@@ -33,6 +36,7 @@ LEVEL_BY_KIND: dict[str, int] = {
 # LOGGING task adds its modules here.
 LOG_CONVERTED_MODULES: tuple[str, ...] = (
     "champollion_pipeline.generate_masks",
+    "compare_sulcal.cli",
     "compare_sulcal.crops",
     "compare_sulcal.databases",
     "compare_sulcal.embeddings",
@@ -104,6 +108,11 @@ class PipelineLogCapture:
             lambda record: record.levelno < logging.WARNING and text in record.getMessage(),
             f"below-WARNING {text!r}",
         )
+
+
+def logged_messages(caplog: pytest.LogCaptureFixture, logger_name: str, level: int) -> list[str]:
+    """Messages of the records caplog captured on ``logger_name`` at ``level``, in emission order."""
+    return [record.getMessage() for record in caplog.records if record.name == logger_name and record.levelno == level]
 
 
 def module_logger_problem(module: ModuleType) -> str | None:

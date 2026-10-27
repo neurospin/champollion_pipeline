@@ -7,6 +7,7 @@ compare_cortical_tiles delegates to) is replaced by a fake reader serving small 
 """
 
 import json
+import logging
 import sys
 from pathlib import Path
 
@@ -16,6 +17,7 @@ import pytest
 import compare_cortical_tiles
 import compare_sulcal.brainvisa
 from compare_cortical_tiles import CompareCorticalTiles
+from tests.log_assertions import COMPARE_LOGGER_NAME, OUTPUT, logged_messages
 
 # ---------------------------------------------------------------------------
 # Helpers
@@ -147,7 +149,8 @@ class TestRun:
         assert report["wasserstein_per_mask"]["SHARED/mask/Lmask_skeleton.nii.gz"] == pytest.approx(2.0)
         assert "diffs_per_mask" not in report
 
-    def test_both_metrics_and_console_summary(self, tile_sets, tmp_path, capsys):
+    def test_both_metrics_and_console_summary(self, tile_sets, tmp_path, caplog):
+        caplog.set_level(1, logger=COMPARE_LOGGER_NAME)
         dir_a, dir_b = tile_sets
         out = tmp_path / "both.json"
         script = _make_script(
@@ -168,12 +171,13 @@ class TestRun:
         report = json.loads(out.read_text())
         assert "diff_by_bucket" in report
         assert "wasserstein_by_bucket" in report
-        printed = capsys.readouterr().out
+        printed = "\n".join(logged_messages(caplog, "compare_sulcal.cli", OUTPUT))
         assert "Diff buckets (step=1.0)" in printed
         assert "Wasserstein buckets (step=1.0)" in printed
         assert "Unchanged masks: 0/1" in printed
 
-    def test_shape_mismatch_is_skipped(self, tmp_path, monkeypatch, capsys):
+    def test_shape_mismatch_is_skipped(self, tmp_path, monkeypatch, caplog):
+        caplog.set_level(1, logger=COMPARE_LOGGER_NAME)
         dir_a = _make_tile_tree(tmp_path / "a", ["SHARED"])
         dir_b = _make_tile_tree(tmp_path / "b", ["SHARED"])
         volumes = {
@@ -184,7 +188,7 @@ class TestRun:
         out = tmp_path / "r.json"
         script = _make_script(["--set_a", str(dir_a), "--set_b", str(dir_b), "--output", str(out)])
         assert script.run() == 0
-        assert "shape mismatch" in capsys.readouterr().out
+        assert "shape mismatch" in "\n".join(logged_messages(caplog, "compare_sulcal.cli", logging.WARNING))
         assert json.loads(out.read_text())["diffs_per_mask"] == {}
 
 

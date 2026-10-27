@@ -26,6 +26,7 @@ Usage:
 import argparse
 import sys
 
+from champollion_pipeline.process_setup import init_pipeline_process
 from compare import bucket_label, find_masks, load_mask_vol, run_subcommand, voxel_diff, wasserstein_distance
 
 __all__ = ["bucket_label", "find_masks", "load_mask_vol", "main", "parse_args", "voxel_diff", "wasserstein_distance"]
@@ -53,6 +54,7 @@ def parse_args(argv):
 
 
 def main(argv=None) -> int:
+    init_pipeline_process()
     args = parse_args(argv)
     return run_subcommand(
         "masks",

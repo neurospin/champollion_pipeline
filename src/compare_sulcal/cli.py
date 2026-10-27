@@ -3,6 +3,7 @@
 import argparse
 import csv
 import json
+import logging
 import math
 import os
 import sys
@@ -14,6 +15,8 @@ from champollion_utils.script_builder import ScriptBuilder
 from joblib import Parallel, cpu_count, delayed
 
 from compare_sulcal import brainvisa, crops, databases, embeddings, masks, viewer
+
+logger = logging.getLogger(__name__)
 
 _SIDE_CHOICES = ("L", "R", "both")
 
@@ -205,7 +208,7 @@ class Compare(ScriptBuilder):
 
     def run(self) -> int:
         if brainvisa.aims is None and self.args.mode in _AIMS_MODES:
-            print(f"{brainvisa._AIMS_UNAVAILABLE_MESSAGE} ({brainvisa._AIMS_IMPORT_ERROR})", file=sys.stderr)
+            logger.error(f"{brainvisa._AIMS_UNAVAILABLE_MESSAGE} ({brainvisa._AIMS_IMPORT_ERROR})")
             return 1
         if self.args.mode == "masks":
             return self._run_masks()
@@ -217,7 +220,7 @@ class Compare(ScriptBuilder):
             return self._run_crops()
         if self.args.mode == "embeddings":
             return self._run_embeddings()
-        print(f"ERROR: unknown mode '{self.args.mode}'")
+        logger.error(f"unknown mode '{self.args.mode}'")
         return 1
 
     # ---------------------------------------------------------------------- #
@@ -230,23 +233,23 @@ class Compare(ScriptBuilder):
         set_b = Path(self.args.set_b)
         for flag, path in (("--set_a", set_a), ("--set_b", set_b)):
             if not path.is_dir():
-                print(f"ERROR: {flag} is not a directory: {path}", file=sys.stderr)
+                logger.error(f"{flag} is not a directory: {path}")
                 return 1
         if (self.args.umap_a is None) != (self.args.umap_b is None):
-            print("ERROR: --umap_a and --umap_b must be given together.", file=sys.stderr)
+            logger.error("--umap_a and --umap_b must be given together.")
             return 1
         if (self.args.covariate is None) != (self.args.covariate_column is None):
-            print("ERROR: --covariate and --covariate_column must be given together.", file=sys.stderr)
+            logger.error("--covariate and --covariate_column must be given together.")
             return 1
         if self.args.k < 1:
-            print("ERROR: --k must be a positive integer.", file=sys.stderr)
+            logger.error("--k must be a positive integer.")
             return 1
 
         covariate_map = None
         if self.args.covariate is not None:
             covariate_map = embeddings._load_covariate_csv(self.args.covariate, self.args.covariate_column)
             if isinstance(covariate_map, str):
-                print(f"ERROR: {covariate_map}", file=sys.stderr)
+                logger.error(f"{covariate_map}")
                 return 1
 
         out_dir = Path(self.args.output)
@@ -281,14 +284,16 @@ class Compare(ScriptBuilder):
             key = result["key"]
             if result["skipped"] is not None:
                 skipped_list.append(result["skipped"])
-                print(f"SKIP  {key}: {result['skipped']['reason']}")
+                logger.warning(f"SKIP  {key}: {result['skipped']['reason']}")
             umap_skipped.extend(result["umap_skipped"])
             for entry in result["umap_skipped"]:
-                print(f"UMAP SKIP  {key}: {entry['reason']}")
+                logger.warning(f"UMAP SKIP  {key}: {entry['reason']}")
             if result["summary"] is not None:
                 regions_summary[key] = result["summary"]
                 s = result["summary"]
-                print(f"  {key}: n={s['n_subjects']} cka={s['cka']:.4f} knn_overlap_mean={s['knn_overlap_mean']:.4f}")
+                logger.output(
+                    f"  {key}: n={s['n_subjects']} cka={s['cka']:.4f} knn_overlap_mean={s['knn_overlap_mean']:.4f}"
+                )
             all_rows.extend(result["rows"])
 
         with open(out_dir / "per_subject.csv", "w", newline="") as f:
@@ -310,7 +315,7 @@ class Compare(ScriptBuilder):
         }
         with open(out_dir / "summary.json", "w") as f:
             json.dump(embeddings._normalize_json_value(summary), f, indent=2, allow_nan=False)
-        print(f"Wrote {out_dir / 'per_subject.csv'} ({len(all_rows)} rows) and {out_dir / 'summary.json'}")
+        logger.output(f"Wrote {out_dir / 'per_subject.csv'} ({len(all_rows)} rows) and {out_dir / 'summary.json'}")
         return 0
 
     # ---------------------------------------------------------------------- #
@@ -322,10 +327,10 @@ class Compare(ScriptBuilder):
         set_a = Path(self.args.set_a)
         set_b = Path(self.args.set_b)
         if not set_a.is_dir():
-            print(f"ERROR: --set_a is not a directory: {set_a}", file=sys.stderr)
+            logger.error(f"--set_a is not a directory: {set_a}")
             return 1
         if not set_b.is_dir():
-            print(f"ERROR: --set_b is not a directory: {set_b}", file=sys.stderr)
+            logger.error(f"--set_b is not a directory: {set_b}")
             return 1
 
         out_dir = Path(self.args.output)
@@ -355,11 +360,11 @@ class Compare(ScriptBuilder):
             side_name = result["side"]
             if result["skipped"] is not None:
                 skipped_list.append(result["skipped"])
-                print(f"SKIP  {key}: {result['skipped']['reason']}")
+                logger.warning(f"SKIP  {key}: {result['skipped']['reason']}")
             if result["summary"] is not None:
                 regions_summary[key] = result["summary"]
                 s = result["summary"]
-                print(
+                logger.output(
                     f"  {key}: n={s['n_subjects_compared']} "
                     f"changed={s['subjects_changed']} "
                     f"pct_lost_mean={s['pct_lost_mean']:.4f} "
@@ -399,9 +404,9 @@ class Compare(ScriptBuilder):
         with open(json_path, "w") as f:
             json.dump(summary, f, indent=2, allow_nan=False)
 
-        print(f"Wrote {csv_path} and {json_path}")
+        logger.output(f"Wrote {csv_path} and {json_path}")
         if xor_dir is not None:
-            print(f"XOR files written under: {xor_dir}")
+            logger.output(f"XOR files written under: {xor_dir}")
         return 0
 
     # ---------------------------------------------------------------------- #
@@ -428,11 +433,11 @@ class Compare(ScriptBuilder):
         only_a = sorted(set(masks_a) - set(masks_b))
         only_b = sorted(set(masks_b) - set(masks_a))
 
-        print(f"Masks in set_a:      {len(masks_a)}")
-        print(f"Masks in set_b:      {len(masks_b)}")
-        print(f"Common:              {len(common)}")
-        print(f"Only in set_a:       {len(only_a)}")
-        print(f"Only in set_b:       {len(only_b)}")
+        logger.output(f"Masks in set_a:      {len(masks_a)}")
+        logger.output(f"Masks in set_b:      {len(masks_b)}")
+        logger.output(f"Common:              {len(common)}")
+        logger.output(f"Only in set_a:       {len(only_a)}")
+        logger.output(f"Only in set_b:       {len(only_b)}")
 
         use_wass = self.args.metric in ("wasserstein", "both")
         use_diff = self.args.metric in ("diff", "both")
@@ -443,8 +448,8 @@ class Compare(ScriptBuilder):
         )
 
         total_compared = len(common) - len(skipped_shape_mismatch)
-        print(f"Compared:            {total_compared}")
-        print(f"Skipped (shape mismatch): {len(skipped_shape_mismatch)}")
+        logger.output(f"Compared:            {total_compared}")
+        logger.output(f"Skipped (shape mismatch): {len(skipped_shape_mismatch)}")
 
         report = {
             "mode": self.args.mode,
@@ -480,19 +485,19 @@ class Compare(ScriptBuilder):
         out_path.parent.mkdir(parents=True, exist_ok=True)
         with open(out_path, "w") as f:
             json.dump(report, f, indent=2, allow_nan=False)
-        print(f"\nReport written to: {out_path}")
+        logger.output(f"Report written to: {out_path}")
         if self.args.xor_dir:
-            print(f"XOR images written to: {self.args.xor_dir}")
+            logger.output(f"XOR images written to: {self.args.xor_dir}")
 
         if use_wass and wass_buckets:
-            print(f"\nWasserstein buckets (step={step}):")
-            _print_bucket_counts(wass_buckets)
+            logger.output(f"Wasserstein buckets (step={step}):")
+            _log_bucket_counts(wass_buckets)
 
         if use_diff and diff_buckets:
-            print(f"\nDiff buckets (step={step}):")
-            _print_bucket_counts(diff_buckets)
+            logger.output(f"Diff buckets (step={step}):")
+            _log_bucket_counts(diff_buckets)
             unchanged = sum(1 for d in diffs.values() if d["changed"] == 0)
-            print(f"Unchanged masks: {unchanged}/{len(diffs)}")
+            logger.output(f"Unchanged masks: {unchanged}/{len(diffs)}")
 
         if not self.args.visualisation:
             return 0
@@ -513,7 +518,7 @@ class Compare(ScriptBuilder):
         for side in sides:
             pattern = "%(subject)s/" + path_to_graph + "/%(side)s%(subject)s*.arg"
             subjects = brainvisa.get_all_subjects_as_dictionary([subjects_dir], [pattern], side)
-            print(f"    [{side}] {len(subjects)} subjects found, loading with {njobs} worker(s)…")
+            logger.trace(f"    [{side}] {len(subjects)} subjects found, loading with {njobs} worker(s)…")
 
             results = Parallel(n_jobs=njobs, prefer="processes")(
                 delayed(databases._get_subject_voxel_counts)(sub, brainvisa_dir) for sub in subjects
@@ -521,11 +526,11 @@ class Compare(ScriptBuilder):
             n_ok = 0
             for sub_name, counts in results:
                 if counts is None:
-                    print(f"    [{side}] WARNING: no graph for {sub_name}")
+                    logger.warning(f"    [{side}] no graph for {sub_name}")
                     continue
                 all_data.setdefault(sub_name, {}).update(counts)
                 n_ok += 1
-            print(f"    [{side}] Done ({n_ok}/{len(subjects)}).")
+            logger.trace(f"    [{side}] Done ({n_ok}/{len(subjects)}).")
         return all_data
 
     def _run_databases(self) -> int:  # noqa: PLR0915 - linear subcommand body; split deferred (user decision 2026-10-23)
@@ -539,20 +544,20 @@ class Compare(ScriptBuilder):
         njobs = self.args.njobs or max(1, min(22, cpu_count() - 2))
         la, lb = self.args.label_a, self.args.label_b
 
-        print(f"\nLoading campaign A ({la}): {self.args.path_to_graph_a}")
+        logger.trace(f"Loading campaign A ({la}): {self.args.path_to_graph_a}")
         data_a = self._load_database(
             self.args.path_to_graph_a, sides, self.args.labeled_subjects_dir, njobs, brainvisa_dir
         )
 
-        print(f"\nLoading campaign B ({lb}): {self.args.path_to_graph_b}")
+        logger.trace(f"Loading campaign B ({lb}): {self.args.path_to_graph_b}")
         data_b = self._load_database(
             self.args.path_to_graph_b, sides, self.args.labeled_subjects_dir, njobs, brainvisa_dir
         )
 
         subs_a, subs_b = set(data_a), set(data_b)
-        print(f"\nSubjects in {la} only:  {len(subs_a - subs_b)}")
-        print(f"Subjects in {lb} only:  {len(subs_b - subs_a)}")
-        print(f"Subjects in both:        {len(subs_a & subs_b)}")
+        logger.output(f"Subjects in {la} only:  {len(subs_a - subs_b)}")
+        logger.output(f"Subjects in {lb} only:  {len(subs_b - subs_a)}")
+        logger.output(f"Subjects in both:        {len(subs_a & subs_b)}")
 
         all_sulci = sorted({s for d in data_a.values() for s in d} | {s for d in data_b.values() for s in d})
 
@@ -581,10 +586,10 @@ class Compare(ScriptBuilder):
         # Optional mask stats
         mask_a_stats, mask_b_stats = {}, {}
         if self.args.masks_a and os.path.isdir(self.args.masks_a):
-            print(f"\nLoading mask stats from {la}: {self.args.masks_a}")
+            logger.trace(f"Loading mask stats from {la}: {self.args.masks_a}")
             mask_a_stats = databases._mask_stats(abspath(self.args.masks_a), brainvisa_dir)
         if self.args.masks_b and os.path.isdir(self.args.masks_b):
-            print(f"Loading mask stats from {lb}: {self.args.masks_b}")
+            logger.trace(f"Loading mask stats from {lb}: {self.args.masks_b}")
             mask_b_stats = databases._mask_stats(abspath(self.args.masks_b), brainvisa_dir)
 
         if mask_a_stats or mask_b_stats:
@@ -607,7 +612,7 @@ class Compare(ScriptBuilder):
                 row.update(mask_lookup.get(row["sulcus"], {}))
 
         if not rows:
-            print(f"\nNo sulcus rows found for {la} vs {lb}; no CSV written.")
+            logger.output(f"No sulcus rows found for {la} vs {lb}; no CSV written.")
             return 0
 
         output_path = abspath(self.args.output)
@@ -617,15 +622,15 @@ class Compare(ScriptBuilder):
             writer.writeheader()
             writer.writerows(rows)
 
-        print(f"\nSulci with biggest voxel-density difference ({lb}/{la}):\n")
-        print(
+        logger.output(f"Sulci with biggest voxel-density difference ({lb}/{la}):")
+        logger.output(
             f"  {'Sulcus':<45}  {f'N({la})':>7}  {f'N({lb})':>7}  "
             f"{f'vox/sub({la})':>12}  {f'vox/sub({lb})':>12}  {'ratio':>6}"
         )
-        print("  " + "-" * 100)
+        logger.output("  " + "-" * 100)
         sortable = [r for r in rows if r.get("vox_ratio_B_over_A") is not None]
         for row in sorted(sortable, key=lambda r: abs(r["vox_ratio_B_over_A"] - 1.0), reverse=True)[:30]:
-            print(
+            logger.output(
                 f"  {row['sulcus']:<45}  "
                 f"{row[f'N_{la}']:>7}  {row[f'N_{lb}']:>7}  "
                 f"{row[f'vox_per_subject_{la}']:>12.1f}  "
@@ -633,7 +638,7 @@ class Compare(ScriptBuilder):
                 f"{row['vox_ratio_B_over_A']:>6.3f}"
             )
 
-        print(f"\nCSV written to: {output_path}")
+        logger.output(f"CSV written to: {output_path}")
         return 0
 
 
@@ -656,10 +661,10 @@ def main():
     return script.main()
 
 
-def _print_bucket_counts(buckets: "dict[str, list]") -> None:
-    """Print one `  <label>  <n> mask(s)` line per bucket, in masks.sort_buckets order."""
+def _log_bucket_counts(buckets: "dict[str, list]") -> None:
+    """Log one `  <label>  <n> mask(s)` line per bucket, in masks.sort_buckets order."""
     for lbl, names in masks.sort_buckets(buckets).items():
-        print(f"  {lbl:15s}  {len(names):3d} mask(s)")
+        logger.output(f"  {lbl:15s}  {len(names):3d} mask(s)")
 
 
 def _score_common_masks(  # noqa: PLR0913 - scoring options passed explicitly; split deferred (user decision 2026-10-23)
@@ -683,7 +688,7 @@ def _score_common_masks(  # noqa: PLR0913 - scoring options passed explicitly; s
         arr_b = masks.load_mask_vol(masks_b[name])
 
         if arr_a.shape != arr_b.shape:
-            print(f"WARNING: shape mismatch for {name}: {arr_a.shape} vs {arr_b.shape}, skipping.")
+            logger.warning(f"shape mismatch for {name}: {arr_a.shape} vs {arr_b.shape}, skipping.")
             skipped_shape_mismatch[name] = {
                 "shape_a": [int(n) for n in arr_a.shape],
                 "shape_b": [int(n) for n in arr_b.shape],

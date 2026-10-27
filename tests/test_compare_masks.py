@@ -139,6 +139,7 @@ class TestMain:
         assert "wasserstein_per_mask" not in report
 
     def test_both_metrics_and_console_summary(self, mask_sets, tmp_path, capsys):
+        """REQ-LOGGING-BDRABCZUK-8383D55DEF0B: compare_masks.py keeps the masks report on stdout."""
         dir_a, dir_b = mask_sets
         out = tmp_path / "both.json"
         rc = compare_masks.main(
