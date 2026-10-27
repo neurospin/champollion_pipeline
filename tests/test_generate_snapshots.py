@@ -525,7 +525,8 @@ class TestGenerateSnapshotsSmoke:
 
 # --- Stage 6 input QC (TASK-NTUI-BDRABCZUK-8C1AE0C0AD63) ---
 
-QC_FILE = "snapshots_input_qc.tsv"
+QC_FILE = "input_qc.tsv"
+LEGACY_QC_FILE = "snapshots_input_qc.tsv"
 _RENDER_SULCAL = "champollion_pipeline.generate_snapshots.generate_sulcal_graph_snapshot"
 _RENDER_TILES = "champollion_pipeline.generate_snapshots.generate_tiles_snapshot"
 _LOAD_UMAP_MODEL = "champollion_pipeline.snapshot_types.umap.joblib.load"
@@ -580,7 +581,7 @@ def _run_snapshots(args):
 
 
 def _qc_rows(output_dir):
-    """Read snapshots_input_qc.tsv of output_dir, keyed by participant_id."""
+    """Read input_qc.tsv of output_dir, keyed by participant_id."""
     return {row["participant_id"]: row for row in read_qc_tsv(os.path.join(output_dir, QC_FILE))}
 
 
@@ -593,7 +594,7 @@ class TestSnapshotsInputQC:
     """Stage 6 input QC: per-subject QC file, exclusions, and up-front missing-input warnings."""
 
     def test_qc_file_rows_written_before_rendering(self, temp_dir):
-        """REQ C7139FD8D38A: one row per sulcal subject and embeddings ID, written before rendering."""
+        """REQ DFF65AA45223: one row per sulcal subject and embeddings ID, written before rendering."""
         morph = os.path.join(temp_dir, "morphologist")
         _morphologist_subject(morph, "sub-01")
         _morphologist_subject(morph, "sub-02")
@@ -625,6 +626,18 @@ class TestSnapshotsInputQC:
         assert set(_qc_rows(output_dir)) == {"sub-01", "sub-02", "sub-03"}
         assert qc_present_at_render and all(qc_present_at_render)
 
+    def test_qc_file_named_input_qc_in_output_dir(self, temp_dir):
+        """REQ DFF65AA45223: the QC file is --output_dir/input_qc.tsv, with no stage-prefixed copy."""
+        morph = os.path.join(temp_dir, "morphologist")
+        _morphologist_subject(morph, "sub-01")
+        output_dir = os.path.join(temp_dir, "out")
+
+        with patch(_RENDER_SULCAL, side_effect=lambda graph_path, out, *a, **k: out):
+            _run_snapshots(["--output_dir", output_dir, "--morphologist_dir", morph, "--sulcal-only"])
+
+        assert os.path.isfile(os.path.join(output_dir, QC_FILE))
+        assert not os.path.exists(os.path.join(output_dir, LEGACY_QC_FILE))
+
     def test_missing_right_graph_excludes_subject(self, temp_dir):
         """REQ 02280180FCF2: a subject with no right sulcal graph gets qc 0, reason missing_sulcal_graph_right."""
         morph = os.path.join(temp_dir, "morphologist")
@@ -640,7 +653,7 @@ class TestSnapshotsInputQC:
         assert (rows["sub-02"]["qc"], rows["sub-02"]["reason"]) == (1, "")
 
     def test_missing_white_mesh_column_keeps_subject(self, temp_dir):
-        """REQ C191487CA1E0: a missing right white mesh is listed in missing_white_mesh, qc stays 1."""
+        """REQ E9178BA7413E: a missing right white mesh is listed in missing_white_mesh, qc stays 1."""
         morph = os.path.join(temp_dir, "morphologist")
         _morphologist_subject(morph, "sub-01", meshes=("L",))
         output_dir = os.path.join(temp_dir, "out")
@@ -703,7 +716,7 @@ class TestSnapshotsInputQC:
         assert (rows["sub-02"]["qc"], rows["sub-02"]["reason"]) == (0, "nonfinite_embedding_S.Or._left")
 
     def test_several_reasons_joined_by_semicolons(self, temp_dir):
-        """REQ 6FC91D82C46C: a subject failing two checks gets both reasons joined by semicolons."""
+        """REQ 04C1D2865B16: a subject failing two checks gets both reasons joined by semicolons."""
         morph = os.path.join(temp_dir, "morphologist")
         (Path(morph) / "sub-01" / "t1mri").mkdir(parents=True)
         output_dir = os.path.join(temp_dir, "out")
@@ -732,7 +745,7 @@ class TestSnapshotsInputQC:
         assert os.path.exists(os.path.join(output_dir, QC_FILE))
 
     def test_sulcal_step_skips_excluded_subject(self, temp_dir):
-        """REQ BE44D168C384: the sulcal step renders no graph of a subject with qc 0."""
+        """REQ BB1489CABD7D: the sulcal step renders no graph of a subject with qc 0."""
         morph = os.path.join(temp_dir, "morphologist")
         _morphologist_subject(morph, "sub-01", graphs=("L",), meshes=("L",))
         output_dir = os.path.join(temp_dir, "out")
@@ -746,7 +759,7 @@ class TestSnapshotsInputQC:
         render.assert_not_called()
 
     def test_umap_projects_only_kept_rows(self, temp_dir):
-        """REQ 61D89615C8AF: the UMAP model receives only the embeddings rows of qc 1 subjects."""
+        """REQ 0C5F92F50BF2: the UMAP model receives only the embeddings rows of qc 1 subjects."""
         embeddings = os.path.join(temp_dir, "embeddings")
         _embeddings_csv(embeddings, "S.Or.", "left", [("sub-01", 0.1, 0.2), ("sub-02", "", 0.4)])
         reference = os.path.join(temp_dir, "reference")
@@ -767,6 +780,8 @@ class TestSnapshotsInputQC:
                 ]
             )
 
+        rows = _qc_rows(output_dir)
+        assert (rows["sub-01"]["qc"], rows["sub-02"]["qc"]) == (1, 0)
         assert len(model.inputs) == 1
         np.testing.assert_allclose(model.inputs[0], np.array([[0.1, 0.2]]), rtol=1e-6)
 

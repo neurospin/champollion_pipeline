@@ -2,7 +2,7 @@
 
 Sulcal subjects are checked for one sulcal graph per hemisphere (and a white
 mesh, reported but not excluding); embeddings IDs for a finite row in every
-selected CSV. Results go to ``snapshots_input_qc.tsv`` through the shared QC
+selected CSV. Results go to ``input_qc.tsv`` in the snapshots folder through the shared QC
 report writer. Region-level gaps (UMAP reference files, crop masks, region
 graphs) are reported as single warning lines and never give a row.
 """
@@ -23,7 +23,7 @@ from champollion_pipeline.snapshot_types.tiles import compute_region_graph_path,
 from champollion_pipeline.snapshot_types.umap import compute_umap_reference_paths
 from champollion_pipeline.utils.qc_report import write_qc_tsv
 
-QC_FILENAME = "snapshots_input_qc.tsv"
+QC_FILENAME = "input_qc.tsv"
 MISSING_WHITE_MESH_COLUMN = "missing_white_mesh"
 REASON_SEPARATOR = ";"
 EMBEDDING_ID_COLUMN = "ID"
