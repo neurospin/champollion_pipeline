@@ -47,6 +47,7 @@ LOG_CONVERTED_MODULES: tuple[str, ...] = (
     "champollion_pipeline.snapshot_types.sulcal",
     "champollion_pipeline.snapshot_types.tiles",
     "champollion_pipeline.snapshot_types.umap",
+    "champollion_pipeline.train_champollion",
 )
 
 
