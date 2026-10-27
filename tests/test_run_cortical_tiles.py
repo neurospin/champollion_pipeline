@@ -92,6 +92,7 @@ class _RemoveVentricleRecorder:
 
     def __init__(self):
         self.sessions_by_subject = {}
+        self.path_to_graph_by_subject = {}
 
     def __call__(self, *args, **kwargs):
         bound = _REMOVE_VENTRICLE_SIGNATURE.bind(*args, **kwargs)
@@ -107,12 +108,16 @@ class _RemoveVentricleRecorder:
             if match:
                 subject = match[1][1:] if match[1].startswith("_") else match[1]
                 self.sessions_by_subject.setdefault(subject, []).append(params["labelling_session"])
+                self.path_to_graph_by_subject.setdefault(subject, []).append(params["path_to_graph"])
 
 
-def _run_whole_brain_step(temp_dir, subjects, extra_args=None):
+def _run_whole_brain_step(temp_dir, subjects, extra_args=None, *, path_to_graph=_GRAPH_SUBPATH, make_subject=None):
     """Run run() with the crop subprocess and fusion mocked, ``subjects`` laid out
     on disk (``{subject: [sessions holding a labelled graph]}``), and
     ``remove_ventricle`` replaced by a ``_RemoveVentricleRecorder``.
+
+    ``make_subject(input_dir, output_dir, subject, value)`` lays out one subject
+    (default ``_make_subject``); ``path_to_graph`` is the --path_to_graph value.
 
     Returns the recorder, the Python warnings emitted during run() and run()'s return value.
     """
@@ -120,8 +125,8 @@ def _run_whole_brain_step(temp_dir, subjects, extra_args=None):
     output_dir = Path(temp_dir) / "output"
     input_dir.mkdir()
     output_dir.mkdir()
-    for subject, sessions in subjects.items():
-        _make_subject(input_dir, output_dir, subject, sessions)
+    for subject, value in subjects.items():
+        (make_subject or _make_subject)(input_dir, output_dir, subject, value)
 
     script = RunCorticalTiles()
     script.parse_args(
@@ -129,7 +134,7 @@ def _run_whole_brain_step(temp_dir, subjects, extra_args=None):
             str(input_dir),
             str(output_dir),
             "--path_to_graph",
-            _GRAPH_SUBPATH,
+            path_to_graph,
             "--path_sk_with_hull",
             "skeleton/path",
         ]
@@ -1724,6 +1729,96 @@ class TestSubjectsWithoutLabelledGraph:
         _, _, result = _run_whole_brain_step(temp_dir, {"subj08": [], "subj09": []})
 
         assert result == 0
+
+
+_WILDCARD_PATH_TO_GRAPH = "t1mri/*/default_analysis/folds/3.1"
+_WILDCARD_SESSION = "deepcnn_session_auto"
+
+
+def _resolved_graph_path(acquisition):
+    """``_WILDCARD_PATH_TO_GRAPH`` with its ``*`` replaced by ``acquisition``."""
+    return _WILDCARD_PATH_TO_GRAPH.replace("*", acquisition)
+
+
+def _make_wildcard_subject(input_dir, output_dir, subject, acquisitions):
+    """Lay out one subject whose labelled graphs sit under one folder per entry of
+    ``acquisitions``, each matching ``_WILDCARD_PATH_TO_GRAPH``:
+    ``<input>/<subject>/t1mri/<acquisition>/default_analysis/folds/3.1/<session>/<side><subject>_<session>.arg``.
+    The subject folder exists even when ``acquisitions`` is empty. The L, R and
+    fused F resampled skeletons are written under the skeleton directory.
+    """
+    (Path(input_dir) / subject).mkdir(parents=True)
+    for acquisition in acquisitions:
+        session_dir = Path(input_dir) / subject / _resolved_graph_path(acquisition) / _WILDCARD_SESSION
+        session_dir.mkdir(parents=True)
+        for side in ("L", "R"):
+            (session_dir / f"{side}{subject}_{_WILDCARD_SESSION}.arg").touch()
+    for side in ("L", "R", "F"):
+        side_dir = _skeleton_dir(output_dir) / side
+        side_dir.mkdir(parents=True, exist_ok=True)
+        (side_dir / f"{side}resampled_skeleton_{subject}.nii.gz").touch()
+
+
+def _run_wildcard_step(temp_dir, subjects):
+    """``_run_whole_brain_step`` without --bids, --path_to_graph holding a ``*``,
+    ``subjects`` given as ``{subject: [folder names the * matches]}``."""
+    return _run_whole_brain_step(
+        temp_dir, subjects, path_to_graph=_WILDCARD_PATH_TO_GRAPH, make_subject=_make_wildcard_subject
+    )
+
+
+class TestPathToGraphWildcardResolution:
+    """Non-BIDS --path_to_graph holding ``*`` (as the README advises), resolved per subject.
+
+    cortical_tiles' remove_ventricle joins path_to_graph literally without --bids,
+    so run() passes it, per subject, the one folder under ``<input>/<subject>``
+    that path_to_graph matches with ``*`` as a wildcard; a subject matching no
+    folder, or two or more, is excluded from whole-brain ventricle removal
+    (coupling report risk 2).
+    """
+
+    def test_wildcard_resolved_to_the_matched_folder(self, temp_dir):
+        """REQ-WHOLEBRAIN-BDRABCZUK-8028CE6C4890."""
+        recorder, _, _ = _run_wildcard_step(temp_dir, {"subj01": ["default_acquisition"]})
+
+        assert recorder.path_to_graph_by_subject == {"subj01": [_resolved_graph_path("default_acquisition")]}
+
+    def test_wildcard_resolved_per_subject(self, temp_dir):
+        """REQ-WHOLEBRAIN-BDRABCZUK-8028CE6C4890: subjects matching different folders
+        each get their own folder."""
+        recorder, _, _ = _run_wildcard_step(temp_dir, {"subj01": ["acq_a"], "subj02": ["acq_b"]})
+
+        assert recorder.path_to_graph_by_subject == {
+            "subj01": [_resolved_graph_path("acq_a")],
+            "subj02": [_resolved_graph_path("acq_b")],
+        }
+        assert recorder.sessions_by_subject == {"subj01": [_WILDCARD_SESSION], "subj02": [_WILDCARD_SESSION]}
+
+    def test_subject_with_no_matching_folder_is_excluded(self, temp_dir):
+        """REQ-WHOLEBRAIN-BDRABCZUK-D1E16A7827A2."""
+        recorder, _, _ = _run_wildcard_step(temp_dir, {"subj01": ["default_acquisition"], "subj05": []})
+
+        assert recorder.path_to_graph_by_subject == {"subj01": [_resolved_graph_path("default_acquisition")]}
+
+    def test_subject_with_several_matching_folders_is_excluded(self, temp_dir):
+        """REQ-WHOLEBRAIN-BDRABCZUK-3AE09F03A6E7: an ambiguous match is not guessed."""
+        recorder, _, _ = _run_wildcard_step(temp_dir, {"subj01": ["default_acquisition"], "subj06": ["acq_a", "acq_b"]})
+
+        assert recorder.path_to_graph_by_subject == {"subj01": [_resolved_graph_path("default_acquisition")]}
+
+    def test_unresolved_subjects_are_listed_in_the_one_exclusion_warning(self, temp_dir, capsys, caplog):
+        """REQ-WHOLEBRAIN-BDRABCZUK-D1E16A7827A2 and -3AE09F03A6E7 exclusions go through
+        the existing one-line warning (REQ-LABELSESSION-BDRABCZUK-56365C1DEE1F)."""
+        caplog.set_level(logging.WARNING)
+        _, python_warnings, _ = _run_wildcard_step(
+            temp_dir, {"subj01": ["default_acquisition"], "subj05": [], "subj06": ["acq_a", "acq_b"]}
+        )
+
+        matching = _warnings_mentioning("sulcal recognition", capsys, caplog, python_warnings)
+        assert len(matching) == 1
+        assert "subj05" in matching[0]
+        assert "subj06" in matching[0]
+        assert "subj01" not in matching[0]
 
 
 @pytest.mark.smoke
