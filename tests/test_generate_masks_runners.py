@@ -35,6 +35,14 @@ from champollion_pipeline.generate_masks import (
 )
 
 
+def _logged_text(capture):
+    """Messages of the champollion_pipeline records captured by pipeline_caplog, one per line.
+
+    generate_masks reports through its module logger, not print() (TASK-LOGGING-BDRABCZUK-FC3904F71983).
+    """
+    return "\n".join(record.getMessage() for record in capture.records)
+
+
 def complete_sulci_name(sulcus, side):
     """Stand-in for deep_folding's sulcus-name completion."""
     return f"{sulcus}_{'left' if side == 'L' else 'right'}"
@@ -207,13 +215,13 @@ class TestSerialRunner:
         assert results == {"S.C.": RETURN_DICTIONARY["ok"]}
         mock_compute.assert_called_once()
 
-    def test_verbose_prints_compute_mask_parameters(self, tmp_path, capsys):
+    def test_verbose_prints_compute_mask_parameters(self, tmp_path, pipeline_caplog):
         config = make_config(tmp_path)
         compute_mask_mod = types.ModuleType("compute_mask")
         compute_mask_mod.compute_mask = MagicMock()
         with _patched_masks_names(deep_folding_modules(compute_mask=compute_mask_mod)):
             list(SerialRunner(verbose=True)(config))
-        out = capsys.readouterr().out
+        out = _logged_text(pipeline_caplog)
         assert "calling compute_mask" in out
         assert "nb_subjects=-1" in out
 
@@ -312,14 +320,14 @@ class TestBufferedRunner:
         assert side == "L"
         assert results == {"S.C.": RETURN_DICTIONARY["ok"], "S.Or.": RETURN_DICTIONARY["ok"]}
 
-    def test_all_masks_present_message(self, tmp_path, monkeypatch, subjects_modules, capsys):
+    def test_all_masks_present_message(self, tmp_path, monkeypatch, subjects_modules, pipeline_caplog):
         self._patch_workers(monkeypatch)
         config = make_config(tmp_path)
         with _patched_masks_names(subjects_modules):
             list(BufferedRunner(1)(config))
-        assert "All 1 mask files present." in capsys.readouterr().out
+        assert "All 1 mask files present." in _logged_text(pipeline_caplog)
 
-    def test_missing_mask_files_are_reported(self, tmp_path, monkeypatch, subjects_modules, capsys):
+    def test_missing_mask_files_are_reported(self, tmp_path, monkeypatch, subjects_modules, pipeline_caplog):
         def compute(sf, *args, **kwargs):
             return RETURN_DICTIONARY["ok"]
 
@@ -327,11 +335,13 @@ class TestBufferedRunner:
         config = make_config(tmp_path)
         with _patched_masks_names(subjects_modules):
             list(BufferedRunner(1)(config))
-        out = capsys.readouterr().out
+        out = _logged_text(pipeline_caplog)
         assert "1 mask file(s) missing" in out
         assert "MISSING: S.C._left.nii.gz" in out
 
-    def test_subject_without_graph_is_warned_and_dropped(self, tmp_path, monkeypatch, subjects_modules, capsys):
+    def test_subject_without_graph_is_warned_and_dropped(
+        self, tmp_path, monkeypatch, subjects_modules, pipeline_caplog
+    ):
         def load(sub, sulci_full_set, voxel_size_tuple, brainvisa_dir):
             if sub["subject"] == "sub02":
                 return sub["subject"], None
@@ -341,14 +351,16 @@ class TestBufferedRunner:
         config = make_config(tmp_path)
         with _patched_masks_names(subjects_modules):
             list(BufferedRunner(1)(config))
-        assert "no graph for sub02, skipped" in capsys.readouterr().out
+        assert "no graph for sub02, skipped" in _logged_text(pipeline_caplog)
 
-    def test_verbose_reports_per_subject_and_per_sulcus_details(self, tmp_path, monkeypatch, subjects_modules, capsys):
+    def test_verbose_reports_per_subject_and_per_sulcus_details(
+        self, tmp_path, monkeypatch, subjects_modules, pipeline_caplog
+    ):
         self._patch_workers(monkeypatch)
         config = make_config(tmp_path)
         with _patched_masks_names(subjects_modules):
             list(BufferedRunner(1, verbose=True)(config))
-        out = capsys.readouterr().out
+        out = _logged_text(pipeline_caplog)
         assert "loaded sub01: 1 sulci, 1 voxels" in out
         assert "S.C._left: 2 subjects contributing, 2 voxels total" in out
 
@@ -469,7 +481,7 @@ class TestGenerateMasksRunAccounting:
         result = self._run(script, [("L", {"S.C.": "failed: boom"})])
         assert result == 1
 
-    def test_summary_counts_each_result_kind(self, tmp_path, capsys):
+    def test_summary_counts_each_result_kind(self, tmp_path, pipeline_caplog):
         script = self._script(tmp_path, ["--sides", "L"])
         yielded = [
             (
@@ -483,28 +495,28 @@ class TestGenerateMasksRunAccounting:
             )
         ]
         self._run(script, yielded, sulci={"a", "b", "c", "d"})
-        out = capsys.readouterr().out
+        out = _logged_text(pipeline_caplog)
         assert "Success:  1" in out
         assert "Skipped:  1" in out
         assert "Invalid:  1" in out
         assert "Failed:   1" in out
         assert "Total:    4" in out
 
-    def test_per_sulcus_lines_are_printed(self, tmp_path, capsys):
+    def test_per_sulcus_lines_are_printed(self, tmp_path, pipeline_caplog):
         script = self._script(tmp_path)
         self._run(script, [("L", {"S.C.": RETURN_DICTIONARY["invalid_foldlabel"]})])
-        assert "invalid foldlabel" in capsys.readouterr().out
+        assert "invalid foldlabel" in _logged_text(pipeline_caplog)
 
-    def test_masks_version_is_inserted_into_output_path(self, tmp_path, capsys):
+    def test_masks_version_is_inserted_into_output_path(self, tmp_path, pipeline_caplog):
         script = self._script(tmp_path, ["--masks", "canonical_25"])
         self._run(script, [("L", {})])
-        out = capsys.readouterr().out
+        out = _logged_text(pipeline_caplog)
         assert str(tmp_path / "out" / "canonical_25" / "2mm") in out
 
-    def test_without_masks_version_output_path_is_output_dir(self, tmp_path, capsys):
+    def test_without_masks_version_output_path_is_output_dir(self, tmp_path, pipeline_caplog):
         script = self._script(tmp_path)
         self._run(script, [("L", {})])
-        out = capsys.readouterr().out
+        out = _logged_text(pipeline_caplog)
         assert str(tmp_path / "out" / "2mm") in out
 
     def test_default_regions_are_used_when_none_given(self, tmp_path):

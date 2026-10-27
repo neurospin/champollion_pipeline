@@ -6,12 +6,14 @@ Script to generate sulcal mask files from manually labelled graph data.
 import datetime
 import glob
 import json
+import logging
 import os
 import sys
 from abc import ABC, abstractmethod
 from dataclasses import dataclass
 from os.path import abspath, dirname, exists, join
 
+import champollion_utils.logger  # noqa: F401 - installs Logger.trace/output/fail
 import numpy as np
 from champollion_utils.script_builder import ScriptBuilder
 from cortical_tiles.brainvisa.compute_mask import compute_mask, initialize_mask, write_mask
@@ -26,6 +28,8 @@ from soma import aims
 
 from champollion_pipeline.derivatives_layout import compute_run_log_path
 from champollion_pipeline.process_setup import detach_frozen_root_handlers
+
+logger = logging.getLogger(__name__)
 
 # Default regions — same 28 as generate_sulcal_regions.py
 _REGIONS_DEFAULT = [
@@ -272,8 +276,8 @@ class SerialRunner(MaskRunner):
                     results[sulcus] = RETURN_DICTIONARY["skipped"]
                     continue
                 if self.verbose:
-                    print(
-                        f"    [{side}] {sulcus_full}: calling compute_mask "
+                    logger.trace(
+                        f"[{side}] {sulcus_full}: calling compute_mask "
                         f"(src_dir={config.labeled_subjects_dir}, "
                         f"path_to_graph={config.path_to_graph_supervised}, "
                         f"nb_subjects={config.nb_subjects}, "
@@ -296,7 +300,7 @@ class SerialRunner(MaskRunner):
                     if "too many simple surfaces" in str(cause):
                         log_path = join(config.mask_dir, "invalid_subjects.log")
                         _log_invalid_subject(log_path, f"[{side}] sulcus={sulcus_full}  graph={e}")
-                        print(f"  ⚠ [{side}] {sulcus_full}: invalid foldlabel — logged to {log_path}")
+                        logger.warning(f"⚠ [{side}] {sulcus_full}: invalid foldlabel — logged to {log_path}")
                         results[sulcus] = RETURN_DICTIONARY["invalid_foldlabel"]
                     else:
                         results[sulcus] = f"failed: {e}"
@@ -341,8 +345,8 @@ class BufferedRunner(MaskRunner):
             sulci_full_set = set(sulci_to_run)
 
             # ── Phase 1: parallel load + extract per subject ───────────────
-            print(
-                f"  [{side}] Loading and extracting {len(subjects)} subjects "
+            logger.trace(
+                f"[{side}] Loading and extracting {len(subjects)} subjects "
                 f"({len(sulci_to_run)} sulci) with {self.njobs} worker(s)…"
             )
             raw_results = Parallel(n_jobs=self.njobs, prefer="processes")(
@@ -357,23 +361,23 @@ class BufferedRunner(MaskRunner):
             per_subject_voxels: dict = {}
             for sub_name, sub_data in raw_results:
                 if sub_data is None:
-                    print(f"  [{side}] WARNING: no graph for {sub_name}, skipped")
+                    logger.warning(f"[{side}] no graph for {sub_name}, skipped")
                 else:
                     per_subject_voxels[sub_name] = sub_data
                     if self.verbose:
                         n_sulci_loaded = len(sub_data)
                         total_v = sum(len(v) for v in sub_data.values())
-                        print(f"    loaded {sub_name}: {n_sulci_loaded} sulci, {total_v} voxels")
-            print(f"  [{side}] Load+extract done ({len(per_subject_voxels)} subjects).")
+                        logger.trace(f"loaded {sub_name}: {n_sulci_loaded} sulci, {total_v} voxels")
+            logger.trace(f"[{side}] Load+extract done ({len(per_subject_voxels)} subjects).")
 
             # ── Phase 2: parallel sulcus compute ──────────────────────────
-            print(f"  [{side}] Computing {len(sulci_to_run)} sulci with {self.njobs} worker(s)…")
+            logger.trace(f"[{side}] Computing {len(sulci_to_run)} sulci with {self.njobs} worker(s)…")
             sorted_sulci_full = sorted(sulci_to_run)
             if self.verbose:
                 for sf in sorted_sulci_full:
                     n_subs = sum(1 for d in per_subject_voxels.values() if sf in d)
                     total_v = sum(len(d[sf]) for d in per_subject_voxels.values() if sf in d)
-                    print(f"    {sf}: {n_subs} subjects contributing, {total_v} voxels total")
+                    logger.trace(f"{sf}: {n_subs} subjects contributing, {total_v} voxels total")
             try:
                 job_outputs = Parallel(n_jobs=self.njobs, prefer="threads")(
                     delayed(_compute_one_sulcus)(
@@ -398,11 +402,11 @@ class BufferedRunner(MaskRunner):
             # Completeness check
             missing = [sf for sf in sulci_to_run if not exists(join(config.mask_dir, side, sf + ".nii.gz"))]
             if missing:
-                print(f"  [{side}] WARNING: {len(missing)} mask file(s) missing after run:")
+                logger.warning(f"[{side}] {len(missing)} mask file(s) missing after run:")
                 for sf in missing:
-                    print(f"    MISSING: {sf}.nii.gz")
+                    logger.warning(f"[{side}] MISSING: {sf}.nii.gz")
             else:
-                print(f"  [{side}] All {len(sulci_to_run)} mask files present.")
+                logger.trace(f"[{side}] All {len(sulci_to_run)} mask files present.")
 
             yield side, results
 
@@ -478,10 +482,10 @@ class GenerateMasks(ScriptBuilder):
 
     def run(self):
         """Execute mask generation for all (sulcus × side) combinations."""
-        print(f"generate_masks.py/labeled_subjects_dir: {self.args.labeled_subjects_dir}")
-        print(f"generate_masks.py/path_to_graph_supervised: {self.args.path_to_graph_supervised}")
-        print(f"generate_masks.py/output_dir: {self.args.output_dir}")
-        print(f"Argument values: {self.args}")
+        logger.trace(f"generate_masks.py/labeled_subjects_dir: {self.args.labeled_subjects_dir}")
+        logger.trace(f"generate_masks.py/path_to_graph_supervised: {self.args.path_to_graph_supervised}")
+        logger.trace(f"generate_masks.py/output_dir: {self.args.output_dir}")
+        logger.trace(f"Argument values: {self.args}")
 
         regions = self.args.regions if self.args.regions else _REGIONS_DEFAULT
         sides = self.args.sides
@@ -494,7 +498,9 @@ class GenerateMasks(ScriptBuilder):
 
         json_path = abspath(join(dirname(__file__), "..", "..", "sulci_regions_champollion_V1.json"))
         sulci = get_sulci_for_regions(regions, sides, json_path)
-        print(f"generate_masks.py: {len(sulci)} unique sulci from {len(regions)} region(s) × {len(sides)} side(s)")
+        logger.trace(
+            f"generate_masks.py: {len(sulci)} unique sulci from {len(regions)} region(s) × {len(sides)} side(s)"
+        )
 
         vox_str = f"{int(self.args.voxel_size)}mm"
         mask_dir = (
@@ -507,7 +513,7 @@ class GenerateMasks(ScriptBuilder):
         if self.args.njobs is not None:
             njobs = define_njobs(self.args.njobs)
             if not self.args.buffered:
-                print("  Note: --njobs implies --buffered")
+                logger.trace("Note: --njobs implies --buffered")
 
         runner = MaskRunner.create(self.args.buffered, njobs, verbose=self.args.verbose)
         mode = (
@@ -517,7 +523,7 @@ class GenerateMasks(ScriptBuilder):
             if self.args.buffered
             else "serial unbuffered"
         )
-        print(f"generate_masks.py: {mode} mode")
+        logger.trace(f"generate_masks.py: {mode} mode")
 
         config = RunConfig(
             sulci=sulci,
@@ -540,28 +546,28 @@ class GenerateMasks(ScriptBuilder):
         for side, results in runner(config):
             for sulcus, result in results.items():
                 if result == RETURN_DICTIONARY["skipped"]:
-                    print(f"  ✓ [{side}] {sulcus} (already exists, skipping)")
+                    logger.trace(f"✓ [{side}] {sulcus} (already exists, skipping)")
                     n_skipped += 1
                 elif result == RETURN_DICTIONARY["ok"]:
-                    print(f"  → [{side}] {sulcus} ok")
+                    logger.output(f"→ [{side}] {sulcus} ok")
                     n_ok += 1
                 elif result == RETURN_DICTIONARY["invalid_foldlabel"]:
-                    print(f"  ⚠ [{side}] {sulcus} (invalid foldlabel — subject logged)")
+                    logger.warning(f"⚠ [{side}] {sulcus} (invalid foldlabel — subject logged)")
                     n_invalid += 1
                 else:
-                    print(f"  ✗ [{side}] {sulcus}  {result}")
+                    logger.error(f"✗ [{side}] {sulcus}  {result}")
                     n_failed += 1
 
         sep = "=" * 60
-        print(f"\n{sep}")
-        print("MASK GENERATION SUMMARY")
-        print(f"  Total:    {len(sulci) * len(sides)}")
-        print(f"  Skipped:  {n_skipped} (already exist)")
-        print(f"  Success:  {n_ok}")
-        print(f"  Invalid:  {n_invalid} (invalid foldlabel — see {mask_dir}/invalid_subjects.log)")
-        print(f"  Failed:   {n_failed}")
-        print(f"\n  Output:   {mask_dir}/{{side}}/{{sulcus}}.nii.gz")
-        print(f"{sep}\n")
+        logger.output(sep)
+        logger.output("MASK GENERATION SUMMARY")
+        logger.output(f"Total:    {len(sulci) * len(sides)}")
+        logger.output(f"Skipped:  {n_skipped} (already exist)")
+        logger.output(f"Success:  {n_ok}")
+        logger.output(f"Invalid:  {n_invalid} (invalid foldlabel — see {mask_dir}/invalid_subjects.log)")
+        logger.output(f"Failed:   {n_failed}")
+        logger.output(f"Output:   {mask_dir}/{{side}}/{{sulcus}}.nii.gz")
+        logger.output(sep)
 
         return 0 if n_failed == 0 else 1
 

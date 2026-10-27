@@ -8,17 +8,23 @@ Unit tests for generate_masks.py:
 """
 
 import json
+import logging
 from unittest.mock import MagicMock, patch
 
 import numpy as np
 import pytest
 
 from champollion_pipeline.generate_masks import (
+    RETURN_DICTIONARY,
+    BufferedRunner,
     GenerateMasks,
+    RunConfig,
+    SerialRunner,
     _compute_one_sulcus,
     _load_and_extract_subject,
     get_sulci_for_regions,
 )
+from tests.log_assertions import LOG, OUTPUT
 
 # ---------------------------------------------------------------------------
 # Shared helpers
@@ -450,8 +456,8 @@ class TestPublicUseFlag:
 
 
 class TestNjobsAutoBuffered:
-    def test_njobs_prints_auto_buffered_message(self, tmp_path, capsys):
-        """--njobs without --buffered prints the auto-enable notice."""
+    def test_njobs_logs_auto_buffered_message(self, tmp_path, pipeline_caplog):
+        """REQ-LOGGING-BDRABCZUK-66FDAFAEC932: --njobs without --buffered logs the auto-enable notice at LOG."""
         gm = GenerateMasks()
         with patch(
             "sys.argv",
@@ -478,8 +484,7 @@ class TestNjobsAutoBuffered:
         ):
             gm.run()
 
-        out = capsys.readouterr().out
-        assert "--njobs implies --buffered" in out
+        pipeline_caplog.assert_logged(LOG, "--njobs implies --buffered")
 
     def test_njobs_without_buffered_uses_buffered_path(self, tmp_path):
         """--njobs alone triggers the buffered runner."""
@@ -600,3 +605,158 @@ class TestVoxStrOutputPath:
         mask_dir = captured.get("mask_dir", "")
         assert "canonical_25" in mask_dir
         assert "2mm" in mask_dir
+
+
+# ---------------------------------------------------------------------------
+# LOGGING convention: messages go through the champollion_pipeline.generate_masks
+# logger at the mapped levels (TASK-LOGGING-BDRABCZUK-FC3904F71983)
+# ---------------------------------------------------------------------------
+
+MASKS_LOGGER = "champollion_pipeline.generate_masks"
+
+
+def _parsed_script(tmp_path):
+    """GenerateMasks with parsed arguments, serial unbuffered, writing under tmp_path."""
+    gm = GenerateMasks()
+    argv = [
+        "generate_masks",
+        "--labeled_subjects_dir",
+        "/x",
+        "--path_to_graph_supervised",
+        "p",
+        "--output_dir",
+        str(tmp_path / "masks_out"),
+    ]
+    with patch("sys.argv", argv):
+        gm.parse_args()
+    return gm
+
+
+def _run_with_results(gm, results):
+    """Run gm with a runner yielding one side 'L' with the given {sulcus: result}."""
+    mock_runner = MagicMock()
+    mock_runner.return_value = iter([("L", results)])
+    with (
+        patch("champollion_pipeline.generate_masks.get_sulci_for_regions", return_value=set(results)),
+        patch("champollion_pipeline.generate_masks.MaskRunner.create", return_value=mock_runner),
+    ):
+        return gm.run()
+
+
+def _assert_masks_record(pipeline_caplog, level, text):
+    record = pipeline_caplog.assert_logged(level, text)
+    assert record.name == MASKS_LOGGER
+
+
+class TestRunResultLogging:
+    def test_skipped_sulcus_logged_at_log(self, tmp_path, pipeline_caplog):
+        """REQ-LOGGING-BDRABCZUK-AC183340EDDB: a skipped sulcus is logged at LOG."""
+        _run_with_results(_parsed_script(tmp_path), {"S.C.-sylv.": RETURN_DICTIONARY["skipped"]})
+
+        _assert_masks_record(pipeline_caplog, LOG, "S.C.-sylv.")
+
+    def test_ok_sulcus_logged_at_output(self, tmp_path, pipeline_caplog):
+        """REQ-LOGGING-BDRABCZUK-9B48A06BD3EC: a computed sulcus is logged at OUTPUT."""
+        _run_with_results(_parsed_script(tmp_path), {"S.Pe.C.": RETURN_DICTIONARY["ok"]})
+
+        _assert_masks_record(pipeline_caplog, OUTPUT, "S.Pe.C.")
+
+    def test_invalid_foldlabel_sulcus_logged_at_warning(self, tmp_path, pipeline_caplog):
+        """REQ-LOGGING-BDRABCZUK-B0FC11C97093: an invalid-foldlabel sulcus is logged at WARNING."""
+        _run_with_results(_parsed_script(tmp_path), {"S.Po.C.": RETURN_DICTIONARY["invalid_foldlabel"]})
+
+        _assert_masks_record(pipeline_caplog, logging.WARNING, "S.Po.C.")
+
+    def test_failed_sulcus_logged_at_error(self, tmp_path, pipeline_caplog):
+        """REQ-LOGGING-BDRABCZUK-CFD9EE54B936: a failed sulcus is logged at ERROR with the failure message."""
+        exit_code = _run_with_results(_parsed_script(tmp_path), {"S.T.s.": "failed: graph unreadable"})
+
+        _assert_masks_record(pipeline_caplog, logging.ERROR, "failed: graph unreadable")
+        assert exit_code == 1
+
+    def test_summary_logged_at_output(self, tmp_path, pipeline_caplog):
+        """REQ-LOGGING-BDRABCZUK-E91566B285D8: the run summary is logged at OUTPUT."""
+        _run_with_results(_parsed_script(tmp_path), {"S.Pe.C.": RETURN_DICTIONARY["ok"]})
+
+        _assert_masks_record(pipeline_caplog, OUTPUT, "MASK GENERATION SUMMARY")
+
+    def test_output_dir_logged_at_log(self, tmp_path, pipeline_caplog):
+        """REQ-LOGGING-BDRABCZUK-AC85AC34CD0D: the --output_dir value is logged at LOG when run() starts."""
+        _run_with_results(_parsed_script(tmp_path), {})
+
+        _assert_masks_record(pipeline_caplog, LOG, str(tmp_path / "masks_out"))
+
+
+def _run_config(tmp_path, **overrides):
+    values = {
+        "sulci": {"S.C."},
+        "sides": ["L"],
+        "mask_dir": str(tmp_path / "2mm"),
+        "labeled_subjects_dir": str(tmp_path / "labelled"),
+        "path_to_graph_supervised": "p",
+        "nb_subjects": -1,
+        "voxel_size": 2.0,
+        "force": True,
+        "brainvisa_dir": str(tmp_path),
+    }
+    values.update(overrides)
+    return RunConfig(**values)
+
+
+def _serial_parallel(*_args, **_kwargs):
+    """Stand-in for joblib.Parallel that runs the delayed calls in this process."""
+    return lambda calls: [func(*args, **kwargs) for func, args, kwargs in calls]
+
+
+class TestRunnerLogging:
+    def test_serial_invalid_foldlabel_logged_at_warning(self, tmp_path, pipeline_caplog):
+        """REQ-LOGGING-BDRABCZUK-78D091E02EB7: SerialRunner logs the invalid_subjects.log path at WARNING."""
+        config = _run_config(tmp_path)
+        with patch(
+            "champollion_pipeline.generate_masks.compute_mask",
+            side_effect=RuntimeError("too many simple surfaces in graph"),
+        ):
+            outcomes = dict(SerialRunner()(config))
+
+        assert outcomes["L"] == {"S.C.": RETURN_DICTIONARY["invalid_foldlabel"]}
+        _assert_masks_record(pipeline_caplog, logging.WARNING, "invalid_subjects.log")
+
+    def test_serial_verbose_call_logged_at_log(self, tmp_path, pipeline_caplog):
+        """REQ-LOGGING-BDRABCZUK-A9975E7557BB: verbose SerialRunner logs the compute_mask call at LOG."""
+        config = _run_config(tmp_path)
+        with patch("champollion_pipeline.generate_masks.compute_mask"):
+            list(SerialRunner(verbose=True)(config))
+
+        _assert_masks_record(pipeline_caplog, LOG, "calling compute_mask")
+
+    def _run_buffered(self, tmp_path, load_result, subject_names=("sub-07",)):
+        config = _run_config(tmp_path)
+        subjects = [{"subject": name} for name in subject_names]
+        with (
+            patch("champollion_pipeline.generate_masks.get_all_subjects_as_dictionary", return_value=subjects),
+            patch("champollion_pipeline.generate_masks.select_subjects_int_if_list_of_dict", return_value=subjects),
+            patch("champollion_pipeline.generate_masks.Parallel", _serial_parallel),
+            patch("champollion_pipeline.generate_masks._load_and_extract_subject", return_value=load_result),
+            patch("champollion_pipeline.generate_masks._compute_one_sulcus", return_value=RETURN_DICTIONARY["ok"]),
+        ):
+            return dict(BufferedRunner(1)(config))
+
+    def test_buffered_missing_graph_logged_at_warning(self, tmp_path, pipeline_caplog):
+        """REQ-LOGGING-BDRABCZUK-98A88DD87C69: BufferedRunner logs a subject without graph at WARNING."""
+        self._run_buffered(tmp_path, ("sub-07", None))
+
+        _assert_masks_record(pipeline_caplog, logging.WARNING, "sub-07")
+
+    def test_buffered_missing_mask_logged_at_warning(self, tmp_path, pipeline_caplog):
+        """REQ-LOGGING-BDRABCZUK-E87C13722E8D: BufferedRunner logs a mask file absent after the run at WARNING."""
+        # _compute_one_sulcus is stubbed, so S.C._left.nii.gz is never written.
+        self._run_buffered(tmp_path, ("sub-07", {}))
+
+        _assert_masks_record(pipeline_caplog, logging.WARNING, "S.C._left.nii.gz")
+
+    def test_buffered_loading_start_logged_at_log(self, tmp_path, pipeline_caplog):
+        """REQ-LOGGING-BDRABCZUK-625A7222ABCC: BufferedRunner logs the subject count at LOG when loading starts."""
+        # Neither subject has a graph, so only the loading-start message can carry "2 subjects".
+        self._run_buffered(tmp_path, ("sub-07", None), subject_names=("sub-07", "sub-08"))
+
+        _assert_masks_record(pipeline_caplog, LOG, "2 subjects")
