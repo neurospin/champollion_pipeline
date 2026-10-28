@@ -27,7 +27,7 @@ Requirements (area COMPARE, author BDRABCZUK):
 4B6CAF044462 9948C646D2E5 required options, 117DA8854F73 176B8286C589
 344D566E476B 7B6A038CF0A3 06A9B555A5BF subcommand defaults, B8A47BB26FE8
 1BA70A85A01E EA954461B742 choices, 941405980FD7 missing --set_a, 5EA1F9FAA661
-compare names, 2A0C618A7734 F48CF44F94F1 E039500B2685 script options,
+compare names, 2A0C618A7734 3726FBCC818E 0E56D0E7DF0C script options,
 509D22CD1937 script required options, 3D27AA1B3C0D AE6339FE8D98 4AC071AD83CC
 script defaults, E6ABDDDFD058 script --metric choices, A43D0BA27200 script
 missing --set_a, 200C6AFF041C 4E8737605582 B3921FE6A4DF script names,
@@ -142,9 +142,11 @@ _SCRIPT_OPTIONS = {
         "--metric",
         "--bucket_step",
         "--log",
+        "--profile",
+        "--profile-mode",
         "--help",
     },
-    "compare_databases": _DB_OPTIONS | {"--log"},
+    "compare_databases": _DB_OPTIONS | {"--log", "--profile", "--profile-mode"},
 }
 
 _PUBLIC_NAMES = {
@@ -391,7 +393,7 @@ def test_compare_missing_set_a_exits_1(subcommand, tmp_path):
 
 @pytest.mark.parametrize("script", list(_SCRIPT_OPTIONS))
 def test_script_help_lists_exact_options(script):
-    """REQ-COMPARE-BDRABCZUK-2A0C618A7734, -F48CF44F94F1, -E039500B2685 (--log from champollion_utils >= 0.3.0)."""
+    """REQ-COMPARE-BDRABCZUK-2A0C618A7734, -3726FBCC818E, -0E56D0E7DF0C (ScriptBuilder --log, --profile*)."""
     result = _help(script)
     assert result.returncode == 0, result.stderr
     assert _help_options(result.stdout) == _SCRIPT_OPTIONS[script]
