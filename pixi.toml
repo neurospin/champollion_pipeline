@@ -187,6 +187,7 @@ install-pipeline = "pip install -e . --no-deps --no-build-isolation"
 install-champollion = { cmd = "pip install -e external/champollion_V1 --no-deps --no-build-isolation", depends-on = ["init-submodules"] }
 check-install = "python scripts/install_health.py"
 check-install-fix = "python scripts/install_health.py --fix"
+profile-report = "python src/champollion_pipeline/profile_report.py"
 pre-update = "python scripts/install_health.py --pre-update"
 
 install-all = { depends-on = ["init-submodules", "install-cortical-tiles", "install-champollion", "install-pipeline", "install-utils", "setup-data", "test-smoke", "check-install"] }
