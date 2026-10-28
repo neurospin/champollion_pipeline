@@ -23,19 +23,31 @@ Requirements:
 - REQ-STREAMING-BDRABCZUK-8BBB3CFFDC39 no tiles after a Morphologist failure
 - REQ-STREAMING-BDRABCZUK-CEB42AC25B4F ERROR record on a stage failure
 - REQ-STREAMING-BDRABCZUK-967B6F136F92 dry run skips
-- REQ-STREAMING-BDRABCZUK-334C117E751A existing crops skip (resume)
 - REQ-STREAMING-BDRABCZUK-B40295BAE4FC OUTPUT record on a skip
 - REQ-STREAMING-BDRABCZUK-48DEC870F8C8 OUTPUT record naming the per-scan tiles directory on success
 - REQ-STREAMING-BDRABCZUK-4299F1D39459 init_pipeline_process once, before the stages
 - REQ-STREAMING-BDRABCZUK-3C3CC0AF76DF per-worker log file captures fds 1 and 2, Morphologist layout path
 - REQ-STREAMING-BDRABCZUK-E96ED01D6C2D unusable log file gives FAILED without raising
 - REQ-STREAMING-BDRABCZUK-C7C6A43D6E5A WorkerResult pickle round trip
+
+Task TASK-STREAMING-BDRABCZUK-35C5BBC4F117 (completion marker): a scan's .npy and crops may still be half-written
+when the consumer reads them, so the worker writes worker.TILES_COMPLETE_MARKER in the scan's tiles directory once
+cortical_tiles has succeeded, and its resume skip keys on that marker instead of on the crops directory alone.
+- REQ-STREAMING-BDRABCZUK-071AFF98B7B3 marker written after cortical_tiles succeeds, JSON {"masks_version": ...}
+- REQ-STREAMING-BDRABCZUK-AD5437C0D21C marker visible to the barrier's SubjectEligibilityChecker
+- REQ-STREAMING-BDRABCZUK-EDFD158F7143 marker written atomically (os.replace of a temporary file)
+- REQ-STREAMING-BDRABCZUK-3BE1D3ED6A4F stale marker removed before the first stage
+- REQ-STREAMING-BDRABCZUK-821731DFDCCC no marker after a FAILED result
+- REQ-STREAMING-BDRABCZUK-48CAF41169BC no marker on a dry run
+- REQ-STREAMING-BDRABCZUK-1C66412CFADC resume skip on a matching marker (supersedes 334C117E751A, skip on crops)
+- REQ-STREAMING-BDRABCZUK-A4A3BB54DF57 no skip without a matching marker, crops or not
 """
 
 from __future__ import annotations
 
 import dataclasses
 import importlib
+import json
 import logging
 import os
 import pickle
@@ -45,7 +57,7 @@ from types import ModuleType
 import pytest
 
 from champollion_pipeline.config import DatasetConfig
-from champollion_pipeline.file_indexer import ScanId
+from champollion_pipeline.file_indexer import ScanId, SubjectEligibilityChecker
 from champollion_pipeline.streaming import stages
 from champollion_pipeline.streaming.settings import StreamingSettings
 from champollion_pipeline.utils.lib import DERIVATIVES_FOLDER
@@ -71,18 +83,30 @@ class _FakeStages:
         self.calls: list[tuple] = []
         self.errors: dict[str, BaseException] = {}
         self.write_fds = False
+        # Path whose existence each stage call records in marker_seen (the completion marker, when a test sets it).
+        self.watched: str | None = None
+        self.marker_seen: list[tuple[str, bool]] = []
 
     def init_pipeline_process(self) -> logging.Logger:
         self.calls.append(("init",))
         return logging.getLogger()
 
+    def _watch(self, stage: str) -> None:
+        if self.watched is not None:
+            self.marker_seen.append((stage, os.path.exists(self.watched)))
+
     def run_morphologist_for_scan(self, raw_scan: str, settings: StreamingSettings, dataset: DatasetConfig) -> None:
         self.calls.append(("morphologist", raw_scan, settings, dataset))
+        self._watch("morphologist")
         if "morphologist" in self.errors:
             raise self.errors["morphologist"]
 
     def run_cortical_tiles_for_scan(self, scan: ScanId, settings: StreamingSettings, dataset: DatasetConfig) -> None:
+        """Like cortical_tiles, create the scan's crops directory, even on a failure (partial output)."""
         self.calls.append(("tiles", scan, settings, dataset))
+        self._watch("tiles")
+        tiles_dir = stages.compute_scan_tiles_dir(dataset.cortical_tiles_output, scan)
+        os.makedirs(os.path.join(tiles_dir, DERIVATIVES_FOLDER, "crops", dataset.masks_version, "2mm"), exist_ok=True)
         if self.write_fds:
             os.write(1, f"{STDOUT_MARKER}\n".encode())
             os.write(2, f"{STDERR_MARKER}\n".encode())
@@ -172,6 +196,25 @@ def _make_crops(dataset: DatasetConfig, scan: ScanId) -> str:
     crops = stages.find_scan_crops_root(tiles_dir, MASKS_VERSION)
     assert crops is not None
     return crops
+
+
+def _marker_path(worker: ModuleType, dataset: DatasetConfig, scan: ScanId) -> str:
+    """Path of the scan's completion marker: worker.TILES_COMPLETE_MARKER in the per-scan tiles directory."""
+    return os.path.join(
+        stages.compute_scan_tiles_dir(dataset.cortical_tiles_output, scan), worker.TILES_COMPLETE_MARKER
+    )
+
+
+def _write_marker(worker: ModuleType, dataset: DatasetConfig, scan: ScanId, text: str) -> str:
+    """Write a completion marker holding text (for a resume or a stale marker); return its path."""
+    path = _marker_path(worker, dataset, scan)
+    os.makedirs(os.path.dirname(path), exist_ok=True)
+    Path(path).write_text(text)
+    return path
+
+
+def _marker_json(masks_version: str) -> str:
+    return json.dumps({"masks_version": masks_version})
 
 
 # --- stage sequence -------------------------------------------------------------------------------
@@ -264,24 +307,45 @@ def test_dry_run_skips(ctx: _Context, scan: ScanId) -> None:
 
 
 @SCANS
-def test_existing_crops_skips(ctx: _Context, scan: ScanId) -> None:
-    _make_crops(ctx.dataset, scan)
+def test_complete_marker_skips(ctx: _Context, scan: ScanId) -> None:
     worker = ctx.load()
+    _write_marker(worker, ctx.dataset, scan, _marker_json(MASKS_VERSION))
     result = worker.run_scan_worker(scan, ctx.settings, ctx.dataset, raw_scan=ctx.raw_scan)
     assert result.status == worker.WorkerStatus.SKIPPED
     assert ctx.fake.stage_calls() == []
 
 
+# Each case has the crops directory of the current masks version, which the old resume skip trusted alone.
+NO_MATCHING_MARKER = pytest.mark.parametrize(
+    "marker_text",
+    [None, _marker_json("other_masks"), "not json {", json.dumps(["masks_version"])],
+    ids=["crops_without_marker", "other_masks_version", "unreadable_marker", "not_an_object"],
+)
+
+
 @SCANS
-@pytest.mark.parametrize("reason", ["dry_run", "existing_crops"])
+@NO_MATCHING_MARKER
+def test_no_matching_marker_reruns(ctx: _Context, scan: ScanId, marker_text: str | None) -> None:
+    worker = ctx.load()
+    _make_crops(ctx.dataset, scan)
+    if marker_text is not None:
+        _write_marker(worker, ctx.dataset, scan, marker_text)
+    result = worker.run_scan_worker(scan, ctx.settings, ctx.dataset)
+    assert result.status != worker.WorkerStatus.SKIPPED
+    assert [call[0] for call in ctx.fake.stage_calls()] == ["tiles"]
+
+
+@SCANS
+@pytest.mark.parametrize("reason", ["dry_run", "complete_marker"])
 def test_skip_logs_output(ctx: _Context, scan: ScanId, reason: str) -> None:
     worker = ctx.load()
     settings = ctx.settings
     if reason == "dry_run":
         settings = dataclasses.replace(settings, dry_run=True)
     else:
-        _make_crops(ctx.dataset, scan)
-    worker.run_scan_worker(scan, settings, ctx.dataset)
+        _write_marker(worker, ctx.dataset, scan, _marker_json(MASKS_VERSION))
+    result = worker.run_scan_worker(scan, settings, ctx.dataset)
+    assert result.status == worker.WorkerStatus.SKIPPED  # precondition: this test is about the skip's record
     outputs = ctx.messages(OUTPUT_LEVEL)
     assert any(scan.path_prefix in text for text in outputs), outputs
 
@@ -339,3 +403,94 @@ def test_result_pickle_round_trip(ctx: _Context, scan: ScanId) -> None:
     worker = ctx.load()
     result = worker.run_scan_worker(scan, ctx.settings, ctx.dataset)
     assert pickle.loads(pickle.dumps(result)) == result
+
+
+# --- completion marker -------------------------------------------------------------------------------
+
+
+@SCANS
+@pytest.mark.parametrize("with_raw", [True, False], ids=["raw_scan", "no_raw_scan"])
+def test_success_writes_complete_marker(ctx: _Context, scan: ScanId, with_raw: bool) -> None:
+    worker = ctx.load()
+    worker.run_scan_worker(scan, ctx.settings, ctx.dataset, raw_scan=ctx.raw_scan if with_raw else None)
+    marker = Path(_marker_path(worker, ctx.dataset, scan))
+    assert marker.is_file()
+    assert json.loads(marker.read_text()) == {"masks_version": MASKS_VERSION}
+
+
+@SCANS
+def test_complete_marker_visible_to_checker(ctx: _Context, scan: ScanId) -> None:
+    """The consumer's barrier checker, with the marker as a required pattern, sees the scan once the worker is OK."""
+    worker = ctx.load()
+    result = worker.run_scan_worker(scan, ctx.settings, ctx.dataset)
+    assert result.status == worker.WorkerStatus.OK
+    checker = SubjectEligibilityChecker(
+        os.path.join(ctx.dataset.cortical_tiles_output, stages.SCAN_TILES_DIRNAME),
+        [worker.TILES_COMPLETE_MARKER],
+        bids=scan.bids,
+    )
+    assert scan in checker.check().eligible
+
+
+@SCANS
+def test_complete_marker_written_by_os_replace(ctx: _Context, scan: ScanId, monkeypatch: pytest.MonkeyPatch) -> None:
+    worker = ctx.load()
+    replaced: list[tuple[str, str]] = []
+    real_replace = os.replace
+
+    def _recording_replace(src: str, dst: str) -> None:
+        replaced.append((os.fspath(src), os.fspath(dst)))
+        real_replace(src, dst)
+
+    monkeypatch.setattr(os, "replace", _recording_replace)
+    worker.run_scan_worker(scan, ctx.settings, ctx.dataset)
+    marker = _marker_path(worker, ctx.dataset, scan)
+    tiles_dir = os.path.dirname(marker)
+    sources = [src for src, dst in replaced if os.path.abspath(dst) == os.path.abspath(marker)]
+    assert len(sources) == 1, replaced
+    assert os.path.dirname(os.path.abspath(sources[0])) == os.path.abspath(tiles_dir)
+    assert os.path.abspath(sources[0]) != os.path.abspath(marker)
+    # The temporary file was renamed, not copied: the tiles directory holds no other file next to the marker.
+    files = sorted(entry.name for entry in os.scandir(tiles_dir) if entry.is_file())
+    assert files == [worker.TILES_COMPLETE_MARKER]
+
+
+@pytest.mark.parametrize("with_raw", [True, False], ids=["raw_scan", "no_raw_scan"])
+def test_stale_marker_removed_before_stages(ctx: _Context, with_raw: bool) -> None:
+    """A marker left by an earlier run (here for other masks, so no skip) is gone when the first stage starts."""
+    worker = ctx.load()
+    ctx.fake.watched = _write_marker(worker, ctx.dataset, CLASSIC_SCAN, _marker_json("other_masks"))
+    worker.run_scan_worker(CLASSIC_SCAN, ctx.settings, ctx.dataset, raw_scan=ctx.raw_scan if with_raw else None)
+    first_stage = "morphologist" if with_raw else "tiles"
+    assert ctx.fake.marker_seen, "no stage was called"
+    assert ctx.fake.marker_seen[0] == (first_stage, False)
+
+
+@SCANS
+@pytest.mark.parametrize("failure", ["morphologist", "tiles", "tiles_exit", "unusable_log"])
+def test_failure_leaves_no_marker(ctx: _Context, tmp_path: Path, scan: ScanId, failure: str) -> None:
+    """Partial crops and a stale marker from an earlier run must not pass for a complete scan after a failure."""
+    worker = ctx.load()
+    marker = _write_marker(worker, ctx.dataset, scan, _marker_json("other_masks"))
+    settings = ctx.settings
+    if failure == "morphologist":
+        ctx.fake.errors["morphologist"] = RuntimeError("Morphologist failed")
+    elif failure == "tiles":
+        ctx.fake.errors["tiles"] = RuntimeError("tiles failed")
+    elif failure == "tiles_exit":
+        ctx.fake.errors["tiles"] = SystemExit(2)
+    else:
+        blocker = tmp_path / "log_dir_is_a_file"
+        blocker.write_text("not a directory")
+        settings = dataclasses.replace(settings, log_dir=str(blocker))
+    result = worker.run_scan_worker(scan, settings, ctx.dataset, raw_scan=ctx.raw_scan)
+    assert result.status == worker.WorkerStatus.FAILED
+    assert not os.path.exists(marker)
+
+
+@SCANS
+def test_dry_run_writes_no_marker(ctx: _Context, scan: ScanId) -> None:
+    worker = ctx.load()
+    settings = dataclasses.replace(ctx.settings, dry_run=True)
+    worker.run_scan_worker(scan, settings, ctx.dataset, raw_scan=ctx.raw_scan)
+    assert not os.path.exists(_marker_path(worker, ctx.dataset, scan))
