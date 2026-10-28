@@ -46,14 +46,22 @@ def iter_ready_scans(
     return _poll(checker, sorted(set(items)), poll_interval, timeout)
 
 
+def poll_ready_scans(checker: SubjectEligibilityChecker, pending: Sequence[ScanId]) -> list[ScanId]:
+    """One poll: refresh the checker's index; return the pending scans whose required patterns all resolve.
+
+    The scans keep their order in ``pending``. No check, sleep or log: callers own timing.
+    """
+    checker.refresh()
+    return [s for s in pending if all(checker.scan_has_pattern(s, p) for p in checker.required_patterns)]
+
+
 def _poll(
     checker: SubjectEligibilityChecker, pending: list[ScanId], poll_interval: float, timeout: float
 ) -> Iterator[ScanId]:
     last_progress: float | None = None
     while pending:
         now = time.monotonic()
-        checker.refresh()
-        ready = [s for s in pending if all(checker.scan_has_pattern(s, p) for p in checker.required_patterns)]
+        ready = poll_ready_scans(checker, pending)
         if ready:
             last_progress = now
             pending = [s for s in pending if s not in ready]
