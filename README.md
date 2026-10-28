@@ -548,6 +548,7 @@ champollion_pipeline/
 │       ├── generate_masks.py
 │       ├── prune_failed_subjects.py
 │       ├── purge_subject.py
+│       ├── profile_report.py        # Aggregates a --profile run dir into report.json (pixi run profile-report)
 │       ├── process_setup.py
 │       ├── _stage_base.py           # Template base class of main.py's pipeline stages
 │       └── generate_labelling_qc.py
