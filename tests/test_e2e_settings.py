@@ -31,7 +31,7 @@ Requirements (one test or more each):
 - REQ-E2ECI-BDRABCZUK-41E4A0CB54BA WEEKLY tier row
 - REQ-E2ECI-BDRABCZUK-7D703A43E1C5 no other scripts/e2e file restates the owned paths
 - REQ-E2ECI-BDRABCZUK-60B2E493BF3B data-touching e2e scripts call check-path
-- REQ-E2ECI-BDRABCZUK-4FE68FD50A5E named IXI data roots
+- REQ-E2ECI-BDRABCZUK-20D1499D1431 named IXI data roots (supersedes -4FE68FD50A5E: morphologist-2021 root)
 - REQ-E2ECI-BDRABCZUK-5EACD169E3D9 profile subdirectory name inside each run directory
 """
 
@@ -55,7 +55,9 @@ BASH = shutil.which("bash")
 ROSETTE_ROOT = "/neurospin/dico/bdrabczuk/champollion_e2e"
 MODELS_DIR = "/neurospin/dico/bdrabczuk/models/Champollion_V1/canonical_corrected_26_1"
 IXI_RAWDATA = "/neurospin/psy/ixi/rawdata"
-IXI_MORPHOLOGIST = "/neurospin/dico/data/human/openbhb/ixi/derivatives/morphologist-6.0/subjects"
+IXI_MORPHOLOGIST = "/neurospin/psy/ixi/derivatives/morphologist-2021/subjects"
+# The former root, which holds no sulcal graph (user decision 2026-10-28), is no longer allowed.
+FORMER_IXI_MORPHOLOGIST = "/neurospin/dico/data/human/openbhb/ixi/derivatives/morphologist-6.0/subjects"
 
 ASSIGNMENT = re.compile(r"^E2E_[A-Z0-9_]+=")
 COMMENT_OR_BLANK = re.compile(r"^\s*(#.*)?$")
@@ -252,7 +254,7 @@ def test_run_profile_dirname(home: Path) -> None:
     assert settings.get("E2E_RUN_PROFILE_DIRNAME") == "profile"
 
 
-# REQ-E2ECI-BDRABCZUK-44984A6D62C4 / REQ-E2ECI-BDRABCZUK-4FE68FD50A5E --------------
+# REQ-E2ECI-BDRABCZUK-44984A6D62C4 / REQ-E2ECI-BDRABCZUK-20D1499D1431 --------------
 
 
 def test_allowed_data_roots_are_ixi_only(home: Path) -> None:
@@ -304,6 +306,7 @@ def test_check_path_accepts_ixi_paths(home: Path, path: str) -> None:
         f"{IXI_RAWDATA}_other/sub-002",
         "/neurospin/dico/data/human/openbhb/ixi/derivatives/morphologist-5.2/subjects/sub-002",
         "/neurospin/psy/ixi",
+        f"{FORMER_IXI_MORPHOLOGIST}/sub-002",
     ],
 )
 def test_check_path_refuses_outside_allowlist(home: Path, path: str) -> None:
