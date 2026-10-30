@@ -6,6 +6,9 @@ its key changes, so the key must cover exactly what shapes that environment:
 
 - ``pixi.lock``;
 - the pixi version pin, ``E2E_PIXI_VERSION`` in ``scripts/e2e/e2e.env``;
+- the pixi release checksum, ``E2E_PIXI_SHA256`` in ``scripts/e2e/e2e.env``
+  (user decision 2026-10-28, TASK-E2ECI-BDRABCZUK-1D146FD37178: the eighth
+  input, hashed right after E2E_PIXI_VERSION);
 - the champollion_utils pin, the ``champollion-utils`` dependency specifier in
   ``pyproject.toml`` (champollion_utils is not in ``pixi.lock``: the pixi tasks
   clone it as an unpinned sibling, so the pinned git reference is the input);
@@ -23,10 +26,12 @@ submodules checked out.
 
 Requirements (one test or more each):
 - REQ-E2ECI-BDRABCZUK-3A892AE6F832 one line of 12 lowercase hex characters, exit 0
-- REQ-E2ECI-BDRABCZUK-4DC4A1BE0402 the key depends only on the seven listed inputs
-  (supersedes REQ-E2ECI-BDRABCZUK-D490B93DA736, six inputs)
+- REQ-E2ECI-BDRABCZUK-5B1C339D88E8 the key depends only on the eight listed inputs
+  (supersedes REQ-E2ECI-BDRABCZUK-4DC4A1BE0402, seven inputs, itself superseding
+  REQ-E2ECI-BDRABCZUK-D490B93DA736, six inputs)
 - REQ-E2ECI-BDRABCZUK-5D8812A38665 a pixi.lock change changes the key
 - REQ-E2ECI-BDRABCZUK-CCC13BA1EA59 an E2E_PIXI_VERSION change changes the key
+- REQ-E2ECI-BDRABCZUK-F323877CAB4C an E2E_PIXI_SHA256 change changes the key
 - REQ-E2ECI-BDRABCZUK-164DB7DC9CA3 a champollion-utils pin change changes the key
 - REQ-E2ECI-BDRABCZUK-9D9C0E6FF09D a submodule manifest change changes the key
 - REQ-E2ECI-BDRABCZUK-435366BF2FB2 a .github/Dockerfile.base change changes the key
@@ -53,6 +58,7 @@ SCRIPT = REPO / "scripts" / "e2e" / "env_key.sh"
 BASH = shutil.which("bash")
 
 KEY_LINE = re.compile(r"[0-9a-f]{12}\n")
+PIXI_SHA256 = "0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef"
 UTILS_PIN = "champollion-utils @ git+https://github.com/neurospin/champollion_utils.git@v0.3.0"
 
 PIXI_LOCK = "version: 6\nenvironments:\n  default:\n    packages:\n      - conda: numpy-2.1.0.conda\n"
@@ -67,12 +73,15 @@ dependencies = [
 [tool.ruff]
 line-length = 120
 """
-E2E_ENV = """# fake settings file
+E2E_ENV = (
+    """# fake settings file
 E2E_ROSETTE_ROOT=/fake/rosette
 E2E_ENV_SIF_NAME="champollion-env-{key12}.sif"
 E2E_ENV_SIF_KEEP=3
 E2E_PIXI_VERSION=0.80.0
 """
+    + f"E2E_PIXI_SHA256={PIXI_SHA256}\n"
+)
 V1_SETUP = "from setuptools import setup\nsetup(name='champollion_V1', install_requires=['torch'])\n"
 CT_SETUP = "from setuptools import setup\nsetup(name='cortical_tiles')\n"
 CT_INFO = "__version__ = '1.0.0'\nREQUIRES = ['six', 'numpy']\n"
@@ -147,7 +156,7 @@ def test_key_is_one_line_of_12_lowercase_hex(tmp_path):
     assert KEY_LINE.fullmatch(result.stdout), f"stdout is not one line of 12 lowercase hex: {result.stdout!r}"
 
 
-# --- REQ-E2ECI-BDRABCZUK-4DC4A1BE0402: the key depends only on the inputs --------
+# --- REQ-E2ECI-BDRABCZUK-5B1C339D88E8: the key depends only on the inputs --------
 
 
 def test_identical_inputs_give_identical_key(tmp_path):
@@ -264,6 +273,16 @@ def test_pixi_version_pin_change_changes_key(tmp_path):
     assert _key(root) != before, "an E2E_PIXI_VERSION change left the key unchanged"
 
 
+# --- REQ-E2ECI-BDRABCZUK-F323877CAB4C: pixi release checksum --------------------
+
+
+def test_pixi_sha256_change_changes_key(tmp_path):
+    root = _make_root(tmp_path / "repo")
+    before = _key(root)
+    _edit(root, "scripts/e2e/e2e.env", "E2E_PIXI_SHA256=0123456789abcdef", "E2E_PIXI_SHA256=fedcba9876543210")
+    assert _key(root) != before, "an E2E_PIXI_SHA256 change left the key unchanged"
+
+
 # --- REQ-E2ECI-BDRABCZUK-164DB7DC9CA3: champollion_utils pin --------------------
 
 
@@ -313,6 +332,15 @@ def _drop_pixi_version(root: Path) -> None:
     _edit(root, "scripts/e2e/e2e.env", "E2E_PIXI_VERSION=0.80.0\n", "")
 
 
+def _drop_pixi_sha256(root: Path) -> None:
+    _edit(
+        root,
+        "scripts/e2e/e2e.env",
+        f"E2E_PIXI_SHA256={PIXI_SHA256}\n",
+        "",
+    )
+
+
 def _drop_utils_pin(root: Path) -> None:
     _edit(root, "pyproject.toml", f'    "{UTILS_PIN}",\n', "")
 
@@ -325,6 +353,7 @@ ABSENT_INPUTS: dict[str, tuple[Callable[[Path], None], str]] = {
     "pixi.lock": (_remover("pixi.lock"), "pixi.lock"),
     "e2e.env": (_remover("scripts/e2e/e2e.env"), "e2e.env"),
     "E2E_PIXI_VERSION": (_drop_pixi_version, "E2E_PIXI_VERSION"),
+    "E2E_PIXI_SHA256": (_drop_pixi_sha256, "E2E_PIXI_SHA256"),
     "pyproject.toml": (_remover("pyproject.toml"), "pyproject.toml"),
     "champollion-utils": (_drop_utils_pin, "champollion-utils"),
     "champollion_V1-setup": (_remover("external/champollion_V1/setup.py"), "external/champollion_V1/setup.py"),

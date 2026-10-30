@@ -1,50 +1,51 @@
-FROM ubuntu:22.04
+# Env-only image of the e2e runs: the locked default pixi environment and nothing else
+# (no pipeline code, no data, no secret, no user account). Built by build_env_sif and the CI
+# workflow with --build-arg PIXI_VERSION and --build-arg PIXI_SHA256, both from scripts/e2e/e2e.env.
+# The pipeline code is bound read-only at /opt/code at run time (pack_code layout).
 
-ENV DEBIAN_FRONTEND=noninteractive
+# ubuntu:22.04 multi-arch index digest (docker buildx imagetools inspect, 2026-10-30)
+FROM --platform=linux/amd64 ubuntu:22.04@sha256:076e7bf82319619f28dd0aa9c02ab34b055ad37100395b4f49a2ffba04fb5e11
 
-# System deps (pipeline + visualization)
+ARG PIXI_VERSION
+ARG PIXI_SHA256
+ARG DEBIAN_FRONTEND=noninteractive
+
+# System deps; versions are the apt-cache policy candidates inside the pinned base (2026-10-30).
+# git: cortical_tiles logs.py reads HEAD through gitpython on the stub repository of the code dir.
 RUN apt-get update && apt-get install -y --no-install-recommends \
-    python3 python3-pip python3-venv \
-    curl ca-certificates git \
-    libgl1-mesa-glx libglib2.0-0 libxrender1 libxext6 xvfb \
+    ca-certificates=20260816ubuntu0.22.04.1 \
+    curl=7.81.0-1ubuntu1.30 \
+    git=1:2.34.1-1ubuntu1.18 \
+    libgl1-mesa-glx=23.0.4-0ubuntu1~22.04.1 \
+    libglib2.0-0=2.72.4-0ubuntu2.10 \
+    libxrender1=1:0.9.10-1build4 \
+    libxext6=2:1.3.4-1build1 \
+    xvfb=2:21.1.4-2ubuntu1.7~22.04.16 \
     && rm -rf /var/lib/apt/lists/*
 
-# Non-root user (HF Spaces requires uid 1000)
-RUN useradd -m -u 1000 user
-ENV HOME=/home/user
-ENV PATH="/home/user/.pixi/bin:${PATH}"
+# pixi: the uncompressed musl release binary, checked against its sha256 before first use
+RUN : "${PIXI_VERSION:?build arg PIXI_VERSION required}" \
+    && : "${PIXI_SHA256:?build arg PIXI_SHA256 required}" \
+    && curl -fsSL "https://github.com/prefix-dev/pixi/releases/download/v${PIXI_VERSION}/pixi-x86_64-unknown-linux-musl" -o /usr/local/bin/pixi \
+    && echo "${PIXI_SHA256}  /usr/local/bin/pixi" | sha256sum --check --strict - \
+    && chmod 0755 /usr/local/bin/pixi
 
-# Install pixi
-USER user
-RUN curl -fsSL https://pixi.sh/install.sh | bash
+# The build sees no GPU: select the linux-64-cuda platform of pixi.lock (the cuda floor of pixi.toml)
+ENV CONDA_OVERRIDE_CUDA=12.0
 
-WORKDIR ${HOME}/app
+WORKDIR /opt/pixi
+COPY pixi.toml pixi.lock /opt/pixi/
 
-# Copy pipeline from build context (reflects local changes; submodules in external/)
-COPY --chown=user:user . champollion_pipeline/
-# cortical_tiles/logs.py uses gitpython to record the repo HEAD commit SHA.
-# The submodule .git pointer is broken without the parent .git/modules/ tree.
-# Replace it with a minimal stub git repo so gitpython finds a valid HEAD.
-RUN rm -f champollion_pipeline/external/cortical_tiles/.git \
-    && git -C champollion_pipeline/external/cortical_tiles init -b main \
-    && git -C champollion_pipeline/external/cortical_tiles \
-       -c user.email="build@docker" -c user.name="Docker" \
-       commit --allow-empty -m "Docker build snapshot"
-# Clone champollion_utils (separate external repository)
-RUN git clone --depth 1 -b master https://github.com/neurospin/champollion_utils.git
+# chmod in the same RUN: in a later one it would copy the environment into a second layer
+RUN PIXI_CACHE_DIR=/tmp/pixi-cache pixi install --locked -e default \
+    && rm -rf /tmp/pixi-cache \
+    && chmod -R a+rX /opt/pixi
 
-# Pipeline environment (pixi + BrainVISA)
-RUN cd champollion_pipeline && pixi install \
-    && rm -rf ${HOME}/.cache/rattler ${HOME}/.cache/pixi
+RUN PYTHONDONTWRITEBYTECODE=1 pixi run python -c "import torch, soma.aims, p_tqdm; assert torch.version.cuda, 'torch built without CUDA'"
 
-RUN cd champollion_pipeline \
-    && pixi run install-cortical-tiles \
-    && pixi run install-champollion \
-    && pixi run -- pip install -e ../champollion_utils \
-    && pixi run -- pip install "setuptools>=65,<81" \
-    && pixi run -- python -c "import pkg_resources; print('pkg_resources OK')" \
-    && pixi run -- pip cache purge \
-    && rm -rf /tmp/pip-*
+# Runtime activation; pixi itself never runs at run time (read-only image, any uid, no network)
+RUN pixi shell-hook -e default --shell bash > /opt/pixi/activate.sh \
+    && chmod 0644 /opt/pixi/activate.sh
 
-# Data directory
-RUN mkdir -p data
+ENV PATH=/opt/pixi/.pixi/envs/default/bin:${PATH}
+ENV PYTHONPATH=/opt/code/src:/opt/code/external/champollion_V1:/opt/code/external/cortical_tiles:/opt/code/champollion_utils/src
