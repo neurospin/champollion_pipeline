@@ -29,6 +29,7 @@ from contextlib import contextmanager
 from pathlib import Path
 from typing import ClassVar
 
+from champollion_utils.script_builder import ScriptBuilder
 from champollion_utils.update_check import check_for_updates
 
 from champollion_pipeline._stage_base import PipelineStage, StageResult
@@ -67,6 +68,31 @@ except ImportError as e:
     _PARALLEL_RUNNER_IMPORT_ERROR = str(e)
 
 logger = logging.getLogger("champollion_pipeline.main")
+
+SCRIPT_NAME = "champollion_pipeline"
+SCRIPT_DESCRIPTION = "Champollion Pipeline Orchestrator"
+_HELP_EPILOG = """
+Examples:
+  # Run with default config
+  python main.py
+
+  # Run with custom config
+  python main.py --config configs/my_experiment.yaml
+
+  # Run specific stages
+  python main.py --stages generate_embeddings
+
+  # Enable all stages
+  python main.py --enable-all-stages
+
+  # Generate template config
+  python main.py --generate-config my_config.yaml
+        """
+_LOG_HELP = (
+    "Write a run log per stage: DIR/<stage>_<YYYYmmdd-HHMMSS>.log; bare --log: each stage's default log path "
+    "(its derivatives .log folder) plus this run's own log at ./.log/champollion_pipeline_<YYYYmmdd-HHMMSS>.log. "
+    "Overrides the config file's log."
+)
 
 
 # ====================== Pipeline Stage Strategy Pattern ======================
@@ -576,102 +602,9 @@ def create_default_config() -> PipelineConfig:
     return config
 
 
-def parse_arguments():
+def parse_arguments() -> argparse.Namespace:
     """Parse command line arguments."""
-    parser = argparse.ArgumentParser(
-        description="Champollion Pipeline Orchestrator",
-        formatter_class=argparse.RawDescriptionHelpFormatter,
-        epilog="""
-Examples:
-  # Run with default config
-  python main.py
-
-  # Run with custom config
-  python main.py --config configs/my_experiment.yaml
-
-  # Run specific stages
-  python main.py --stages generate_embeddings
-
-  # Enable all stages
-  python main.py --enable-all-stages
-
-  # Generate template config
-  python main.py --generate-config my_config.yaml
-        """,
-    )
-
-    parser.add_argument("--config", type=str, help="Path to configuration YAML file")
-
-    parser.add_argument(
-        "--stages",
-        nargs="+",
-        choices=list(PipelineOrchestrator.STAGE_REGISTRY.keys()),
-        help="Specific stages to run (overrides config)",
-    )
-
-    parser.add_argument("--enable-all-stages", action="store_true", help="Enable all pipeline stages")
-
-    parser.add_argument("--dataset-name", type=str, help="Dataset name (overrides config)")
-
-    parser.add_argument("--models-path", type=str, help="Path to models directory (overrides config)")
-
-    parser.add_argument("--verbose", action="store_true", help="Enable verbose output")
-
-    parser.add_argument(
-        "--generate-config", type=str, metavar="OUTPUT_PATH", help="Generate a template configuration file and exit"
-    )
-
-    parser.add_argument(
-        "--bids",
-        action="store_true",
-        help=(
-            "Input database follows BIDS layout "
-            "(subjects/sub-*/ses-*/...). "
-            "Activates BIDS-aware scan enumeration in eligibility checks "
-            "and passes --bids to cortical_tiles."
-        ),
-    )
-
-    parser.add_argument(
-        "--mode",
-        choices=["sequential", "streaming"],
-        default=None,
-        help=(
-            "Execution mode: 'sequential' (default, stage-centric batch) or "
-            "'streaming' (scan-centric parallel, one worker per scan). "
-            "Streaming mode requires --embeddings-only."
-        ),
-    )
-    parser.add_argument(
-        "--n-workers",
-        type=int,
-        default=None,
-        metavar="N",
-        help="Number of parallel scan workers (streaming mode only). Defaults to os.cpu_count().",
-    )
-    parser.add_argument(
-        "--worker-timeout",
-        type=int,
-        default=None,
-        metavar="SECONDS",
-        help="Per-worker timeout waiting for prerequisite files (default: 7200).",
-    )
-    parser.add_argument(
-        "--log",
-        nargs="?",
-        const="",
-        default=None,
-        metavar="DIR",
-        help="Write a run log per stage: DIR/<stage>_<YYYYmmdd-HHMMSS>.log; bare --log: each stage's default log path "
-        "(its derivatives .log folder). Overrides the config file's log.",
-    )
-    parser.add_argument(
-        "--dry-run",
-        action="store_true",
-        help="Enumerate scans and report without processing (streaming mode only).",
-    )
-
-    return parser.parse_args()
+    return ChampollionPipeline().parse_args()
 
 
 def _apply_stage_overrides(config: PipelineConfig, args: argparse.Namespace) -> None:
@@ -734,56 +667,164 @@ def _apply_cli_overrides(config: PipelineConfig, args: argparse.Namespace, *, fr
     _apply_runtime_overrides(config, args)
 
 
+def _save_config_template(args: argparse.Namespace) -> int:
+    """Write the default configuration, with the command-line overrides, to --generate-config."""
+    config = create_default_config()
+    _apply_cli_overrides(config, args, from_default=True)
+    ConfigLoader.save_to_yaml(config, args.generate_config)
+    logger.output(f"✅ Configuration template generated: {args.generate_config}")
+    return 0
+
+
+def _load_config(args: argparse.Namespace) -> PipelineConfig:
+    """Load the --config YAML file, or the default configuration without one."""
+    if args.config:
+        logger.trace(f"Loading configuration from: {args.config}")
+        return ConfigLoader.load_from_yaml(args.config)
+    logger.trace("Using default configuration")
+    return create_default_config()
+
+
+def _run_streaming_mode(config: PipelineConfig, args: argparse.Namespace) -> int:
+    """Run the scan-centric streaming mode after its two guards."""
+    if not config.dataset.embeddings_only:
+        logger.error(
+            "--mode streaming requires --embeddings-only (training aggregates subjects and must remain batch)."
+        )
+        return 1
+    if run_parallel_pipeline is None:
+        logger.error(f"could not import parallel_runner: {_PARALLEL_RUNNER_IMPORT_ERROR}")
+        return 1
+    subjects_dir = config.dataset.input_path or config.dataset.morphologist_graphs
+    output_dir = config.outputs_path
+    log_dir = config.log_dir or str(Path(output_dir) / "logs")
+    return run_parallel_pipeline(
+        subjects_dir=subjects_dir,
+        output_dir=output_dir,
+        config=config.dataset,
+        n_workers=config.n_workers,
+        log_dir=log_dir,
+        worker_timeout=config.worker_timeout,
+        dry_run=getattr(args, "dry_run", False),
+    )
+
+
+class ChampollionPipeline(ScriptBuilder):
+    """main.py as a ScriptBuilder script: the shared run log, profiling and process setup."""
+
+    def __init__(self) -> None:
+        super().__init__(SCRIPT_NAME, SCRIPT_DESCRIPTION)
+        self._add_pipeline_options()
+
+    def _create_parser(self) -> argparse.ArgumentParser:
+        """Keep main.py's raw help layout and its examples epilog."""
+        return argparse.ArgumentParser(
+            prog=self.script_name,
+            description=self.description,
+            formatter_class=argparse.RawDescriptionHelpFormatter,
+            epilog=_HELP_EPILOG,
+        )
+
+    def _add_log_option(self) -> None:
+        """Add nothing: main.py's --log takes a DIR (or none), and _add_pipeline_options adds it in place."""
+
+    def _add_pipeline_options(self) -> None:
+        """Add the orchestrator options."""
+        self.parser.add_argument("--config", type=str, help="Path to configuration YAML file")
+
+        self.parser.add_argument(
+            "--stages",
+            nargs="+",
+            choices=list(PipelineOrchestrator.STAGE_REGISTRY.keys()),
+            help="Specific stages to run (overrides config)",
+        )
+
+        self.parser.add_argument("--enable-all-stages", action="store_true", help="Enable all pipeline stages")
+
+        self.parser.add_argument("--dataset-name", type=str, help="Dataset name (overrides config)")
+
+        self.parser.add_argument("--models-path", type=str, help="Path to models directory (overrides config)")
+
+        self.parser.add_argument("--verbose", action="store_true", help="Enable verbose output")
+
+        self.parser.add_argument(
+            "--generate-config", type=str, metavar="OUTPUT_PATH", help="Generate a template configuration file and exit"
+        )
+
+        self.parser.add_argument(
+            "--bids",
+            action="store_true",
+            help=(
+                "Input database follows BIDS layout "
+                "(subjects/sub-*/ses-*/...). "
+                "Activates BIDS-aware scan enumeration in eligibility checks "
+                "and passes --bids to cortical_tiles."
+            ),
+        )
+
+        self.parser.add_argument(
+            "--mode",
+            choices=["sequential", "streaming"],
+            default=None,
+            help=(
+                "Execution mode: 'sequential' (default, stage-centric batch) or "
+                "'streaming' (scan-centric parallel, one worker per scan). "
+                "Streaming mode requires --embeddings-only."
+            ),
+        )
+        self.parser.add_argument(
+            "--n-workers",
+            type=int,
+            default=None,
+            metavar="N",
+            help="Number of parallel scan workers (streaming mode only). Defaults to os.cpu_count().",
+        )
+        self.parser.add_argument(
+            "--worker-timeout",
+            type=int,
+            default=None,
+            metavar="SECONDS",
+            help="Per-worker timeout waiting for prerequisite files (default: 7200).",
+        )
+        self.parser.add_argument(
+            "--log",
+            nargs="?",
+            const="",
+            default=None,
+            metavar="DIR",
+            help=_LOG_HELP,
+        )
+        self.parser.add_argument(
+            "--dry-run",
+            action="store_true",
+            help="Enumerate scans and report without processing (streaming mode only).",
+        )
+
+    def _resolve_log_path(self) -> str | None:
+        """main.py's own run log: only with a bare --log. args.log is left as is, since it feeds config.log."""
+        return self.default_log_path() if self.args.log == "" else None
+
+    def build(self) -> "ChampollionPipeline":
+        """Check for updates through main.py's own import, then parse the arguments."""
+        check_for_updates()
+        self.parse_args()
+        return self
+
+    def run(self) -> int:
+        args = self.args
+        if args.generate_config:
+            return _save_config_template(args)
+        config = _load_config(args)
+        _apply_cli_overrides(config, args, from_default=not args.config)
+        if config.mode == "streaming":
+            return _run_streaming_mode(config, args)
+        return PipelineOrchestrator(config).run()
+
+
 def main() -> int:
     """Main entry point for the pipeline."""
     init_pipeline_process()
-    check_for_updates()
-    args = parse_arguments()
-
-    # Generate config template if requested
-    if args.generate_config:
-        config = create_default_config()
-        _apply_cli_overrides(config, args, from_default=True)
-        ConfigLoader.save_to_yaml(config, args.generate_config)
-        logger.output(f"✅ Configuration template generated: {args.generate_config}")
-        return 0
-
-    # Load configuration
-    if args.config:
-        logger.trace(f"Loading configuration from: {args.config}")
-        config = ConfigLoader.load_from_yaml(args.config)
-    else:
-        logger.trace("Using default configuration")
-        config = create_default_config()
-
-    # Apply command-line overrides
-    _apply_cli_overrides(config, args, from_default=not args.config)
-
-    # Run pipeline
-    if config.mode == "streaming":
-        if not config.dataset.embeddings_only:
-            logger.error(
-                "--mode streaming requires --embeddings-only (training aggregates subjects and must remain batch)."
-            )
-            return 1
-        if run_parallel_pipeline is None:
-            logger.error(f"could not import parallel_runner: {_PARALLEL_RUNNER_IMPORT_ERROR}")
-            return 1
-        subjects_dir = config.dataset.input_path or config.dataset.morphologist_graphs
-        output_dir = config.outputs_path
-        log_dir = config.log_dir or str(Path(output_dir) / "logs")
-        return run_parallel_pipeline(
-            subjects_dir=subjects_dir,
-            output_dir=output_dir,
-            config=config.dataset,
-            n_workers=config.n_workers,
-            log_dir=log_dir,
-            worker_timeout=config.worker_timeout,
-            dry_run=getattr(args, "dry_run", False),
-        )
-
-    orchestrator = PipelineOrchestrator(config)
-    return orchestrator.run()
+    return ChampollionPipeline().main()
 
 
 if __name__ == "__main__":

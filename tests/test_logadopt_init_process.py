@@ -57,7 +57,13 @@ champollion_utils.update_check.check_for_updates = _no_update_check
 champollion_utils.script_builder.check_for_updates = _no_update_check
 
 
+_ORIGINAL = getattr(champollion_utils.script_builder.ScriptBuilder, {raise_in!r} or "build")
+
+
 def _raise_from_build(self, *args, **kwargs):
+    # main.py is a ScriptBuilder too: only the stage scripts raise.
+    if type(self).__name__ == "ChampollionPipeline":
+        return _ORIGINAL(self, *args, **kwargs)
     raise RuntimeError("raised by the test driver")
 
 

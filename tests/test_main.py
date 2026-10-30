@@ -44,6 +44,7 @@ def main_module(monkeypatch):
     spec.loader.exec_module(module)
     monkeypatch.setattr(module, "check_for_updates", lambda: None)
     monkeypatch.setattr(module, "init_pipeline_process", lambda: logging.getLogger())
+    monkeypatch.setattr("champollion_utils.script_builder.init_process", lambda *a, **k: logging.getLogger())
     # parse_arguments() reads the stage names from PipelineOrchestrator.STAGE_REGISTRY.
     monkeypatch.setattr(_NoRunOrchestrator, "STAGE_REGISTRY", module.PipelineOrchestrator.STAGE_REGISTRY)
     monkeypatch.setattr(module, "PipelineOrchestrator", _NoRunOrchestrator)
