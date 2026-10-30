@@ -1963,6 +1963,8 @@ environments:
     channels:
     - url: https://brainvisa.info/neuro-forge/
     - url: https://conda.anaconda.org/conda-forge/
+    indexes:
+    - https://pypi.org/simple
     packages:
       linux-64:
       - conda: https://brainvisa.info/neuro-forge/linux-64/anatomist-6.0.18-py311.conda
@@ -2591,6 +2593,14 @@ environments:
       - conda: https://conda.anaconda.org/conda-forge/noarch/xlwt-1.3.0-py_1.tar.bz2
       - conda: https://conda.anaconda.org/conda-forge/noarch/xvfbwrapper-0.2.29-pyhd8ed1ab_0.conda
       - conda: https://conda.anaconda.org/conda-forge/noarch/zipp-4.1.0-pyhcf101f3_0.conda
+      - pypi: git+https://github.com/neurospin/colorado?rev=b08d79b1e023bae2d85aaf375dc3918d5ee0bf66#b08d79b1e023bae2d85aaf375dc3918d5ee0bf66
+      - pypi: git+https://github.com/neurospin/dico_toolbox?rev=2c5d57196dab408d7248065d54aa3a134c396c52#2c5d57196dab408d7248065d54aa3a134c396c52
+      - pypi: git+https://github.com/neurospin/point-cloud-pattern-mining?rev=60c0f9aa56b59e83ed4b72d9dbd9f2c36363bd53#60c0f9aa56b59e83ed4b72d9dbd9f2c36363bd53
+      - pypi: https://files.pythonhosted.org/packages/11/0a/daece46e65c821d153746566a1604ac90338f0279b1fb858a3617eb60472/pathos-0.3.4-py3-none-any.whl
+      - pypi: https://files.pythonhosted.org/packages/1e/7a/dbb3be0ce9bd5c8b7e3d87328e79063f8b263b2b1bfa4774cb1147bfcd3f/sklearn-0.0.tar.gz
+      - pypi: https://files.pythonhosted.org/packages/2a/ac/4d5f104edf2aae2fec85567ec1d1969010de8124c5c45514f25e14900b65/pox-0.3.7-py3-none-any.whl
+      - pypi: https://files.pythonhosted.org/packages/8e/e1/d1b380af6443e7c33aeb40617ebdc17c39dc30095235643cc518e3908203/ppft-1.7.8-py3-none-any.whl
+      - pypi: https://files.pythonhosted.org/packages/ea/70/d4539ed4e2b5e17f170c1c971a98459cbe95eb9ed7e475298ededb56af22/p_tqdm-1.4.2.tar.gz
       linux-64-cuda:
       - conda: https://brainvisa.info/neuro-forge/linux-64/anatomist-6.0.18-py311.conda
       - conda: https://brainvisa.info/neuro-forge/linux-64/axon-6.0.14-py311.conda
@@ -3256,6 +3266,14 @@ environments:
       - conda: https://conda.anaconda.org/conda-forge/noarch/xlwt-1.3.0-py_1.tar.bz2
       - conda: https://conda.anaconda.org/conda-forge/noarch/xvfbwrapper-0.2.34-pyhd8ed1ab_0.conda
       - conda: https://conda.anaconda.org/conda-forge/noarch/zipp-4.1.0-pyhcf101f3_0.conda
+      - pypi: git+https://github.com/neurospin/colorado?rev=b08d79b1e023bae2d85aaf375dc3918d5ee0bf66#b08d79b1e023bae2d85aaf375dc3918d5ee0bf66
+      - pypi: git+https://github.com/neurospin/dico_toolbox?rev=2c5d57196dab408d7248065d54aa3a134c396c52#2c5d57196dab408d7248065d54aa3a134c396c52
+      - pypi: git+https://github.com/neurospin/point-cloud-pattern-mining?rev=60c0f9aa56b59e83ed4b72d9dbd9f2c36363bd53#60c0f9aa56b59e83ed4b72d9dbd9f2c36363bd53
+      - pypi: https://files.pythonhosted.org/packages/11/0a/daece46e65c821d153746566a1604ac90338f0279b1fb858a3617eb60472/pathos-0.3.4-py3-none-any.whl
+      - pypi: https://files.pythonhosted.org/packages/1e/7a/dbb3be0ce9bd5c8b7e3d87328e79063f8b263b2b1bfa4774cb1147bfcd3f/sklearn-0.0.tar.gz
+      - pypi: https://files.pythonhosted.org/packages/2a/ac/4d5f104edf2aae2fec85567ec1d1969010de8124c5c45514f25e14900b65/pox-0.3.7-py3-none-any.whl
+      - pypi: https://files.pythonhosted.org/packages/8e/e1/d1b380af6443e7c33aeb40617ebdc17c39dc30095235643cc518e3908203/ppft-1.7.8-py3-none-any.whl
+      - pypi: https://files.pythonhosted.org/packages/ea/70/d4539ed4e2b5e17f170c1c971a98459cbe95eb9ed7e475298ededb56af22/p_tqdm-1.4.2.tar.gz
   docs:
     channels:
     - url: https://conda.anaconda.org/conda-forge/
@@ -24248,6 +24266,31 @@ packages:
   run_exports: {}
   size: 24190
   timestamp: 1779159948016
+- pypi: git+https://github.com/neurospin/colorado?rev=b08d79b1e023bae2d85aaf375dc3918d5ee0bf66#b08d79b1e023bae2d85aaf375dc3918d5ee0bf66
+  name: colorado
+  version: 0.2.2
+  requires_dist:
+  - plotly
+  - numpy
+- pypi: git+https://github.com/neurospin/dico_toolbox?rev=2c5d57196dab408d7248065d54aa3a134c396c52#2c5d57196dab408d7248065d54aa3a134c396c52
+  name: dico-toolbox
+  version: 0.1.2
+  requires_dist:
+  - numpy
+  - tqdm
+  - sphinx>=1.0 ; extra == 'doc'
+  - pytest ; extra == 'dev'
+- pypi: git+https://github.com/neurospin/point-cloud-pattern-mining?rev=60c0f9aa56b59e83ed4b72d9dbd9f2c36363bd53#60c0f9aa56b59e83ed4b72d9dbd9f2c36363bd53
+  name: point-cloud-pattern-mining
+  version: 0.1.0
+  requires_dist:
+  - scipy>=0.22
+  - pandas
+  - numpy
+  - tqdm
+  - sklearn
+  - matplotlib
+  requires_python: '>=3.6'
 - pypi: https://files.pythonhosted.org/packages/01/f9/575c8d760eae1fc99651b7cc5efd96ad5379ca4d6b53750b0fb4fe983f34/imagesize-2.0.1-py3-none-any.whl
   name: imagesize
   version: 2.0.1
@@ -24323,6 +24366,20 @@ packages:
   - pytest ; extra == 'test'
   - html5lib ; extra == 'test'
   requires_python: '>=3.9'
+- pypi: https://files.pythonhosted.org/packages/11/0a/daece46e65c821d153746566a1604ac90338f0279b1fb858a3617eb60472/pathos-0.3.4-py3-none-any.whl
+  name: pathos
+  version: 0.3.4
+  sha256: fe44883448c05c80d518b61df491b496f6190bb6860253f3254d8c9afb53c340
+  requires_dist:
+  - ppft>=1.7.7
+  - dill>=0.4.0
+  - pox>=0.3.6
+  - multiprocess>=0.70.18
+  requires_python: '>=3.8'
+- pypi: https://files.pythonhosted.org/packages/1e/7a/dbb3be0ce9bd5c8b7e3d87328e79063f8b263b2b1bfa4774cb1147bfcd3f/sklearn-0.0.tar.gz
+  name: sklearn
+  version: '0.0'
+  sha256: e23001573aa194b834122d2b9562459bf5ae494a2d59ca6b8aa22c85a44c0e31
 - pypi: https://files.pythonhosted.org/packages/27/2c/daca29684cbe9fd4bc711f8246da3c10adca1ccc4d24436b17572eb2590e/roman_numerals_py-4.1.0-py3-none-any.whl
   name: roman-numerals-py
   version: 4.1.0
@@ -24341,6 +24398,11 @@ packages:
   - sphinx>=5 ; extra == 'standalone'
   - pytest ; extra == 'test'
   - defusedxml>=0.7.1 ; extra == 'test'
+  requires_python: '>=3.9'
+- pypi: https://files.pythonhosted.org/packages/2a/ac/4d5f104edf2aae2fec85567ec1d1969010de8124c5c45514f25e14900b65/pox-0.3.7-py3-none-any.whl
+  name: pox
+  version: 0.3.7
+  sha256: 82a495249d13371314c1a5b5626a115e067ef5215d49530bf5efa37fbc25b56a
   requires_python: '>=3.9'
 - pypi: https://files.pythonhosted.org/packages/31/53/136e9eca6e0b9dc0e1962e2c908fbea2e5ac000c2a2fbd9a35797958c48b/sphinx-8.2.3-py3-none-any.whl
   name: sphinx
@@ -24550,6 +24612,13 @@ packages:
   - hypothesis ; extra == 'tests'
   - pytest ; extra == 'tests'
   requires_python: '>=3.9'
+- pypi: https://files.pythonhosted.org/packages/8e/e1/d1b380af6443e7c33aeb40617ebdc17c39dc30095235643cc518e3908203/ppft-1.7.8-py3-none-any.whl
+  name: ppft
+  version: 1.7.8
+  sha256: d3e0e395215b14afc3dd5adfc032ccecfda2d4ed50dc7ded076cd1d215442843
+  requires_dist:
+  - dill>=0.4.1 ; extra == 'dill'
+  requires_python: '>=3.9'
 - pypi: https://files.pythonhosted.org/packages/8f/d7/9322c609343d929e75e7e5e6255e614fcc67572cfd083959cdef3b7aad79/docutils-0.21.2-py3-none-any.whl
   name: docutils
   version: 0.21.2
@@ -24646,6 +24715,14 @@ packages:
   version: 3.5.1
   sha256: 15f024313246a4ed976c60f440bb8d257815513a681d212ff74fd46f7d715a90
   requires_python: '>=3.7'
+- pypi: https://files.pythonhosted.org/packages/ea/70/d4539ed4e2b5e17f170c1c971a98459cbe95eb9ed7e475298ededb56af22/p_tqdm-1.4.2.tar.gz
+  name: p-tqdm
+  version: 1.4.2
+  sha256: 0f860c5facd0b0059da39998e55cfc035563f92d85d2f4895ba88a675c3c7529
+  requires_dist:
+  - tqdm>=4.45.0
+  - pathos>=0.2.5
+  - six>=1.13.0
 - pypi: https://files.pythonhosted.org/packages/eb/dc/ad025c1ee131eba60c69f4dd5779b18fcf1e6b21a343e2162a84d5d133c7/soupsieve-2.9.2-py3-none-any.whl
   name: soupsieve
   version: 2.9.2

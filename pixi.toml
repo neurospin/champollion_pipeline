@@ -34,6 +34,22 @@ numpy = ">=1.24"
 joblib = ">=1.3"
 rich = ">=13.0"
 
+# cortical_tiles runtime deps (external/cortical_tiles/cortical_tiles/info.py REQUIRES)
+# not on conda; locked as PyPI packages of the default env only. Git sources pinned
+# to full commit hashes (git ls-remote main, 2026-10-28).
+[pypi-dependencies]
+p_tqdm = ">=1.4.2,<2"
+dico_toolbox = { git = "https://github.com/neurospin/dico_toolbox", rev = "2c5d57196dab408d7248065d54aa3a134c396c52" }
+colorado = { git = "https://github.com/neurospin/colorado", rev = "b08d79b1e023bae2d85aaf375dc3918d5ee0bf66" }
+point-cloud-pattern-mining = { git = "https://github.com/neurospin/point-cloud-pattern-mining", rev = "60c0f9aa56b59e83ed4b72d9dbd9f2c36363bd53" }
+
+# pcpm's info.py REQUIRES the deprecated PyPI name "sklearn"; its current sdist
+# (0.0.post12) raises at build unless SKLEARN_ALLOW_DEPRECATED_SKLEARN_PACKAGE_INSTALL
+# is set. sklearn 0.0 is an empty shim whose only requirement is scikit-learn
+# (already conda-locked), so the lock stays reproducible with no env variable.
+[pypi-options.dependency-overrides]
+sklearn = "==0.0"
+
 # ── BrainVISA feature (morphologist graphs + snapshots) ──────────────────────
 [feature.brainvisa.dependencies]
 python = ">=3.11"
