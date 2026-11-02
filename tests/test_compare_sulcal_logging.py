@@ -141,7 +141,7 @@ class TestDatabasesLogging:
         monkeypatch.setattr(compare_sulcal.brainvisa, "aims", types.SimpleNamespace(read=lambda _p: _FakeGraph()))
         sub = {"subject": SUBJECT, "dir": GRAPH_DIR, "graph_file": f"L{SUBJECT}*.arg"}
 
-        databases._get_subject_voxel_counts(sub, "/fake/brainvisa")
+        databases._get_subject_voxel_counts(sub)
 
         message = _only_record(compare_caplog, "compare_sulcal.databases", logging.WARNING)
         assert SUBJECT in message

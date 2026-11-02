@@ -116,12 +116,14 @@ class TestRunCkaRename:
 
 @pytest.mark.smoke
 class TestGenerateUmapReferenceRename:
-    def test_sys_path_append_targets_champollion_utils(self):
-        """src/generate_umap_reference.py appends champollion_V1/champollion/utils."""
-        lines = [ln for ln in _code_lines(_read(SRC / "generate_umap_reference.py")) if "champollion_V1" in ln]
-        assert lines, "no champollion_V1 path found in src/generate_umap_reference.py"
+    def test_model_discovery_import_targets_champollion_utils(self):
+        """src/generate_umap_reference.py imports the champollion.utils package, never contrastive."""
+        lines = [
+            ln for ln in _code_lines(_read(SRC / "generate_umap_reference.py")) if "put_together_embeddings_files" in ln
+        ]
+        assert lines, "no put_together_embeddings_files import found in src/generate_umap_reference.py"
         joined = "\n".join(lines)
-        assert '"champollion_V1", "champollion", "utils"' in joined, (
-            f"expected champollion_V1/champollion/utils, got: {joined.strip()}"
+        assert "from champollion.utils.put_together_embeddings_files import" in joined, (
+            f"expected an import from champollion.utils, got: {joined.strip()}"
         )
         assert "contrastive" not in joined

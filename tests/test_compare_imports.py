@@ -57,7 +57,7 @@ class TestTask185CompareImports:
         # raising=True (the default): the attribute must already exist on the module.
         monkeypatch.setattr(compare_sulcal.brainvisa, "get_all_subjects_as_dictionary", lister)
         monkeypatch.setattr(
-            compare_sulcal.databases, "_get_subject_voxel_counts", lambda sub, _bv: (sub["subject"], {"S.C.": 3})
+            compare_sulcal.databases, "_get_subject_voxel_counts", lambda sub: (sub["subject"], {"S.C.": 3})
         )
         script = _make_script(
             [
@@ -71,7 +71,7 @@ class TestTask185CompareImports:
             ]
         )
 
-        data = script._load_database("folds/3.3/a", ["L", "R"], str(tmp_path), 1, str(tmp_path))
+        data = script._load_database("folds/3.3/a", ["L", "R"], str(tmp_path), 1)
 
         assert data == {"sub-01": {"S.C.": 3}}
         assert lister.call_count == 2

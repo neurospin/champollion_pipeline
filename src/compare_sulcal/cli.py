@@ -6,8 +6,7 @@ import json
 import logging
 import math
 import os
-import sys
-from os.path import abspath, dirname, join
+from os.path import abspath, dirname
 from pathlib import Path
 
 import numpy as np
@@ -508,7 +507,7 @@ class Compare(ScriptBuilder):
     # Database comparison mode
     # ---------------------------------------------------------------------- #
 
-    def _load_database(self, path_to_graph, sides, subjects_dir, njobs, brainvisa_dir) -> dict:
+    def _load_database(self, path_to_graph, sides, subjects_dir, njobs) -> dict:
         if brainvisa.get_all_subjects_as_dictionary is None:
             raise ImportError(
                 "The databases subcommand requires cortical_tiles (pixi environment with the cortical-tiles feature)"
@@ -521,7 +520,7 @@ class Compare(ScriptBuilder):
             logger.trace(f"    [{side}] {len(subjects)} subjects found, loading with {njobs} worker(s)…")
 
             results = Parallel(n_jobs=njobs, prefer="processes")(
-                delayed(databases._get_subject_voxel_counts)(sub, brainvisa_dir) for sub in subjects
+                delayed(databases._get_subject_voxel_counts)(sub) for sub in subjects
             )
             n_ok = 0
             for sub_name, counts in results:
@@ -534,25 +533,15 @@ class Compare(ScriptBuilder):
         return all_data
 
     def _run_databases(self) -> int:  # noqa: PLR0915 - linear subcommand body; split deferred (user decision 2026-10-23)
-        brainvisa_dir = abspath(
-            join(dirname(__file__), "..", "..", "external", "cortical_tiles", "cortical_tiles", "brainvisa")
-        )
-        if brainvisa_dir not in sys.path:
-            sys.path.insert(0, brainvisa_dir)
-
         sides = ["L", "R"] if self.args.side == "both" else [self.args.side]
         njobs = self.args.njobs or max(1, min(22, cpu_count() - 2))
         la, lb = self.args.label_a, self.args.label_b
 
         logger.trace(f"Loading campaign A ({la}): {self.args.path_to_graph_a}")
-        data_a = self._load_database(
-            self.args.path_to_graph_a, sides, self.args.labeled_subjects_dir, njobs, brainvisa_dir
-        )
+        data_a = self._load_database(self.args.path_to_graph_a, sides, self.args.labeled_subjects_dir, njobs)
 
         logger.trace(f"Loading campaign B ({lb}): {self.args.path_to_graph_b}")
-        data_b = self._load_database(
-            self.args.path_to_graph_b, sides, self.args.labeled_subjects_dir, njobs, brainvisa_dir
-        )
+        data_b = self._load_database(self.args.path_to_graph_b, sides, self.args.labeled_subjects_dir, njobs)
 
         subs_a, subs_b = set(data_a), set(data_b)
         logger.output(f"Subjects in {la} only:  {len(subs_a - subs_b)}")
@@ -587,10 +576,10 @@ class Compare(ScriptBuilder):
         mask_a_stats, mask_b_stats = {}, {}
         if self.args.masks_a and os.path.isdir(self.args.masks_a):
             logger.trace(f"Loading mask stats from {la}: {self.args.masks_a}")
-            mask_a_stats = databases._mask_stats(abspath(self.args.masks_a), brainvisa_dir)
+            mask_a_stats = databases._mask_stats(abspath(self.args.masks_a))
         if self.args.masks_b and os.path.isdir(self.args.masks_b):
             logger.trace(f"Loading mask stats from {lb}: {self.args.masks_b}")
-            mask_b_stats = databases._mask_stats(abspath(self.args.masks_b), brainvisa_dir)
+            mask_b_stats = databases._mask_stats(abspath(self.args.masks_b))
 
         if mask_a_stats or mask_b_stats:
             all_mask_keys = sorted(set(mask_a_stats) | set(mask_b_stats))

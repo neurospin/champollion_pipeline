@@ -3,7 +3,6 @@
 import glob
 import logging
 import os
-import sys
 from os.path import join
 
 import numpy as np
@@ -17,11 +16,8 @@ logger = logging.getLogger(__name__)
 # --------------------------------------------------------------------------- #
 
 
-def _get_subject_voxel_counts(sub, brainvisa_dir):
+def _get_subject_voxel_counts(sub):
     """Worker: load one graph and return (subject_name, {sulcus: voxel_count})."""
-    if brainvisa_dir not in sys.path:
-        sys.path.insert(0, brainvisa_dir)
-
     matches = sorted(glob.glob(join(sub["dir"], sub["graph_file"])))
     if not matches:
         return sub["subject"], None
@@ -43,11 +39,8 @@ def _get_subject_voxel_counts(sub, brainvisa_dir):
     return sub["subject"], counts
 
 
-def _mask_stats(mask_dir: str, brainvisa_dir: str) -> dict:
+def _mask_stats(mask_dir: str) -> dict:
     """Return {relative_path: (max, sum, nonzero)} for all masks in mask_dir."""
-    if brainvisa_dir not in sys.path:
-        sys.path.insert(0, brainvisa_dir)
-
     stats = {}
     for path in sorted(glob.glob(join(mask_dir, "*/*.nii.gz"))):
         rel = os.path.relpath(path, mask_dir)

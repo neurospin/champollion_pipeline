@@ -34,17 +34,11 @@ import joblib
 import numpy as np
 import pandas as pd
 import umap as umap_lib
+from champollion.utils.put_together_embeddings_files import get_model_paths
 from champollion_utils.script_builder import ScriptBuilder
 
 from champollion_pipeline.derivatives_layout import compute_run_log_path
 from champollion_pipeline.process_setup import init_pipeline_process
-
-# Re-use the model-discovery helpers from champollion_V1 utils
-sys.path.insert(
-    0,
-    osp.abspath(osp.join(osp.dirname(__file__), "..", "external", "champollion_V1", "champollion", "utils")),
-)
-from put_together_embeddings_files import get_model_paths
 
 logger = logging.getLogger(__name__)
 

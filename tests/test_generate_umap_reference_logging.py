@@ -39,7 +39,7 @@ import numpy as np
 import pytest
 
 # The champollion_V1 helper module may be absent; stub it before importing the script.
-sys.modules.setdefault("put_together_embeddings_files", MagicMock())
+sys.modules.setdefault("champollion.utils.put_together_embeddings_files", MagicMock())
 
 import generate_umap_reference  # noqa: E402
 from generate_umap_reference import GenerateUmapReference  # noqa: E402
