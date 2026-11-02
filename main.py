@@ -156,6 +156,8 @@ class RunCorticalTilesStage(PipelineStage):
 
         if self.config.dataset.bids:
             args.append("--bids")
+        if self.config.dataset.allow_prefix_ids:
+            args.append("--allow-prefix-ids")
 
         if self.config.dataset.regions:
             args.extend(["--regions", *self.config.dataset.regions])
@@ -617,13 +619,15 @@ def _apply_dataset_path_overrides(config: PipelineConfig, args: argparse.Namespa
 
 
 def _apply_runtime_overrides(config: PipelineConfig, args: argparse.Namespace) -> None:
-    """Apply --verbose, --bids, --mode, --n-workers, --worker-timeout and --log."""
+    """Apply --verbose, --bids, --allow-prefix-ids, --mode, --n-workers, --worker-timeout and --log."""
     if args.verbose:
         config.verbose = True
         config.log_level = "DEBUG"
 
     if args.bids:
         config.dataset.bids = True
+    if args.allow_prefix_ids:
+        config.dataset.allow_prefix_ids = True
 
     if args.mode:
         config.mode = args.mode
@@ -785,6 +789,15 @@ class ChampollionPipeline(ScriptBuilder):
                 "(subjects/sub-*/ses-*/...). "
                 "Activates BIDS-aware scan enumeration in eligibility checks "
                 "and passes --bids to cortical_tiles."
+            ),
+        )
+
+        self.parser.add_argument(
+            "--allow-prefix-ids",
+            action="store_true",
+            help=(
+                "TEMPORARY: let cortical_tiles run when a subject ID is a strict prefix "
+                "of another (e.g. sub-1 and sub-10); its transforms may then be wrong."
             ),
         )
 
