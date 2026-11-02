@@ -689,6 +689,21 @@ class TestTrainChampollionLogging:
         record = pipeline_caplog.assert_logged(logging.WARNING, "OSError")
         assert record.name == TRAIN_LOGGER
 
+    def test_qc_not_written_warning_carries_traceback(self, tmp_path, pipeline_caplog):
+        """REQ-PYTHONIC-BDRABCZUK-E0BA63DC56DE: the QC write failure WARNING keeps its traceback."""
+        error = OSError("synthetic qc write failure f6a8")
+        with patch.object(train_champollion, "write_run_qc_tsv", side_effect=error):
+            self._run(tmp_path, losses=FINITE_LOSSES)
+
+        hits = [
+            r
+            for r in pipeline_caplog.records
+            if r.levelno == logging.WARNING and r.exc_info is not None and r.exc_info[1] is error
+        ]
+        assert hits, f"no WARNING record carries the traceback of {error!r}"
+        assert hits[0].name == TRAIN_LOGGER
+        assert hits[0].exc_info[2] is not None, "exc_info holds no traceback object"
+
     def test_qc_passed_logged_at_output(self, tmp_path, pipeline_caplog):
         out, _ = self._run(tmp_path, losses=FINITE_LOSSES)
 

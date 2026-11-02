@@ -102,7 +102,7 @@ def _fetch_models(settings: StreamingSettings, dataset: DatasetConfig, models_pa
         extract_to = ensure_models_cache_dir(cache)
         fetched, _ = fetch_model_set(models_path, extract_to, None, False)
     except Exception as error:
-        logger.error("model fetch failed for %s: %s", models_path, error)
+        logger.exception("model fetch failed for %s: %s", models_path, error)
         return None
     logger.trace("models fetched to %s", fetched)
     return fetched
@@ -117,7 +117,7 @@ def _ensure_config(settings: StreamingSettings, dataset: DatasetConfig) -> bool:
     try:
         root = ensure_dataset_config(settings, dataset)
     except Exception as error:
-        logger.error("dataset config failed: %s", error)
+        logger.exception("dataset config failed: %s", error)
         return False
     logger.trace("dataset config ready under %s", root)
     return True
@@ -163,7 +163,7 @@ def _record_done(state: _ProducerState, future: Future) -> None:
     try:
         result = future.result()
     except Exception as error:
-        logger.error("scan %s: run_scan_worker raised: %s (log %s)", scan.path_prefix, error, log)
+        logger.exception("scan %s: run_scan_worker raised: %s (log %s)", scan.path_prefix, error, log)
         result = WorkerResult(scan, WorkerStatus.FAILED)
     else:
         if result.status is WorkerStatus.FAILED:
@@ -257,7 +257,7 @@ def _consumer_results(future: Future, settings: StreamingSettings) -> list[Consu
     try:
         return future.result()
     except Exception as error:
-        logger.error("consumer failed: %s (log %s)", error, os.path.join(settings.log_dir, CONSUMER_LOG_NAME))
+        logger.exception("consumer failed: %s (log %s)", error, os.path.join(settings.log_dir, CONSUMER_LOG_NAME))
         return None
 
 
@@ -275,7 +275,7 @@ def _combine(settings: StreamingSettings, dataset: DatasetConfig) -> bool:
     try:
         logger.output("combined embeddings: %s", run_combine(settings, dataset))
     except Exception as error:
-        logger.error("combine failed: %s", error)
+        logger.exception("combine failed: %s", error)
         return False
     return True
 
