@@ -305,7 +305,7 @@ def _report_training_qc(output_dir: str) -> None:
             rows.append({"check": name, "qc": 0 if reason else 1, "reason": reason})
         write_run_qc_tsv(report_path, rows)
     except Exception as exc:
-        logger.warning(f"training QC not written: {type(exc).__name__}: {exc}")
+        logger.warning(f"training QC not written: {type(exc).__name__}: {exc}", exc_info=True)
         return
     failed = [row["check"] for row in rows if row["qc"] == 0]
     if failed:

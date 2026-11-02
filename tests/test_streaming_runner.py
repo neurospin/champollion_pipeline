@@ -75,6 +75,9 @@ Requirements (id, test):
   test_skipped_scans_without_crops_root_return_1
 - REQ-STREAMING-BDRABCZUK-537672FF1735, REQ-STREAMING-BDRABCZUK-004902F07AB2
   test_dry_run_without_ok_or_skipped_scan_returns_1
+- REQ-PYTHONIC-BDRABCZUK-1218A531FCB8 (TASK-PYTHONIC-BDRABCZUK-E5CECD81D01D) test_fetch_failure_error_carries_traceback,
+  test_dataset_config_failure_error_carries_traceback, test_worker_exception_error_carries_traceback,
+  test_consumer_failure_error_carries_traceback, test_combine_failure_error_carries_traceback
 """
 
 from __future__ import annotations
@@ -696,3 +699,48 @@ def test_dry_run_without_ok_or_skipped_scan_returns_1(ctx, pipeline_caplog):
     hits = [m for m in _summary_records(pipeline_caplog, WorkerStatus) if "failed=3" in m]
     assert len(hits) == 1, f"worker summary records: {_summary_records(pipeline_caplog, WorkerStatus)}"
     assert [m for m in _errors(pipeline_caplog) if ctx.dataset.cortical_tiles_output in m], _errors(pipeline_caplog)
+
+
+# --- caught failures keep their traceback (REQ-PYTHONIC-BDRABCZUK-1218A531FCB8) ------------------------
+
+
+def _assert_error_with_traceback(pipeline_caplog, error: BaseException) -> None:
+    """One ERROR record carries ``error`` as its exc_info, so the handler output shows the traceback."""
+    hits = [
+        r
+        for r in pipeline_caplog.records
+        if r.levelno == logging.ERROR and r.exc_info is not None and r.exc_info[1] is error
+    ]
+    assert hits, f"no ERROR record carries the traceback of {error!r}; ERROR records: {_errors(pipeline_caplog)}"
+    assert hits[0].exc_info[2] is not None, "exc_info holds no traceback object"
+
+
+def test_fetch_failure_error_carries_traceback(ctx, pipeline_caplog):
+    error = ctx.h.fetch_error = RuntimeError("synthetic fetch failure a1f3")
+    assert ctx.run() == 1
+    _assert_error_with_traceback(pipeline_caplog, error)
+
+
+def test_dataset_config_failure_error_carries_traceback(ctx, pipeline_caplog):
+    error = ctx.h.config_error = RuntimeError("synthetic config failure b2e4")
+    assert ctx.run() == 1
+    _assert_error_with_traceback(pipeline_caplog, error)
+
+
+def test_worker_exception_error_carries_traceback(ctx, pipeline_caplog):
+    error = RuntimeError("synthetic pool failure c3d5")
+    ctx.h.worker_errors = {SCAN_B: error}
+    assert ctx.run() == 1
+    _assert_error_with_traceback(pipeline_caplog, error)
+
+
+def test_consumer_failure_error_carries_traceback(ctx, pipeline_caplog):
+    error = ctx.h.consumer_error = ValueError("synthetic consumer failure d4c6")
+    assert ctx.run() == 1
+    _assert_error_with_traceback(pipeline_caplog, error)
+
+
+def test_combine_failure_error_carries_traceback(ctx, pipeline_caplog):
+    error = ctx.h.combine_error = FileNotFoundError("synthetic combine failure e5b7")
+    assert ctx.run() == 1
+    _assert_error_with_traceback(pipeline_caplog, error)
