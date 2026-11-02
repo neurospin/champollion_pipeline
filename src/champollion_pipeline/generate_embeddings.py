@@ -580,7 +580,7 @@ class GenerateEmbeddings(ScriptBuilder):
             )
             logger.output("CKA coherence test completed.")
         except Exception as e:
-            logger.warning(f"CKA test failed - {e}")
+            logger.warning(f"CKA test failed - {e}", exc_info=True)
 
 
 def main():

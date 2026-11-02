@@ -638,6 +638,17 @@ class TestRunCkaTest:
             script._run_cka_test(str(tmp_path))
         pipeline_caplog.assert_logged(logging.WARNING, "CKA test failed - no data")
 
+    def test_failure_warning_carries_traceback(self, tmp_path, pipeline_caplog):
+        """REQ-PYTHONIC-BDRABCZUK-35D192B47E7E: the CKA failure WARNING keeps the exception traceback."""
+        script = make_script(["/m", "/d"])
+        error = RuntimeError("synthetic cka failure 7c1e")
+        with patch.object(ge, "test_models_coherence_from_directory", side_effect=error):
+            script._run_cka_test(str(tmp_path))
+        record = pipeline_caplog.assert_logged(logging.WARNING, "CKA test failed")
+        assert record.exc_info is not None, "the CKA failure WARNING carries no exc_info"
+        assert record.exc_info[1] is error
+        assert record.exc_info[2] is not None, "exc_info holds no traceback object"
+
     def test_success_is_reported(self, tmp_path, pipeline_caplog):
         script = make_script(["/m", "/d"])
         with patch.object(ge, "test_models_coherence_from_directory"):
