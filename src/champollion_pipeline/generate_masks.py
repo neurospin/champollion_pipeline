@@ -169,6 +169,7 @@ def _compute_one_sulcus(  # noqa: PLR0913 - joblib worker called positionally; t
 
         write_mask(mask, join(mask_dir, side, sulcus_full + ".nii.gz"))
     except Exception as e:
+        logger.exception(f"[{side}] {sulcus_full}: mask computation failed: {e}")
         return f"failed: {e}"
     return RETURN_DICTIONARY["ok"]
 
@@ -293,6 +294,7 @@ class SerialRunner(MaskRunner):
                         logger.warning(f"⚠ [{side}] {sulcus_full}: invalid foldlabel — logged to {log_path}")
                         results[sulcus] = RETURN_DICTIONARY["invalid_foldlabel"]
                     else:
+                        logger.exception(f"[{side}] {sulcus_full}: mask computation failed: {e}")
                         results[sulcus] = f"failed: {e}"
             yield side, results
 
@@ -381,6 +383,7 @@ class BufferedRunner(MaskRunner):
                 )
                 run_results = {sulci_to_run[sf]: r for sf, r in zip(sorted_sulci_full, job_outputs, strict=False)}
             except Exception as e:
+                logger.exception(f"[{side}] sulcus compute phase failed for {len(sorted_sulci_full)} sulci: {e}")
                 run_results = {sulci_to_run[sf]: f"failed: {e}" for sf in sorted_sulci_full}
 
             # All sulci default to skipped; overwrite with actual run results

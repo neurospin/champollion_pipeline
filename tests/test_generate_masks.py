@@ -289,6 +289,17 @@ class TestComputeOneSulcus:
         assert result.startswith("failed:")
         assert "boom" in result
 
+    def test_failure_error_carries_traceback(self, tmp_path, pipeline_caplog):
+        """REQ-PYTHONIC-BDRABCZUK-B9E1ECFFD550: the worker's caught failure is logged at ERROR with its traceback."""
+        error = RuntimeError("synthetic worker failure 7c2a")
+        modules, _, mock_cm, _ = _mock_aims_env()
+        mock_cm.initialize_mask.side_effect = error  # noqa: V101
+        with _patched_masks_module(modules):
+            result = _compute_one_sulcus(self.SULCUS, {}, self.VT, str(tmp_path), "L")
+        assert result.startswith("failed:")
+        record = pipeline_caplog.assert_traceback_logged(logging.ERROR, error)
+        assert record.name == "champollion_pipeline.generate_masks"
+
     def test_voxels_accumulated_into_aggregate(self, tmp_path):
         """Both subjects' voxel positions appear in the aggregate array."""
         fake_mask = _FakeMask()

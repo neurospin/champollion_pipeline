@@ -15,6 +15,7 @@ The ``n_jobs``/soma-workflow contract is exercised, not changed: joblib is
 still driven through ``Parallel(n_jobs=...)`` exactly as in production.
 """
 
+import logging
 import types
 from pathlib import Path
 from unittest.mock import MagicMock, patch
@@ -232,6 +233,27 @@ class TestSerialRunner:
         assert results["S.C."].startswith("failed: ")
         assert "boom" in results["S.C."]
 
+    def test_generic_failure_error_carries_traceback(self, tmp_path, pipeline_caplog):
+        """REQ-PYTHONIC-BDRABCZUK-B9E1ECFFD550: a caught compute_mask failure is logged at ERROR with its traceback."""
+        error = RuntimeError("synthetic compute_mask failure 4e1b")
+        config = make_config(tmp_path)
+        compute_mask_mod = types.ModuleType("compute_mask")
+        compute_mask_mod.compute_mask = MagicMock(side_effect=error)
+        with _patched_masks_names(deep_folding_modules(compute_mask=compute_mask_mod)):
+            ((_, results),) = list(SerialRunner()(config))
+        assert results["S.C."].startswith("failed: ")
+        pipeline_caplog.assert_traceback_logged(logging.ERROR, error)
+
+    def test_invalid_foldlabel_logs_no_error(self, tmp_path, pipeline_caplog):
+        """REQ-PYTHONIC-BDRABCZUK-B9E1ECFFD550 excludes the invalid foldlabel: it stays a WARNING, no ERROR."""
+        config = make_config(tmp_path)
+        compute_mask_mod = types.ModuleType("compute_mask")
+        compute_mask_mod.compute_mask = MagicMock(side_effect=RuntimeError("too many simple surfaces"))
+        with _patched_masks_names(deep_folding_modules(compute_mask=compute_mask_mod)):
+            list(SerialRunner()(config))
+        errors = [r.getMessage() for r in pipeline_caplog.records if r.levelno >= logging.ERROR]
+        assert errors == []
+
     def test_too_many_simple_surfaces_is_invalid_foldlabel(self, tmp_path):
         config = make_config(tmp_path)
         compute_mask_mod = types.ModuleType("compute_mask")
@@ -385,6 +407,22 @@ class TestBufferedRunner:
         with _patched_masks_names(subjects_modules):
             list(BufferedRunner(1)(config))
         assert computed == ["S.C._left"]
+
+    def test_compute_phase_failure_error_carries_traceback(
+        self, tmp_path, monkeypatch, subjects_modules, pipeline_caplog
+    ):
+        """REQ-PYTHONIC-BDRABCZUK-B9E1ECFFD550: a caught compute-phase failure is logged at ERROR with its traceback."""
+        error = RuntimeError("synthetic compute phase failure 9d3f")
+
+        def compute(*args, **kwargs):
+            raise error
+
+        self._patch_workers(monkeypatch, compute=compute)
+        config = make_config(tmp_path)
+        with _patched_masks_names(subjects_modules):
+            ((_, results),) = list(BufferedRunner(1)(config))
+        assert results["S.C."].startswith("failed: ")
+        pipeline_caplog.assert_traceback_logged(logging.ERROR, error)
 
     def test_compute_phase_failure_marks_all_sulci_failed(self, tmp_path, monkeypatch, subjects_modules):
         def compute(*args, **kwargs):

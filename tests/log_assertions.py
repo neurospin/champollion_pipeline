@@ -120,6 +120,18 @@ class PipelineLogCapture:
             f"{logging.getLevelName(level)} {text!r}",
         )
 
+    def assert_traceback_logged(self, level: int, error: BaseException) -> logging.LogRecord:
+        """Return a captured record at ``level`` carrying ``error`` and its traceback as exc_info.
+
+        A record with exc_info set makes the handler print the traceback after the message.
+        """
+        record = self._first(
+            lambda record: record.levelno == level and record.exc_info is not None and record.exc_info[1] is error,
+            f"{logging.getLevelName(level)} with the traceback of {error!r}",
+        )
+        assert record.exc_info[2] is not None, "exc_info holds no traceback object"
+        return record
+
     def assert_fold_progress(self, fold: int, folds: int) -> logging.LogRecord:
         """Return a captured record below WARNING whose message contains ``Fold <fold>/<folds>``."""
         text = f"Fold {fold}/{folds}"
