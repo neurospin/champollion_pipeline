@@ -84,7 +84,7 @@ class TestRunValidation:
 
     def test_skips_crop_purge_when_crops_2mm_missing(self, tmp_path, pipeline_caplog):
         """REQ-LOGGING-BDRABCZUK-D1792CAE3479: the skipped crop purge is a WARNING record."""
-        tmp_path.mkdir(exist_ok=True)
+        (tmp_path / "skeletons" / "sub-01").mkdir(parents=True)
         script = _make_script(str(tmp_path), "sub-01")
         result = script.run()
         assert result == 0
@@ -94,6 +94,7 @@ class TestRunValidation:
     def test_returns_zero_on_success(self, tmp_path):
         crops_2mm = tmp_path / "crops" / "2mm"
         crops_2mm.mkdir(parents=True)
+        (tmp_path / "skeletons" / "sub-01").mkdir(parents=True)
         script = _make_script(str(tmp_path), "sub-01")
         assert script.run() == 0
 

@@ -9,6 +9,7 @@ Handles:
 """
 
 import logging
+import os
 import shutil
 from datetime import datetime
 from os.path import exists, join
@@ -20,8 +21,11 @@ from champollion_utils.script_builder import ScriptBuilder
 
 from champollion_pipeline.derivatives_layout import compute_run_log_path
 from champollion_pipeline.process_setup import init_pipeline_process
+from champollion_pipeline.utils.subject_name import subject_name_problem
 
 logger = logging.getLogger(__name__)
+
+PER_SUBJECT_STAGE_DIRS = ["skeletons", "foldlabels", "extremities", "transforms", "distmaps"]
 
 
 class PurgeSubject(ScriptBuilder):
@@ -57,17 +61,20 @@ class PurgeSubject(ScriptBuilder):
         if not self.args.dry_run:
             shutil.rmtree(path)
 
-    def _purge_per_subject_dirs(self, derivatives):
-        """Remove {subject}/ subdirectories under skeletons/, foldlabels/, etc."""
-        top_level_dirs = ["skeletons", "foldlabels", "extremities", "transforms", "distmaps"]
-        for dirname in top_level_dirs:
-            subj_dir = join(derivatives, dirname, self.args.subject)
+    def _per_subject_dirs(self, derivatives):
+        """Return (stage dir, {subject}/ subdirectory) pairs that exist under skeletons/, foldlabels/, etc."""
+        pairs = []
+        for dirname in PER_SUBJECT_STAGE_DIRS:
+            stage_dir = join(derivatives, dirname)
+            subj_dir = join(stage_dir, self.args.subject)
             if exists(subj_dir):
-                self._remove_dir(subj_dir)
+                pairs.append((stage_dir, subj_dir))
+        return pairs
 
-    def _purge_per_subject_crop_files(self, crops_2mm):
-        """Remove per-subject .nii.gz files inside Rcrops/, Rlabels/, etc."""
+    def _per_subject_crop_files(self, crops_2mm):
+        """Return the per-subject .nii.gz files inside Rcrops/, Rlabels/, etc."""
         subject = self.args.subject
+        files = []
         for region_dir in Path(crops_2mm).iterdir():
             if not region_dir.is_dir():
                 continue
@@ -84,13 +91,21 @@ class PurgeSubject(ScriptBuilder):
                             stem = stem[: -len(ext)]
                             break
                     if stem == subject or stem.startswith(f"{subject}_"):
-                        self._remove_file(str(f))
+                        files.append(f)
+        return files
 
-    def _purge_aggregated_arrays(self, crops_2mm):
-        """Remove subject row from aggregated .npy arrays and their subject CSVs."""
-        subject = self.args.subject
-        found_in_any = False
+    def _purge_per_subject_dirs(self, derivatives):
+        """Remove {subject}/ subdirectories under skeletons/, foldlabels/, etc."""
+        for _stage_dir, subj_dir in self._per_subject_dirs(derivatives):
+            self._remove_dir(subj_dir)
 
+    def _purge_per_subject_crop_files(self, crops_2mm):
+        """Remove per-subject .nii.gz files inside Rcrops/, Rlabels/, etc."""
+        for f in self._per_subject_crop_files(crops_2mm):
+            self._remove_file(str(f))
+
+    def _array_csvs(self, crops_2mm):
+        """Yield (region dir, subject CSV, paired .npy) for every aggregated array with a subject CSV."""
         for region_dir in Path(crops_2mm).iterdir():
             if not region_dir.is_dir():
                 continue
@@ -99,29 +114,50 @@ class PurgeSubject(ScriptBuilder):
                     continue
                 for csv_path in sorted(mask_dir.glob("*_subject.csv")):
                     npy_path = csv_path.parent / (csv_path.name.replace("_subject.csv", ".npy"))
-                    if not npy_path.exists():
-                        continue
+                    if npy_path.exists():
+                        yield region_dir, csv_path, npy_path
 
-                    subjects_df = pd.read_csv(csv_path)
-                    col = subjects_df.columns[0]
-                    subjects_df[col] = subjects_df[col].astype(str)
-                    mask = subjects_df[col] == str(subject)
+    def _has_array_rows(self, crops_2mm):
+        """True when some subject CSV of an aggregated array lists the subject."""
+        for _region_dir, csv_path, _npy_path in self._array_csvs(crops_2mm):
+            subjects_df = pd.read_csv(csv_path)
+            if (subjects_df[subjects_df.columns[0]].astype(str) == str(self.args.subject)).any():
+                return True
+        return False
 
-                    if not mask.any():
-                        continue
+    def _plan(self, derivatives, crops_2mm):
+        """Return (per-subject dirs, crop files, has array rows) without touching anything."""
+        dirs = self._per_subject_dirs(derivatives)
+        if not exists(crops_2mm):
+            return dirs, [], False
+        return dirs, self._per_subject_crop_files(crops_2mm), self._has_array_rows(crops_2mm)
 
-                    found_in_any = True
-                    idx = subjects_df.index[mask].tolist()
-                    self._log(f"Filter row(s) {idx} from array: {npy_path.name} (region {region_dir.name})")
+    def _purge_aggregated_arrays(self, crops_2mm):
+        """Remove subject row from aggregated .npy arrays and their subject CSVs."""
+        subject = self.args.subject
+        found_in_any = False
 
-                    if not self.args.dry_run:
-                        arr = np.load(str(npy_path), allow_pickle=True)
-                        keep = ~mask.values
-                        arr_filtered = arr[keep]
-                        np.save(str(npy_path), arr_filtered)
+        for region_dir, csv_path, npy_path in self._array_csvs(crops_2mm):
+            subjects_df = pd.read_csv(csv_path)
+            col = subjects_df.columns[0]
+            subjects_df[col] = subjects_df[col].astype(str)
+            mask = subjects_df[col] == str(subject)
 
-                        subjects_filtered = subjects_df[keep].reset_index(drop=True)
-                        subjects_filtered.to_csv(str(csv_path), index=False)
+            if not mask.any():
+                continue
+
+            found_in_any = True
+            idx = subjects_df.index[mask].tolist()
+            self._log(f"Filter row(s) {idx} from array: {npy_path.name} (region {region_dir.name})")
+
+            if not self.args.dry_run:
+                arr = np.load(str(npy_path), allow_pickle=True)
+                keep = ~mask.values
+                arr_filtered = arr[keep]
+                np.save(str(npy_path), arr_filtered)
+
+                subjects_filtered = subjects_df[keep].reset_index(drop=True)
+                subjects_filtered.to_csv(str(csv_path), index=False)
 
         if not found_in_any:
             logger.warning(f"Subject '{subject}' not found in any aggregated array.")
@@ -140,11 +176,37 @@ class PurgeSubject(ScriptBuilder):
         crops_2mm = join(derivatives, "crops", "2mm")
         subject = self.args.subject
 
+        reason = subject_name_problem(subject)
+        if reason is not None:
+            logger.error(f"Refusing --subject {subject!r}: {reason}.")
+            return 1
+
+        dirs, crop_files, has_array_rows = self._plan(derivatives, crops_2mm)
+        if not dirs and not crop_files and not has_array_rows:
+            logger.error(
+                f"Refusing --subject {subject!r}: no per-subject directory, crop file "
+                f"or subject CSV row in {derivatives}."
+            )
+            return 1
+
+        outside = False
+        for stage_dir, subj_dir in dirs:
+            if not os.path.realpath(subj_dir).startswith(os.path.realpath(stage_dir) + os.sep):
+                logger.error(
+                    f"Refusing --subject {subject!r}: {subj_dir} resolves to "
+                    f"{os.path.realpath(subj_dir)}, outside {stage_dir}."
+                )
+                outside = True
+        if outside:
+            return 1
+
         logger.trace(f"Purging subject '{subject}' from: {derivatives}")
 
-        self._purge_per_subject_dirs(derivatives)
+        for _stage_dir, subj_dir in dirs:
+            self._remove_dir(subj_dir)
         if exists(crops_2mm):
-            self._purge_per_subject_crop_files(crops_2mm)
+            for f in crop_files:
+                self._remove_file(str(f))
             self._purge_aggregated_arrays(crops_2mm)
         else:
             logger.warning("No crops/2mm directory found — skipping crop purge.")
