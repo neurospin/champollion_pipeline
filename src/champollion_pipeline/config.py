@@ -83,6 +83,9 @@ class DatasetConfig:
     # BIDS database layout (subjects/sub-*/ses-*/...)
     bids: bool = False
 
+    # TEMPORARY: let run_cortical_tiles accept subject IDs that are strict prefixes of others
+    allow_prefix_ids: bool = False
+
     # Snapshots parameters
     snapshots_path: str = ""
     reference_data_path: str = ""  # noqa: V107 - YAML config field

@@ -272,7 +272,11 @@ def _help_text(harness, monkeypatch, capsys) -> str:
 
 
 def _comparable_help(text: str) -> str:
-    """Help text without the usage lines, the --log entry, the "profiling" option group and trailing blanks."""
+    """Help text without the usage lines, the --log and --allow-prefix-ids entries, "profiling" and trailing blanks.
+
+    --allow-prefix-ids is TEMPORARY (DEF-CORTILES-BDRABCZUK-8A44DAD7F312); REQ-REFACTOR-BDRABCZUK-23313B4B70B5
+    leaves its entry out of the cbe51d7 comparison and REQ-CORTILES-BDRABCZUK-937E3705E661 requires it listed.
+    """
     lines = text.splitlines()
     first_blank = lines.index("")
     kept: list[str] = []
@@ -285,7 +289,7 @@ def _comparable_help(text: str) -> str:
             if line == "":
                 skipping = None
             continue
-        if line.startswith("  --log"):
+        if line.startswith(("  --log", "  --allow-prefix-ids")):
             skipping = "entry"
             continue
         if skipping == "entry":
@@ -423,10 +427,18 @@ def test_help_usage_names_champollion_pipeline(harness, monkeypatch, capsys):
     assert text.startswith(f"usage: {SCRIPT_NAME} "), text.splitlines()[0]
 
 
-# REQ-REFACTOR-BDRABCZUK-230A54CA2187
+# REQ-REFACTOR-BDRABCZUK-230A54CA2187, head REQ-REFACTOR-BDRABCZUK-23313B4B70B5
 def test_help_text_unchanged_since_cbe51d7(harness, monkeypatch, capsys):
     text = _help_text(harness, monkeypatch, capsys)
     assert _comparable_help(text) == _comparable_help(CBE51D7_HELP)
+
+
+# REQ-CORTILES-BDRABCZUK-937E3705E661
+def test_help_lists_allow_prefix_ids(harness, monkeypatch, capsys):
+    text = _help_text(harness, monkeypatch, capsys)
+    options = text.split("\noptions:\n", 1)[-1].split("\n\n", 1)[0]
+    entries = [line for line in options.splitlines() if line.startswith("  --allow-prefix-ids")]
+    assert entries, f"the options section of main.py --help lists no --allow-prefix-ids entry:\n{options}"
 
 
 # REQ-REFACTOR-BDRABCZUK-80A48D228105
