@@ -10,9 +10,11 @@ passed to run_cortical_tiles.py from the start.
 
 import logging
 import os
+import re
+from collections.abc import Collection
 from datetime import datetime
 from os.path import exists, join
-from pathlib import Path
+from pathlib import Path, PurePath
 
 import pandas as pd
 from champollion_utils.script_builder import ScriptBuilder
@@ -22,6 +24,20 @@ from champollion_pipeline.process_setup import init_pipeline_process
 from champollion_pipeline.utils.lib import DERIVATIVES_FOLDER
 
 logger = logging.getLogger(__name__)
+
+
+def _file_belongs_to(rel_path: PurePath, subjects: Collection[str]) -> bool:
+    """True when a subject ID is a whole directory of rel_path or a whole '_'/'.' token of its name.
+
+    '-' is not a delimiter, so sub-10 never matches sub-1.
+    """
+    dirs = set(rel_path.parent.parts)
+    for subject in subjects:
+        if subject in dirs:
+            return True
+        if re.search(r"(?<![^_.])" + re.escape(subject) + r"(?![^_.])", rel_path.name):
+            return True
+    return False
 
 
 class PruneFailedSubjects(ScriptBuilder):
@@ -102,23 +118,8 @@ class PruneFailedSubjects(ScriptBuilder):
         deleted = 0
         for root, _dirs, files in os.walk(derivatives_dir):
             for fname in files:
-                stem = fname
-                for ext in (
-                    ".nii.gz",
-                    ".nii",
-                    ".gz",
-                    ".csv",
-                    ".json",
-                    ".trm",
-                    ".nii.gz.minf",
-                    ".nii.minf",
-                    ".gz.minf",
-                    ".trm.minf",
-                ):
-                    if stem.endswith(ext):
-                        stem = stem[: -len(ext)]
-                        break
-                if any(sub in stem for sub in to_remove):
+                rel = PurePath(root, fname).relative_to(derivatives_dir)
+                if _file_belongs_to(rel, to_remove):
                     fpath = join(root, fname)
                     if self.args.dry_run:
                         logger.output(f"[dry-run] Would delete: {fpath}")
