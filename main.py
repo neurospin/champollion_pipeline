@@ -722,7 +722,8 @@ def _run_streaming_mode(config: PipelineConfig, args: argparse.Namespace, *, run
     """Run the scan-centric streaming mode after its two guards."""
     if not config.dataset.embeddings_only:
         logger.error(
-            "--mode streaming requires --embeddings-only (training aggregates subjects and must remain batch)."
+            "--mode streaming requires dataset.embeddings_only: true in the --config YAML "
+            "(training aggregates subjects and must remain batch)."
         )
         return 1
     if run_parallel_pipeline is None:
@@ -794,7 +795,7 @@ class ChampollionPipeline(ScriptBuilder):
             help=(
                 "Execution mode: 'sequential' (default, stage-centric batch) or "
                 "'streaming' (scan-centric parallel, one worker per scan). "
-                "Streaming mode requires --embeddings-only."
+                "Streaming mode requires dataset.embeddings_only: true in the --config YAML."
             ),
         )
         self.parser.add_argument(
@@ -809,7 +810,10 @@ class ChampollionPipeline(ScriptBuilder):
             type=int,
             default=None,
             metavar="SECONDS",
-            help="Per-worker timeout waiting for prerequisite files (default: 7200).",
+            help=(
+                "Timeout in seconds of the whole producer-worker run of one scan; "
+                "a longer run ends FAILED (default: 7200)."
+            ),
         )
         self.parser.add_argument(
             "--log",

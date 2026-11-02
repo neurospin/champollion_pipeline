@@ -102,7 +102,8 @@ GOLDEN_COMMAND_LINES = [
     (["--unknown"], 2),
 ]
 
-# main.py --help at commit cbe51d7 (Python 3.11 argparse, COLUMNS=100).
+# main.py --help at commit cbe51d7 (Python 3.11 argparse, COLUMNS=100); the --mode and --worker-timeout
+# entries carry the texts of TASK-STREAMING-BDRABCZUK-7CD70A508D2E.
 CBE51D7_HELP = """\
 usage: main.py [-h] [--config CONFIG]
                [--stages {generate_morphologist_graphs,run_cortical_tiles,generate_champollion_config,generate_embeddings,put_together_embeddings,generate_snapshots} [{generate_morphologist_graphs,run_cortical_tiles,generate_champollion_config,generate_embeddings,put_together_embeddings,generate_snapshots} ...]]
@@ -132,11 +133,12 @@ options:
   --mode {sequential,streaming}
                         Execution mode: 'sequential' (default, stage-centric batch) or 'streaming'
                         (scan-centric parallel, one worker per scan). Streaming mode requires
-                        --embeddings-only.
+                        dataset.embeddings_only: true in the --config YAML.
   --n-workers N         Number of parallel scan workers (streaming mode only). Defaults to
                         os.cpu_count().
   --worker-timeout SECONDS
-                        Per-worker timeout waiting for prerequisite files (default: 7200).
+                        Timeout in seconds of the whole producer-worker run of one scan; a longer
+                        run ends FAILED (default: 7200).
   --log [DIR]           Write a run log per stage: DIR/<stage>_<YYYYmmdd-HHMMSS>.log; bare --log:
                         each stage's default log path (its derivatives .log folder). Overrides the
                         config file's log.
@@ -423,7 +425,7 @@ def test_help_usage_names_champollion_pipeline(harness, monkeypatch, capsys):
     assert text.startswith(f"usage: {SCRIPT_NAME} "), text.splitlines()[0]
 
 
-# REQ-REFACTOR-BDRABCZUK-230A54CA2187
+# REQ-REFACTOR-BDRABCZUK-09DD7C8F5B7E
 def test_help_text_unchanged_since_cbe51d7(harness, monkeypatch, capsys):
     text = _help_text(harness, monkeypatch, capsys)
     assert _comparable_help(text) == _comparable_help(CBE51D7_HELP)
