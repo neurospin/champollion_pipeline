@@ -50,6 +50,9 @@ EXCLUDED_SEVERAL_GRAPH_FOLDERS = "several_graph_folders"  # non-BIDS: it matches
 EXCLUDED_NO_LABELLED_GRAPH = "no_labelled_graph"  # graph folder found, no candidate session dir in it
 EXCLUSION_REASONS = (EXCLUDED_NO_GRAPH_FOLDER, EXCLUDED_SEVERAL_GRAPH_FOLDERS, EXCLUDED_NO_LABELLED_GRAPH)
 INPUT_TYPES_DEFAULT = ("skeleton", "foldlabel")
+# TEMPORARY (DEF-CORTILES-BDRABCZUK-8A44DAD7F312): the prefix-ID guard below (and its flag, check and test file)
+# goes once cortical_tiles stops globbing {subject}*/ in generate_ICBM2009c_transforms.py.
+PREFIX_PAIRS_SHOWN = 5  # prefix pairs named in the refusal or warning
 
 
 class _ExplicitLabellingSession(argparse.Action):
@@ -122,6 +125,25 @@ def resolve_graph_paths(morpho_dir: str, path_to_graph: str, subject: str) -> li
             continue
         rels.add(rel)
     return sorted(rels)
+
+
+# TEMPORARY (DEF-CORTILES-BDRABCZUK-8A44DAD7F312)
+def find_prefix_id_pairs(input_dir: str) -> list[tuple[str, str]]:
+    """Every (shorter, longer) pair of input subject IDs where one strictly prefixes the other, sorted.
+
+    Subject IDs are the non-dot subdirectory names of ``input_dir``, as cortical_tiles lists them
+    (with or without --bids). An input that is not a directory gives no pair.
+    """
+    if not isdir(input_dir):
+        return []
+    names = sorted(e.name for e in os.scandir(input_dir) if e.is_dir() and not e.name.startswith("."))
+    pairs = []
+    for i, shorter in enumerate(names):
+        for longer in names[i + 1 :]:
+            if not longer.startswith(shorter):
+                break
+            pairs.append((shorter, longer))
+    return sorted(pairs)
 
 
 def exclusion_warning(excluded: dict[str, list[str]], path_to_graph: str, candidates: tuple[str, ...]) -> str:
@@ -212,6 +234,12 @@ class RunCorticalTiles(ScriptBuilder):
                 "Input is BIDS-named (sub-/ses-/run- prefixed files). Threaded into the "
                 "pipeline JSON config and the whole-brain ventricle-removal call.",
             )
+            .add_flag(  # TEMPORARY (DEF-CORTILES-BDRABCZUK-8A44DAD7F312)
+                "--allow-prefix-ids",
+                "Run even when one input subject ID strictly prefixes another (e.g. sub-1 and sub-10); "
+                "logs a warning instead of refusing. cortical_tiles may then give a subject the ICBM2009c "
+                "transform of the other. Temporary: removed once cortical_tiles fixes its {subject}*/ glob.",
+            )
         )
         _distbottom_group = self.parser.add_mutually_exclusive_group()
         _distbottom_group.add_argument(
@@ -225,6 +253,27 @@ class RunCorticalTiles(ScriptBuilder):
             help="Deprecated: distbottom is skipped by default. Kept for backward compatibility.",
         )
         self.parser.set_defaults(labelling_session_explicit=False)
+
+    # TEMPORARY (DEF-CORTILES-BDRABCZUK-8A44DAD7F312)
+    def _check_prefix_ids(self, input_abs: str) -> bool:
+        """Refuse (False, error) or allow with a warning (True) an input with prefix subject IDs."""
+        pairs = find_prefix_id_pairs(input_abs)
+        if not pairs:
+            return True
+        listed = ", ".join(f"({a}, {b})" for a, b in pairs[:PREFIX_PAIRS_SHOWN])
+        more = f" and {len(pairs) - PREFIX_PAIRS_SHOWN} more" if len(pairs) > PREFIX_PAIRS_SHOWN else ""
+        head = f"{len(pairs)} input subject ID pair(s) where one ID strictly prefixes another: {listed}{more}."
+        if not self.args.allow_prefix_ids:
+            logger.error(
+                head + " cortical_tiles globs '{subject}*/' and may give a subject the ICBM2009c transform of "
+                "another one. Rename the subject folders, or pass --allow-prefix-ids to run anyway."
+            )
+            return False
+        logger.warning(
+            head + " --allow-prefix-ids given: running anyway; cortical_tiles may give a subject the ICBM2009c "
+            "transform of another one (check these subjects' transforms)."
+        )
+        return True
 
     def _preflight_check(self, output_abs: str, config_path: str) -> bool:
         """Check for existing crops and migrate legacy flat structure if needed.
@@ -312,6 +361,8 @@ class RunCorticalTiles(ScriptBuilder):
 
         # Convert input to absolute path
         input_abs = abspath(self.args.input)
+        if not self._check_prefix_ids(input_abs):  # TEMPORARY (DEF-CORTILES-BDRABCZUK-8A44DAD7F312)
+            return 1
 
         output_abs = abspath(self.args.output)
         config_file_path: str = join(output_abs, "pipeline_loop_2mm.json")
