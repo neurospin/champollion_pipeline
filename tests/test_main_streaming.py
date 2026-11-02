@@ -19,6 +19,13 @@ REQ-STREAMING-BDRABCZUK-EC47AC1B9F8D: hf_enabled false -> models_path argument i
 REQ-STREAMING-BDRABCZUK-DCA7928D3675: hf_enabled true -> models_path argument is dataset.hf_repo_id.
 REQ-STREAMING-BDRABCZUK-1A49B653DBC5: sequential run_cortical_tiles emits the Pre-check OUTPUT record first.
 
+Streaming help texts (TASK-STREAMING-BDRABCZUK-7CD70A508D2E):
+REQ-STREAMING-BDRABCZUK-2B04E6F76D1D: streaming without dataset.embeddings_only -> ERROR names the YAML setting.
+REQ-STREAMING-BDRABCZUK-515AE4475C2E: --mode help names dataset.embeddings_only in the --config YAML.
+REQ-STREAMING-BDRABCZUK-9E3175DA7BE6: --worker-timeout help bounds the whole producer-worker run of one scan.
+REQ-STREAMING-BDRABCZUK-A9C4FA3618DA: runner.py module docstring has no "dry run: up front".
+REQ-STREAMING-BDRABCZUK-39B23C06FC54: runner.py module docstring says a dry run generates no dataset config.
+
 main.py lives at the repo root, so it is loaded by file path under a private module name. check_for_updates
 (network), init_pipeline_process and ScriptBuilder's init_process (root handlers) are stubbed, and every test runs in a
 temporary working directory. run_parallel_pipeline is replaced by a recorder whose arguments are bound to the real
@@ -40,6 +47,7 @@ from unittest.mock import patch
 import pytest
 from champollion_utils.script_builder import ScriptBuilder
 
+import champollion_pipeline.streaming.runner as streaming_runner
 from champollion_pipeline.config import DatasetConfig
 from champollion_pipeline.streaming import StreamingSettings
 from champollion_pipeline.streaming.runner import run_parallel_pipeline as real_run_parallel_pipeline
@@ -442,3 +450,54 @@ def test_sequential_pre_check_summary_logged(main_module, monkeypatch, tmp_path,
         assert _run_main(main_module, monkeypatch, "--stages", "run_cortical_tiles") == 0
 
     assert seen_before_run == [True], f"no OUTPUT record starting with {PRE_CHECK_PREFIX!r} before the stage script ran"
+
+
+# ====================== Streaming help texts ======================
+
+EMBEDDINGS_ONLY_ERROR_PREFIX = "--mode streaming requires dataset.embeddings_only: true in the --config YAML"
+MODE_HELP = (
+    "Execution mode: 'sequential' (default, stage-centric batch) or 'streaming' (scan-centric parallel, "
+    "one worker per scan). Streaming mode requires dataset.embeddings_only: true in the --config YAML."
+)
+WORKER_TIMEOUT_HELP = (
+    "Timeout in seconds of the whole producer-worker run of one scan; a longer run ends FAILED (default: 7200)."
+)
+
+
+def _option_help(module, option: str) -> str:
+    """Help string of *option* on the parser of main.py's ScriptBuilder subclass."""
+    parser = _script_class(module)().parser
+    helps = [action.help for action in parser._actions if option in action.option_strings]
+    assert len(helps) == 1, f"{option} is registered {len(helps)} times"
+    return helps[0]
+
+
+def _runner_docstring() -> str:
+    """runner.py's module docstring, lower case, every whitespace run collapsed to one space."""
+    return " ".join((streaming_runner.__doc__ or "").split()).lower()
+
+
+def test_streaming_without_embeddings_only_error_names_yaml_setting(streaming_main, monkeypatch, pipeline_caplog):
+    streaming_main.test_config.dataset.embeddings_only = False
+    monkeypatch.setattr(streaming_main, "run_parallel_pipeline", _OrchestratorRecorder())
+
+    assert _run_main(streaming_main, monkeypatch, "--mode", "streaming") == 1
+
+    errors = [record.getMessage() for record in pipeline_caplog.records if record.levelno == logging.ERROR]
+    assert any(message.startswith(EMBEDDINGS_ONLY_ERROR_PREFIX) for message in errors), errors
+
+
+def test_mode_help_names_yaml_setting(main_module):
+    assert _option_help(main_module, "--mode") == MODE_HELP
+
+
+def test_worker_timeout_help_bounds_whole_worker_run(main_module):
+    assert _option_help(main_module, "--worker-timeout") == WORKER_TIMEOUT_HELP
+
+
+def test_runner_docstring_has_no_dry_run_up_front_claim():
+    assert "dry run: up front" not in _runner_docstring()
+
+
+def test_runner_docstring_states_dry_run_generates_no_config():
+    assert "a dry run generates no dataset config" in _runner_docstring()

@@ -1,9 +1,10 @@
 """Orchestrator of a streaming run: producer workers, one resident inference consumer, then combine.
 
 Scans of ``settings.subjects_dir`` (graphs layout) run through ``run_scan_worker`` in a spawn process pool. The
-dataset config is generated once, from the first OK or SKIPPED scan's crops root (dry run: up front), then one
-``run_consumer`` call embeds scans while the workers still run. When the workers drain, ``producers_done`` is set,
-the consumer returns, both summaries are logged and the run is combined. Any FAILED scan makes the exit code 1.
+dataset config is generated once, from the first OK or SKIPPED scan's crops root (a dry run generates no dataset
+config), then one ``run_consumer`` call embeds scans while the workers still run. When the workers drain,
+``producers_done`` is set, the consumer returns, both summaries are logged and the run is combined. Any FAILED scan
+makes the exit code 1.
 """
 
 from __future__ import annotations
@@ -219,7 +220,7 @@ def _log_worker_summary(state: _ProducerState) -> None:
 
 
 def _await_config(state: _ProducerState, pool: ProcessPoolExecutor) -> bool:
-    """Generate the dataset config from the first OK or SKIPPED scan's crops root (dry run: done already).
+    """Generate the dataset config from the first OK or SKIPPED scan's crops root (not in a dry run).
 
     A dry run waits for its first OK or SKIPPED scan instead; with none, it ends like a real run without a
     crops root: no consumer, no combine.

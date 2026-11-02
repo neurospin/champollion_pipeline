@@ -3,7 +3,7 @@
 REQ-LOGGING-BDRABCZUK-BF7CAFA17DF1: --generate-config logs the template path at OUTPUT.
 REQ-LOGGING-BDRABCZUK-09E807184505: --config logs the configuration file path at LOG.
 REQ-LOGGING-BDRABCZUK-B650F7D4E810: no --config logs "Using default configuration" at LOG.
-REQ-LOGGING-BDRABCZUK-0A7F0CE5FFB2: streaming without dataset.embeddings_only logs at ERROR.
+REQ-LOGGING-BDRABCZUK-5B2C48B1DD9C: streaming without dataset.embeddings_only logs at ERROR.
 REQ-LOGGING-BDRABCZUK-A9D14195A854: streaming with a failed parallel_runner import logs at ERROR.
 REQ-LOGGING-BDRABCZUK-84D9CEFCF3F8: main.py contains no built-in print call.
 
@@ -96,7 +96,9 @@ def test_streaming_without_embeddings_only_logged_at_error(main_module, monkeypa
 
     assert _run_main(main_module, monkeypatch, "--mode", "streaming") == 1
 
-    pipeline_caplog.assert_logged(logging.ERROR, "--mode streaming requires --embeddings-only")
+    pipeline_caplog.assert_logged(
+        logging.ERROR, "--mode streaming requires dataset.embeddings_only: true in the --config YAML"
+    )
 
 
 def test_parallel_runner_import_failure_logged_at_error(main_module, monkeypatch, pipeline_caplog):
