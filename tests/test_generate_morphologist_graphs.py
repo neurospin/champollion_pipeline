@@ -251,8 +251,8 @@ class TestRunMethod:
             assert "--of" in cmd
             assert "morphologist-auto-nonoverlap-1.0" in cmd
 
-    def test_run_with_shell_true(self, temp_dir):
-        """Test that run executes command with shell=True."""
+    def test_run_without_shell(self, temp_dir):
+        """REQ-PYTHONIC-BDRABCZUK-B5A0F717AB0D: run executes the command with shell=False."""
         script = GenerateMorphologistGraphs()
         script.parse_args([temp_dir, temp_dir])
         _write_nifti(Path(temp_dir) / "test.nii")
@@ -265,8 +265,7 @@ class TestRunMethod:
         ):
             script.run()
 
-            # Check that shell=True was passed
-            assert mock_exec.call_args[1]["shell"] is True
+            assert mock_exec.call_args.kwargs.get("shell", False) is False
 
     def test_run_returns_command_result(self, temp_dir):
         """Test that run returns the result from execute_command."""
