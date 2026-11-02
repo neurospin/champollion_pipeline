@@ -296,7 +296,7 @@ def fetch_model_set(models_path: str, extract_to: str, model_version: str | None
                 "subfolder": model_version,
             }
         except Exception as e:
-            logger.warning(f"HuggingFace strategy failed: {e}")
+            logger.warning(f"HuggingFace strategy failed: {e}", exc_info=True)
             # Continue to other strategies
 
     remote_strategy = RemoteArchiveStrategy()
@@ -305,7 +305,7 @@ def fetch_model_set(models_path: str, extract_to: str, model_version: str | None
             fetched = remote_strategy.fetch(models_path, extract_to, no_cache)
             return fetched, {"type": "url", "url": models_path}
         except Exception as e:
-            logger.warning(f"Remote archive strategy failed: {e}")
+            logger.warning(f"Remote archive strategy failed: {e}", exc_info=True)
             # Continue to other strategies
 
     # Resolve relative paths to absolute for local file strategies
@@ -321,7 +321,7 @@ def fetch_model_set(models_path: str, extract_to: str, model_version: str | None
             fetched = local_strategy.fetch(resolved_path, extract_to, no_cache)
             return fetched, {"type": "local", "path": os.path.abspath(resolved_path)}
         except Exception as e:
-            logger.warning(f"Local path strategy failed: {e}")
+            logger.warning(f"Local path strategy failed: {e}", exc_info=True)
             # Continue to fallback
 
     # Fallback: ask user interactively

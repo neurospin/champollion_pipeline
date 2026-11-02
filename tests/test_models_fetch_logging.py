@@ -5,6 +5,8 @@ instead of print(); the interactive prompts stay input() calls (a prompt is not 
 
 REQ-LOGGING-BDRABCZUK-192E2C6D29CC: a failed Hugging Face, remote archive or local path strategy
     is logged by fetch_model_set at WARNING with the exception message.
+REQ-PYTHONIC-BDRABCZUK-3A8159D148CB (TASK-PYTHONIC-BDRABCZUK-907FAAA627BF): that WARNING carries the
+    exception traceback (exc_info) on its log record.
 REQ-LOGGING-BDRABCZUK-30EA533B6978: a successful Hugging Face download is logged at OUTPUT with its path.
 REQ-LOGGING-BDRABCZUK-8EC95D00C4C7: a written model_set.json marker is logged at OUTPUT with its path.
 REQ-LOGGING-BDRABCZUK-35E2DB99D460: the Hugging Face download start is logged at LOG with the repo id.
@@ -120,6 +122,29 @@ class TestFetchModelSetLogging:
 
         record = pipeline_caplog.assert_logged(logging.WARNING, STRATEGY_ERROR)
         assert record.name == "champollion_pipeline.models.fetch"
+
+    @pytest.mark.parametrize("case", ["huggingface", "remote", "local"])
+    def test_failed_strategy_warning_carries_traceback(self, tmp_path, pipeline_caplog, case):
+        """REQ-PYTHONIC-BDRABCZUK-3A8159D148CB: the failed-strategy WARNING keeps the exception traceback."""
+        local_models = tmp_path / "models"
+        local_models.mkdir()
+        strategy, models_path = {
+            "huggingface": (HuggingFaceStrategy, REPO_ID),
+            "remote": (RemoteArchiveStrategy, ARCHIVE_URL),
+            "local": (LocalPathStrategy, str(local_models)),
+        }[case]
+        error = OSError(f"synthetic {case} strategy failure 9b2d")
+        with (
+            patch.object(strategy, "fetch", side_effect=error),
+            patch.object(models_fetch.sys.stdin, "isatty", return_value=False),
+            pytest.raises(RuntimeError, match="Cannot find models"),
+        ):
+            fetch_model_set(models_path, str(tmp_path / "cache"), None, False)
+
+        record = pipeline_caplog.assert_logged(logging.WARNING, str(error))
+        assert record.exc_info is not None, "the failed-strategy WARNING carries no exc_info"
+        assert record.exc_info[1] is error
+        assert record.exc_info[2] is not None, "exc_info holds no traceback object"
 
 
 class TestHuggingFaceLogging:
