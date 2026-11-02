@@ -114,7 +114,7 @@ def generate_umap_reference(  # noqa: PLR0913 - public API mirroring the CLI opt
             df = pd.read_csv(csv_path)
             X = df.drop(columns=["ID"], errors="ignore").values.astype(np.float32)
         except Exception as e:
-            logger.warning(f"[{region} {hemi}] Could not load {csv_path}: {e}")
+            logger.warning(f"[{region} {hemi}] Could not load {csv_path}: {e}", exc_info=True)
             continue
 
         key = (region, hemi)

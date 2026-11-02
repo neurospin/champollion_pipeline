@@ -215,13 +215,13 @@ def _compute_umap_projection(  # noqa: PLR0913 - both UMAP dirs and both embeddi
         model_a = load_umap_model(str(path_a))
         umap_a = np.asarray(model_a.transform(emb_a.astype(float)), dtype=float)
     except Exception as exc:
-        logger.warning(f"umap_a transform failed for {region}/{side}: {exc}")
+        logger.warning(f"umap_a transform failed for {region}/{side} ({path_a}): {exc}", exc_info=True)
         return "umap_transform_failed_a"
     try:
         model_b = load_umap_model(str(path_b))
         umap_b_raw = np.asarray(model_b.transform(emb_b.astype(float)), dtype=float)
     except Exception as exc:
-        logger.warning(f"umap_b transform failed for {region}/{side}: {exc}")
+        logger.warning(f"umap_b transform failed for {region}/{side} ({path_b}): {exc}", exc_info=True)
         return "umap_transform_failed_b"
     umap_b_aligned = procrustes_align(umap_b_raw, umap_a)
     return umap_a, umap_b_aligned
