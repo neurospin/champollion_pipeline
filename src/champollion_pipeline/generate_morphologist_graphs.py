@@ -146,7 +146,7 @@ class GenerateMorphologistGraphs(ScriptBuilder):
 
     def run(self):
         """Execute the morphologist script."""
-        print(f"Current working directory: {getcwd()}")
+        logger.trace(f"Current working directory: {getcwd()}")
 
         # Validate paths
         if not self.validate_paths([self.args.input, self.args.output]):

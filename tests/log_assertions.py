@@ -55,6 +55,9 @@ LOG_CONVERTED_MODULES: tuple[str, ...] = (
     "generate_umap_reference",
     "run_cka",
     "upload_models_to_hf",
+    "champollion_pipeline.run_cortical_tiles",
+    "champollion_pipeline.generate_labelling_qc",
+    "champollion_pipeline.generate_morphologist_graphs",
 )
 
 

@@ -19,6 +19,7 @@ the correct labelled masks are used during region extraction.
 import argparse
 import glob
 import json
+import logging
 import os
 import re
 import shutil
@@ -38,6 +39,8 @@ from champollion_pipeline.derivatives_layout import compute_run_log_path
 from champollion_pipeline.process_setup import init_pipeline_process
 from champollion_pipeline.utils.cortical_tiles_config import CorticalTilesConfigFactory, versioned_crops_exist
 from champollion_pipeline.utils.lib import DERIVATIVES_FOLDER, LABELLING_SESSION_CANDIDATES
+
+logger = logging.getLogger(__name__)
 
 LABELLING_SESSION_DEFAULT = LABELLING_SESSION_CANDIDATES[0]
 WHOLE_BRAIN_SRC_FILENAME = "resampled_skeleton"
@@ -140,7 +143,7 @@ def exclusion_warning(excluded: dict[str, list[str]], path_to_graph: str, candid
     ]
     n = sum(len(ids) for ids in excluded.values())
     return (
-        f"run_cortical_tiles.py: Warning - {n} subject(s) excluded from whole-brain ventricle removal, which "
+        f"{n} subject(s) excluded from whole-brain ventricle removal, which "
         "requires sulcal recognition (one labelled graph per subject, found through --path_to_graph): "
         f"{'; '.join(clauses)}."
     )
@@ -243,28 +246,30 @@ class RunCorticalTiles(ScriptBuilder):
             old_version = existing_cfg.masks_version
             target = join(derivatives_abs, "crops", old_version, vox_str)
             if not isdir(target):
-                print(f"Migrating legacy crops to versioned path: crops/{old_version}/...")
+                logger.trace(f"Migrating legacy crops to versioned path: crops/{old_version}/...")
                 shutil.move(legacy_crops, target)
             else:
                 if not self.args.overwrite:
-                    print(
+                    logger.error(
                         f"Legacy crops found at crops/{vox_str}/ but versioned crops already exist "
                         f"at crops/{old_version}/{vox_str}/. Please resolve manually or use --overwrite "
                         "to remove both and regenerate."
                     )
                     return False
-                print(f"--overwrite: removing legacy crops/{vox_str}/ and existing crops/{old_version}/{vox_str}/...")
+                logger.warning(
+                    f"--overwrite: removing legacy crops/{vox_str}/ and existing crops/{old_version}/{vox_str}/..."
+                )
                 shutil.rmtree(legacy_crops)
                 shutil.rmtree(target)
 
         if versioned_crops_exist(derivatives_abs, requested_cfg.masks_version, requested_cfg.out_voxel_size):
             if not self.args.overwrite:
-                print(
+                logger.warning(
                     f"Crops for mask version '{requested_cfg.masks_version}' already exist. "
                     "Use --overwrite to regenerate."
                 )
                 return False
-            print(f"Overwriting existing crops for '{requested_cfg.masks_version}'.")
+            logger.warning(f"Overwriting existing crops for '{requested_cfg.masks_version}'.")
         return True
 
     def _generate_mask_npys(self, output_abs: str) -> None:
@@ -276,7 +281,7 @@ class RunCorticalTiles(ScriptBuilder):
         pattern = join(output_abs, DERIVATIVES_FOLDER, "crops", "**", "mask", "*mask_cropped.nii.gz")
         nii_files = sorted(glob.glob(pattern, recursive=True))
         if not nii_files:
-            print("_generate_mask_npys: no *mask_cropped.nii.gz files found — skipping.")
+            logger.warning("no *mask_cropped.nii.gz files found — skipping.")
             return
         generated = 0
         for nii_path in nii_files:
@@ -285,9 +290,9 @@ class RunCorticalTiles(ScriptBuilder):
                 continue
             vol = aims.read(nii_path)
             np.save(npy_path, vol.np.astype(bool))
-            print(f"Generated {npy_path}")
+            logger.output(f"Generated {npy_path}")
             generated += 1
-        print(f"_generate_mask_npys: {generated} mask .npy file(s) written.")
+        logger.output(f"{generated} mask .npy file(s) written.")
 
     def default_log_path(self) -> str:
         """Run-log path of a bare --log: .log/cortical_tiles_<stamp>.log in the cortical tiles derivatives folder."""
@@ -299,8 +304,8 @@ class RunCorticalTiles(ScriptBuilder):
 
     def run(self):  # noqa: PLR0915 - linear stage script body; split deferred (user decision 2026-10-23)
         """Execute the cortical_tiles script."""
-        print(f"run_cortical_tiles.py/input: {self.args.input}")
-        print(f"run_cortical_tiles.py/output: {self.args.output}")
+        logger.trace(f"input: {self.args.input}")
+        logger.trace(f"output: {self.args.output}")
 
         # Validate paths
         if not self.validate_paths([self.args.input, self.args.output]):
@@ -347,10 +352,7 @@ class RunCorticalTiles(ScriptBuilder):
             self.args.njobs = max(1, min(22, cpu_count() - 2))
 
         if self.args.njobs >= cpu_count():
-            print(
-                f"run_cortical_tiles.py: Warning - {self.args.njobs} jobs requested "
-                f"but only {cpu_count()} cores available."
-            )
+            logger.warning(f"{self.args.njobs} jobs requested but only {cpu_count()} cores available.")
 
         # Build command to run cortical_tiles script directly
         # Get absolute paths
@@ -455,15 +457,12 @@ class RunCorticalTiles(ScriptBuilder):
 
         fused = list_fused_subjects(skeleton_src_dir, WHOLE_BRAIN_SRC_FILENAME)
         if not fused:
-            print(
-                f"run_cortical_tiles.py: no fused volume under {skeleton_src_dir}/F; "
-                "whole-brain ventricle removal skipped."
-            )
+            logger.warning(f"No fused volume under {skeleton_src_dir}/F; whole-brain ventricle removal skipped.")
             return
 
         groups, excluded = self._group_whole_brain_subjects(list(fused), input_abs, candidates)
         if excluded:
-            print(exclusion_warning(excluded, self.args.path_to_graph, candidates))
+            logger.warning(exclusion_warning(excluded, self.args.path_to_graph, candidates))
 
         def call(src_dir: str, session: str, graph_path: str) -> None:
             remove_ventricle.remove_ventricle(
