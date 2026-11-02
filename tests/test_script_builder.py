@@ -276,12 +276,25 @@ class TestScriptBuilderExecuteCommand:
     """Test command execution."""
 
     def test_execute_command_success_no_shell(self):
-        """Test successful command execution without shell."""
+        """REQ-PYTHONIC-BDRABCZUK-A76F4D13B246: a child exiting 0 without a shell gives 0."""
         script = ConcreteScriptBuilder()
         cmd = ["echo", "test"]
-        with patch("champollion_utils.script_builder.check_call", return_value=0):
+        with patch("champollion_utils.script_builder.run") as mock_run:
+            mock_run.return_value = MagicMock(returncode=0)
             result = script.execute_command(cmd, shell=False)
             assert result == 0
+            mock_run.assert_called_once()
+
+    @pytest.mark.parametrize("status", [2, 3, 127, -9])
+    def test_execute_command_no_shell_returns_child_exit_status(self, status):
+        """REQ-PYTHONIC-BDRABCZUK-A76F4D13B246: without a shell the child's exit status comes back unchanged."""
+        script = ConcreteScriptBuilder()
+        cmd = ["false"]
+        with patch("champollion_utils.script_builder.run") as mock_run:
+            mock_run.return_value = MagicMock(returncode=status)
+            result = script.execute_command(cmd, shell=False)
+            assert result == status
+            assert mock_run.call_args.args[0] == cmd
 
     def test_execute_command_success_with_shell(self):
         """Test successful command execution with shell."""
@@ -294,10 +307,10 @@ class TestScriptBuilderExecuteCommand:
             mock_run.assert_called_once()
 
     def test_execute_command_failure(self):
-        """Test command execution failure."""
+        """REQ-PYTHONIC-BDRABCZUK-755505967699: a command that cannot start gives 1."""
         script = ConcreteScriptBuilder()
         cmd = ["nonexistent_command"]
-        with patch("champollion_utils.script_builder.check_call", side_effect=Exception("Command failed")):
+        with patch("champollion_utils.script_builder.run", side_effect=FileNotFoundError("nonexistent_command")):
             result = script.execute_command(cmd, shell=False)
             assert result == 1
 
@@ -306,7 +319,8 @@ class TestScriptBuilderExecuteCommand:
         """Test that execute_command prints the command."""
         script = ConcreteScriptBuilder()
         cmd = ["echo", "test"]
-        with patch("champollion_utils.script_builder.check_call", return_value=0):
+        with patch("champollion_utils.script_builder.run") as mock_run:
+            mock_run.return_value = MagicMock(returncode=0)
             script.execute_command(cmd, shell=False)
             assert mock_print.called
 
