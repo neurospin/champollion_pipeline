@@ -242,7 +242,7 @@ class GenerateSnapshots(ScriptBuilder):
                 )
                 snapshots.append(snap)
             except Exception as e:
-                logger.error(f"Error processing {graph_path}: {e}")
+                logger.exception(f"Error processing {graph_path}: {e}")
 
         return snapshots
 
@@ -281,7 +281,7 @@ class GenerateSnapshots(ScriptBuilder):
             except ImportError as e:
                 logger.error(f"Anatomist not available for tiles snapshot: {e}")
             except Exception as e:
-                logger.error(f"Error generating tiles snapshot: {e}")
+                logger.exception(f"Error generating tiles snapshot: {e}")
         elif self.args.cortical_tiles_dir:
             logger.warning(f"Cortical tiles directory not found: {self.args.cortical_tiles_dir}")
         return snapshots
@@ -318,7 +318,7 @@ class GenerateSnapshots(ScriptBuilder):
             )
             snapshots.extend(snaps)
         except Exception as e:
-            logger.error(f"Error generating UMAP snapshot: {e}")
+            logger.exception(f"Error generating UMAP snapshot: {e}")
         return snapshots
 
 

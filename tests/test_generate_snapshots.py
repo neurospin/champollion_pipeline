@@ -969,3 +969,41 @@ class TestSnapshotsLogging:
         messages = [record.getMessage() for record in pipeline_caplog.records]
         assert messages, "the run logged no champollion_pipeline record"
         assert [m for m in messages if MCP_FOLD_RE.search(m)] == []
+
+
+# --- caught render failures keep their traceback (REQ-PYTHONIC-BDRABCZUK-0F8B803EA446) ---
+
+_RENDER_UMAP = "champollion_pipeline.generate_snapshots.generate_umap_snapshot"
+SNAPSHOTS_LOGGER = "champollion_pipeline.generate_snapshots"
+
+
+class TestSnapshotFailureTraceback:
+    """A caught render failure is logged at ERROR with its traceback; the run still exits 0."""
+
+    def test_sulcal_failure_error_carries_traceback(self, temp_dir, pipeline_caplog):
+        error = RuntimeError("synthetic sulcal render failure 2b8e")
+
+        def render(graph_path, out, *args, **kwargs):
+            if graph_path.endswith("Lsulci_sub-01.arg"):
+                raise error
+            return out
+
+        with patch(_RENDER_SULCAL, side_effect=render) as rendered:
+            assert _run_snapshots([*_all_steps_args(temp_dir), "--sulcal-only"]) == 0
+        assert rendered.call_count == 2, "the right hemisphere is still rendered after the left one failed"
+        record = pipeline_caplog.assert_traceback_logged(logging.ERROR, error)
+        assert record.name == SNAPSHOTS_LOGGER
+
+    def test_tiles_failure_error_carries_traceback(self, temp_dir, pipeline_caplog):
+        error = RuntimeError("synthetic tiles render failure 5a1c")
+        with patch(_RENDER_TILES, side_effect=error):
+            assert _run_snapshots([*_all_steps_args(temp_dir), "--tiles-only"]) == 0
+        record = pipeline_caplog.assert_traceback_logged(logging.ERROR, error)
+        assert record.name == SNAPSHOTS_LOGGER
+
+    def test_umap_failure_error_carries_traceback(self, temp_dir, pipeline_caplog):
+        error = ValueError("synthetic umap render failure 8f4d")
+        with patch(_RENDER_UMAP, side_effect=error):
+            assert _run_snapshots([*_all_steps_args(temp_dir), "--umap-only"]) == 0
+        record = pipeline_caplog.assert_traceback_logged(logging.ERROR, error)
+        assert record.name == SNAPSHOTS_LOGGER
