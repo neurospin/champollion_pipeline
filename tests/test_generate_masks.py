@@ -185,7 +185,6 @@ class TestComputeOneSulcus:
                 self.VT,
                 str(tmp_path),
                 "L",
-                "/fake_bv",
                 public_use=False,
             )
         assert (tmp_path / "L" / self.SULCUS).is_dir()
@@ -200,7 +199,6 @@ class TestComputeOneSulcus:
                 self.VT,
                 str(tmp_path),
                 "L",
-                "/fake_bv",
                 public_use=True,
             )
         assert not (tmp_path / "L" / self.SULCUS).is_dir()
@@ -215,7 +213,6 @@ class TestComputeOneSulcus:
                 self.VT,
                 str(tmp_path),
                 "L",
-                "/fake_bv",
                 public_use=False,
             )
         assert mock_aims.write.call_count == 2
@@ -230,7 +227,6 @@ class TestComputeOneSulcus:
                 self.VT,
                 str(tmp_path),
                 "L",
-                "/fake_bv",
                 public_use=True,
             )
         mock_aims.write.assert_not_called()
@@ -246,7 +242,6 @@ class TestComputeOneSulcus:
                     self.VT,
                     str(tmp_path / str(flag)),
                     "L",
-                    "/fake_bv",
                     public_use=flag,
                 )
             mock_cm.write_mask.assert_called_once()
@@ -262,7 +257,6 @@ class TestComputeOneSulcus:
                 self.VT,
                 str(tmp_path),
                 "L",
-                "/fake_bv",
                 public_use=False,
             )
         assert result == "ok"
@@ -277,7 +271,6 @@ class TestComputeOneSulcus:
                 self.VT,
                 str(tmp_path),
                 "L",
-                "/fake_bv",
             )
         assert result == "ok"
 
@@ -292,7 +285,6 @@ class TestComputeOneSulcus:
                 self.VT,
                 str(tmp_path),
                 "L",
-                "/fake_bv",
             )
         assert result.startswith("failed:")
         assert "boom" in result
@@ -308,7 +300,6 @@ class TestComputeOneSulcus:
                 self.VT,
                 str(tmp_path),
                 "L",
-                "/fake_bv",
                 public_use=True,
             )
         arr = fake_mask._data
@@ -348,7 +339,6 @@ class TestLoadAndExtractSubject:
                 self._sub(tmp_path),
                 set(),
                 self.VT,
-                "/fake_bv",
             )
         assert name == "sub01"
         assert data is None
@@ -363,7 +353,6 @@ class TestLoadAndExtractSubject:
                 self._sub(tmp_path),
                 {"S.C._left"},
                 self.VT,
-                "/fake_bv",
             )
         assert name == "sub01"
         assert isinstance(data, dict)
@@ -397,7 +386,6 @@ class TestLoadAndExtractSubject:
                 self._sub(tmp_path),
                 {"S.C._left"},
                 self.VT,
-                "/fake_bv",
             )
         assert "S.C._left" in data
         assert "OTHER._left" not in data
@@ -412,7 +400,6 @@ class TestLoadAndExtractSubject:
                 self._sub(tmp_path),
                 set(),
                 self.VT,
-                "/fake_bv",
             )
         assert data == {}
 
@@ -697,7 +684,6 @@ def _run_config(tmp_path, **overrides):
         "nb_subjects": -1,
         "voxel_size": 2.0,
         "force": True,
-        "brainvisa_dir": str(tmp_path),
     }
     values.update(overrides)
     return RunConfig(**values)

@@ -8,7 +8,6 @@ import glob
 import json
 import logging
 import os
-import sys
 from abc import ABC, abstractmethod
 from dataclasses import dataclass
 from os.path import abspath, dirname, exists, join
@@ -95,7 +94,6 @@ class RunConfig:
     nb_subjects: int
     voxel_size: float
     force: bool
-    brainvisa_dir: str
     public_use: bool = False
 
 
@@ -126,7 +124,7 @@ def get_sulci_for_regions(regions, sides, json_path):
 
 
 def _compute_one_sulcus(  # noqa: PLR0913 - joblib worker called positionally; test fakes mirror the signature
-    sulcus_full, per_subject_voxels, voxel_size_tuple, mask_dir, side, brainvisa_dir, public_use=False
+    sulcus_full, per_subject_voxels, voxel_size_tuple, mask_dir, side, public_use=False
 ):
     """Worker: build one sulcal mask from pre-extracted voxel coords.
 
@@ -137,9 +135,6 @@ def _compute_one_sulcus(  # noqa: PLR0913 - joblib worker called positionally; t
     When public_use=True, per-subject NIfTI files are not written; only the
     aggregated count mask is produced.
     """
-    if brainvisa_dir not in sys.path:
-        sys.path.insert(0, brainvisa_dir)
-
     try:
         sample_dir = join(mask_dir, side, sulcus_full)
         os.makedirs(join(mask_dir, side), exist_ok=True)
@@ -178,7 +173,7 @@ def _compute_one_sulcus(  # noqa: PLR0913 - joblib worker called positionally; t
     return RETURN_DICTIONARY["ok"]
 
 
-def _load_and_extract_subject(sub, sulci_full_set, voxel_size_tuple, brainvisa_dir):
+def _load_and_extract_subject(sub, sulci_full_set, voxel_size_tuple):
     """Worker: load one subject graph and extract voxel coords for all sulci.
 
     Returns (sub_name, sub_data) where sub_data is
@@ -188,9 +183,6 @@ def _load_and_extract_subject(sub, sulci_full_set, voxel_size_tuple, brainvisa_d
     Accumulates voxels across all vertices that share the same sulcus name
     (a single sulcus can have many separate labelled patches in the graph).
     """
-    if brainvisa_dir not in sys.path:
-        sys.path.insert(0, brainvisa_dir)
-
     matches = glob.glob(join(sub["dir"], sub["graph_file"] % sub))
     if not matches:
         return sub["subject"], None
@@ -265,8 +257,6 @@ class SerialRunner(MaskRunner):
     """
 
     def __call__(self, config: RunConfig):
-        if config.brainvisa_dir not in sys.path:
-            sys.path.insert(0, config.brainvisa_dir)
         for side in config.sides:
             results = {}
             for sulcus in sorted(config.sulci):
@@ -354,7 +344,6 @@ class BufferedRunner(MaskRunner):
                     sub,
                     sulci_full_set,
                     voxel_size_tuple,
-                    config.brainvisa_dir,
                 )
                 for sub in subjects
             )
@@ -386,7 +375,6 @@ class BufferedRunner(MaskRunner):
                         voxel_size_tuple,
                         config.mask_dir,
                         side,
-                        config.brainvisa_dir,
                         config.public_use,
                     )
                     for sf in sorted_sulci_full
@@ -490,12 +478,6 @@ class GenerateMasks(ScriptBuilder):
         regions = self.args.regions if self.args.regions else _REGIONS_DEFAULT
         sides = self.args.sides
 
-        brainvisa_dir = abspath(
-            join(dirname(__file__), "..", "..", "external", "cortical_tiles", "cortical_tiles", "brainvisa")
-        )
-        if brainvisa_dir not in sys.path:
-            sys.path.insert(0, brainvisa_dir)
-
         json_path = abspath(join(dirname(__file__), "..", "..", "sulci_regions_champollion_V1.json"))
         sulci = get_sulci_for_regions(regions, sides, json_path)
         logger.trace(
@@ -534,7 +516,6 @@ class GenerateMasks(ScriptBuilder):
             nb_subjects=self.args.nb_subjects,
             voxel_size=self.args.voxel_size,
             force=self.args.force,
-            brainvisa_dir=brainvisa_dir,
             public_use=self.args.public_use,
         )
 

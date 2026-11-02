@@ -15,7 +15,6 @@ The ``n_jobs``/soma-workflow contract is exercised, not changed: joblib is
 still driven through ``Parallel(n_jobs=...)`` exactly as in production.
 """
 
-import sys
 import types
 from pathlib import Path
 from unittest.mock import MagicMock, patch
@@ -95,7 +94,6 @@ def make_config(tmp_path, **overrides):
         "nb_subjects": -1,
         "voxel_size": 2.0,
         "force": False,
-        "brainvisa_dir": str(tmp_path / "brainvisa"),
         "public_use": False,
     }
     params.update(overrides)
@@ -267,18 +265,6 @@ class TestSerialRunner:
             ((_, results),) = list(SerialRunner()(config))
         assert results["S.C."] == RETURN_DICTIONARY["invalid_foldlabel"]
 
-    def test_brainvisa_dir_is_added_to_sys_path(self, tmp_path):
-        config = make_config(tmp_path)
-        compute_mask_mod = types.ModuleType("compute_mask")
-        compute_mask_mod.compute_mask = MagicMock()
-        original = list(sys.path)
-        try:
-            with _patched_masks_names(deep_folding_modules(compute_mask=compute_mask_mod)):
-                list(SerialRunner()(config))
-            assert config.brainvisa_dir in sys.path
-        finally:
-            sys.path[:] = original
-
 
 class TestBufferedRunner:
     """Test BufferedRunner.__call__ (two-phase load + compute)."""
@@ -298,12 +284,12 @@ class TestBufferedRunner:
         """Replace the two module-level joblib workers with in-process fakes."""
         if load is None:
 
-            def load(sub, sulci_full_set, voxel_size_tuple, brainvisa_dir):
+            def load(sub, sulci_full_set, voxel_size_tuple):
                 return sub["subject"], {sf: [(0, 0, 0)] for sf in sulci_full_set}
 
         if compute is None:
 
-            def compute(sf, per_subject_voxels, voxel_size_tuple, md, side, _bv_dir, public_use):  # noqa: PLR0913 - fake of _compute_one_sulcus; mirrors its signature
+            def compute(sf, per_subject_voxels, voxel_size_tuple, md, side, public_use):  # noqa: PLR0913 - fake of _compute_one_sulcus; mirrors its signature
                 out = Path(md) / side / f"{sf}.nii.gz"
                 out.parent.mkdir(parents=True, exist_ok=True)
                 out.touch()
@@ -342,7 +328,7 @@ class TestBufferedRunner:
     def test_subject_without_graph_is_warned_and_dropped(
         self, tmp_path, monkeypatch, subjects_modules, pipeline_caplog
     ):
-        def load(sub, sulci_full_set, voxel_size_tuple, brainvisa_dir):
+        def load(sub, sulci_full_set, voxel_size_tuple):
             if sub["subject"] == "sub02":
                 return sub["subject"], None
             return sub["subject"], {sf: [(0, 0, 0)] for sf in sulci_full_set}
@@ -384,7 +370,7 @@ class TestBufferedRunner:
     def test_force_recomputes_existing_masks(self, tmp_path, monkeypatch, subjects_modules):
         computed = []
 
-        def compute(sf, per_subject_voxels, voxel_size_tuple, md, side, _bv_dir, public_use):  # noqa: PLR0913 - fake of _compute_one_sulcus; mirrors its signature
+        def compute(sf, per_subject_voxels, voxel_size_tuple, md, side, public_use):  # noqa: PLR0913 - fake of _compute_one_sulcus; mirrors its signature
             computed.append(sf)
             out = Path(md) / side / f"{sf}.nii.gz"
             out.parent.mkdir(parents=True, exist_ok=True)
@@ -414,7 +400,7 @@ class TestBufferedRunner:
     def test_public_use_flag_is_forwarded_to_the_worker(self, tmp_path, monkeypatch, subjects_modules):
         seen = {}
 
-        def compute(sf, per_subject_voxels, voxel_size_tuple, md, side, _bv_dir, public_use):  # noqa: PLR0913 - fake of _compute_one_sulcus; mirrors its signature
+        def compute(sf, per_subject_voxels, voxel_size_tuple, md, side, public_use):  # noqa: PLR0913 - fake of _compute_one_sulcus; mirrors its signature
             seen["public_use"] = public_use
             return RETURN_DICTIONARY["ok"]
 

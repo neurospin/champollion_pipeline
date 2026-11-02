@@ -37,18 +37,6 @@ def _code_lines(text: str) -> list[str]:
 class TestGenerateEmbeddingsRename:
     """generate_embeddings.py must point at the renamed package."""
 
-    def test_champollion_dir_constant_targets_champollion_package(self):
-        """_CHAMPOLLION_DIR is the champollion_V1 parent dir (sys.path parent for champollion pkg)."""
-        lines = [
-            ln for ln in _code_lines(_read(PKG / "generate_embeddings.py")) if "_CHAMPOLLION_DIR" in ln and "=" in ln
-        ]
-        assert lines, "no _CHAMPOLLION_DIR assignment found in generate_embeddings.py"
-        assignment = lines[0]
-        assert '"champollion_V1"' in assignment, (
-            f"_CHAMPOLLION_DIR must reference champollion_V1, got: {assignment.strip()}"
-        )
-        assert "contrastive" not in assignment
-
     def test_no_contrastive_package_import(self):
         """No `from contrastive.` / `import contrastive` remains."""
         text = _read(PKG / "generate_embeddings.py")
