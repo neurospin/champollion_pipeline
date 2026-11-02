@@ -17,7 +17,7 @@ __pycache__/
 *.env
 .env
 settings.json
-*.prof
+**/*.prof
 
 # GitHub Actions (Dockerfile is specified with -f, not needed in context)
 .github/
@@ -26,3 +26,20 @@ settings.json
 # CSVs may contain participant lists. Excluded as a defence-in-depth measure.
 **/*.ipynb
 **/*.csv
+
+# Local data, run outputs and reports: never in an image (root-anchored; the
+# champollion_V1 Python package also has a `data/` directory that must stay).
+data/
+outputs/
+htmlcov/
+**/comparison_report.json
+
+# Imaging volumes at any depth: no dataset in an image.
+**/*.nii
+**/*.nii.gz
+
+# Agent and tooling state
+.alm/
+.omc/
+.codegraph/
+.claude/

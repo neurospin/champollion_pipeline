@@ -3,9 +3,9 @@
 #
 # Usage: scripts/e2e/env_key.sh [--sif-name] [ROOT]
 #
-# The key is the first 12 hex characters of a SHA-256 over the seven inputs that
-# shape the environment, in this order: pixi.lock, E2E_PIXI_VERSION (from
-# scripts/e2e/e2e.env), the champollion-utils specifier of pyproject.toml, the
+# The key is the first 12 hex characters of a SHA-256 over the eight inputs that
+# shape the environment, in this order: pixi.lock, E2E_PIXI_VERSION and
+# E2E_PIXI_SHA256 (from scripts/e2e/e2e.env), the champollion-utils specifier of pyproject.toml, the
 # champollion_V1 and cortical_tiles setup.py, cortical_tiles/info.py and
 # .github/Dockerfile.base. Each input contributes `label NUL sha256(content) LF`.
 # ROOT defaults to this script's repository. --sif-name prints E2E_ENV_SIF_NAME
@@ -81,9 +81,12 @@ PY
 missing=()
 [ -f "$ROOT/pixi.lock" ] || missing+=("pixi.lock")
 PIXI_VERSION=""
+PIXI_SHA256=""
 if [ -f "$ENV_FILE" ]; then
     PIXI_VERSION="$(read_setting E2E_PIXI_VERSION)"
     [ -n "$PIXI_VERSION" ] || missing+=("E2E_PIXI_VERSION")
+    PIXI_SHA256="$(read_setting E2E_PIXI_SHA256)"
+    [ -n "$PIXI_SHA256" ] || missing+=("E2E_PIXI_SHA256")
 else
     missing+=("scripts/e2e/e2e.env")
 fi
@@ -116,6 +119,7 @@ KEY="$(
     {
         printf '%s\0%s\n' pixi.lock "$(digest_file "$ROOT/pixi.lock")"
         printf '%s\0%s\n' E2E_PIXI_VERSION "$(digest_text "$PIXI_VERSION")"
+        printf '%s\0%s\n' E2E_PIXI_SHA256 "$(digest_text "$PIXI_SHA256")"
         printf '%s\0%s\n' champollion-utils "$(digest_text "$UTILS_PIN")"
         for rel in "${FILE_INPUTS[@]}"; do
             printf '%s\0%s\n' "$rel" "$(digest_file "$ROOT/$rel")"
