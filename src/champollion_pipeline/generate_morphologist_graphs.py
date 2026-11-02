@@ -180,10 +180,11 @@ class GenerateMorphologistGraphs(ScriptBuilder):
         # Skip sulcal recognition by default (process parameters come last)
         # Must disable BOTH sulci_labelling and sulcal_morphometry (which depends on it)
         # CAPSUL pipeline_steps do not cascade dependencies automatically
+        # One argv element, no quotes: without a shell nothing strips them (NTUI: no shell sees user names).
         if not self.args.enable_sulcal_recognition:
-            cmd.append('pipeline_steps="sulci_labelling=False, sulcal_morphometry=False"')
+            cmd.append("pipeline_steps=sulci_labelling=False, sulcal_morphometry=False")
 
-        return self.execute_command(cmd, shell=True, cwd=self.args.input)
+        return self.execute_command(cmd, shell=False, cwd=self.args.input)
 
 
 def main():
