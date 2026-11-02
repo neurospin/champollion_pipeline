@@ -10,8 +10,9 @@ REQ-PYTHONIC-BDRABCZUK-F7EE03ADDB6A, -E4EF4855A4EA: neither module source calls 
 REQ-PYTHONIC-BDRABCZUK-AD5613FEB639: morphologist-cli runs with the input directory as cwd.
 REQ-PYTHONIC-BDRABCZUK-41A36519D15F: generate_sulcal_regions.py runs with its own directory as cwd.
 REQ-PYTHONIC-BDRABCZUK-83D824016E94, -ECF42A00512C: run() leaves the process cwd as found, on return and on raise.
-REQ-PYTHONIC-BDRABCZUK-3B5E8BCCDFD1 (supersedes -C19B8BB3589F): the champollion-utils pin names a v0.4.1-or-later
-release tag (0.4.1 adds champollion_utils.process.active_profiling, TASK-PROFILING-BDRABCZUK-0BB1760DF489).
+REQ-PYTHONIC-BDRABCZUK-4D443088B18B (supersedes -3B5E8BCCDFD1): the champollion-utils pin names a v0.4.2-or-later
+release tag (0.4.2: execute_command(shell=False) returns the child exact exit status,
+TASK-PYTHONIC-BDRABCZUK-4DABAB215371).
 """
 
 import ast
@@ -38,7 +39,7 @@ pytestmark = pytest.mark.unit  # noqa: V107
 _REPO_ROOT = Path(__file__).resolve().parent.parent
 _PACKAGE_DIR = _REPO_ROOT / "src" / "champollion_pipeline"
 _RELEASE_TAG = re.compile(r"^v(?P<version>\d+\.\d+\.\d+)$")
-_MINIMUM_UTILS = Version("0.4.1")
+_MINIMUM_UTILS = Version("0.4.2")
 _GENERATE_SULCAL_REGIONS = (
     _REPO_ROOT / "external" / "cortical_tiles" / "cortical_tiles" / "brainvisa" / "generate_sulcal_regions.py"
 )
@@ -198,8 +199,8 @@ def _utils_dependency() -> Requirement:
     return utils[0]
 
 
-def test_pyproject_champollion_utils_pins_release_tag_0_4_1_or_later():
-    """REQ-PYTHONIC-BDRABCZUK-3B5E8BCCDFD1."""
+def test_pyproject_champollion_utils_pins_release_tag_0_4_2_or_later():
+    """REQ-PYTHONIC-BDRABCZUK-4D443088B18B."""
     url = _utils_dependency().url
     assert url is not None and url.startswith("git+"), f"{url!r} is not a PEP 508 git direct reference"
     path = url.split("://", 1)[-1]
