@@ -59,6 +59,9 @@ pixi run champollion-snapshots \
 
 The sections below explain each step in detail.
 
+For inference on many scans, `python main.py --mode streaming --config my_pipeline.yaml` runs cortical_tiles and
+the embeddings scan by scan, with one resident model; see [Streaming mode](docs/usage.md#streaming-mode).
+
 ---
 
 ## 1. Installation

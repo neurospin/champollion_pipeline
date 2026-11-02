@@ -196,6 +196,30 @@ The pipeline runs **56 inference passes** (28 regions × 2 hemispheres), one per
 
 ---
 
+## Streaming mode
+
+`main.py --mode streaming` calls `run_parallel_pipeline` of `champollion_pipeline.streaming.runner`, a
+producer/consumer run over scans rather than a sequence of stages.
+
+- Producers: each producer worker runs cortical_tiles for one scan, in a `spawn` process pool of `--n-workers`
+  processes; it writes the scan's `tiles_complete.json` completion marker.
+- Dataset config: the config is generated once per run, from the crops root of the first OK or SKIPPED scan.
+- Consumer: one consumer process keeps a single `EmbeddingEngine` resident for the whole run, so the models are
+  loaded once, not once per scan.
+- Overlap: the consumer embeds scans while the producer workers still run; it does not wait for all crops.
+- Arrival barrier: a scan is ready for the consumer once its `tiles_complete.json` marker records the run's masks
+  version and each region's skeleton crops exist.
+- When the producers drain, a scan still not ready when a drain poll finds no ready scan is marked FAILED by the
+  consumer (region inputs or completion marker missing).
+- Stall: the consumer stops waiting after 7200 seconds without a newly ready scan (consumer stall timeout); the scans
+  still pending end FAILED.
+- Combine: the per-region embeddings are combined once, after the consumer returns, into the same layout as the batch
+  combine stage.
+
+User-facing options, logs, resume and exit codes are in [docs/usage.md](usage.md#streaming-mode).
+
+---
+
 ## Data flow summary
 
 ```
