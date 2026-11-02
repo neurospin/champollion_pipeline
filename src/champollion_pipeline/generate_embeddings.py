@@ -20,6 +20,7 @@ from io import StringIO
 from os.path import abspath, dirname, exists, join
 from pathlib import Path
 
+from champollion.metrics.cka_coherence import test_models_coherence_from_directory
 from champollion_utils.script_builder import ScriptBuilder
 
 from champollion_pipeline.derivatives_layout import (
@@ -55,14 +56,7 @@ from champollion_pipeline.models.fetch import fetch_model_set
 from champollion_pipeline.process_setup import init_pipeline_process
 from champollion_pipeline.utils.lib import CORTICAL_TILES_VERSION
 
-# Add champollion to path for CKA imports
-_SCRIPT_DIR = dirname(abspath(__file__))
 PROVENANCE_FILE_NAME = "provenance.json"
-_CHAMPOLLION_DIR = abspath(join(_SCRIPT_DIR, "..", "..", "external", "champollion_V1"))
-if _CHAMPOLLION_DIR not in sys.path:
-    sys.path.insert(0, _CHAMPOLLION_DIR)
-
-from champollion.metrics.cka_coherence import test_models_coherence_from_directory  # noqa: E402
 
 logger = logging.getLogger(__name__)
 
