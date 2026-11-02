@@ -280,7 +280,7 @@ class TestWarnings:
         _stub_subjects(monkeypatch, ["sub-98", "sub-99"], without_graph={"sub-99"})
         script = _script(_databases_argv(tmp_path))
 
-        script._load_database(GRAPH_A, ["R"], str(tmp_path), 1, str(tmp_path))
+        script._load_database(GRAPH_A, ["R"], str(tmp_path), 1)
 
         message = _assert_one(compare_caplog, logging.WARNING, "sub-99")
         assert _names_side(message, "R"), message
@@ -333,7 +333,7 @@ def _stub_subjects(monkeypatch, subjects: list, without_graph=frozenset()) -> No
     monkeypatch.setattr(
         databases,
         "_get_subject_voxel_counts",
-        lambda sub, _bv: (sub["subject"], None if sub["subject"] in without_graph else {"S.C.": 7}),
+        lambda sub: (sub["subject"], None if sub["subject"] in without_graph else {"S.C.": 7}),
     )
 
 
@@ -356,7 +356,7 @@ class TestProgress:
         _stub_subjects(monkeypatch, ["sub-01", "sub-02", "sub-03"])
         script = _script(_databases_argv(tmp_path))
 
-        script._load_database(GRAPH_A, ["R"], str(tmp_path), 1, str(tmp_path))
+        script._load_database(GRAPH_A, ["R"], str(tmp_path), 1)
 
         found = [m for m in _matching(compare_caplog, LOG, "3", "1", "subjects found") if _names_side(m, "R")]
         assert len(found) == 1, logged_messages(compare_caplog, CLI_LOGGER, LOG)
@@ -365,7 +365,7 @@ class TestProgress:
         _stub_subjects(monkeypatch, ["sub-01", "sub-02", "sub-03"], without_graph={"sub-03"})
         script = _script(_databases_argv(tmp_path))
 
-        script._load_database(GRAPH_A, ["R"], str(tmp_path), 1, str(tmp_path))
+        script._load_database(GRAPH_A, ["R"], str(tmp_path), 1)
 
         message = _assert_one(compare_caplog, LOG, "2/3")
         assert _names_side(message, "R"), message
@@ -380,7 +380,7 @@ class TestProgress:
 
     def test_mask_stats_load_logged_at_log(self, monkeypatch, compare_caplog, tmp_path):
         _fake_campaigns(monkeypatch, {"sub-01": {"S.C.": 1}}, {"sub-01": {"S.C.": 2}})
-        monkeypatch.setattr(databases, "_mask_stats", lambda _path, _bv: {})
+        monkeypatch.setattr(databases, "_mask_stats", lambda _path: {})
         masks_a, masks_b = tmp_path / "masks_a", tmp_path / "masks_b"
         masks_a.mkdir()
         masks_b.mkdir()

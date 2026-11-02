@@ -17,7 +17,7 @@ import pytest
 
 # The champollion_V1 submodule may not be checked out; stub its helper module
 # before importing the script under test.
-sys.modules.setdefault("put_together_embeddings_files", MagicMock())
+sys.modules.setdefault("champollion.utils.put_together_embeddings_files", MagicMock())
 
 import generate_umap_reference  # noqa: E402
 from generate_umap_reference import GenerateUmapReference, _parse_region_hemi  # noqa: E402

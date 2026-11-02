@@ -116,7 +116,7 @@ class TestRun:
     def test_single_side_is_honoured(self, tmp_path, monkeypatch):
         seen = []
 
-        def _record(self, path_to_graph, sides, subjects_dir, njobs, brainvisa_dir):  # noqa: PLR0913 - fake of Compare._load_database; self counts outside a class
+        def _record(self, path_to_graph, sides, subjects_dir, njobs):
             seen.append(sides)
             return {}
 
@@ -128,7 +128,7 @@ class TestRun:
     def test_njobs_override_is_forwarded(self, tmp_path, monkeypatch):
         seen = []
 
-        def _record(self, path_to_graph, sides, subjects_dir, njobs, brainvisa_dir):  # noqa: PLR0913 - fake of Compare._load_database; self counts outside a class
+        def _record(self, path_to_graph, sides, subjects_dir, njobs):
             seen.append(njobs)
             return {}
 
@@ -140,7 +140,7 @@ class TestRun:
     def test_njobs_defaults_to_cpu_budget(self, tmp_path, monkeypatch):
         seen = []
 
-        def _record(self, path_to_graph, sides, subjects_dir, njobs, brainvisa_dir):  # noqa: PLR0913 - fake of Compare._load_database; self counts outside a class
+        def _record(self, path_to_graph, sides, subjects_dir, njobs):
             seen.append(njobs)
             return {}
 
@@ -168,7 +168,7 @@ class TestRun:
                 {"L/S.C..nii.gz": (20, 800, 80), "L/F.C.M..nii.gz": (2, 80, 8)},
             ]
         )
-        monkeypatch.setattr(compare_sulcal.databases, "_mask_stats", lambda d, _bv: next(stats))
+        monkeypatch.setattr(compare_sulcal.databases, "_mask_stats", lambda d: next(stats))
 
         out = tmp_path / "masked.csv"
         script = _make_script(

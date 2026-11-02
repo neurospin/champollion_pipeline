@@ -57,7 +57,7 @@ def _run_databases(monkeypatch, data_a, data_b, output):
     """Run the databases subcommand with a fake loader; return its exit status."""
     by_graph = {_GRAPH_A: data_a, _GRAPH_B: data_b}
 
-    def _fake_load_database(_self, path_to_graph, _sides, _subjects_dir, _njobs, _brainvisa_dir):
+    def _fake_load_database(_self, path_to_graph, _sides, _subjects_dir, _njobs):
         return {sub: dict(counts) for sub, counts in by_graph[path_to_graph].items()}
 
     monkeypatch.setattr(Compare, "_load_database", _fake_load_database)

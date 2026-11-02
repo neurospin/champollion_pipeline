@@ -96,12 +96,12 @@ class TestMultipleGraphsSortedChoice:
 
     def test_reads_sorted_first_graph_when_glob_order_is_unsorted(self, install):
         fake = install(UNSORTED_MATCHES)
-        _get_subject_voxel_counts(_sub(), sys.path[0])
+        _get_subject_voxel_counts(_sub())
         assert fake.read_paths == [sorted(UNSORTED_MATCHES)[0]]
 
     def test_counts_come_from_sorted_first_graph(self, install):
         install(UNSORTED_MATCHES)
-        name, counts = _get_subject_voxel_counts(_sub(), sys.path[0])
+        name, counts = _get_subject_voxel_counts(_sub())
         assert name == SUBJECT
         assert counts == {"S.C._left": 1}  # PATH_A's graph, not PATH_C's (3)
 
@@ -112,7 +112,7 @@ class TestMultipleGraphsWarning:
     def test_one_warning_line_names_subject_selected_path_and_match_count(self, install, caplog):
         install(UNSORTED_MATCHES)
         caplog.set_level(logging.WARNING, logger=DATABASES_LOGGER)
-        _get_subject_voxel_counts(_sub(), sys.path[0])
+        _get_subject_voxel_counts(_sub())
         lines = _warning_messages(caplog)
         assert len(lines) == 1, f"expected one WARNING record on {DATABASES_LOGGER}, got: {lines!r}"
         line = lines[0]
@@ -130,12 +130,12 @@ class TestSingleGraphCharacterization:
 
     def test_single_match_reads_that_graph(self, install):
         fake = install([PATH_B])
-        name, counts = _get_subject_voxel_counts(_sub(), sys.path[0])
+        name, counts = _get_subject_voxel_counts(_sub())
         assert fake.read_paths == [PATH_B]
         assert (name, counts) == (SUBJECT, {"S.C._left": 2})
 
     def test_single_match_prints_no_warning(self, install, caplog):
         install([PATH_B])
         caplog.set_level(logging.WARNING, logger=DATABASES_LOGGER)
-        _get_subject_voxel_counts(_sub(), sys.path[0])
+        _get_subject_voxel_counts(_sub())
         assert _warning_messages(caplog) == []

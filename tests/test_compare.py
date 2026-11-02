@@ -279,7 +279,7 @@ def fake_soma_aims(monkeypatch):
 class TestGetSubjectVoxelCounts:
     def test_returns_none_when_no_graph_matches(self, tmp_path):
         sub = {"subject": "sub-01", "dir": str(tmp_path), "graph_file": "L*.arg"}
-        assert _get_subject_voxel_counts(sub, str(tmp_path)) == ("sub-01", None)
+        assert _get_subject_voxel_counts(sub) == ("sub-01", None)
 
     def test_sums_buckets_per_sulcus(self, tmp_path, fake_soma_aims):
         graph_path = tmp_path / "Lsub-01.arg"
@@ -296,21 +296,14 @@ class TestGetSubjectVoxelCounts:
             }
         )
         sub = {"subject": "sub-01", "dir": str(tmp_path), "graph_file": "L*.arg"}
-        assert _get_subject_voxel_counts(sub, str(tmp_path)) == ("sub-01", {"S.C._left": 6})
+        assert _get_subject_voxel_counts(sub) == ("sub-01", {"S.C._left": 6})
 
     def test_unnamed_vertices_are_ignored(self, tmp_path, fake_soma_aims):
         graph_path = tmp_path / "Lsub-02.arg"
         graph_path.touch()
         fake_soma_aims({str(graph_path): _FakeGraph([_FakeVertex(None, {"aims_ss": 9})])})
         sub = {"subject": "sub-02", "dir": str(tmp_path), "graph_file": "L*.arg"}
-        assert _get_subject_voxel_counts(sub, str(tmp_path)) == ("sub-02", {})
-
-    def test_brainvisa_dir_added_to_syspath(self, tmp_path, fake_soma_aims):
-        marker = str(tmp_path / "bv_dir_databases")
-        sub = {"subject": "sub-03", "dir": str(tmp_path), "graph_file": "NOPE*.arg"}
-        _get_subject_voxel_counts(sub, marker)
-        assert marker in sys.path
-        sys.path.remove(marker)
+        assert _get_subject_voxel_counts(sub) == ("sub-02", {})
 
 
 class TestMaskStats:
@@ -320,11 +313,11 @@ class TestMaskStats:
         path = mask_dir / "L" / "OCCIPITAL_left.nii.gz"
         path.touch()
         fake_soma_aims({str(path): np.array([[[0, 2, 3]]])})
-        assert _mask_stats(str(mask_dir), str(tmp_path)) == {"L/OCCIPITAL_left.nii.gz": (3, 5, 2)}
+        assert _mask_stats(str(mask_dir)) == {"L/OCCIPITAL_left.nii.gz": (3, 5, 2)}
 
     def test_empty_directory(self, tmp_path, fake_soma_aims):
         fake_soma_aims({})
-        assert _mask_stats(str(tmp_path), str(tmp_path)) == {}
+        assert _mask_stats(str(tmp_path)) == {}
 
 
 # ---------------------------------------------------------------------------
@@ -652,27 +645,27 @@ class TestLoadDatabase:
     def test_aggregates_subjects_over_sides(self, tmp_path, stub_deep_folding, monkeypatch):
         subjects_mod = stub_deep_folding([{"subject": "sub-01", "dir": "d", "graph_file": "g"}])
         monkeypatch.setattr(
-            compare_sulcal.databases, "_get_subject_voxel_counts", lambda sub, _bv: (sub["subject"], {"S.C.": 7})
+            compare_sulcal.databases, "_get_subject_voxel_counts", lambda sub: (sub["subject"], {"S.C.": 7})
         )
         script = _make_script(_db_argv(tmp_path))
-        data = script._load_database("folds/3.3/a", ["L", "R"], str(tmp_path), 1, str(tmp_path))
+        data = script._load_database("folds/3.3/a", ["L", "R"], str(tmp_path), 1)
         assert data == {"sub-01": {"S.C.": 7}}
         assert subjects_mod.get_all_subjects_as_dictionary.call_count == 2
 
     def test_pattern_includes_graph_subpath(self, tmp_path, stub_deep_folding, monkeypatch):
         subjects_mod = stub_deep_folding([])
-        monkeypatch.setattr(compare_sulcal.databases, "_get_subject_voxel_counts", lambda sub, _bv: (None, None))
+        monkeypatch.setattr(compare_sulcal.databases, "_get_subject_voxel_counts", lambda sub: (None, None))
         script = _make_script(_db_argv(tmp_path))
-        script._load_database("folds/3.3/a", ["L"], str(tmp_path), 1, str(tmp_path))
+        script._load_database("folds/3.3/a", ["L"], str(tmp_path), 1)
         patterns = subjects_mod.get_all_subjects_as_dictionary.call_args.args[1]
         assert patterns == ["%(subject)s/folds/3.3/a/%(side)s%(subject)s*.arg"]
 
     def test_warns_when_subject_has_no_graph(self, tmp_path, stub_deep_folding, monkeypatch, caplog):
         caplog.set_level(1, logger=COMPARE_LOGGER_NAME)
         stub_deep_folding([{"subject": "sub-99", "dir": "d", "graph_file": "g"}])
-        monkeypatch.setattr(compare_sulcal.databases, "_get_subject_voxel_counts", lambda sub, _bv: ("sub-99", None))
+        monkeypatch.setattr(compare_sulcal.databases, "_get_subject_voxel_counts", lambda sub: ("sub-99", None))
         script = _make_script(_db_argv(tmp_path))
-        assert script._load_database("p", ["L"], str(tmp_path), 1, str(tmp_path)) == {}
+        assert script._load_database("p", ["L"], str(tmp_path), 1) == {}
         assert "no graph for sub-99" in "\n".join(logged_messages(caplog, "compare_sulcal.cli", logging.WARNING))
 
 
@@ -710,7 +703,7 @@ class TestRunDatabases:
     def test_single_side_and_njobs_are_forwarded(self, tmp_path, monkeypatch):
         seen = []
 
-        def _record(self, path_to_graph, sides, subjects_dir, njobs, brainvisa_dir):  # noqa: PLR0913 - fake of Compare._load_database; self counts outside a class
+        def _record(self, path_to_graph, sides, subjects_dir, njobs):
             seen.append((sides, njobs))
             return {}
 
@@ -722,7 +715,7 @@ class TestRunDatabases:
     def test_njobs_defaults_to_cpu_budget(self, tmp_path, monkeypatch):
         seen = []
 
-        def _record(self, path_to_graph, sides, subjects_dir, njobs, brainvisa_dir):  # noqa: PLR0913 - fake of Compare._load_database; self counts outside a class
+        def _record(self, path_to_graph, sides, subjects_dir, njobs):
             seen.append(njobs)
             return {}
 
@@ -750,7 +743,7 @@ class TestRunDatabases:
                 {"L/S.C..nii.gz": (20, 800, 80), "L/F.C.M..nii.gz": (2, 80, 8)},
             ]
         )
-        monkeypatch.setattr(compare_sulcal.databases, "_mask_stats", lambda d, _bv: next(stats))
+        monkeypatch.setattr(compare_sulcal.databases, "_mask_stats", lambda d: next(stats))
         out = tmp_path / "masked.csv"
         script = _make_script(_db_argv(tmp_path, output=out, masks_a=masks_a, masks_b=masks_b))
         assert script.run() == 0
