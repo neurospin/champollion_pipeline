@@ -8,8 +8,8 @@ unused ``ScanId`` import and ``StageResult.outputs`` field in ``main.py``,
 and ``get_nth_parent_dir`` functions in ``utils/lib.py``.
 
 The checks are deliberately static (``ast``), matching
-``test_source_import_names.py``: importing ``main.py`` pulls in optional
-BrainVISA-only modules behind ``try``/``except ImportError`` fallbacks, and
+``test_source_import_names.py``: importing ``main.py`` pulls in every
+pipeline stage and the streaming runner, and
 running vulture itself would couple the result to its confidence heuristics.
 Parsing the source pins down exactly the five definitions named by the
 requirement and nothing else.
@@ -111,13 +111,12 @@ class TestLiveSiblingsKept:
     def test_lib_keeps_find_dataset_folder(self):
         assert "find_dataset_folder" in _function_names(_tree(LIB_PY).body)
 
-    def test_main_keeps_pipeline_checks_fallbacks(self):
-        """The sibling ``SubjectEligibilityChecker``/``build_output_report`` fallbacks survive."""
-        assigned = {
-            target.id
-            for node in ast.walk(_tree(MAIN_PY))
-            if isinstance(node, ast.Assign)
-            for target in node.targets
-            if isinstance(target, ast.Name)
+    def test_main_keeps_subject_eligibility_checker_import(self):
+        """The live sibling ``SubjectEligibilityChecker`` stays imported, from ``champollion_pipeline.file_indexer``."""
+        imported = {
+            alias.asname or alias.name
+            for node in _tree(MAIN_PY).body
+            if isinstance(node, ast.ImportFrom) and node.module == "champollion_pipeline.file_indexer"
+            for alias in node.names
         }
-        assert {"SubjectEligibilityChecker", "build_output_report"} <= assigned
+        assert "SubjectEligibilityChecker" in imported

@@ -41,6 +41,7 @@ from champollion_pipeline.derivatives_layout import (
     compute_region_model_name,
     compute_snapshots_dir,
 )
+from champollion_pipeline.file_indexer import SubjectEligibilityChecker
 from champollion_pipeline.generate_champollion_config import GenerateChampollionConfig
 from champollion_pipeline.generate_embeddings import GenerateEmbeddings
 from champollion_pipeline.generate_morphologist_graphs import GenerateMorphologistGraphs
@@ -48,21 +49,11 @@ from champollion_pipeline.generate_snapshots import GenerateSnapshots
 from champollion_pipeline.process_setup import init_pipeline_process
 from champollion_pipeline.put_together_embeddings import PutTogetherEmbeddings
 from champollion_pipeline.run_cortical_tiles import RunCorticalTiles
-
-# Add src to path for imports - still needed for the optional file_indexer.pipeline_checks
-# and parallel_runner imports below.
-pipeline_src = Path(__file__).parent / "src"
-sys.path.insert(0, str(pipeline_src))
-
-try:
-    from file_indexer.pipeline_checks import SubjectEligibilityChecker, build_output_report
-except ImportError:
-    SubjectEligibilityChecker = None
-    build_output_report = None
+from champollion_pipeline.streaming import StreamingSettings
 
 _PARALLEL_RUNNER_IMPORT_ERROR: str | None = None
 try:
-    from parallel_runner import run_parallel_pipeline
+    from champollion_pipeline.streaming.runner import run_parallel_pipeline
 except ImportError as e:
     run_parallel_pipeline = None
     _PARALLEL_RUNNER_IMPORT_ERROR = str(e)
@@ -276,7 +267,7 @@ class GenerateEmbeddingsStage(PipelineStage):
 
     def build_args(self) -> list[str]:
         dataset = self.config.dataset
-        models_path = dataset.hf_repo_id if dataset.hf_enabled else str(self.config.models_path)
+        models_path = _compute_models_source(self.config)
         args = [models_path, dataset.datasets_root, f"--masks={dataset.masks_version}"]
         if dataset.hf_enabled:
             args.append(f"--model-version={dataset.masks_version}")
@@ -496,8 +487,6 @@ class PipelineOrchestrator:
 
     def _report_pre_stage(self, stage_name: str, stage: PipelineStage) -> None:
         """Index the stage's input subjects and print the eligibility report."""
-        if SubjectEligibilityChecker is None:
-            return
         input_dir = stage.subject_input_dir()
         if not input_dir:
             return
@@ -514,16 +503,7 @@ class PipelineOrchestrator:
             bids=self.config.dataset.bids,
             path_to_graph=self.config.dataset.path_to_graph,
         )
-        checker.check(save_index_to=index_path).print()
-
-    def _report_post_stage(self, stage_name: str, stage: PipelineStage) -> None:
-        """Index the stage's output and print the summary report."""
-        if build_output_report is None:
-            return
-        out_dir = stage.output_dir()
-        if not out_dir or not os.path.exists(out_dir):
-            return
-        build_output_report(out_dir, stage_name, save_index_to=self._index_path("post", stage_name)).print()
+        checker.check(save_index_to=index_path).log_summary()
 
     def _run_stage(self, stage_name: str, completed_stages: list[str]) -> bool:
         """Check, validate, report and execute one registered stage; True on success."""
@@ -536,7 +516,6 @@ class PipelineOrchestrator:
         self._report_pre_stage(stage_name, stage)
         result = stage.execute()
         if result.success:
-            self._report_post_stage(stage_name, stage)
             return True
         if self.config.stop_on_error:
             self.logger.error("Stopping pipeline due to stage failure")
@@ -685,7 +664,36 @@ def _load_config(args: argparse.Namespace) -> PipelineConfig:
     return create_default_config()
 
 
-def _run_streaming_mode(config: PipelineConfig, args: argparse.Namespace) -> int:
+def _compute_models_source(config: PipelineConfig) -> str:
+    """Models source of the embeddings: the Hugging Face repo id when enabled, else the local models path."""
+    dataset = config.dataset
+    return dataset.hf_repo_id if dataset.hf_enabled else str(config.models_path)
+
+
+def _compute_streaming_log_dir(config: PipelineConfig, run_log_path: str | None) -> str:
+    """Worker and consumer log folder: beside main.py's run log, under --log DIR, or the default logs folder."""
+    if run_log_path is not None:
+        return run_log_path.removesuffix(".log")
+    if config.log:
+        return config.log
+    return config.log_dir or str(Path(config.outputs_path) / "logs")
+
+
+def _build_streaming_settings(
+    config: PipelineConfig, args: argparse.Namespace, run_log_path: str | None
+) -> StreamingSettings:
+    """StreamingSettings of this run from the overridden configuration."""
+    return StreamingSettings(
+        subjects_dir=config.dataset.input_path or config.dataset.morphologist_graphs,
+        output_dir=config.outputs_path,
+        log_dir=_compute_streaming_log_dir(config, run_log_path),
+        n_workers=config.n_workers,
+        worker_timeout=config.worker_timeout,
+        dry_run=args.dry_run,
+    )
+
+
+def _run_streaming_mode(config: PipelineConfig, args: argparse.Namespace, *, run_log_path: str | None) -> int:
     """Run the scan-centric streaming mode after its two guards."""
     if not config.dataset.embeddings_only:
         logger.error(
@@ -693,19 +701,10 @@ def _run_streaming_mode(config: PipelineConfig, args: argparse.Namespace) -> int
         )
         return 1
     if run_parallel_pipeline is None:
-        logger.error(f"could not import parallel_runner: {_PARALLEL_RUNNER_IMPORT_ERROR}")
+        logger.error(f"could not import champollion_pipeline.streaming.runner: {_PARALLEL_RUNNER_IMPORT_ERROR}")
         return 1
-    subjects_dir = config.dataset.input_path or config.dataset.morphologist_graphs
-    output_dir = config.outputs_path
-    log_dir = config.log_dir or str(Path(output_dir) / "logs")
     return run_parallel_pipeline(
-        subjects_dir=subjects_dir,
-        output_dir=output_dir,
-        config=config.dataset,
-        n_workers=config.n_workers,
-        log_dir=log_dir,
-        worker_timeout=config.worker_timeout,
-        dry_run=getattr(args, "dry_run", False),
+        _build_streaming_settings(config, args, run_log_path), config.dataset, _compute_models_source(config)
     )
 
 
@@ -713,6 +712,7 @@ class ChampollionPipeline(ScriptBuilder):
     """main.py as a ScriptBuilder script: the shared run log, profiling and process setup."""
 
     def __init__(self) -> None:
+        self._run_log_path: str | None = None
         super().__init__(SCRIPT_NAME, SCRIPT_DESCRIPTION)
         self._add_pipeline_options()
 
@@ -801,8 +801,9 @@ class ChampollionPipeline(ScriptBuilder):
         )
 
     def _resolve_log_path(self) -> str | None:
-        """main.py's own run log: only with a bare --log. args.log is left as is, since it feeds config.log."""
-        return self.default_log_path() if self.args.log == "" else None
+        """main.py's own run log: only with a bare --log, stored for the streaming log_dir. args.log is left as is."""
+        self._run_log_path = self.default_log_path() if self.args.log == "" else None
+        return self._run_log_path
 
     def build(self) -> "ChampollionPipeline":
         """Check for updates through main.py's own import, then parse the arguments."""
@@ -817,7 +818,7 @@ class ChampollionPipeline(ScriptBuilder):
         config = _load_config(args)
         _apply_cli_overrides(config, args, from_default=not args.config)
         if config.mode == "streaming":
-            return _run_streaming_mode(config, args)
+            return _run_streaming_mode(config, args, run_log_path=self._run_log_path)
         return PipelineOrchestrator(config).run()
 
 
