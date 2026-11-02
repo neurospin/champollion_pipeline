@@ -21,6 +21,7 @@ from hypothesis import strategies as st
 
 from champollion_pipeline.run_cortical_tiles import RunCorticalTiles, main
 from champollion_pipeline.utils.lib import DERIVATIVES_FOLDER
+from tests.log_assertions import LOG
 
 
 @pytest.fixture(autouse=True)  # noqa: V103
@@ -158,13 +159,16 @@ def _run_whole_brain_step(temp_dir, subjects, extra_args=None, *, path_to_graph=
     return recorder, [str(w.message) for w in caught], result
 
 
-def _warnings_mentioning(text, capsys, caplog, python_warnings):
-    """Warnings emitted through logging (WARNING or above), the warnings module,
-    or a printed line containing 'warning', that mention ``text`` (case-insensitive)."""
-    captured = capsys.readouterr()
-    printed = [line for line in (captured.out + captured.err).splitlines() if "warning" in line.lower()]
-    logged = [r.getMessage() for r in caplog.records if r.levelno >= logging.WARNING]
-    return [m for m in printed + logged + python_warnings if text.lower() in m.lower()]
+_LOGGER_NAME = "champollion_pipeline.run_cortical_tiles"
+
+
+def _warnings_mentioning(text, pipeline_caplog):
+    """Messages of the WARNING records of the run_cortical_tiles logger that mention ``text``
+    (case-insensitive). Printed lines and Python warnings no longer count (TASK-LOGGING-BDRABCZUK-940DB0BFBA89)."""
+    logged = [
+        r.getMessage() for r in pipeline_caplog.records if r.name == _LOGGER_NAME and r.levelno == logging.WARNING
+    ]
+    return [m for m in logged if text.lower() in m.lower()]
 
 
 class TestRunCorticalTilesInit:
@@ -350,9 +354,8 @@ class TestNjobsHandling:
             assert script.args.njobs == 6
 
     @patch("champollion_pipeline.run_cortical_tiles.cpu_count", return_value=8)
-    @patch("builtins.print")
-    def test_njobs_exceeds_cpu_count_prints_warning(self, mock_print, _mock_cpu):
-        """Test that warning is printed when njobs >= cpu_count."""
+    def test_njobs_exceeds_cpu_count_logs_warning(self, _mock_cpu, pipeline_caplog):
+        """REQ-LOGGING-BDRABCZUK-AA4776030940: njobs >= cpu_count is logged at WARNING with both counts."""
         script = RunCorticalTiles()
         script.parse_args(
             [
@@ -375,9 +378,9 @@ class TestNjobsHandling:
         ):
             script.run()
 
-            # Check warning was printed
-            warning_printed = any("Warning" in str(call_args) for call_args in mock_print.call_args_list)
-            assert warning_printed
+        record = pipeline_caplog.assert_logged(logging.WARNING, "10")
+        assert record.name == _LOGGER_NAME
+        assert re.search(r"\b10\b.*\b8\b", record.getMessage()), record.getMessage()
 
     @patch("champollion_pipeline.run_cortical_tiles.cpu_count", return_value=1)
     def test_njobs_minimum_one_with_cpu_count_one(self, _mock_cpu):
@@ -1162,9 +1165,8 @@ class TestRunMethod:
             result = script.run()
             assert result == 42
 
-    @patch("builtins.print")
-    def test_run_prints_input_output(self, mock_print, temp_dir):
-        """Test that run prints input and output paths."""
+    def test_run_logs_input_output(self, temp_dir, pipeline_caplog):
+        """run logs the input and output paths at LOG (REQ-LOGGING-BDRABCZUK-72B7182FAE4D, -3CD073B72CB8)."""
         script = RunCorticalTiles()
         script.parse_args([temp_dir, temp_dir, "--path_to_graph", "graphs", "--path_sk_with_hull", "skeleton"])
 
@@ -1176,10 +1178,11 @@ class TestRunMethod:
         ):
             script.run()
 
-            # Check that paths were printed
-            print_calls = [str(call) for call in mock_print.call_args_list]
-            assert any("input" in call.lower() for call in print_calls)
-            assert any("output" in call.lower() for call in print_calls)
+        logged = [
+            r.getMessage().lower() for r in pipeline_caplog.records if r.name == _LOGGER_NAME and r.levelno == LOG
+        ]
+        assert any("input" in message for message in logged), logged
+        assert any("output" in message for message in logged), logged
 
 
 class TestMainFunction:
@@ -1700,23 +1703,19 @@ class TestSubjectsWithoutLabelledGraph:
 
         assert recorder.sessions_by_subject == {}
 
-    def test_one_warning_lists_excluded_subjects_and_requires_sulcal_recognition(self, temp_dir, capsys, caplog):
-        caplog.set_level(logging.WARNING)
-        _, python_warnings, _ = _run_whole_brain_step(
-            temp_dir, {"subj01": ["deepcnn_session_auto"], "subj08": [], "subj09": []}
-        )
+    def test_one_warning_lists_excluded_subjects_and_requires_sulcal_recognition(self, temp_dir, pipeline_caplog):
+        _run_whole_brain_step(temp_dir, {"subj01": ["deepcnn_session_auto"], "subj08": [], "subj09": []})
 
-        matching = _warnings_mentioning("sulcal recognition", capsys, caplog, python_warnings)
+        matching = _warnings_mentioning("sulcal recognition", pipeline_caplog)
         assert len(matching) == 1
         assert "subj08" in matching[0]
         assert "subj09" in matching[0]
         assert "subj01" not in matching[0]
 
-    def test_no_sulcal_recognition_warning_when_no_subject_is_excluded(self, temp_dir, capsys, caplog):
-        caplog.set_level(logging.WARNING)
-        _, python_warnings, _ = _run_whole_brain_step(temp_dir, {"subj01": ["deepcnn_session_auto"]})
+    def test_no_sulcal_recognition_warning_when_no_subject_is_excluded(self, temp_dir, pipeline_caplog):
+        _run_whole_brain_step(temp_dir, {"subj01": ["deepcnn_session_auto"]})
 
-        assert _warnings_mentioning("sulcal recognition", capsys, caplog, python_warnings) == []
+        assert _warnings_mentioning("sulcal recognition", pipeline_caplog) == []
 
     def test_run_returns_zero_when_subjects_are_excluded_after_successful_crop(self, temp_dir):
         """Exit status stays 0 when only whole-brain ventricle removal is skipped:
@@ -1806,15 +1805,12 @@ class TestPathToGraphWildcardResolution:
 
         assert recorder.path_to_graph_by_subject == {"subj01": [_resolved_graph_path("default_acquisition")]}
 
-    def test_unresolved_subjects_are_listed_in_the_one_exclusion_warning(self, temp_dir, capsys, caplog):
+    def test_unresolved_subjects_are_listed_in_the_one_exclusion_warning(self, temp_dir, pipeline_caplog):
         """REQ-WHOLEBRAIN-BDRABCZUK-D1E16A7827A2 and -3AE09F03A6E7 exclusions go through
         the existing one-line warning (REQ-LABELSESSION-BDRABCZUK-56365C1DEE1F)."""
-        caplog.set_level(logging.WARNING)
-        _, python_warnings, _ = _run_wildcard_step(
-            temp_dir, {"subj01": ["default_acquisition"], "subj05": [], "subj06": ["acq_a", "acq_b"]}
-        )
+        _run_wildcard_step(temp_dir, {"subj01": ["default_acquisition"], "subj05": [], "subj06": ["acq_a", "acq_b"]})
 
-        matching = _warnings_mentioning("sulcal recognition", capsys, caplog, python_warnings)
+        matching = _warnings_mentioning("sulcal recognition", pipeline_caplog)
         assert len(matching) == 1
         assert "subj05" in matching[0]
         assert "subj06" in matching[0]

@@ -10,6 +10,7 @@ TASK-199 / COMP-LABELLING-QC.
 
 import csv
 import glob
+import logging
 import os
 import os.path
 from collections import Counter
@@ -25,6 +26,8 @@ from champollion_pipeline.utils.lib import (
     ExplicitLabellingSession,
     labelling_session_candidates,
 )
+
+logger = logging.getLogger(__name__)
 
 # ---------------------------------------------------------------------------
 # Constants
@@ -271,11 +274,11 @@ class GenerateLabellingQC(ScriptBuilder):
 
         total = len(rows)
         n_pass = sum(1 for r in rows if r["qc"] == "1")
-        print(f"Total: {total}  qc=1: {n_pass}  qc=0: {total - n_pass}")
+        logger.output(f"Total: {total}  qc=1: {n_pass}  qc=0: {total - n_pass}")
 
         reason_counts = Counter(r["reason"] for r in rows if r["reason"])
         for reason, count in sorted(reason_counts.items()):
-            print(f"  {reason}: {count}")
+            logger.output(f"{reason}: {count}")
 
         return 0
 
