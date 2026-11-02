@@ -1,0 +1,22 @@
+# main.py --config file of every e2e tier and layout, read inside the env SIF.
+# Container mount points only: the run script binds code at /opt/code, the input scans,
+# the Morphologist graphs and the models read-only, and every output under /opt/e2e/run.
+# Stages (--stages), layout (--bids) and profiling (--profile) come from e2e.env through
+# the run script's command line, never from this file.
+
+models_path: /opt/e2e/models
+outputs_path: /opt/e2e/run
+
+dataset:
+  name: e2e
+  datasets_root: /opt/e2e/run
+  input_path: /opt/e2e/input
+  morphologist_graphs: /opt/e2e/morphologist
+  cortical_tiles_output: /opt/e2e/run/derivatives/cortical_tiles
+  crops_path: /opt/e2e/run/derivatives/cortical_tiles
+  embeddings_path: /opt/e2e/run/derivatives/champollion_V1
+  # Morphologist 6.0 layout, as written by the pipeline's own Morphologist stage.
+  path_to_graph: t1mri/default_acquisition/default_analysis/folds/3.1
+  path_sk_with_hull: t1mri/default_acquisition/default_analysis/segmentation
+  njobs: 8
+  hf_enabled: false
