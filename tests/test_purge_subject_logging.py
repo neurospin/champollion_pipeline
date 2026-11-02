@@ -66,6 +66,8 @@ def _aggregated_array(derivatives: Path) -> Path:
 
 
 def test_purge_start_logged_at_log(tmp_path, pipeline_caplog):
+    _skeleton_dir(tmp_path)
+
     assert _script(tmp_path).run() == 0
 
     records = [
@@ -128,6 +130,8 @@ def test_dry_run_deletion_record_starts_with_dry_run_tag(tmp_path, pipeline_capl
 
 
 def test_purge_completion_logged_at_output(tmp_path, pipeline_caplog):
+    _skeleton_dir(tmp_path)
+
     assert _script(tmp_path).run() == 0
 
     record = pipeline_caplog.assert_logged(OUTPUT, "Done.")
