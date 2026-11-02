@@ -1,21 +1,27 @@
 #!/usr/bin/env python3
 """Checker of one finished e2e run directory: its facts and its hard failures.
 
-Usage: ``python3 scripts/e2e/check_e2e.py <run dir>``. Writes ``<run dir>/report.json``
-(per-stage exit code, subject counts, QC counts, failed subjects, region-side coverage,
-hard failures) and prints each hard failure on stderr as ``check_e2e: ...``. Exit 0 when
-there is no hard failure, 1 otherwise, 2 on a usage error (nothing written).
+Usage: ``python3 scripts/e2e/check_e2e.py <run dir> [--tier T --layout L [--baselines-dir DIR]
+[--accept-baseline]]``. Writes ``<run dir>/report.json`` (per-stage exit code, subject counts,
+QC counts, failed subjects, region-side coverage, hard failures) and prints each hard failure
+on stderr as ``check_e2e: ...``. With ``--tier``/``--layout`` it also compares those facts with
+the shared baseline ``<E2E_BASELINES_DIR>/<tier>-<layout>.json``; any difference is a hard
+failure. Only ``--accept-baseline`` on a run without hard failures writes that baseline.
+Exit 0 when there is no hard failure, 1 otherwise, 2 on a usage error (nothing written).
 The run-directory layout is written by scripts/e2e/run_e2e.sh; E2E_RUN_PROFILE_DIRNAME
 comes from e2e.env. Standard library only, so it runs without aims, on the host or in the SIF.
 """
 
 from __future__ import annotations
 
+import argparse
 import csv
 import json
 import math
+import os
 import subprocess
 import sys
+import tempfile
 from pathlib import Path
 
 sys.path.insert(0, str(Path(__file__).resolve().parent))
@@ -35,6 +41,14 @@ TILES = Path("derivatives/cortical_tiles")
 SNAPSHOTS_QC_GLOB = "*/snapshots/input_qc.tsv"
 COMBINED_GLOB = "*/embeddings/*_embeddings.csv"
 COMBINED_SUFFIX = "_embeddings.csv"
+USAGE = "usage: check_e2e.py <run dir> [--tier <tier> --layout <layout> [--baselines-dir <dir>] [--accept-baseline]]"
+ENV_ERRORS = (OSError, KeyError, RuntimeError, subprocess.SubprocessError)
+BASELINE_FACTS = ("exit_code", "subjects", "qc", "failed_subjects")
+_ABSENT = object()  # a key missing on one side of the baseline comparison
+
+
+class UsageError(Exception):
+    """A command-line error: one usage line, exit 2, nothing written."""
 
 
 class Check:
@@ -127,9 +141,12 @@ def sidecar_stages(proc: Path) -> set[str]:
     return stages
 
 
-def check_run(run: Path) -> dict:
-    """Run every check on ``run`` (absolute) and return the report object."""
-    check = Check()
+def check_run(run: Path, settings: dict[str, str] | None = None, check: Check | None = None) -> dict:
+    """Run every check on ``run`` (absolute) and return the report object.
+
+    ``settings`` are the e2e.env values read once by tier mode; plain mode reads them here.
+    """
+    check = check or Check()
     rows = read_stages(run, check)
     ran = [stage for stage, _ in rows]
     for stage, code in rows:
@@ -150,8 +167,8 @@ def check_run(run: Path) -> dict:
         check.fail(f"missing QC TSV for {SNAPSHOTS_STAGE}: {run / CHAMPOLLION / SNAPSHOTS_QC_GLOB}")
 
     try:
-        proc = run / e2e_env.load_settings()["E2E_RUN_PROFILE_DIRNAME"] / "proc"
-    except (OSError, KeyError, RuntimeError, subprocess.SubprocessError) as error:
+        proc = run / (settings or e2e_env.load_settings())["E2E_RUN_PROFILE_DIRNAME"] / "proc"
+    except ENV_ERRORS as error:
         check.fail(f"cannot read e2e.env: {error}")
     else:
         profiled = sidecar_stages(proc)
@@ -185,14 +202,172 @@ def check_run(run: Path) -> dict:
     }
 
 
+def baseline_facts(report: dict) -> dict:
+    """The BASELINE_FACTS of ``report``: per-stage facts in report order, then region_sides."""
+    stages = {
+        stage: {fact: facts[fact] for fact in BASELINE_FACTS if fact in facts}
+        for stage, facts in report["stages"].items()
+    }
+    return {"stages": stages, "region_sides": report["region_sides"]}
+
+
+def compare_baseline(facts: dict, baseline: dict) -> list[str]:
+    """Difference lines between the run's facts and a baseline object, in contract order."""
+    base_stages = baseline.get("stages")
+    base_stages = base_stages if isinstance(base_stages, dict) else {}
+    lines = []
+
+    def differ(key: str, run_value: object, base_value: object) -> None:
+        if run_value != base_value:
+            shown = [
+                "absent" if value is _ABSENT else json.dumps(value, sort_keys=True) for value in (run_value, base_value)
+            ]
+            lines.append(f"check_e2e: baseline difference {key}: run {shown[0]}, baseline {shown[1]}")
+
+    run_stages = facts["stages"]
+    for stage in [*run_stages, *(name for name in base_stages if name not in run_stages)]:
+        run_entry = run_stages.get(stage, {})
+        base_entry = base_stages.get(stage, {})
+        base_entry = base_entry if isinstance(base_entry, dict) else {}
+        for fact in BASELINE_FACTS:
+            differ(f"stages.{stage}.{fact}", run_entry.get(fact, _ABSENT), base_entry.get(fact, _ABSENT))
+    differ("region_sides", facts["region_sides"], baseline.get("region_sides", _ABSENT))
+    return lines
+
+
+def write_baseline(path: Path, facts: dict) -> None:
+    """Write ``facts`` to ``path`` atomically (temp file in the same directory, then os.replace)."""
+    path.parent.mkdir(parents=True, exist_ok=True)
+    handle, temp = tempfile.mkstemp(dir=path.parent, prefix=f".{path.name}.", suffix=".tmp")
+    try:
+        with os.fdopen(handle, "w") as out:
+            out.write(json.dumps(facts, indent=2) + "\n")
+        os.replace(temp, path)
+    except OSError:
+        if os.path.exists(temp):
+            os.remove(temp)
+        raise
+
+
+def baseline_step(report: dict, check: Check, args: argparse.Namespace, settings: dict[str, str]) -> dict:
+    """Accept, refuse or compare the tier-layout baseline (modes B1-B6); returns report["baseline"]."""
+    directory = args.baselines_dir or settings.get("E2E_BASELINES_DIR")
+    result = {"tier": args.tier, "layout": args.layout, "file": None, "status": None, "differences": []}
+    if not directory:
+        check.fail("E2E_BASELINES_DIR not set in e2e.env")
+        result["status"] = "unconfigured"
+        return result
+    path = Path(os.path.abspath(os.path.join(directory, f"{args.tier}-{args.layout}.json")))
+    result["file"] = str(path)
+    if args.accept_baseline:
+        if check.failures:
+            sys.stderr.write(f"check_e2e: baseline not written (run has hard failures): {path}\n")
+            result["status"] = "refused"
+            return result
+        try:
+            write_baseline(path, baseline_facts(report))
+        except OSError as error:
+            check.fail(f"cannot write baseline {path}: {error}")
+            result["status"] = "unwritable"
+            return result
+        sys.stderr.write(f"check_e2e: baseline written: {path}\n")
+        result["status"] = "accepted"
+        return result
+    if not path.exists():
+        sys.stderr.write(f"check_e2e: no baseline: {path}\n")
+        result["status"] = "missing"
+        return result
+    try:
+        baseline = json.loads(path.read_text())
+        if not isinstance(baseline, dict):
+            raise ValueError("not a JSON object")
+    except (OSError, ValueError) as error:  # UnicodeDecodeError and JSONDecodeError included
+        check.fail(f"unreadable baseline {path}: {error}")
+        result["status"] = "unreadable"
+        return result
+    for line in compare_baseline(baseline_facts(report), baseline):
+        sys.stderr.write(line + "\n")
+        check.failures.append(line)
+        result["differences"].append(line)
+    result["status"] = "compared"
+    return result
+
+
+class _Parser(argparse.ArgumentParser):
+    """argparse whose errors raise UsageError instead of printing and exiting."""
+
+    def error(self, message: str) -> None:  # type: ignore[override]
+        raise UsageError(message)
+
+
+class _Once(argparse.Action):
+    """Store an option value, refusing a second occurrence."""
+
+    def __call__(self, parser, namespace, values, option_string=None):
+        if getattr(namespace, self.dest) is not None:
+            raise UsageError(f"{option_string} given twice")
+        setattr(namespace, self.dest, values)
+
+
+class _OnceFlag(argparse.Action):
+    """Set a flag, refusing a second occurrence."""
+
+    def __init__(self, option_strings, dest, **kwargs):
+        super().__init__(option_strings, dest, nargs=0, default=False, **kwargs)
+
+    def __call__(self, parser, namespace, values, option_string=None):
+        if getattr(namespace, self.dest):
+            raise UsageError(f"{option_string} given twice")
+        setattr(namespace, self.dest, True)
+
+
+def parse_args(args: list[str]) -> argparse.Namespace:
+    """Parse the command line; any error raises UsageError."""
+    parser = _Parser(add_help=False, allow_abbrev=False)
+    parser.add_argument("run_dir", nargs="?")
+    parser.add_argument("--tier", action=_Once)
+    parser.add_argument("--layout", action=_Once)
+    parser.add_argument("--baselines-dir", action=_Once)
+    parser.add_argument("--accept-baseline", action=_OnceFlag)
+    parsed = parser.parse_args(args)
+    if parsed.run_dir is None or not Path(parsed.run_dir).is_dir():
+        raise UsageError("<run dir> must be one existing directory")
+    if (parsed.tier is None) != (parsed.layout is None):
+        raise UsageError("--tier and --layout go together")
+    if parsed.tier is None and (parsed.baselines_dir is not None or parsed.accept_baseline):
+        raise UsageError("--baselines-dir and --accept-baseline need --tier and --layout")
+    return parsed
+
+
 def main(argv: list[str] | None = None) -> int:
     """Command-line entry point."""
     args = sys.argv[1:] if argv is None else argv
-    if len(args) != 1 or not Path(args[0]).is_dir():
-        sys.stderr.write("usage: check_e2e.py <run dir>\n")
+    try:
+        parsed = parse_args(args)
+    except UsageError as error:
+        sys.stderr.write(f"{USAGE}: {error}\n")
         return EXIT_USAGE
-    run = Path(args[0]).resolve()
-    report = check_run(run)
+    run = Path(parsed.run_dir).resolve()
+    if parsed.tier is None:
+        report = check_run(run)
+    else:
+        try:
+            settings = e2e_env.load_settings()
+        except ENV_ERRORS as error:
+            sys.stderr.write(f"check_e2e: cannot read e2e.env: {error}\n")
+            return EXIT_FAILED
+        if parsed.tier not in settings.get("E2E_TIERS", "").split():
+            sys.stderr.write(f"{USAGE}: unknown tier {parsed.tier!r}\n")
+            return EXIT_USAGE
+        if parsed.layout not in settings.get(f"E2E_TIER_{parsed.tier.upper()}_LAYOUTS", "").split():
+            sys.stderr.write(f"{USAGE}: unknown layout {parsed.layout!r} for tier {parsed.tier}\n")
+            return EXIT_USAGE
+        check = Check()
+        report = check_run(run, settings, check)
+        baseline = baseline_step(report, check, parsed, settings)
+        hard_failures = report.pop("hard_failures")
+        report["baseline"] = baseline
+        report["hard_failures"] = hard_failures
     (run / "report.json").write_text(json.dumps(report, indent=2) + "\n")
     return EXIT_FAILED if report["hard_failures"] else EXIT_OK
 
