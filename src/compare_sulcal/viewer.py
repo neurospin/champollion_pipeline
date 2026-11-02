@@ -28,8 +28,7 @@ VIEWS = ("Axial", "Sagittal", "Coronal")
 entries = json.loads(sys.argv[1])
 a = ana.Anatomist()
 alive = []
-for i, e in enumerate(entries, 1):
-    print(f"[{i}/{len(entries)}] {e['name']}: set_a grey, set_b violet, XOR red")
+for e in entries:
     va, vb, vx = (a.loadObject(e[k]) for k in ("path_a", "path_b", "path_xor"))
     va.setPalette("B-W LINEAR")
     vb.setPalette("VIOLET-lfusion")
@@ -44,7 +43,6 @@ for i, e in enumerate(entries, 1):
 qt_app = Qt.QApplication.instance()
 if qt_app is None:
     sys.exit("ERROR: no Qt application after creating Anatomist; cannot run the viewer.")
-print("Anatomist ready. Close all windows to exit.")
 qt_app.exec_()
 """
 
@@ -104,7 +102,8 @@ def visualise_mask_diffs(
     temporary directory removed afterwards.
 
     Prerequisites: Anatomist and a usable display; without a display the
-    viewer is skipped with a note on stderr. The viewer runs in a fresh Python
+    viewer is skipped with a WARNING record. The colour legend (OUTPUT) and the exit
+    instruction (LOG) are logged before the viewer starts; it runs in a fresh Python
     subprocess so Anatomist gets a clean QApplication.
 
     Args:
@@ -128,7 +127,9 @@ def visualise_mask_diffs(
         )
         return 0
 
-    logger.trace(f"Opening Anatomist for the {len(names)} most-changed mask(s)...")
+    logger.trace(f"Opening Anatomist for the {len(names)} most-changed mask(s). Close the Anatomist windows to exit.")
+    for i, name in enumerate(names, 1):
+        logger.output(f"[{i}/{len(names)}] {name}: set_a grey, set_b violet, XOR red")
     if xor_dir is not None:
         return _launch_viewer(_make_viewer_entries(names, masks_a, masks_b, Path(xor_dir)))
     with tempfile.TemporaryDirectory(prefix="compare_xor_") as tmp:

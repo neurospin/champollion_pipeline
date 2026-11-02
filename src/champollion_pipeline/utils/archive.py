@@ -1,11 +1,16 @@
 """Archive extraction and extraction-cache helpers shared by the model fetch strategies."""
 
 import gzip
+import logging
 import os
 import shutil
 import tarfile
 from os.path import exists, join
 from pathlib import Path
+
+import champollion_utils.logger  # noqa: F401 - installs Logger.trace/output/fail
+
+logger = logging.getLogger(__name__)
 
 _TAR_SUFFIXES = (".tar.xz", ".tar.gz", ".tgz")
 
@@ -23,13 +28,13 @@ def extract_archive(archive_path: str, extract_to: str, *, top_level: bool) -> s
             tar.extractall(path=extract_to, members=members)  # noqa: S202 - members vetted above
         if members:
             result = join(extract_to, members[0].name.split("/")[0]) if top_level else extract_to
-            print(f"Extracted to: {result}")
+            logger.trace(f"Extracted to: {result}")
             return result
     elif archive_path.endswith(".gz"):
         output_path = join(extract_to, Path(archive_path).stem)
         with gzip.open(archive_path, "rb") as f_in, open(output_path, "wb") as f_out:
             shutil.copyfileobj(f_in, f_out)
-        print(f"Extracted to: {output_path}")
+        logger.trace(f"Extracted to: {output_path}")
         return output_path
     return extract_to
 
@@ -78,12 +83,12 @@ def reuse_cached_extraction(cached_path: str, no_cache: bool, *, require_content
         and (not require_content or any(os.scandir(cached_path)))
     )
     if reuse:
-        print(f"Using cached extraction: {cached_path}")
+        logger.trace(f"Using cached extraction: {cached_path}")
     return reuse
 
 
 def remove_stale_cache(cached_path: str, no_cache: bool) -> None:
     """Delete the cached extraction at cached_path when no_cache is set."""
     if no_cache and exists(cached_path):
-        print(f"Removing existing cache: {cached_path}")
+        logger.trace(f"Removing existing cache: {cached_path}")
         shutil.rmtree(cached_path)

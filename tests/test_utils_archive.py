@@ -10,6 +10,7 @@ from pathlib import Path
 import pytest
 
 from champollion_pipeline.utils import archive
+from tests.log_assertions import LOG
 
 GENERATE_EMBEDDINGS = Path(__file__).resolve().parents[1] / "src" / "champollion_pipeline" / "generate_embeddings.py"
 
@@ -125,21 +126,23 @@ class TestExtractArchiveRefusesUnsafeMembers:
 
 
 class TestReuseCachedExtraction:
-    """REQ-REFACTOR-BDRABCZUK-FB87E74AAD4B."""
+    """REQ-REFACTOR-BDRABCZUK-094F4199149C (supersedes -FB87E74AAD4B)."""
 
-    def test_existing_dir_is_reused(self, tmp_path, capsys):
+    def test_existing_dir_is_reused(self, tmp_path, pipeline_caplog):
         cached = tmp_path / "models"
         cached.mkdir()
         (cached / "w.txt").write_text("w")
         assert archive.reuse_cached_extraction(str(cached), False) is True
-        assert f"Using cached extraction: {cached}" in capsys.readouterr().out.splitlines()
+        record = pipeline_caplog.assert_logged(LOG, f"Using cached extraction: {cached}")
+        assert record.getMessage() == f"Using cached extraction: {cached}"
+        assert record.name == "champollion_pipeline.utils.archive"
 
-    def test_no_cache_prevents_reuse(self, tmp_path, capsys):
+    def test_no_cache_prevents_reuse(self, tmp_path, pipeline_caplog):
         cached = tmp_path / "models"
         cached.mkdir()
         (cached / "w.txt").write_text("w")
         assert archive.reuse_cached_extraction(str(cached), True) is False
-        assert "Using cached extraction" not in capsys.readouterr().out
+        assert not any("Using cached extraction" in record.getMessage() for record in pipeline_caplog.records)
 
     def test_missing_dir_is_not_reused(self, tmp_path):
         assert archive.reuse_cached_extraction(str(tmp_path / "absent"), False) is False
@@ -155,22 +158,24 @@ class TestReuseCachedExtraction:
 
 
 class TestRemoveStaleCache:
-    """REQ-REFACTOR-BDRABCZUK-604D5A77C0D9."""
+    """REQ-REFACTOR-BDRABCZUK-ED5C0AC8879D (supersedes -604D5A77C0D9)."""
 
-    def test_no_cache_removes_existing_dir(self, tmp_path, capsys):
+    def test_no_cache_removes_existing_dir(self, tmp_path, pipeline_caplog):
         cached = tmp_path / "models"
         (cached / "sub").mkdir(parents=True)
         (cached / "sub" / "w.txt").write_text("w")
         archive.remove_stale_cache(str(cached), True)
         assert not cached.exists()
-        assert f"Removing existing cache: {cached}" in capsys.readouterr().out.splitlines()
+        record = pipeline_caplog.assert_logged(LOG, f"Removing existing cache: {cached}")
+        assert record.getMessage() == f"Removing existing cache: {cached}"
+        assert record.name == "champollion_pipeline.utils.archive"
 
-    def test_cache_kept_without_no_cache(self, tmp_path, capsys):
+    def test_cache_kept_without_no_cache(self, tmp_path, pipeline_caplog):
         cached = tmp_path / "models"
         cached.mkdir()
         archive.remove_stale_cache(str(cached), False)
         assert cached.is_dir()
-        assert "Removing existing cache" not in capsys.readouterr().out
+        assert not any("Removing existing cache" in record.getMessage() for record in pipeline_caplog.records)
 
 
 class TestGenerateEmbeddingsDelegates:

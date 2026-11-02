@@ -12,10 +12,15 @@ REQ-LOGGING-BDRABCZUK-07EA64A2D67D: a non-zero viewer exit -> ERROR with the ret
 REQ-LOGGING-BDRABCZUK-1B8E58FA45EB: no changed mask -> LOG "No changed masks to visualise".
 REQ-LOGGING-BDRABCZUK-E6B52DB20D7A: no usable display -> WARNING containing "display".
 REQ-LOGGING-BDRABCZUK-DC5BCAA4CA21: viewer start -> LOG with the number of masks shown.
+REQ-LOGGING-BDRABCZUK-AF8FEDD3C1AC: before the viewer subprocess, per mask -> OUTPUT with the mask name
+    followed by the colour legend (TASK-PYTHONIC-BDRABCZUK-17F097040EE7).
+REQ-LOGGING-BDRABCZUK-E82B9DCA7044: before the viewer subprocess -> LOG "Close the Anatomist windows to exit".
+REQ-LOGGING-BDRABCZUK-1DCB824F3685: the Anatomist viewer script calls print() nowhere.
 REQ-LOGGING-BDRABCZUK-C96C8DAAF703 / -22ABEF2F2CBD (no print call, module logger) are checked by
 tests/test_logging_convention.py through LOG_CONVERTED_MODULES.
 """
 
+import ast
 import glob
 import logging
 import re
@@ -27,7 +32,7 @@ import pytest
 
 import compare_sulcal.brainvisa
 from compare_sulcal import crops, databases, embeddings, viewer
-from tests.log_assertions import LOG
+from tests.log_assertions import LOG, OUTPUT, print_call_lines
 
 UMAP_ERROR = "corrupt umap pickle"
 
@@ -221,3 +226,41 @@ class TestViewerLogging:
 
         assert len(calls) == 1
         assert "2" in _only_record(compare_caplog, "compare_sulcal.viewer", LOG)
+
+    @pytest.mark.usefixtures("display_env")
+    def test_mask_legend_logged_at_output(self, monkeypatch, compare_caplog, tmp_path):
+        before_run = _records_before_viewer_run(monkeypatch, compare_caplog, OUTPUT)
+
+        scores = {"L/a.nii.gz": 3.0, "L/b.nii.gz": 1.0}
+        assert viewer.visualise_mask_diffs(scores, MASKS_A, MASKS_B, xor_dir=tmp_path) == 0
+
+        assert len(before_run) == 1, "the viewer subprocess was not started exactly once"
+        for name in scores:
+            legends = [m for m in before_run[0] if name in m and "set_a grey, set_b violet, XOR red" in m]
+            assert legends, f"no OUTPUT legend record for {name} before the viewer started; got {before_run[0]}"
+            message = legends[0]
+            assert message.index(name) < message.index("set_a grey, set_b violet, XOR red")
+
+    @pytest.mark.usefixtures("display_env")
+    def test_exit_instruction_logged_at_log(self, monkeypatch, compare_caplog, tmp_path):
+        before_run = _records_before_viewer_run(monkeypatch, compare_caplog, LOG)
+
+        assert viewer.visualise_mask_diffs({"L/a.nii.gz": 1.0}, MASKS_A, MASKS_B, xor_dir=tmp_path) == 0
+
+        assert len(before_run) == 1, "the viewer subprocess was not started exactly once"
+        assert any("Close the Anatomist windows to exit" in m for m in before_run[0]), before_run[0]
+
+    def test_viewer_script_has_no_print_call(self):
+        assert print_call_lines(ast.parse(viewer._VIEWER_SCRIPT)) == []
+
+
+def _records_before_viewer_run(monkeypatch, caplog, level):
+    """Replace subprocess.run; per call, keep the compare_sulcal.viewer messages at level logged so far."""
+    snapshots = []
+
+    def _run(cmd, *_args, **_kwargs):
+        snapshots.append([record.getMessage() for record in _records(caplog, "compare_sulcal.viewer", level)])
+        return subprocess.CompletedProcess(cmd, 0)
+
+    monkeypatch.setattr(subprocess, "run", _run)
+    return snapshots

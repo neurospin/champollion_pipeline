@@ -55,6 +55,8 @@ LOG_CONVERTED_MODULES: tuple[str, ...] = (
     "generate_umap_reference",
     "run_cka",
     "upload_models_to_hf",
+    "champollion_pipeline.config",
+    "champollion_pipeline.utils.archive",
 )
 
 

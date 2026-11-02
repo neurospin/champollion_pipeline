@@ -12,6 +12,8 @@ import yaml
 from champollion_pipeline.derivatives_layout import DEFAULT_MASKS_VERSION
 from champollion_pipeline.generate_embeddings import DEFAULT_CHECKPOINT_EPOCH
 
+logger = logging.getLogger(__name__)
+
 # Dataset config keys that no longer exist; old YAML files still carrying them load with a warning.
 _REMOVED_DATASET_KEYS = {
     "use_best_model": "it had no effect; set dataset.checkpoint_epoch to choose the training epoch whose "
@@ -160,9 +162,7 @@ class ConfigLoader:
         for key, hint in _REMOVED_DATASET_KEYS.items():
             if key in dataset_dict:
                 dataset_dict.pop(key)
-                logging.getLogger("champollion_pipeline").warning(
-                    "Ignoring removed config key dataset.%s: %s", key, hint
-                )
+                logger.warning("Ignoring removed config key dataset.%s: %s", key, hint)
         dataset_config = DatasetConfig(**dataset_dict)
 
         # Create pipeline config
@@ -180,6 +180,6 @@ class ConfigLoader:
         with open(output_path, "w") as f:
             yaml.safe_dump(config_dict, f, default_flow_style=False, sort_keys=False)
         if config.dataset.hf_token:
-            print(
-                f"Note: dataset.hf_token not written to {output_path}; set the HF_TOKEN environment variable instead."
+            logger.warning(
+                f"dataset.hf_token not written to {output_path}; set the HF_TOKEN environment variable instead."
             )
