@@ -12,6 +12,7 @@ Requirements:
 - REQ-PROFILING-BDRABCZUK-B09796DF6E14: each stage script receives --profile <absolute profile_dir>.
 - REQ-PROFILING-BDRABCZUK-8E8CF75E4A51: no --profile reaches a stage script when profile_dir is None.
 - REQ-PROFILING-BDRABCZUK-063F1345231D: profiling stays off by default (no CHAMPOLLION_PROFILE* in a stage).
+- REQ-PROFILING-BDRABCZUK-5B1108BDDE03: _profiling_session returns champollion_utils.process.active_profiling().
 
 Profiling is process-global (one session per interpreter, exit hooks, PYTHONPATH changes), so every
 test that may start it runs main.py in a fresh interpreter; the argv tests stay in-process because
@@ -312,3 +313,13 @@ def test_stage_argv_has_no_profile_by_default(main_module, stage_class_name, scr
     argv, namespace = _stage_namespace(main_module, stage_class_name, script_cls, _base_config(main_module, None))
     assert not any(arg == "--profile" or arg.startswith("--profile=") for arg in argv), f"argv was {argv!r}"
     assert namespace.profile is None
+
+
+@pytest.mark.unit
+def test_profiling_session_returns_active_profiling_result(main_module):
+    """REQ-PROFILING-BDRABCZUK-5B1108BDDE03: _profiling_session delegates to champollion_utils active_profiling."""
+    session = MagicMock(name="active profiling session")
+    with patch.object(main_module, "active_profiling", create=True, return_value=session) as active_profiling:
+        result = main_module._profiling_session()
+    assert result is session, f"_profiling_session returned {result!r}, not the active_profiling() result"
+    active_profiling.assert_called_once_with()

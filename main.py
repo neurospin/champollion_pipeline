@@ -30,7 +30,7 @@ from pathlib import Path
 from types import ModuleType
 from typing import ClassVar
 
-from champollion_utils.process import PROFILING_BOOT_MODULE, PROFILING_MODULE, start_profiling
+from champollion_utils.process import active_profiling, start_profiling
 from champollion_utils.script_builder import ScriptBuilder
 from champollion_utils.update_check import check_for_updates
 
@@ -639,11 +639,7 @@ def _apply_runtime_overrides(config: PipelineConfig, args: argparse.Namespace) -
 
 def _profiling_session() -> ModuleType | None:
     """The profiling module of this process when a session is open, else None; never imports it."""
-    for name in (PROFILING_MODULE, PROFILING_BOOT_MODULE):
-        module = sys.modules.get(name)
-        if module is not None and module.is_profiling_enabled():
-            return module
-    return None
+    return active_profiling()
 
 
 def _start_config_profiling(config: PipelineConfig, args: argparse.Namespace) -> None:
