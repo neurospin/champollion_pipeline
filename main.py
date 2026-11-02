@@ -25,10 +25,12 @@ import os
 import re
 import sys
 from collections.abc import Iterator
-from contextlib import contextmanager
+from contextlib import AbstractContextManager, contextmanager, nullcontext
 from pathlib import Path
+from types import ModuleType
 from typing import ClassVar
 
+from champollion_utils.process import PROFILING_BOOT_MODULE, PROFILING_MODULE, start_profiling
 from champollion_utils.script_builder import ScriptBuilder
 from champollion_utils.update_check import check_for_updates
 
@@ -514,7 +516,8 @@ class PipelineOrchestrator:
             self.logger.error(f"Stage '{stage_name}' validation failed")
             return False
         self._report_pre_stage(stage_name, stage)
-        result = stage.execute()
+        with _stage_segment(stage_name):
+            result = stage.execute()
         if result.success:
             return True
         if self.config.stop_on_error:
@@ -630,6 +633,32 @@ def _apply_runtime_overrides(config: PipelineConfig, args: argparse.Namespace) -
         config.worker_timeout = args.worker_timeout
     if args.log is not None:
         config.log = args.log
+    if args.profile is not None:
+        config.profile_dir = args.profile
+
+
+def _profiling_session() -> ModuleType | None:
+    """The profiling module of this process when a session is open, else None; never imports it."""
+    for name in (PROFILING_MODULE, PROFILING_BOOT_MODULE):
+        module = sys.modules.get(name)
+        if module is not None and module.is_profiling_enabled():
+            return module
+    return None
+
+
+def _start_config_profiling(config: PipelineConfig, args: argparse.Namespace) -> None:
+    """Start profiling from config.profile_dir when neither --profile nor a parent already started it."""
+    if args.profile is not None or not config.profile_dir or _profiling_session() is not None:
+        return
+    start_profiling(config.profile_dir, None, stage=SCRIPT_NAME)
+
+
+def _stage_segment(stage_name: str) -> AbstractContextManager:
+    """Profiling segment named after the stage when a session is open, else a no-op context."""
+    session = _profiling_session()
+    if session is None:
+        return nullcontext()
+    return session.profile_segment(stage_name)
 
 
 def _apply_cli_overrides(config: PipelineConfig, args: argparse.Namespace, *, from_default: bool) -> None:
@@ -817,6 +846,7 @@ class ChampollionPipeline(ScriptBuilder):
             return _save_config_template(args)
         config = _load_config(args)
         _apply_cli_overrides(config, args, from_default=not args.config)
+        _start_config_profiling(config, args)
         if config.mode == "streaming":
             return _run_streaming_mode(config, args, run_log_path=self._run_log_path)
         return PipelineOrchestrator(config).run()

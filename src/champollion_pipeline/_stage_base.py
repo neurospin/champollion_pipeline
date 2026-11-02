@@ -5,10 +5,12 @@ result); each stage supplies its argv, its script and its messages through hooks
 """
 
 import logging
+import os
 from abc import ABC, abstractmethod
 from dataclasses import dataclass
 from datetime import datetime
 from os.path import join
+from pathlib import Path
 from typing import ClassVar
 
 from champollion_utils.run_log import RunLogCapture
@@ -68,6 +70,13 @@ class PipelineStage(ABC):
             return script.default_log_path()
         return join(log, f"{self.name}_{datetime.now().astimezone().strftime(RUN_LOG_TIMESTAMP_FORMAT)}.log")
 
+    def profile_args(self) -> list[str]:
+        """--profile=<absolute dir> when config.profile_dir is set, else no argument."""
+        profile_dir = self.config.profile_dir
+        if not isinstance(profile_dir, (str, os.PathLike)) or not os.fspath(profile_dir):
+            return []
+        return [f"--profile={Path(profile_dir).absolute()}"]
+
     def run_script(self, script: ScriptBuilder) -> int:
         """Run the parsed script and return its exit code."""
         return script.run()
@@ -80,7 +89,7 @@ class PipelineStage(ABC):
         self.log_start()
         try:
             self.logger.info(self.progress_message)
-            args = self.build_args()
+            args = [*self.build_args(), *self.profile_args()]
             script = self.create_script()
             script.parse_args(args)
             log_path = self.run_log_path(script)
