@@ -93,7 +93,6 @@ def _run_mocked(script: RunCorticalTiles) -> None:
         patch.object(script, "_generate_mask_npys"),
         patch.object(script, "_remove_ventricle_whole_brain"),
         patch("champollion_pipeline.run_cortical_tiles.add_left_and_right_volumes.add_left_and_right_volumes"),
-        patch("champollion_pipeline.run_cortical_tiles.chdir"),
     ):
         assert script.run() == 0
 

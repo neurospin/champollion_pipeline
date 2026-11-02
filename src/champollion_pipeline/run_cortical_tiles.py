@@ -26,7 +26,6 @@ import shutil
 import sys
 import tempfile
 from datetime import datetime
-from os import chdir, getcwd
 from os.path import abspath, dirname, exists, isdir, join
 
 import numpy as np
@@ -302,7 +301,7 @@ class RunCorticalTiles(ScriptBuilder):
             datetime.now().astimezone(),
         )
 
-    def run(self):  # noqa: PLR0915 - linear stage script body; split deferred (user decision 2026-10-23)
+    def run(self):
         """Execute the cortical_tiles script."""
         logger.trace(f"input: {self.args.input}")
         logger.trace(f"output: {self.args.output}")
@@ -369,9 +368,8 @@ class RunCorticalTiles(ScriptBuilder):
             )
         )
 
-        # Get the directory where the script lives so we can run from there
+        # The script runs from its own directory (subprocess cwd)
         script_dir = dirname(script_path)
-        current_dir = getcwd()
 
         cmd = [
             sys.executable,
@@ -398,10 +396,7 @@ class RunCorticalTiles(ScriptBuilder):
         input_types = self.args.input_types or list(INPUT_TYPES_DEFAULT)
         cmd.extend(["-y", *input_types])
 
-        # Change to script directory to run the command
-        chdir(script_dir)
-        result = self.execute_command(cmd, shell=False)
-        chdir(current_dir)
+        result = self.execute_command(cmd, shell=False, cwd=script_dir)
 
         if result != 0:
             return result
