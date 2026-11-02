@@ -129,13 +129,13 @@ class TestLocalPathStrategy:
         result = LocalPathStrategy().fetch(str(archive), str(tmp_path / "cache"))
         assert Path(result).read_bytes() == b"weights"
 
-    def test_cached_extraction_is_reused(self, tmp_path, capsys):
+    def test_cached_extraction_is_reused(self, tmp_path, caplog, pipeline_caplog):
         archive = make_tar(tmp_path)
         cache = tmp_path / "cache"
         LocalPathStrategy().fetch(str(archive), str(cache))
-        capsys.readouterr()
+        caplog.clear()
         result = LocalPathStrategy().fetch(str(archive), str(cache))
-        assert "Using cached extraction" in capsys.readouterr().out
+        pipeline_caplog.assert_logged(LOG, "Using cached extraction")
         assert result == str(cache / "models")
 
     def test_empty_cache_dir_is_not_reused(self, tmp_path):
@@ -145,13 +145,13 @@ class TestLocalPathStrategy:
         result = LocalPathStrategy().fetch(str(archive), str(cache))
         assert (Path(result) / "models" / "weights.txt").exists()
 
-    def test_no_cache_forces_re_extraction(self, tmp_path, capsys):
+    def test_no_cache_forces_re_extraction(self, tmp_path, caplog, pipeline_caplog):
         archive = make_tar(tmp_path)
         cache = tmp_path / "cache"
         LocalPathStrategy().fetch(str(archive), str(cache))
-        capsys.readouterr()
+        caplog.clear()
         LocalPathStrategy().fetch(str(archive), str(cache), no_cache=True)
-        assert "Removing existing cache" in capsys.readouterr().out
+        pipeline_caplog.assert_logged(LOG, "Removing existing cache")
 
     def test_extract_archive_returns_dir_for_unknown_extension(self, tmp_path):
         target = tmp_path / "out"
@@ -274,16 +274,16 @@ class TestRemoteArchiveStrategy:
         assert result == str(cache / "models")
         assert not (cache / "models.tar.gz").exists()
 
-    def test_cached_extraction_is_reused_without_download(self, tmp_path, capsys):
+    def test_cached_extraction_is_reused_without_download(self, tmp_path, pipeline_caplog):
         cache = tmp_path / "cache"
         (cache / "models").mkdir(parents=True)
         with patch("urllib.request.urlretrieve") as retrieve:
             result = RemoteArchiveStrategy().fetch("https://example.com/models.tar.gz", str(cache))
         retrieve.assert_not_called()
         assert result == str(cache / "models")
-        assert "Using cached extraction" in capsys.readouterr().out
+        pipeline_caplog.assert_logged(LOG, "Using cached extraction")
 
-    def test_no_cache_removes_existing_cache(self, tmp_path, capsys):
+    def test_no_cache_removes_existing_cache(self, tmp_path, pipeline_caplog):
         source = make_tar(tmp_path, name="source.tar.gz")
         cache = tmp_path / "cache"
         (cache / "models").mkdir(parents=True)
@@ -293,7 +293,7 @@ class TestRemoteArchiveStrategy:
 
         with patch("urllib.request.urlretrieve", side_effect=fake_urlretrieve):
             RemoteArchiveStrategy().fetch("https://example.com/models.tar.gz", str(cache), no_cache=True)
-        assert "Removing existing cache" in capsys.readouterr().out
+        pipeline_caplog.assert_logged(LOG, "Removing existing cache")
 
     def test_download_failure_is_wrapped_in_runtime_error(self, tmp_path):
         with (
@@ -364,7 +364,7 @@ class TestInteractiveFallbackStrategy:
             result = InteractiveFallbackStrategy().fetch("weights", str(cache))
         assert result == str(cache / "models")
 
-    def test_cached_extraction_is_reused(self, tmp_path, capsys):
+    def test_cached_extraction_is_reused(self, tmp_path, pipeline_caplog):
         archive = make_tar(tmp_path, name="models.tar.gz")
         cache = tmp_path / "cache"
         (cache / "models").mkdir(parents=True)
@@ -374,9 +374,9 @@ class TestInteractiveFallbackStrategy:
         ):
             result = InteractiveFallbackStrategy().fetch("weights", str(cache))
         assert result == str(cache / "models")
-        assert "Using cached extraction" in capsys.readouterr().out
+        pipeline_caplog.assert_logged(LOG, "Using cached extraction")
 
-    def test_no_cache_removes_existing_cache(self, tmp_path, capsys):
+    def test_no_cache_removes_existing_cache(self, tmp_path, pipeline_caplog):
         archive = make_tar(tmp_path, name="models.tar.gz")
         cache = tmp_path / "cache"
         (cache / "models").mkdir(parents=True)
@@ -385,7 +385,7 @@ class TestInteractiveFallbackStrategy:
             patch("builtins.input", side_effect=["yes", str(archive)]),
         ):
             InteractiveFallbackStrategy().fetch("weights", str(cache), no_cache=True)
-        assert "Removing existing cache" in capsys.readouterr().out
+        pipeline_caplog.assert_logged(LOG, "Removing existing cache")
 
     def test_extract_archive_handles_plain_gz(self, tmp_path):
         archive = make_gz(tmp_path)
