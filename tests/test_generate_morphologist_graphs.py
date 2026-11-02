@@ -11,7 +11,7 @@ import subprocess
 import sys
 import textwrap
 from pathlib import Path
-from unittest.mock import call, patch
+from unittest.mock import patch
 
 import pytest
 
@@ -220,25 +220,6 @@ class TestValidatePaths:
 class TestRunMethod:
     """Test the run method."""
 
-    @patch("champollion_pipeline.generate_morphologist_graphs.chdir")
-    @patch("champollion_pipeline.generate_morphologist_graphs.getcwd", return_value="/original/dir")
-    def test_run_changes_directory(self, _mock_getcwd, mock_chdir, temp_dir):
-        """Test that run changes to input directory."""
-        script = GenerateMorphologistGraphs()
-        script.parse_args([temp_dir, temp_dir])
-        _write_nifti(Path(temp_dir) / "test.nii.gz")
-
-        with (
-            patch.object(script, "validate_paths", return_value=True),
-            patch.object(script, "_get_input_files", return_value=["test.nii.gz"]),
-            patch.object(script, "execute_command", return_value=0),
-        ):
-            script.run()
-
-            # Check that chdir was called to input and back
-            assert call(temp_dir) in mock_chdir.call_args_list
-            assert call("/original/dir") in mock_chdir.call_args_list
-
     def test_run_builds_correct_command(self, temp_dir):
         """Test that run builds correct morphologist-cli command."""
         script = GenerateMorphologistGraphs()
@@ -256,7 +237,6 @@ class TestRunMethod:
             patch.object(script, "validate_paths", return_value=True),
             patch.object(script, "_get_input_files", return_value=test_files),
             patch.object(script, "execute_command", return_value=0) as mock_exec,
-            patch("champollion_pipeline.generate_morphologist_graphs.chdir"),
             patch("champollion_pipeline.generate_morphologist_graphs.getcwd", return_value="/original"),
         ):
             script.run()
@@ -281,7 +261,6 @@ class TestRunMethod:
             patch.object(script, "validate_paths", return_value=True),
             patch.object(script, "_get_input_files", return_value=["test.nii"]),
             patch.object(script, "execute_command", return_value=0) as mock_exec,
-            patch("champollion_pipeline.generate_morphologist_graphs.chdir"),
             patch("champollion_pipeline.generate_morphologist_graphs.getcwd", return_value="/original"),
         ):
             script.run()
@@ -299,30 +278,10 @@ class TestRunMethod:
             patch.object(script, "validate_paths", return_value=True),
             patch.object(script, "_get_input_files", return_value=["test.nii"]),
             patch.object(script, "execute_command", return_value=42),
-            patch("champollion_pipeline.generate_morphologist_graphs.chdir"),
             patch("champollion_pipeline.generate_morphologist_graphs.getcwd", return_value="/original"),
         ):
             result = script.run()
             assert result == 42
-
-    def test_run_restores_directory_on_success(self, temp_dir):
-        """Test that original directory is restored after successful run."""
-        script = GenerateMorphologistGraphs()
-        script.parse_args([temp_dir, temp_dir])
-        _write_nifti(Path(temp_dir) / "test.nii")
-        original_dir = "/original/dir"
-
-        with (
-            patch("champollion_pipeline.generate_morphologist_graphs.getcwd", return_value=original_dir),
-            patch("champollion_pipeline.generate_morphologist_graphs.chdir") as mock_chdir,
-            patch.object(script, "validate_paths", return_value=True),
-            patch.object(script, "_get_input_files", return_value=["test.nii"]),
-            patch.object(script, "execute_command", return_value=0),
-        ):
-            script.run()
-
-            # Verify we returned to original directory
-            assert mock_chdir.call_args_list[-1] == call(original_dir)
 
 
 class TestMainFunction:

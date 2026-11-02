@@ -5,7 +5,7 @@ Script to generate graphs with morphologist from the user's raw data.
 
 import logging
 from datetime import datetime
-from os import chdir, getcwd, listdir
+from os import getcwd, listdir
 from os.path import basename, isfile, join, splitext
 
 from champollion_utils.script_builder import ScriptBuilder
@@ -157,9 +157,6 @@ class GenerateMorphologistGraphs(ScriptBuilder):
         if not kept:
             return 0
 
-        local_dir = getcwd()
-        chdir(self.args.input)
-
         # Build command
         # Force nonoverlap format by default to prevent morphologist-cli from auto-detecting
         # BIDS format when filenames contain BIDS entities (_acq-, _run-, etc.) and silently
@@ -186,11 +183,7 @@ class GenerateMorphologistGraphs(ScriptBuilder):
         if not self.args.enable_sulcal_recognition:
             cmd.append('pipeline_steps="sulci_labelling=False, sulcal_morphometry=False"')
 
-        result = self.execute_command(cmd, shell=True)
-
-        chdir(local_dir)
-
-        return result
+        return self.execute_command(cmd, shell=True, cwd=self.args.input)
 
 
 def main():
