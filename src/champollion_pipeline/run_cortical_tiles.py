@@ -38,6 +38,7 @@ from champollion_pipeline.derivatives_layout import compute_run_log_path
 from champollion_pipeline.process_setup import init_pipeline_process
 from champollion_pipeline.utils.cortical_tiles_config import CorticalTilesConfigFactory, versioned_crops_exist
 from champollion_pipeline.utils.lib import DERIVATIVES_FOLDER, LABELLING_SESSION_CANDIDATES
+from champollion_pipeline.utils.qc_report import write_qc_tsv
 
 logger = logging.getLogger(__name__)
 
@@ -53,6 +54,11 @@ INPUT_TYPES_DEFAULT = ("skeleton", "foldlabel")
 # TEMPORARY (DEF-CORTILES-BDRABCZUK-8A44DAD7F312): the prefix-ID guard below (and its flag, check and test file)
 # goes once cortical_tiles stops globbing {subject}*/ in generate_ICBM2009c_transforms.py.
 PREFIX_PAIRS_SHOWN = 5  # prefix pairs named in the refusal or warning
+# TEMPORARY (DEF-CORTILES-BDRABCZUK-8A44DAD7F312): transform QC, a report of subjects whose ICBM2009c
+# transform is byte-identical to another subject's; goes with the prefix-ID guard.
+TRANSFORM_QC_FILENAME = "transform_qc.tsv"
+TRANSFORM_SIDES = ("L", "R")
+TRANSFORM_STEM = "transform_to_ICBM2009c_"  # files are <side><TRANSFORM_STEM><ID>.trm
 
 
 class _ExplicitLabellingSession(argparse.Action):
@@ -61,6 +67,42 @@ class _ExplicitLabellingSession(argparse.Action):
     def __call__(self, parser, namespace, values, _option_string=None):
         namespace.labelling_session = values
         namespace.labelling_session_explicit = True
+
+
+def transform_qc_rows(transforms_dir: str) -> list[dict[str, object]]:
+    """QC rows of the ICBM2009c transforms in <transforms_dir>/<side>/, one per subject, sorted by ID.
+
+    A subject fails (qc 0) when its transform file on a side has exactly the same bytes as another
+    subject's on that side; L and R are never compared with each other. Pure: no logging, no write.
+    """
+    flagged: dict[str, list[str]] = {}
+    subjects: set[str] = set()
+    for side in TRANSFORM_SIDES:
+        side_dir = join(transforms_dir, side)
+        if not isdir(side_dir):
+            continue
+        prefix = side + TRANSFORM_STEM
+        groups: dict[bytes, list[str]] = {}
+        with os.scandir(side_dir) as entries:
+            for entry in entries:
+                name = entry.name
+                if not (entry.is_file() and name.startswith(prefix) and name.endswith(".trm")):
+                    continue
+                subject = name[len(prefix) : -len(".trm")]
+                if not subject:
+                    continue
+                with open(entry.path, "rb") as handle:
+                    groups.setdefault(handle.read(), []).append(subject)
+                subjects.add(subject)
+        for group in groups.values():
+            for subject in group:
+                others = sorted(other for other in group if other != subject)
+                if others:
+                    flagged.setdefault(subject, []).append(f"{side} transform byte-identical to {', '.join(others)}")
+    return [
+        {"participant_id": subject, "qc": 0 if subject in flagged else 1, "reason": "; ".join(flagged.get(subject, []))}
+        for subject in sorted(subjects)
+    ]
 
 
 def list_fused_subjects(skeleton_src_dir: str, src_filename: str) -> dict[str, str]:
@@ -320,6 +362,24 @@ class RunCorticalTiles(ScriptBuilder):
             logger.warning(f"Overwriting existing crops for '{requested_cfg.masks_version}'.")
         return True
 
+    def _write_transform_qc(self, output_abs: str) -> None:
+        """Write <derivatives>/transform_qc.tsv and log one summary record (warning when a subject is flagged)."""
+        derivatives = join(output_abs, DERIVATIVES_FOLDER)
+        if not isdir(derivatives):
+            logger.info(f"transform QC skipped: no derivatives directory {derivatives}.")
+            return
+        rows = transform_qc_rows(join(derivatives, "transforms"))
+        qc_path = join(derivatives, TRANSFORM_QC_FILENAME)
+        write_qc_tsv(qc_path, rows)
+        flagged = sum(1 for row in rows if row["qc"] == 0)
+        if flagged > 0:
+            logger.warning(
+                f"transform QC: {flagged} subject(s) with an ICBM2009c transform byte-identical to another "
+                f"subject's, see {qc_path}; their crops may use the wrong transform."
+            )
+        else:
+            logger.output(f"transform QC: {len(rows)} subject(s), no byte-identical transform, see {qc_path}.")
+
     def _generate_mask_npys(self, output_abs: str) -> None:
         """Convert {side}mask_cropped.nii.gz → {side}mask.npy for every region.
 
@@ -350,7 +410,7 @@ class RunCorticalTiles(ScriptBuilder):
             datetime.now().astimezone(),
         )
 
-    def run(self):
+    def run(self):  # noqa: PLR0915 - linear stage sequence; split deferred to the guard/QC removal task
         """Execute the cortical_tiles script."""
         logger.trace(f"input: {self.args.input}")
         logger.trace(f"output: {self.args.output}")
@@ -452,6 +512,7 @@ class RunCorticalTiles(ScriptBuilder):
         if result != 0:
             return result
 
+        self._write_transform_qc(output_abs)  # TEMPORARY (DEF-CORTILES-BDRABCZUK-8A44DAD7F312)
         self._generate_mask_npys(output_abs)
 
         # Whole-brain volume: fuse L+R skeletons, then strip the ventricle
