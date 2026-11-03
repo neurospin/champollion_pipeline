@@ -24,7 +24,6 @@ import pytest
 from champollion_pipeline import generate_snapshots as gs
 from champollion_pipeline.generate_snapshots import (
     GenerateSnapshots,
-    _detect_hemi,
     find_completed_regions,
     find_sulcal_graphs,
     find_white_mesh,
@@ -202,17 +201,6 @@ class TestFindCompletedRegions:
         (mask / "Lmask_skeleton.nii.gz").touch()
         (mask / "Rmask_skeleton.nii.gz").touch()
         assert find_completed_regions(str(tmp_path)) == {"left": ["S.Or."], "right": ["S.Or."]}
-
-
-class TestDetectHemi:
-    """Test _detect_hemi."""
-
-    @pytest.mark.parametrize("name", ["Rsulci.arg", "sub_Rwhite.arg", "right_folds.arg"])
-    def test_right_is_detected(self, name):
-        assert _detect_hemi(f"/a/b/{name}") == "right"
-
-    def test_left_is_the_default(self):
-        assert _detect_hemi("/a/b/Lsulci.arg") == "left"
 
 
 class TestParseEmbeddingCsvName:
