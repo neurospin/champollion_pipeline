@@ -27,9 +27,12 @@ def labelling_session_candidates(args: argparse.Namespace) -> tuple[str, ...]:
 def find_dataset_folder(path: str, dataset_name: str) -> str:
     """Find the dataset_folder by locating dataset_name in the path.
 
-    The dataset_folder is the parent directory of the dataset_name component.
-    For example, if path is '/data/TEST01/derivatives/cortical_tiles/crops/2mm'
-    and dataset_name is 'TEST01', returns '/data'.
+    The dataset_folder is the parent directory of the last component equal to
+    dataset_name among the components before the first 'derivatives'
+    component (all components when the path has no 'derivatives').
+    For example, '/data/TEST01/derivatives/cortical_tiles/crops/2mm' with
+    'TEST01' returns '/data', and '/data/UKB/runs/UKB/derivatives/x' with
+    'UKB' returns '/data/UKB/runs'.
 
     Args:
         path: Absolute path containing the dataset name as a component
@@ -39,10 +42,12 @@ def find_dataset_folder(path: str, dataset_name: str) -> str:
         Absolute path to the parent of the dataset directory
 
     Raises:
-        ValueError: If dataset_name is not found in the path
+        ValueError: If dataset_name is not found before 'derivatives'
     """
     parts = Path(path).parts
-    for i, part in enumerate(parts):
-        if part == dataset_name:
+    if "derivatives" in parts:
+        parts = parts[: parts.index("derivatives")]
+    for i in range(len(parts) - 1, -1, -1):
+        if parts[i] == dataset_name:
             return str(Path(*parts[:i]))
     raise ValueError(f"Dataset name '{dataset_name}' not found in path: {path}")
