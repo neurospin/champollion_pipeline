@@ -2,6 +2,9 @@ import json
 import os
 from dataclasses import dataclass
 
+CROPS_DIRNAME = "crops"
+DEFAULT_VOXEL_SIZE = 2.0
+
 
 @dataclass
 class CorticalTilesConfig:
@@ -25,9 +28,18 @@ class CorticalTilesConfigFactory:
         return CorticalTilesConfig(masks_version=masks_version, out_voxel_size=2.0)
 
 
+def compute_versioned_crops_dir(
+    derivatives_dir: str, masks_version: str, voxel_size: float = DEFAULT_VOXEL_SIZE
+) -> str:
+    """Return <derivatives_dir>/crops/<masks_version>/<int(voxel_size)>mm.
+
+    Pure: no I/O, no existence check, no validation of masks_version. Complexity: O(1).
+    """
+    return os.path.join(derivatives_dir, CROPS_DIRNAME, masks_version, f"{int(voxel_size)}mm")
+
+
 def versioned_crops_exist(output_dir: str, masks_version: str, voxel_size: float) -> bool:
-    vox_str = f"{int(voxel_size)}mm"
-    crops_path = os.path.join(output_dir, "crops", masks_version, vox_str)
+    crops_path = compute_versioned_crops_dir(output_dir, masks_version, voxel_size)
     if not os.path.isdir(crops_path):
         return False
     return any(True for _ in os.scandir(crops_path))

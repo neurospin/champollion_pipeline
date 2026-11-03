@@ -14,16 +14,18 @@ import re
 from collections.abc import Collection
 from dataclasses import dataclass
 from datetime import datetime
-from os.path import exists, join
+from os.path import exists, isdir, join
 from pathlib import Path, PurePath
 
 import numpy as np
 import pandas as pd
 from champollion_utils.script_builder import ScriptBuilder
 
-from champollion_pipeline.derivatives_layout import compute_run_log_path
+from champollion_pipeline.derivatives_layout import DEFAULT_MASKS_VERSION, compute_run_log_path
 from champollion_pipeline.process_setup import init_pipeline_process
+from champollion_pipeline.utils.cortical_tiles_config import CROPS_DIRNAME, compute_versioned_crops_dir
 from champollion_pipeline.utils.lib import DERIVATIVES_FOLDER
+from champollion_pipeline.utils.subject_name import subject_name_problem
 
 logger = logging.getLogger(__name__)
 
@@ -44,6 +46,14 @@ def _file_belongs_to(rel_path: PurePath, subjects: Collection[str]) -> bool:
         if re.search(r"(?<![^_.])" + re.escape(subject) + r"(?![^_.])", rel_path.name):
             return True
     return False
+
+
+def _in_masks_scope(rel_path: PurePath, masks: str) -> bool:
+    """True for a file outside crops/; for a file under crops/, True only when it lies under crops/<masks>/."""
+    parts = rel_path.parts
+    if parts[0] != CROPS_DIRNAME:
+        return True
+    return len(parts) > 2 and parts[1] == masks
 
 
 def _crop_ids(side_dir: Path) -> set[str]:
@@ -175,6 +185,12 @@ class PruneFailedSubjects(ScriptBuilder):
                 "Subjects with qc==0 or absent from this file will be removed.",
             )
             .add_flag("--dry-run", "Print files that would be deleted without deleting them.")
+            .add_optional_argument(
+                "--masks",
+                "Mask version of the crops to prune: crops/<masks>/2mm under the derivatives directory "
+                "(default canonical_25). Files under other crops/<version>/ trees are left untouched.",
+                default=DEFAULT_MASKS_VERSION,
+            )
         )
 
     def _discover_subjects(self, crops_dir: str) -> set[str]:
@@ -199,20 +215,51 @@ class PruneFailedSubjects(ScriptBuilder):
         """Run-log path of a bare --log: <output>/.log/prune_failed_subjects_<stamp>.log (<output> = derivatives)."""
         return compute_run_log_path(self.args.output, self.script_name, datetime.now().astimezone())
 
-    def run(self):
-        """Execute the prune operation."""
-        derivatives_dir = join(self.args.output, DERIVATIVES_FOLDER)
+    def _resolve_crops_dir(self, derivatives_dir: str) -> str:
+        """crops/<masks>/2mm under derivatives_dir; ValueError, before any deletion, when it cannot be used."""
         if not exists(derivatives_dir):
             raise ValueError(
                 f"Derivatives directory not found: {derivatives_dir}\n"
                 f"Expected {DERIVATIVES_FOLDER}/ inside {self.args.output}"
             )
+        masks = self.args.masks
+        reason = subject_name_problem(masks)
+        if reason is not None:
+            raise ValueError(f"Invalid --masks {masks!r}: {reason}.")
+        crops_dir = compute_versioned_crops_dir(derivatives_dir, masks)
+        if not isdir(crops_dir):
+            message = f"Crops directory for --masks {masks} not found: {crops_dir}"
+            legacy = join(derivatives_dir, CROPS_DIRNAME, "2mm")
+            if isdir(legacy):
+                message += (
+                    f"; a legacy unversioned crops directory exists at {legacy}: rerun run_cortical_tiles.py on "
+                    f"{self.args.output} to move it under crops/<masks_version>/2mm"
+                )
+            raise ValueError(message)
+        return crops_dir
 
-        crops_2mm = join(derivatives_dir, "crops", "2mm")
-        if not exists(crops_2mm):
-            raise ValueError(f"crops/2mm directory not found: {crops_2mm}")
+    def _delete_subject_files(self, derivatives_dir: str, to_remove: set[str]) -> int:
+        """Delete (or list under --dry-run) the in-scope files of to_remove; return their count (P3/P4)."""
+        deleted = 0
+        for root, _dirs, files in os.walk(derivatives_dir):
+            for fname in files:
+                rel = PurePath(root, fname).relative_to(derivatives_dir)
+                if _in_masks_scope(rel, self.args.masks) and _file_belongs_to(rel, to_remove):
+                    fpath = join(root, fname)
+                    if self.args.dry_run:
+                        logger.output(f"[dry-run] Would delete: {fpath}")
+                    else:
+                        os.remove(fpath)
+                        logger.output(f"Removed: {fpath}")
+                    deleted += 1
+        return deleted
 
-        all_subjects = self._discover_subjects(crops_2mm)
+    def run(self):
+        """Execute the prune operation."""
+        derivatives_dir = join(self.args.output, DERIVATIVES_FOLDER)
+        crops_dir = self._resolve_crops_dir(derivatives_dir)
+
+        all_subjects = self._discover_subjects(crops_dir)
         passing_subjects = self._read_passing_subjects(self.args.qc)
         to_remove = all_subjects - passing_subjects
 
@@ -222,23 +269,11 @@ class PruneFailedSubjects(ScriptBuilder):
 
         logger.output(f"Subjects to remove ({len(to_remove)}): {sorted(to_remove)}")
 
-        plans, problems = plan_aggregate_rows(crops_2mm, to_remove)
+        plans, problems = plan_aggregate_rows(crops_dir, to_remove)
         if not self._check_aggregates(problems):
             return 1
 
-        deleted = 0
-        for root, _dirs, files in os.walk(derivatives_dir):
-            for fname in files:
-                rel = PurePath(root, fname).relative_to(derivatives_dir)
-                if _file_belongs_to(rel, to_remove):
-                    fpath = join(root, fname)
-                    if self.args.dry_run:
-                        logger.output(f"[dry-run] Would delete: {fpath}")
-                    else:
-                        os.remove(fpath)
-                        logger.output(f"Removed: {fpath}")
-                    deleted += 1
-
+        deleted = self._delete_subject_files(derivatives_dir, to_remove)
         aggregates_ok = self._prune_aggregates(plans)
 
         action = "Would delete" if self.args.dry_run else "Deleted"

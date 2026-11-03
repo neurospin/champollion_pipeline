@@ -25,12 +25,12 @@ def _derivatives(base: Path) -> Path:
 
 
 def _make_crops(base: Path, subjects: tuple[str, ...]) -> None:
-    """Crop files the subject discovery reads: crops/2mm/region_a/mask/Rcrops/<subject>_cropped_skeleton.nii.gz."""
+    """Crop files discovery reads: crops/<masks>/2mm/region_a/mask/Rcrops/<subject>_cropped_skeleton.nii.gz."""
     make_crop_files(base, "region_a", "R", list(subjects))
 
 
 def _crop_names(base: Path) -> list[str]:
-    """Sorted names of the files left in crops/2mm/region_a/mask/Rcrops."""
+    """Sorted names of the files left in crops/<masks>/2mm/region_a/mask/Rcrops."""
     return sorted(f.name for f in (crops_2mm(base) / "region_a" / "mask" / "Rcrops").iterdir() if f.is_file())
 
 

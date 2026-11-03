@@ -1,7 +1,11 @@
 import json
+import os
+
+import pytest
 
 from champollion_pipeline.utils.cortical_tiles_config import (
     CorticalTilesConfigFactory,
+    compute_versioned_crops_dir,
     versioned_crops_exist,
 )
 
@@ -69,3 +73,22 @@ class TestVersionedCropsExist:
         (crops_dir / "SC-sylv_left").mkdir()
         assert versioned_crops_exist(str(tmp_path), "canonical_25", 2.0)
         assert not versioned_crops_exist(str(tmp_path), "canonical_25", 1.0)
+
+
+class TestComputeVersionedCropsDir:
+    """REQ-PATTERNS-BDRABCZUK-66BCD9D856F6 and -2ED8EA782B0F: <D>/crops/<M>/<S>mm, pure."""
+
+    @pytest.mark.parametrize(("voxel_size", "vox_dir"), [(2.0, "2mm"), (1.0, "1mm"), (3, "3mm")])
+    def test_returns_versioned_crops_path(self, tmp_path, voxel_size, vox_dir):
+        derivatives = str(tmp_path / "derivatives")
+        expected = os.path.join(derivatives, "crops", "masks_v_test", vox_dir)
+
+        assert compute_versioned_crops_dir(derivatives, "masks_v_test", voxel_size) == expected
+        assert not os.path.exists(expected)
+
+    def test_default_voxel_size_is_2mm(self, tmp_path):
+        derivatives = str(tmp_path / "derivatives")
+
+        assert compute_versioned_crops_dir(derivatives, "canonical_25") == os.path.join(
+            derivatives, "crops", "canonical_25", "2mm"
+        )
