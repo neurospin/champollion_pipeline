@@ -18,13 +18,13 @@ from tests.prune_layout import CROP_SUFFIX, crop_file, crops_2mm, make_crop_file
 
 
 def _make_crops(base: Path, regions: list[str], subjects: list[str]) -> None:
-    """Create crop files crops/2mm/{region}/mask/Rcrops/{subject}_cropped_skeleton.nii.gz (real layout)."""
+    """Create crop files crops/<masks>/2mm/{region}/mask/Rcrops/{subject}_cropped_skeleton.nii.gz (real layout)."""
     for region in regions:
         make_crop_files(base, region, "R", subjects)
 
 
 def _crop_names(base: Path, region: str) -> set[str]:
-    """Names of the files left in crops/2mm/{region}/mask/Rcrops."""
+    """Names of the files left in crops/<masks>/2mm/{region}/mask/Rcrops."""
     return {f.name for f in (crops_2mm(base) / region / "mask" / "Rcrops").iterdir()}
 
 

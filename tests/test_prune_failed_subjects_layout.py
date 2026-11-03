@@ -3,9 +3,9 @@
 prune_failed_subjects.py on the real cortical_tiles crop layout.
 
 cortical_tiles writes one crop per subject to
-crops/2mm/<region>/mask/<side>crops/<id>_cropped_skeleton.nii.gz and stacks
-them into the aggregated arrays crops/2mm/<region>/mask/<side><name>.npy, whose
-rows follow crops/2mm/<region>/mask/<side><name>_subject.csv (column Subject).
+crops/<masks>/2mm/<region>/mask/<side>crops/<id>_cropped_skeleton.nii.gz and stacks
+them into the aggregated arrays crops/<masks>/2mm/<region>/mask/<side><name>.npy, whose
+rows follow crops/<masks>/2mm/<region>/mask/<side><name>_subject.csv (column Subject).
 
 - REQ-PATTERNS-BDRABCZUK-4E9993FCE014: discovery returns exactly the <id> of
   the <side>crops/<id>_cropped_skeleton.nii.gz files.
