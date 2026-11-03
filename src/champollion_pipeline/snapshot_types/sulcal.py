@@ -61,18 +61,24 @@ def find_sulcal_graphs(morphologist_dir, subject=None, acquisition=None):
     """
     root = osp.join(morphologist_dir, subject) if subject else morphologist_dir
     if subject and not osp.isdir(root):
-        candidates = [m for m in glob.glob(osp.join(morphologist_dir, "**", subject), recursive=True) if osp.isdir(m)]
-        if candidates:
-            root = candidates[0]
-            logger.trace(f"Subject found at: {root}")
-        else:
+        # The subject name is a literal folder name, never a glob pattern.
+        pattern = osp.join(glob.escape(morphologist_dir), "**", glob.escape(subject))
+        candidates = sorted(m for m in glob.glob(pattern, recursive=True) if osp.isdir(m))
+        if not candidates:
             logger.warning(f"Subject directory not found for '{subject}' under {morphologist_dir}")
             return []
-    pattern = osp.join(root, "**", "*.arg")
-    graphs = glob.glob(pattern, recursive=True)
-    graphs = [g for g in graphs if "sulci" in g.lower() or "folds" in g.lower()]
+        if len(candidates) > 1:
+            logger.warning(f"Subject '{subject}' is ambiguous under {morphologist_dir}: {', '.join(candidates)}")
+            return []
+        root = candidates[0]
+        logger.trace(f"Subject found at: {root}")
+    graphs = glob.glob(osp.join(glob.escape(root), "**", "*.arg"), recursive=True)
+    # Name tests apply below the search root only: a root named like "folds" must not admit every graph.
+    relative = {g: osp.relpath(g, root).replace("\\", "/") for g in graphs}
+    graphs = [g for g in graphs if "sulci" in relative[g].lower() or "folds" in relative[g].lower()]
     if acquisition:
-        graphs = [g for g in graphs if f"/{acquisition}/" in g.replace("\\", "/")]
+        graphs = [g for g in graphs if f"/{acquisition}/" in f"/{relative[g]}"]
+    graphs.sort()
     return graphs
 
 
