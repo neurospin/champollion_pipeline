@@ -312,6 +312,42 @@ class TestFlatMode:
         with pytest.raises(ValueError, match="No CSV matching region"):
             script.run()
 
+    def test_region_filter_is_not_a_substring(self, tmp_path):
+        a, b = tmp_path / "a", tmp_path / "b"
+        for d in (a, b):
+            _touch(d / "STs_left_embeddings.csv")
+            _touch(d / "STsbr_left_embeddings.csv")
+            _touch(d / "STi-STs-STpol_left_embeddings.csv")
+        script = _make_script(
+            ["--path_a", str(a), "--path_b", str(b), "--output_dir", str(tmp_path / "o"), "--region", "STs"]
+        )
+        assert script.run() == 0
+        assert len(script.executed) == 1
+        assert any(str(arg).endswith("/STs_left_embeddings.csv") for arg in script.executed[0])
+
+    def test_region_filter_accepts_full_region_name(self, tmp_path):
+        a, b = tmp_path / "a", tmp_path / "b"
+        for d in (a, b):
+            _touch(d / "STs_left_embeddings.csv")
+            _touch(d / "STs_right_embeddings.csv")
+        script = _make_script(
+            ["--path_a", str(a), "--path_b", str(b), "--output_dir", str(tmp_path / "o"), "--region", "STs_left"]
+        )
+        assert script.run() == 0
+        assert len(script.executed) == 1
+
+    def test_region_filter_on_model_id_is_not_a_substring(self, tmp_path):
+        a, b = tmp_path / "a", tmp_path / "b"
+        _touch(a / "STs_left_name07-58-00--111_embeddings.csv")
+        _touch(a / "STsbr_left_name08-00-00--222_embeddings.csv")
+        _touch(b / "x_name07-58-00--111_embeddings.csv")
+        _touch(b / "y_name08-00-00--222_embeddings.csv")
+        script = _make_script(
+            ["--path_a", str(a), "--path_b", str(b), "--output_dir", str(tmp_path / "o"), "--region", "STs"]
+        )
+        assert script.run() == 0
+        assert len(script.executed) == 1
+
     def test_models_cache_subdir_does_not_trigger_nested_mode(self, tmp_path):
         a, b = tmp_path / "a", tmp_path / "b"
         for d in (a, b):
