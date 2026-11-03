@@ -169,6 +169,14 @@ def resolve_graph_paths(morpho_dir: str, path_to_graph: str, subject: str) -> li
     return sorted(rels)
 
 
+# TEMPORARY (DEF-CORTILES-BDRABCZUK-9C7D2B9265BC)
+def find_dotted_ids(input_dir: str) -> list[str]:
+    """Sorted input subject IDs (non-dot subdirectory names) that contain a dot; none for a non-directory."""
+    if not isdir(input_dir):
+        return []
+    return sorted(e.name for e in os.scandir(input_dir) if e.is_dir() and not e.name.startswith(".") and "." in e.name)
+
+
 # TEMPORARY (DEF-CORTILES-BDRABCZUK-8A44DAD7F312)
 def find_prefix_id_pairs(input_dir: str) -> list[tuple[str, str]]:
     """Every (shorter, longer) pair of input subject IDs where one strictly prefixes the other, sorted.
@@ -296,6 +304,25 @@ class RunCorticalTiles(ScriptBuilder):
         )
         self.parser.set_defaults(labelling_session_explicit=False)
 
+    # TEMPORARY (DEF-CORTILES-BDRABCZUK-8A44DAD7F312, -9C7D2B9265BC)
+    def _check_subject_ids(self, input_abs: str) -> bool:
+        """Run the temporary subject-ID guards; False when one refuses the input."""
+        return self._check_dotted_ids(input_abs) and self._check_prefix_ids(input_abs)
+
+    # TEMPORARY (DEF-CORTILES-BDRABCZUK-9C7D2B9265BC)
+    def _check_dotted_ids(self, input_abs: str) -> bool:
+        """Refuse (False, error) a non-BIDS input with a dotted subject ID."""
+        if self.args.bids:
+            return True
+        dotted = find_dotted_ids(input_abs)
+        if not dotted:
+            return True
+        logger.error(
+            f"Subject ID(s) containing a dot: {', '.join(dotted)}. cortical_tiles splits IDs on the first dot "
+            "and would merge them (A.1 and A.2 become A). Rename the subject folders, or pass --bids."
+        )
+        return False
+
     # TEMPORARY (DEF-CORTILES-BDRABCZUK-8A44DAD7F312)
     def _check_prefix_ids(self, input_abs: str) -> bool:
         """Refuse (False, error) or allow with a warning (True) an input with prefix subject IDs."""
@@ -421,7 +448,7 @@ class RunCorticalTiles(ScriptBuilder):
 
         # Convert input to absolute path
         input_abs = abspath(self.args.input)
-        if not self._check_prefix_ids(input_abs):  # TEMPORARY (DEF-CORTILES-BDRABCZUK-8A44DAD7F312)
+        if not self._check_subject_ids(input_abs):  # TEMPORARY (DEF-CORTILES-BDRABCZUK-8A44DAD7F312, -9C7D2B9265BC)
             return 1
 
         output_abs = abspath(self.args.output)
