@@ -13,8 +13,8 @@ All subject IDs are synthetic.
 
 from pathlib import Path
 
-from champollion_pipeline.prune_failed_subjects import PruneFailedSubjects
 from champollion_pipeline.utils.lib import DERIVATIVES_FOLDER
+from tests.prune_layout import CROP_SUFFIX, crop_file, crops_2mm, make_crop_files, run_prune, skeleton_file, touch
 
 FAILED = "sub-1"
 SIBLINGS = ("sub-10", "sub-1a")
@@ -24,29 +24,19 @@ def _derivatives(base: Path) -> Path:
     return base / DERIVATIVES_FOLDER
 
 
-def _touch(path: Path) -> Path:
-    path.parent.mkdir(parents=True, exist_ok=True)
-    path.touch()
-    return path
-
-
 def _make_crops(base: Path, subjects: tuple[str, ...]) -> None:
-    """Crop files the subject discovery reads: crops/2mm/<region>/<subject>.nii.gz."""
-    for subject in subjects:
-        _touch(_derivatives(base) / "crops" / "2mm" / "region_a" / f"{subject}.nii.gz")
+    """Crop files the subject discovery reads: crops/2mm/region_a/mask/Rcrops/<subject>_cropped_skeleton.nii.gz."""
+    make_crop_files(base, "region_a", "R", list(subjects))
 
 
-def _run_prune(base: Path, qc_rows: list[tuple[str, int]]) -> None:
-    qc = base / "qc.tsv"
-    qc.write_text("participant_id\tqc\n" + "\n".join(f"{s}\t{q}" for s, q in qc_rows))
-    script = PruneFailedSubjects()
-    script.args = script.parse_args([str(base), "--qc", str(qc)])
-    script.run()
+def _crop_names(base: Path) -> list[str]:
+    """Sorted names of the files left in crops/2mm/region_a/mask/Rcrops."""
+    return sorted(f.name for f in (crops_2mm(base) / "region_a" / "mask" / "Rcrops").iterdir() if f.is_file())
 
 
 def _prune_failed_with_siblings(base: Path) -> None:
     _make_crops(base, (FAILED, *SIBLINGS))
-    _run_prune(base, [(FAILED, 0)] + [(s, 1) for s in SIBLINGS])
+    run_prune(base, [(FAILED, 0)] + [(s, 1) for s in SIBLINGS])
 
 
 # ---------------------------------------------------------------------------
@@ -56,7 +46,7 @@ def _prune_failed_with_siblings(base: Path) -> None:
 
 class TestPathComponentMatch:
     def test_file_under_directory_named_after_failed_id_is_deleted(self, tmp_path):
-        target = _touch(_derivatives(tmp_path) / "transforms" / "R" / FAILED / "transform.trm")
+        target = touch(_derivatives(tmp_path) / "transforms" / "R" / FAILED / "transform.trm")
         _prune_failed_with_siblings(tmp_path)
         assert not target.exists()
 
@@ -68,14 +58,12 @@ class TestPathComponentMatch:
 
 class TestFilenameTokenMatch:
     def test_failed_id_as_leading_token_is_deleted(self, tmp_path):
-        rcrops = _derivatives(tmp_path) / "crops" / "2mm" / "region_a" / "mask" / "Rcrops"
-        target = _touch(rcrops / f"{FAILED}_cropped_skeleton.nii.gz")
+        target = touch(crop_file(tmp_path, "region_a", "R", FAILED))
         _prune_failed_with_siblings(tmp_path)
         assert not target.exists()
 
     def test_failed_id_as_trailing_token_is_deleted(self, tmp_path):
-        skel = _derivatives(tmp_path) / "skeletons" / "2mm" / "R"
-        target = _touch(skel / f"Rresampled_skeleton_{FAILED}.nii.gz")
+        target = touch(skeleton_file(tmp_path, "R", FAILED))
         _prune_failed_with_siblings(tmp_path)
         assert not target.exists()
 
@@ -88,24 +76,21 @@ class TestFilenameTokenMatch:
 class TestSiblingIdsKept:
     def test_sibling_crop_files_are_kept(self, tmp_path):
         _prune_failed_with_siblings(tmp_path)
-        region = _derivatives(tmp_path) / "crops" / "2mm" / "region_a"
-        assert sorted(f.name for f in region.iterdir() if f.is_file()) == [f"{s}.nii.gz" for s in sorted(SIBLINGS)]
+        assert _crop_names(tmp_path) == [f"{s}{CROP_SUFFIX}" for s in sorted(SIBLINGS)]
 
     def test_sibling_token_files_are_kept(self, tmp_path):
         deriv = _derivatives(tmp_path)
         kept = []
         for sibling in SIBLINGS:
-            kept.append(
-                _touch(deriv / "crops" / "2mm" / "region_a" / "mask" / "Rcrops" / f"{sibling}_cropped_skeleton.nii.gz")
-            )
-            kept.append(_touch(deriv / "skeletons" / "2mm" / "R" / f"Rresampled_skeleton_{sibling}.nii.gz"))
-            kept.append(_touch(deriv / "transforms" / "R" / f"R_transform_to_ICBM2009c_{sibling}.trm"))
+            kept.append(touch(crop_file(tmp_path, "region_a", "R", sibling)))
+            kept.append(touch(skeleton_file(tmp_path, "R", sibling)))
+            kept.append(touch(deriv / "transforms" / "R" / f"R_transform_to_ICBM2009c_{sibling}.trm"))
         _prune_failed_with_siblings(tmp_path)
         assert [p for p in kept if not p.exists()] == []
 
     def test_sibling_directory_is_kept(self, tmp_path):
         kept = [
-            _touch(_derivatives(tmp_path) / "transforms" / "R" / sibling / f"R_transform_{sibling}.trm")
+            touch(_derivatives(tmp_path) / "transforms" / "R" / sibling / f"R_transform_{sibling}.trm")
             for sibling in SIBLINGS
         ]
         _prune_failed_with_siblings(tmp_path)
@@ -114,10 +99,8 @@ class TestSiblingIdsKept:
     def test_numeric_sibling_id_is_kept(self, tmp_path):
         failed, siblings = "100002", ("1000021", "2100002")
         _make_crops(tmp_path, (failed, *siblings))
-        skel = _derivatives(tmp_path) / "skeletons" / "2mm" / "R"
-        kept = [_touch(skel / f"Rresampled_skeleton_{s}.nii.gz") for s in siblings]
-        _run_prune(tmp_path, [(failed, 0)] + [(s, 1) for s in siblings])
+        kept = [touch(skeleton_file(tmp_path, "R", s)) for s in siblings]
+        run_prune(tmp_path, [(failed, 0)] + [(s, 1) for s in siblings])
 
-        region = _derivatives(tmp_path) / "crops" / "2mm" / "region_a"
-        assert sorted(f.name for f in region.iterdir()) == [f"{s}.nii.gz" for s in sorted(siblings)]
+        assert _crop_names(tmp_path) == [f"{s}{CROP_SUFFIX}" for s in sorted(siblings)]
         assert [p for p in kept if not p.exists()] == []
