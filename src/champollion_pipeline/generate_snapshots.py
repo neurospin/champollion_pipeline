@@ -217,14 +217,15 @@ class GenerateSnapshots(ScriptBuilder):
         acquisition = getattr(self.args, "acquisition", None)
 
         by_hemi = find_first_kept_subject_graphs(morphologist_dir, subject, acquisition, excluded)
-        if not acquisition:
-            self._warn_multiple_acquisitions(by_hemi, morphologist_dir, subject)
 
         total = sum(len(v) for v in by_hemi.values())
         logger.trace(f"Found {total} sulcal graph(s)")
 
         for hemi, hemi_graphs in by_hemi.items():
             if not hemi_graphs:
+                continue
+            if len(hemi_graphs) > 1:
+                self._report_ambiguous_hemisphere(hemi, hemi_graphs, morphologist_dir, subject)
                 continue
             graph_path = hemi_graphs[0]
             white_mesh = find_white_mesh(graph_path)
@@ -246,20 +247,17 @@ class GenerateSnapshots(ScriptBuilder):
 
         return snapshots
 
-    def _warn_multiple_acquisitions(self, by_hemi, morphologist_dir, subject):
-        """Warn once when a hemisphere has several graphs and no --acquisition was given."""
-        for hemi, hemi_graphs in by_hemi.items():
-            if len(hemi_graphs) > 1:
-                subject_dir = osp.join(morphologist_dir, subject) if subject else morphologist_dir
-                acqs = list_acquisitions(subject_dir)
-                acq_list = ", ".join(acqs) if acqs else "unknown"
-                logger.warning(
-                    f"{len(hemi_graphs)} {hemi} graphs found "
-                    f"(acquisitions: {acq_list}). "
-                    f"Using the first one. Re-run with --acquisition <name> "
-                    f"to select a specific one."
-                )
-                break
+    def _report_ambiguous_hemisphere(self, hemi, hemi_graphs, morphologist_dir, subject):
+        """Log one ERROR naming the graphs of a hemisphere that has several of them (no snapshot)."""
+        subject_dir = osp.join(morphologist_dir, subject) if subject else morphologist_dir
+        acqs = list_acquisitions(subject_dir)
+        acq_list = ", ".join(acqs) if acqs else "unknown"
+        logger.error(
+            f"{len(hemi_graphs)} {hemi} graphs found "
+            f"(acquisitions: {acq_list}): {', '.join(sorted(hemi_graphs))}. "
+            f"No {hemi} sulcal snapshot generated. Re-run with --acquisition <name> "
+            f"(and --subject) to select a single graph."
+        )
 
     def _run_tiles(self, size):
         """Generate cortical tiles snapshots."""

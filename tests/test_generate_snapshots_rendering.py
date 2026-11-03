@@ -688,8 +688,8 @@ class TestRunSulcalStep:
             snaps = script._run_sulcal((800, 600))
         assert snaps[0].endswith("sulcal_graph_wk30_left.png")
 
-    def test_multiple_acquisitions_trigger_a_warning(self, tmp_path, pipeline_caplog):
-        """REQ-LOGGING-BDRABCZUK-B72E4DE27276: one WARNING record names the acquisitions."""
+    def test_multiple_acquisitions_trigger_an_error(self, tmp_path, pipeline_caplog):
+        """REQ-PATTERNS-BDRABCZUK-BE886184ADEA: one ERROR record names the acquisitions."""
         morpho = tmp_path / "morphologist"
         for acq in ("wk30", "wk40"):
             folds = morpho / "t1mri" / acq / "default_analysis" / "folds"
@@ -699,7 +699,7 @@ class TestRunSulcalStep:
         script = self._script(tmp_path, ["--morphologist_dir", str(morpho)])
         with patch.object(gs, "generate_sulcal_graph_snapshot", side_effect=lambda *a, **k: a[1]):
             script._run_sulcal((800, 600))
-        naming = _records_at(pipeline_caplog, logging.WARNING, "wk30, wk40")
+        naming = _records_at(pipeline_caplog, logging.ERROR, "wk30, wk40")
         assert len(naming) == 1
         assert "2 left graphs found" in naming[0].getMessage()
         assert naming[0].name == "champollion_pipeline.generate_snapshots"
