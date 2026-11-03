@@ -12,6 +12,8 @@ from champollion_pipeline.snapshot_types import brainvisa_imports
 logger = logging.getLogger(__name__)
 
 HEMISPHERES = ("left", "right")
+# Morphologist names a sulcal graph <L|R><subject>[_<session>].arg: the first character is the side.
+SIDE_BY_LETTER = {"L": "left", "R": "right"}
 
 
 def list_acquisitions(subject_dir):
@@ -79,15 +81,20 @@ def find_white_mesh(graph_path):
 
     Navigates from the .arg graph path up to the analysis root
     (``default_analysis`` or acquisition index ``0``), then into
-    ``segmentation/mesh/`` to locate the matching
-    ``*_Lwhite.gii`` or ``*_Rwhite.gii`` file.
+    ``segmentation/mesh/`` to locate the ``*Lwhite.gii`` or ``*Rwhite.gii``
+    mesh named by the graph file name's leading side letter (L or R).
 
     Args:
         graph_path: Path to .arg sulcal graph file
 
     Returns:
-        Path to the white mesh file, or None if not found.
+        Path to the white mesh file, or None if not found or when the graph
+        file name has no leading side letter.
     """
+    letter = osp.basename(graph_path)[:1]
+    if letter not in SIDE_BY_LETTER:
+        return None
+
     parts = graph_path.replace("\\", "/").split("/")
     idx = None
     for anchor in ("default_analysis", "0"):
@@ -108,9 +115,7 @@ def find_white_mesh(graph_path):
     if not osp.isdir(mesh_dir):
         return None
 
-    fname = osp.basename(graph_path).lower()
-    is_right = fname.startswith("r") or "_r" in fname or "right" in fname
-    pattern = osp.join(mesh_dir, "*Rwhite.gii" if is_right else "*Lwhite.gii")
+    pattern = osp.join(mesh_dir, f"*{letter}white.gii")
 
     matches = glob.glob(pattern)
     return matches[0] if matches else None
@@ -167,11 +172,8 @@ def generate_sulcal_graph_snapshot(  # noqa: PLR0913 - snapshot API; keyword def
 
 
 def _detect_hemi(graph_path):
-    """Return 'right' or 'left' based on graph filename."""
-    fname = osp.basename(graph_path).lower()
-    if fname.startswith("r") or "_r" in fname or "right" in fname:
-        return "right"
-    return "left"
+    """Return ``"left"``/``"right"`` from the graph file name's first character (L/R), else None."""
+    return SIDE_BY_LETTER.get(osp.basename(graph_path)[:1])
 
 
 def list_sulcal_subjects(morphologist_dir, subject=None):
@@ -182,10 +184,20 @@ def list_sulcal_subjects(morphologist_dir, subject=None):
 
 
 def find_sulcal_graphs_by_hemi(morphologist_dir, subject, acquisition=None):
-    """Return one subject's sorted sulcal graphs grouped as ``{"left": [...], "right": [...]}``."""
+    """Return one subject's sorted sulcal graphs grouped as ``{"left": [...], "right": [...]}``.
+
+    A graph whose file name has no leading side letter (L or R) goes in neither
+    list and is reported by one WARNING naming its path.
+    """
     by_hemi = {hemi: [] for hemi in HEMISPHERES}
     for graph in sorted(find_sulcal_graphs(morphologist_dir, subject=subject, acquisition=acquisition)):
-        by_hemi[_detect_hemi(graph)].append(graph)
+        side = _detect_hemi(graph)
+        if side is None:
+            logger.warning(
+                f"Sulcal graph {graph} has no leading side letter (L or R): left out of both hemisphere lists"
+            )
+            continue
+        by_hemi[side].append(graph)
     return by_hemi
 
 
