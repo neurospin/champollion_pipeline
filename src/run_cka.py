@@ -38,6 +38,18 @@ logger = logging.getLogger(__name__)
 
 CKA_MODULE = "champollion.metrics.cka_coherence"
 
+_MODEL_ID_SUFFIX_RE = re.compile(r"_?name\d{2}-\d{2}-\d{2}--\d+")
+
+
+def _region_matches(region: str, filename: str) -> bool:
+    """True when the region name of a CSV file equals ``region`` or starts with ``region`` + '_'.
+
+    The region name is the file name without its model-ID and ``_embeddings.csv`` parts, so
+    ``STs`` selects ``STs_left`` but not ``STsbr_left``.
+    """
+    name = _MODEL_ID_SUFFIX_RE.sub("", filename.removesuffix("_embeddings.csv"))
+    return name == region or name.startswith(region + "_")
+
 
 class RunCKA(ScriptBuilder):
     def __init__(self):
@@ -159,7 +171,7 @@ class RunCKA(ScriptBuilder):
             if common:
                 # Exact basename match (same naming convention on both sides)
                 if self.args.region:
-                    common = [n for n in common if self.args.region in n]
+                    common = [n for n in common if _region_matches(self.args.region, n)]
                     if not common:
                         raise ValueError(f"No CSV matching region '{self.args.region}' found in both directories.")
                 pairs = [(name.removesuffix("_embeddings.csv"), csvs_a[name], csvs_b[name]) for name in common]
@@ -179,7 +191,9 @@ class RunCKA(ScriptBuilder):
                 id_to_b = {_mid(p): p for p in csvs_b_list if _mid(p)}
                 common_ids = sorted(set(id_to_a) & set(id_to_b))
                 if self.args.region:
-                    common_ids = [mid for mid in common_ids if self.args.region in basename(id_to_a[mid])]
+                    common_ids = [
+                        mid for mid in common_ids if _region_matches(self.args.region, basename(id_to_a[mid]))
+                    ]
                     if not common_ids:
                         raise ValueError(f"No CSV matching region '{self.args.region}' found in both directories.")
                 pairs = [
