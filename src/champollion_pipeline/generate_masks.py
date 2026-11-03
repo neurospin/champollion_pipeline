@@ -8,6 +8,7 @@ import glob
 import json
 import logging
 import os
+import re
 from abc import ABC, abstractmethod
 from dataclasses import dataclass
 from os.path import abspath, dirname, exists, join
@@ -174,6 +175,34 @@ def _compute_one_sulcus(  # noqa: PLR0913 - joblib worker called positionally; t
     return RETURN_DICTIONARY["ok"]
 
 
+def _graph_glob(subject: str, side: str, path_to_graph_supervised: str) -> str:
+    """Glob, relative to the database directory, of the graph files of one subject and side.
+
+    The subject and the graph path are escaped, so glob characters in them are literal;
+    only the trailing '*.arg' is a wildcard (narrowed by _graph_matches).
+    """
+    return "/".join(
+        [glob.escape(subject), glob.escape(path_to_graph_supervised), glob.escape(side + subject) + "*.arg"]
+    )
+
+
+def _attach_graph_glob(subjects: list, side: str, path_to_graph_supervised: str) -> None:
+    """Set, in place, each subject's side and escaped graph glob (see _graph_glob)."""
+    for sub in subjects:
+        sub["side"] = side
+        sub["graph_file"] = _graph_glob(sub["subject"], side, path_to_graph_supervised)
+
+
+def _graph_matches(sub) -> list:
+    """Sorted graph files of sub whose name is side + subject followed by '_' or '.'.
+
+    '-' is not a delimiter, so sub-1 never matches the graph of sub-10.
+    """
+    prefix = sub["side"] + sub["subject"]
+    candidates = glob.glob(join(glob.escape(sub["dir"]), sub["graph_file"]))
+    return sorted(c for c in candidates if re.match(re.escape(prefix) + r"[_.]", os.path.basename(c)))
+
+
 def _load_and_extract_subject(sub, sulci_full_set, voxel_size_tuple):
     """Worker: load one subject graph and extract voxel coords for all sulci.
 
@@ -184,9 +213,14 @@ def _load_and_extract_subject(sub, sulci_full_set, voxel_size_tuple):
     Accumulates voxels across all vertices that share the same sulcus name
     (a single sulcus can have many separate labelled patches in the graph).
     """
-    matches = glob.glob(join(sub["dir"], sub["graph_file"] % sub))
+    matches = _graph_matches(sub)
     if not matches:
         return sub["subject"], None
+    if len(matches) > 1:
+        raise RuntimeError(
+            f"[{sub['side']}] {sub['subject']}: {len(matches)} supervised graphs match, expected exactly one: "
+            + ", ".join(matches)
+        )
 
     graph = aims.read(matches[0])
     g_to_icbm = aims.GraphManip.getICBM2009cTemplateTransform(graph)
@@ -323,9 +357,13 @@ class BufferedRunner(MaskRunner):
         voxel_size_tuple = (config.voxel_size, config.voxel_size, config.voxel_size)
 
         for side in config.sides:
-            graph_file_pattern = "%(subject)s/" + config.path_to_graph_supervised + "/%(side)s%(subject)s*.arg"
+            # The lister %-formats this pattern once; the workers use the escaped glob set below instead.
+            graph_file_pattern = (
+                "%(subject)s/" + config.path_to_graph_supervised.replace("%", "%%") + "/%(side)s%(subject)s*.arg"
+            )
 
             subjects = get_all_subjects_as_dictionary([config.labeled_subjects_dir], [graph_file_pattern], side)
+            _attach_graph_glob(subjects, side, config.path_to_graph_supervised)
             subjects = select_subjects_int_if_list_of_dict(subjects, subjects, config.nb_subjects)
 
             # Determine which sulci need work (skip existing unless --force)
