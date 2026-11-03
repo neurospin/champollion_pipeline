@@ -330,7 +330,8 @@ class TestLoadAndExtractSubject:
         return {
             "subject": "sub01",
             "dir": str(path),
-            "graph_file": "%(subject)s.arg",
+            "side": "L",
+            "graph_file": "Lsub01*.arg",
         }
 
     def _mock_graph(self, mock_aims, vertices=()):
@@ -358,7 +359,7 @@ class TestLoadAndExtractSubject:
         """Found graph file → returns (sub_name, dict)."""
         modules, mock_aims, _, _ = _mock_aims_env()
         self._mock_graph(mock_aims)
-        graph_path = [str(tmp_path / "sub01.arg")]
+        graph_path = [str(tmp_path / "Lsub01.arg")]
         with _patched_masks_module(modules), patch("glob.glob", return_value=graph_path):
             name, data = _load_and_extract_subject(
                 self._sub(tmp_path),
@@ -391,7 +392,7 @@ class TestLoadAndExtractSubject:
             mock_aims,
             vertices=[make_vertex("S.C._left"), make_vertex("OTHER._left")],
         )
-        graph_path = [str(tmp_path / "sub01.arg")]
+        graph_path = [str(tmp_path / "Lsub01.arg")]
         with _patched_masks_module(modules), patch("glob.glob", return_value=graph_path):
             _, data = _load_and_extract_subject(
                 self._sub(tmp_path),
@@ -405,7 +406,7 @@ class TestLoadAndExtractSubject:
         """Empty sulci_full_set → sub_data is an empty dict."""
         modules, mock_aims, _, _ = _mock_aims_env()
         self._mock_graph(mock_aims)
-        graph_path = [str(tmp_path / "sub01.arg")]
+        graph_path = [str(tmp_path / "Lsub01.arg")]
         with _patched_masks_module(modules), patch("glob.glob", return_value=graph_path):
             _, data = _load_and_extract_subject(
                 self._sub(tmp_path),

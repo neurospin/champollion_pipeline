@@ -459,7 +459,7 @@ class TestBufferedRunner:
         config = make_config(tmp_path)
         with _patched_masks_names(subjects_modules):
             list(BufferedRunner(1)(config))
-        assert seen["graph_file"] == ("%(subject)s/" + config.path_to_graph_supervised + "/%(side)s%(subject)s*.arg")
+        assert seen["graph_file"] == "sub02/" + config.path_to_graph_supervised + "/Lsub02*.arg"
 
     def test_both_sides_are_processed(self, tmp_path, monkeypatch, subjects_modules):
         self._patch_workers(monkeypatch)
