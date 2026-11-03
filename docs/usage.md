@@ -97,8 +97,7 @@ python main.py --mode streaming --config my_pipeline.yaml --n-workers 8 --log
 ```
 
 The configuration must set `dataset.embeddings_only: true`; without it the run logs an error and exits with code 1
-before any scan is read. (The error text still names an `--embeddings-only` flag; main.py has no such flag, set the
-YAML key instead.)
+before any scan is read.
 
 A non-empty `dataset.embeddings_path` is refused: the run exits with code 1, since streaming always writes the
 versioned default embeddings folder.
