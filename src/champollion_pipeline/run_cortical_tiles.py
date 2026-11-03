@@ -69,6 +69,9 @@ class _ExplicitLabellingSession(argparse.Action):
         namespace.labelling_session_explicit = True
 
 
+ROOT_FORBIDDEN_SUBSTRINGS = ("ses-", "acq-", "run-", "_cropped")
+
+
 def transform_qc_rows(transforms_dir: str) -> list[dict[str, object]]:
     """QC rows of the ICBM2009c transforms in <transforms_dir>/<side>/, one per subject, sorted by ID.
 
@@ -305,9 +308,26 @@ class RunCorticalTiles(ScriptBuilder):
         self.parser.set_defaults(labelling_session_explicit=False)
 
     # TEMPORARY (DEF-CORTILES-BDRABCZUK-8A44DAD7F312, -9C7D2B9265BC)
-    def _check_subject_ids(self, input_abs: str) -> bool:
-        """Run the temporary subject-ID guards; False when one refuses the input."""
-        return self._check_dotted_ids(input_abs) and self._check_prefix_ids(input_abs)
+    def _check_subject_ids(self, input_abs: str, output_abs: str) -> bool:
+        """Run the temporary subject-ID and root guards; False when one refuses the input."""
+        return (
+            self._check_root_substrings(input_abs, output_abs)
+            and self._check_dotted_ids(input_abs)
+            and self._check_prefix_ids(input_abs)
+        )
+
+    # TEMPORARY (DEF-CORTILES-BDRABCZUK-9C7D2B9265BC)
+    def _check_root_substrings(self, input_abs: str, output_abs: str) -> bool:
+        """Refuse (False, error) an input or output root whose path holds a substring cortical_tiles misparses."""
+        for root in (input_abs, output_abs):
+            bad = next((s for s in ROOT_FORBIDDEN_SUBSTRINGS if s in root), None)
+            if bad:
+                logger.error(
+                    f"Root path {root} contains '{bad}'. cortical_tiles matches ses-/acq-/run- unanchored on the "
+                    "full path and splits on _cropped, which corrupts subject parsing. Use a root without it."
+                )
+                return False
+        return True
 
     # TEMPORARY (DEF-CORTILES-BDRABCZUK-9C7D2B9265BC)
     def _check_dotted_ids(self, input_abs: str) -> bool:
@@ -448,10 +468,11 @@ class RunCorticalTiles(ScriptBuilder):
 
         # Convert input to absolute path
         input_abs = abspath(self.args.input)
-        if not self._check_subject_ids(input_abs):  # TEMPORARY (DEF-CORTILES-BDRABCZUK-8A44DAD7F312, -9C7D2B9265BC)
+        output_abs = abspath(self.args.output)
+        # TEMPORARY (DEF-CORTILES-BDRABCZUK-8A44DAD7F312, -9C7D2B9265BC)
+        if not self._check_subject_ids(input_abs, output_abs):
             return 1
 
-        output_abs = abspath(self.args.output)
         config_file_path: str = join(output_abs, "pipeline_loop_2mm.json")
 
         if not self._preflight_check(output_abs, config_file_path):
