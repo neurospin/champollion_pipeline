@@ -39,6 +39,7 @@ from champollion_pipeline.process_setup import init_pipeline_process
 from champollion_pipeline.utils.cortical_tiles_config import CorticalTilesConfigFactory, versioned_crops_exist
 from champollion_pipeline.utils.lib import DERIVATIVES_FOLDER, LABELLING_SESSION_CANDIDATES
 from champollion_pipeline.utils.qc_report import write_qc_tsv
+from champollion_pipeline.utils.subject_name import subject_name_problem
 
 logger = logging.getLogger(__name__)
 
@@ -157,7 +158,7 @@ def resolve_graph_paths(morpho_dir: str, path_to_graph: str, subject: str) -> li
     returned relative to the subject folder. A subject id that is not a plain
     folder name, or a path leaving the subject folder, matches nothing.
     """
-    if subject in ("", os.curdir, os.pardir) or os.sep in subject:
+    if subject_name_problem(subject):
         return []
     subject_dir = join(morpho_dir, subject)
     pattern = GRAPH_WILDCARD.join(glob.escape(part) for part in path_to_graph.split(GRAPH_WILDCARD))
