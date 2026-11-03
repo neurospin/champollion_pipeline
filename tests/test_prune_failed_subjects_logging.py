@@ -12,44 +12,26 @@ TestRun::test_no_subjects_in_crops_returns_early and ::test_dry_run_output_menti
 REQ-LOGGING-BDRABCZUK-C96C8DAAF703 and -22ABEF2F2CBD: tests/test_logging_convention.py, through
 LOG_CONVERTED_MODULES.)
 
-Synthetic subject IDs and a synthetic derivatives tree only.
+Synthetic subject IDs and a synthetic derivatives tree in the real cortical_tiles layout
+(tests/prune_layout.py) only.
 """
 
 import re
-from pathlib import Path
 
 import pytest
 
-from champollion_pipeline.prune_failed_subjects import PruneFailedSubjects
-from champollion_pipeline.utils.lib import DERIVATIVES_FOLDER
 from tests.log_assertions import OUTPUT
+from tests.prune_layout import crop_file, make_crop_files, run_prune, skeleton_file, touch
 
 pytestmark = pytest.mark.unit  # noqa: V107
 
 LOGGER_NAME = "champollion_pipeline.prune_failed_subjects"
 
 
-def _tree(tmp_path: Path, subjects: list[str], qc_rows: list[tuple[str, int]]) -> Path:
-    """Crops of region_a for ``subjects`` and a QC TSV of ``qc_rows``; return the QC path."""
-    region_dir = tmp_path / DERIVATIVES_FOLDER / "crops" / "2mm" / "region_a"
-    region_dir.mkdir(parents=True)
-    for subject in subjects:
-        (region_dir / f"{subject}.nii.gz").touch()
-    qc = tmp_path / "qc.tsv"
-    qc.write_text("participant_id\tqc\n" + "\n".join(f"{s}\t{q}" for s, q in qc_rows))
-    return qc
-
-
-def _run(tmp_path: Path, qc: Path, dry_run: bool = False) -> None:
-    script = PruneFailedSubjects()
-    script.args = script.parse_args([str(tmp_path), "--qc", str(qc)] + (["--dry-run"] if dry_run else []))
-    assert script.run() == 0
-
-
 def test_subjects_to_remove_logged_at_output(tmp_path, pipeline_caplog):
-    qc = _tree(tmp_path, ["sub-01", "sub-02", "sub-03"], [("sub-01", 1), ("sub-02", 0)])
+    make_crop_files(tmp_path, "region_a", "R", ["sub-01", "sub-02", "sub-03"])
 
-    _run(tmp_path, qc, dry_run=True)
+    assert run_prune(tmp_path, [("sub-01", 1), ("sub-02", 0)], dry_run=True) == 0
 
     records = [
         record
@@ -61,10 +43,10 @@ def test_subjects_to_remove_logged_at_output(tmp_path, pipeline_caplog):
 
 
 def test_removed_file_logged_at_output(tmp_path, pipeline_caplog):
-    qc = _tree(tmp_path, ["sub-01", "sub-02"], [("sub-01", 1), ("sub-02", 0)])
-    removed = tmp_path / DERIVATIVES_FOLDER / "crops" / "2mm" / "region_a" / "sub-02.nii.gz"
+    make_crop_files(tmp_path, "region_a", "R", ["sub-01", "sub-02"])
+    removed = crop_file(tmp_path, "region_a", "R", "sub-02")
 
-    _run(tmp_path, qc)
+    assert run_prune(tmp_path, [("sub-01", 1), ("sub-02", 0)]) == 0
 
     assert not removed.exists()
     record = pipeline_caplog.assert_logged(OUTPUT, f"Removed: {removed}")
@@ -72,12 +54,10 @@ def test_removed_file_logged_at_output(tmp_path, pipeline_caplog):
 
 
 def test_summary_logged_at_output(tmp_path, pipeline_caplog):
-    qc = _tree(tmp_path, ["sub-01", "sub-02"], [("sub-01", 1), ("sub-02", 0)])
-    skeleton_dir = tmp_path / DERIVATIVES_FOLDER / "skeletons" / "2mm" / "region_a"
-    skeleton_dir.mkdir(parents=True)
-    (skeleton_dir / "sub-02.nii.gz").touch()
+    make_crop_files(tmp_path, "region_a", "R", ["sub-01", "sub-02"])
+    touch(skeleton_file(tmp_path, "R", "sub-02"))
 
-    _run(tmp_path, qc)
+    assert run_prune(tmp_path, [("sub-01", 1), ("sub-02", 0)]) == 0
 
     # One subject removed, two of its files deleted.
     record = pipeline_caplog.assert_logged(OUTPUT, "Summary:")

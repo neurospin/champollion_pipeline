@@ -10,6 +10,7 @@ import pytest
 from champollion_pipeline.prune_failed_subjects import PruneFailedSubjects
 from champollion_pipeline.utils.lib import DERIVATIVES_FOLDER
 from tests.log_assertions import OUTPUT
+from tests.prune_layout import CROP_SUFFIX, crop_file, crops_2mm, make_crop_files, skeleton_file, touch
 
 # ---------------------------------------------------------------------------
 # Helpers
@@ -17,12 +18,14 @@ from tests.log_assertions import OUTPUT
 
 
 def _make_crops(base: Path, regions: list[str], subjects: list[str]) -> None:
-    """Create fake crop files under crops/2mm/{region}/{subject}.nii.gz."""
+    """Create crop files crops/2mm/{region}/mask/Rcrops/{subject}_cropped_skeleton.nii.gz (real layout)."""
     for region in regions:
-        region_dir = base / DERIVATIVES_FOLDER / "crops" / "2mm" / region
-        region_dir.mkdir(parents=True, exist_ok=True)
-        for subject in subjects:
-            (region_dir / f"{subject}.nii.gz").touch()
+        make_crop_files(base, region, "R", subjects)
+
+
+def _crop_names(base: Path, region: str) -> set[str]:
+    """Names of the files left in crops/2mm/{region}/mask/Rcrops."""
+    return {f.name for f in (crops_2mm(base) / region / "mask" / "Rcrops").iterdir()}
 
 
 def _make_qc_tsv(path: Path, rows: list[tuple[str, int]]) -> Path:
@@ -79,53 +82,33 @@ class TestArgumentParsing:
 
 
 class TestDiscoverSubjects:
-    def test_discovers_subjects_from_nii_gz(self, tmp_path):
-        crops = tmp_path / "crops" / "2mm"
-        region = crops / "S.C.-sylv."
-        region.mkdir(parents=True)
-        (region / "sub-01.nii.gz").touch()
-        (region / "sub-02.nii.gz").touch()
+    def test_discovers_subjects_from_cropped_skeleton_files(self, tmp_path):
+        make_crop_files(tmp_path, "S.C.-sylv.", "R", ["sub-01", "sub-02"])
 
         script = PruneFailedSubjects()
-        result = script._discover_subjects(str(crops))
+        result = script._discover_subjects(str(crops_2mm(tmp_path)))
         assert result == {"sub-01", "sub-02"}
 
     def test_discovers_subjects_across_regions(self, tmp_path):
-        crops = tmp_path / "crops" / "2mm"
         for region in ("region_a", "region_b"):
-            d = crops / region
-            d.mkdir(parents=True)
-            (d / "sub-01.nii.gz").touch()
-        (crops / "region_b" / "sub-03.nii.gz").touch()
+            make_crop_files(tmp_path, region, "R", ["sub-01"])
+        make_crop_files(tmp_path, "region_b", "R", ["sub-03"])
 
         script = PruneFailedSubjects()
-        result = script._discover_subjects(str(crops))
+        result = script._discover_subjects(str(crops_2mm(tmp_path)))
         assert result == {"sub-01", "sub-03"}
 
-    def test_strips_nii_extension(self, tmp_path):
-        crops = tmp_path / "crops" / "2mm"
-        region = crops / "region_x"
-        region.mkdir(parents=True)
-        (region / "sub-04.nii").touch()
-
-        script = PruneFailedSubjects()
-        result = script._discover_subjects(str(crops))
-        assert "sub-04" in result
-
     def test_ignores_non_directory_entries_in_crops(self, tmp_path):
-        crops = tmp_path / "crops" / "2mm"
-        crops.mkdir(parents=True)
-        (crops / "stray_file.txt").touch()
-        region = crops / "region_y"
-        region.mkdir()
-        (region / "sub-05.nii.gz").touch()
+        crops = crops_2mm(tmp_path)
+        touch(crops / "stray_file.txt")
+        make_crop_files(tmp_path, "region_y", "R", ["sub-05"])
 
         script = PruneFailedSubjects()
         result = script._discover_subjects(str(crops))
         assert result == {"sub-05"}
 
     def test_empty_crops_dir_returns_empty_set(self, tmp_path):
-        crops = tmp_path / "crops" / "2mm"
+        crops = crops_2mm(tmp_path)
         crops.mkdir(parents=True)
 
         script = PruneFailedSubjects()
@@ -197,8 +180,7 @@ class TestRun:
         script = _make_script_with_args(tmp_path, qc)
         script.run()
 
-        remaining = list((tmp_path / DERIVATIVES_FOLDER / "crops" / "2mm" / "region_a").iterdir())
-        assert len(remaining) == 2
+        assert len(_crop_names(tmp_path, "region_a")) == 2
 
     def test_failed_subject_files_are_deleted(self, tmp_path):
         _make_crops(tmp_path, ["region_a", "region_b"], ["sub-01", "sub-02"])
@@ -207,10 +189,9 @@ class TestRun:
         script.run()
 
         for region in ("region_a", "region_b"):
-            region_dir = tmp_path / DERIVATIVES_FOLDER / "crops" / "2mm" / region
-            names = {f.name for f in region_dir.iterdir()}
-            assert "sub-02.nii.gz" not in names
-            assert "sub-01.nii.gz" in names
+            names = _crop_names(tmp_path, region)
+            assert f"sub-02{CROP_SUFFIX}" not in names
+            assert f"sub-01{CROP_SUFFIX}" in names
 
     def test_subject_absent_from_qc_is_deleted(self, tmp_path):
         """A subject not listed in the QC file should be treated as failed."""
@@ -219,10 +200,9 @@ class TestRun:
         script = _make_script_with_args(tmp_path, qc)
         script.run()
 
-        region_dir = tmp_path / DERIVATIVES_FOLDER / "crops" / "2mm" / "region_a"
-        names = {f.name for f in region_dir.iterdir()}
-        assert "sub-99.nii.gz" not in names
-        assert "sub-01.nii.gz" in names
+        names = _crop_names(tmp_path, "region_a")
+        assert f"sub-99{CROP_SUFFIX}" not in names
+        assert f"sub-01{CROP_SUFFIX}" in names
 
     def test_dry_run_does_not_delete_files(self, tmp_path):
         _make_crops(tmp_path, ["region_a"], ["sub-01", "sub-02"])
@@ -230,9 +210,7 @@ class TestRun:
         script = _make_script_with_args(tmp_path, qc, dry_run=True)
         script.run()
 
-        region_dir = tmp_path / DERIVATIVES_FOLDER / "crops" / "2mm" / "region_a"
-        names = {f.name for f in region_dir.iterdir()}
-        assert "sub-02.nii.gz" in names
+        assert f"sub-02{CROP_SUFFIX}" in _crop_names(tmp_path, "region_a")
 
     def test_dry_run_output_mentions_would_delete(self, tmp_path, pipeline_caplog):
         """REQ-LOGGING-BDRABCZUK-728A1E8B1120: the dry-run listing is an OUTPUT record."""
@@ -241,25 +219,23 @@ class TestRun:
         script = _make_script_with_args(tmp_path, qc, dry_run=True)
         script.run()
 
-        listed = tmp_path / DERIVATIVES_FOLDER / "crops" / "2mm" / "region_a" / "sub-02.nii.gz"
+        listed = crop_file(tmp_path, "region_a", "R", "sub-02")
         record = pipeline_caplog.assert_logged(OUTPUT, f"[dry-run] Would delete: {listed}")
         assert record.name == "champollion_pipeline.prune_failed_subjects"
 
     def test_deletes_files_across_subdirectories(self, tmp_path):
         """Non-crop subdirs (e.g. skeletons) should also have failing-subject files removed."""
         _make_crops(tmp_path, ["region_a"], ["sub-01", "sub-02"])
-        # Add a skeleton file for sub-02 in a different subdir
-        skel_dir = tmp_path / DERIVATIVES_FOLDER / "skeletons" / "2mm" / "region_a"
-        skel_dir.mkdir(parents=True)
-        (skel_dir / "sub-02.nii.gz").touch()
-        (skel_dir / "sub-01.nii.gz").touch()
+        # Resampled skeletons of both subjects, outside crops/
+        failed_skel = touch(skeleton_file(tmp_path, "R", "sub-02"))
+        passing_skel = touch(skeleton_file(tmp_path, "R", "sub-01"))
 
         qc = _make_qc_tsv(tmp_path / "qc.tsv", [("sub-01", 1), ("sub-02", 0)])
         script = _make_script_with_args(tmp_path, qc)
         script.run()
 
-        assert not (skel_dir / "sub-02.nii.gz").exists()
-        assert (skel_dir / "sub-01.nii.gz").exists()
+        assert not failed_skel.exists()
+        assert passing_skel.exists()
 
     def test_returns_zero_on_success(self, tmp_path):
         _make_crops(tmp_path, ["region_a"], ["sub-01"])
@@ -269,7 +245,7 @@ class TestRun:
 
     def test_no_subjects_in_crops_returns_early(self, tmp_path, pipeline_caplog):
         """REQ-LOGGING-BDRABCZUK-09E839CCB79E: nothing to prune is an OUTPUT record."""
-        (tmp_path / DERIVATIVES_FOLDER / "crops" / "2mm").mkdir(parents=True)
+        crops_2mm(tmp_path).mkdir(parents=True)
         qc = _make_qc_tsv(tmp_path / "qc.tsv", [("sub-01", 1)])
         script = _make_script_with_args(tmp_path, qc)
         result = script.run()
