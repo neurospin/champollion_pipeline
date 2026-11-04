@@ -267,7 +267,9 @@ class TrainChampollion(ScriptBuilder):
             status = self.execute_command(cmd, shell=False)
         finally:
             os.chdir(local_dir)
-        _report_training_qc(output_dir)
+        failed = _report_training_qc(output_dir)
+        if status == 0 and failed & _TRAINING_USABILITY_CHECKS:
+            return 1
         return status
 
 
@@ -328,9 +330,15 @@ _TRAINING_QC_CHECKS: tuple[tuple[str, Callable[[str], str]], ...] = (
     ("losses", _check_losses),
 )
 
+# A failed member leaves a model folder stage 4 cannot load; a failed losses check stays report-only.
+_TRAINING_USABILITY_CHECKS = frozenset({"weights", "hydra_config"})
 
-def _report_training_qc(output_dir: str) -> None:
-    """Write output_dir/training_qc.tsv and log one summary line; never raises an Exception."""
+
+def _report_training_qc(output_dir: str) -> frozenset[str]:
+    """Write output_dir/training_qc.tsv, log one summary line and return the failed check names.
+
+    Never raises an Exception: the result is empty when the report could not be built.
+    """
     report_path = join(output_dir, TRAINING_QC_FILE)
     try:
         rows = []
@@ -340,12 +348,13 @@ def _report_training_qc(output_dir: str) -> None:
         write_run_qc_tsv(report_path, rows)
     except Exception as exc:
         logger.warning(f"training QC not written: {type(exc).__name__}: {exc}", exc_info=True)
-        return
+        return frozenset()
     failed = [row["check"] for row in rows if row["qc"] == 0]
     if failed:
         logger.warning(f"training QC failed ({', '.join(failed)}); report: {report_path}")
     else:
         logger.output(f"Training QC passed; report: {report_path}")
+    return frozenset(failed)
 
 
 def main():

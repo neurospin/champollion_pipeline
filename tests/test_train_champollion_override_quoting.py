@@ -37,7 +37,7 @@ from hypothesis import HealthCheck, given, settings
 from hypothesis import strategies as st
 
 from champollion_pipeline import train_champollion
-from tests.test_train_champollion import make_script
+from tests.test_train_champollion import _build_model_dir, make_script
 from tests.test_train_champollion_config_precedence import DATASET, LOCALIZATION, REGION, _make_checkout, _write
 
 _PARSER = OverridesParser.create()
@@ -250,6 +250,7 @@ def hostile_run(tmp_path_factory):
         env = dict(os.environ, **{_E2E_DUMP_ENV: str(dump)})
         proc = subprocess.run([sys.executable, *cmd[1:]], cwd=os.getcwd(), env=env, capture_output=True, text=True)
         result["stderr"] = proc.stderr[-3000:]
+        _build_model_dir(output_dir)
         return proc.returncode
 
     with pytest.MonkeyPatch.context() as mp:
