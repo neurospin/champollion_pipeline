@@ -113,3 +113,28 @@ class TestSnapshotsExitPolicy:
         """REQ-NTUI-BDRABCZUK-E237F2F0A8FE: a qc 1 row left, no FAIL record."""
         _run_with_renders_patched(_sulcal_args(temp_dir, kept=("sub-01",), excluded=("sub-02",)))
         assert _messages_at(pipeline_caplog, FAIL) == []
+
+
+class TestSnapshotsEmptyInputQc:
+    """A zero-row input_qc.tsv is a stage failure, except for a standalone --tiles-only run."""
+
+    def test_zero_row_input_qc_returns_1(self, temp_dir):
+        """REQ-NTUI-BDRABCZUK-56B450A33233."""
+        result = _run_with_renders_patched(_sulcal_args(temp_dir))
+        assert _qc_rows(os.path.join(temp_dir, "out")) == {}
+        assert result == 1
+
+    def test_zero_row_input_qc_emits_one_fail_record(self, temp_dir, pipeline_caplog):
+        """REQ-NTUI-BDRABCZUK-56B450A33233: one FAIL record naming the input_qc.tsv path."""
+        _run_with_renders_patched(_sulcal_args(temp_dir))
+        messages = _messages_at(pipeline_caplog, FAIL)
+        assert len(messages) == 1, messages
+        assert os.path.join(temp_dir, "out", QC_FILE) in messages[0]
+
+    def test_tiles_only_zero_row_input_qc_returns_0(self, temp_dir, pipeline_caplog):
+        """REQ-NTUI-BDRABCZUK-B6F1509A06F3: a --tiles-only run with no QC row returns 0, no FAIL record."""
+        args = [*_sulcal_args(temp_dir)[:-1], "--tiles-only"]
+        result = _run_with_renders_patched(args)
+        assert _qc_rows(os.path.join(temp_dir, "out")) == {}
+        assert result == 0
+        assert _messages_at(pipeline_caplog, FAIL) == []

@@ -264,12 +264,12 @@ class TestGenerateSnapshotsRun:
 
     def test_run_creates_output_dir(self, temp_dir):
         """Test that run() creates the output directory."""
-        output_dir = os.path.join(temp_dir, "new_output")
+        args = _one_subject_args(temp_dir)
         script = GenerateSnapshots()
-        script.parse_args(["--output_dir", output_dir])
+        script.parse_args(args)
         result = script.run()
         assert result == 0
-        assert os.path.isdir(output_dir)
+        assert os.path.isdir(args[1])
 
     def test_run_writes_manifest(self, temp_dir):
         """Test that run() writes manifest JSON."""
@@ -287,7 +287,7 @@ class TestGenerateSnapshotsRun:
     def test_run_returns_zero(self, temp_dir):
         """Test that run() returns 0 on success."""
         script = GenerateSnapshots()
-        script.parse_args(["--output_dir", os.path.join(temp_dir, "out")])
+        script.parse_args(_one_subject_args(temp_dir))
         assert script.run() == 0
 
 
@@ -408,18 +408,11 @@ class TestMainFunction:
 
     def test_main_creates_output_dir(self, temp_dir):
         """Test that main creates the output directory."""
-        output_dir = os.path.join(temp_dir, "snapshots_output")
-        with patch(
-            "sys.argv",
-            [
-                "generate_snapshots.py",
-                "--output_dir",
-                output_dir,
-            ],
-        ):
+        args = _one_subject_args(temp_dir)
+        with patch("sys.argv", ["generate_snapshots.py", *args]):
             result = main()
             assert result == 0
-            assert os.path.isdir(output_dir)
+            assert os.path.isdir(args[1])
 
     def test_main_writes_manifest(self, temp_dir):
         """Test that main writes a snapshots_manifest.json."""
@@ -441,16 +434,7 @@ class TestMainFunction:
 
     def test_sulcal_only_does_not_run_tiles_or_umap(self, temp_dir):
         """Test that --sulcal-only skips tiles and umap."""
-        output_dir = os.path.join(temp_dir, "out")
-        with patch(
-            "sys.argv",
-            [
-                "generate_snapshots.py",
-                "--output_dir",
-                output_dir,
-                "--sulcal-only",
-            ],
-        ):
+        with patch("sys.argv", ["generate_snapshots.py", *_one_subject_args(temp_dir), "--sulcal-only"]):
             result = main()
             assert result == 0
 
@@ -471,16 +455,7 @@ class TestMainFunction:
 
     def test_umap_only_does_not_run_sulcal_or_tiles(self, temp_dir):
         """Test that --umap-only skips sulcal and tiles."""
-        output_dir = os.path.join(temp_dir, "out")
-        with patch(
-            "sys.argv",
-            [
-                "generate_snapshots.py",
-                "--output_dir",
-                output_dir,
-                "--umap-only",
-            ],
-        ):
+        with patch("sys.argv", ["generate_snapshots.py", *_one_subject_args(temp_dir, umap=True), "--umap-only"]):
             result = main()
             assert result == 0
 
@@ -560,6 +535,16 @@ def _umap_reference(reference_dir, region, hemi, model=True, coords=True):
         (Path(reference_dir) / f"umap_{region}_{hemi}.pkl").touch()
     if coords:
         np.save(Path(reference_dir) / f"umap_{region}_{hemi}_coords.npy", np.zeros((3, 2)))
+
+
+def _one_subject_args(temp_dir, umap=False):
+    """Command line of a run whose input_qc.tsv gets a qc 1 row: one Morphologist subject (umap: one embeddings ID)."""
+    morph, embeddings, reference = (os.path.join(temp_dir, d) for d in ("morphologist", "embeddings", "reference"))
+    _morphologist_subject(morph, "sub-01")
+    _embeddings_csv(embeddings, "S.Or.", "left", [("sub-01", 0.1, 0.2)])
+    _umap_reference(reference, "S.Or.", "left")
+    args = ["--output_dir", os.path.join(temp_dir, "out"), "--morphologist_dir", morph]
+    return args + ["--embeddings_dir", embeddings, "--reference_data_dir", reference] * umap
 
 
 class _RecordingUmapModel:
@@ -866,6 +851,7 @@ class TestSnapshotsInputQC:
         embeddings.mkdir()
         csv_path = embeddings / "S.Or._left_embeddings.csv"
         csv_path.write_bytes(content)
+        _embeddings_csv(embeddings, "S.Or.", "right", [("sub-01", 0.1, 0.2)])
         reference = os.path.join(temp_dir, "reference")
         _umap_reference(reference, "S.Or.", "left")
         output_dir = os.path.join(temp_dir, "out")
