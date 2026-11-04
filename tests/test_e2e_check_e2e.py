@@ -24,13 +24,13 @@ Requirements (one test or more each):
 - REQ-E2ECI-BDRABCZUK-EB3C7977AC9D report.json, one JSON object, in the run directory
 - REQ-E2ECI-BDRABCZUK-66CA4843E64B per-stage exit codes from stages.tsv
 - REQ-E2ECI-BDRABCZUK-28A839ED2D51 missing stages.tsv fails
-- REQ-E2ECI-BDRABCZUK-D268B7A1152A non-zero stage exit fails
+- REQ-E2ECI-BDRABCZUK-09B962405D07 stage exit other than 0 and 3 fails
 - REQ-E2ECI-BDRABCZUK-CFB5E11FD27A NaN or infinite embedding value fails
 - REQ-E2ECI-BDRABCZUK-EC82B0EAB260 missing Morphologist input QC TSV fails
 - REQ-E2ECI-BDRABCZUK-650CA7A769EB missing snapshots input QC TSV fails
 - REQ-E2ECI-BDRABCZUK-1CA495C91305 missing profile sidecar for a stage that ran fails
 - REQ-E2ECI-BDRABCZUK-ED6AE6327C24 hard_failures lists the stderr failure lines
-- REQ-E2ECI-BDRABCZUK-2A0AF7B30782 exit 0 when hard_failures is empty
+- REQ-E2ECI-BDRABCZUK-F2FDE78174A6 exit 0 when hard_failures and partial_stages are empty
 - REQ-E2ECI-BDRABCZUK-4EBFB2BB5892 region-side coverage
 - REQ-E2ECI-BDRABCZUK-42B77BA11567 cortical tiles subject count
 - REQ-E2ECI-BDRABCZUK-AA0A046CA8C8 region embeddings subject count
@@ -38,6 +38,10 @@ Requirements (one test or more each):
 - REQ-E2ECI-BDRABCZUK-C30DA144BD1E QC counts per stage QC TSV
 - REQ-E2ECI-BDRABCZUK-295F078E8277 failed-subject ids per stage QC TSV
 - REQ-E2ECI-BDRABCZUK-59670620F1D3 standard library imports only (runs without aims)
+- REQ-NTUI-BDRABCZUK-68E1746E4A81 a stage exit 3 is no hard failure
+- REQ-NTUI-BDRABCZUK-C9BD846E29BD partial_stages lists the stages that exited 3
+- REQ-NTUI-BDRABCZUK-3976FCDAB4D7 exit 3 on a partial run without hard failure
+- REQ-NTUI-BDRABCZUK-9EABD8E6D099 a hard failure wins over a partial stage
 """
 
 from __future__ import annotations
@@ -187,12 +191,13 @@ def test_missing_stages_tsv_fails(tmp_path: Path) -> None:
     assert "stages.tsv" in result.stderr
 
 
-# REQ-E2ECI-BDRABCZUK-D268B7A1152A ---------------------------------------------------
+# REQ-E2ECI-BDRABCZUK-09B962405D07 ---------------------------------------------------
 
 
-def test_non_zero_stage_exit_fails(tmp_path: Path) -> None:
+@pytest.mark.parametrize("code", [1, 2, 4])
+def test_non_zero_stage_exit_fails(tmp_path: Path, code: int) -> None:
     run = _make_run(tmp_path / "run")
-    _write_stages(run, {**dict.fromkeys(STAGES, 0), "run_cortical_tiles": 1})
+    _write_stages(run, {**dict.fromkeys(STAGES, 0), "run_cortical_tiles": code})
     result = _run_check(run)
     assert result.returncode == 1, result.stderr
     assert "run_cortical_tiles" in result.stderr
@@ -284,13 +289,14 @@ def test_hard_failures_empty_on_clean_run(tmp_path: Path) -> None:
     assert _report(run)["hard_failures"] == []
 
 
-# REQ-E2ECI-BDRABCZUK-2A0AF7B30782 ---------------------------------------------------
+# REQ-E2ECI-BDRABCZUK-F2FDE78174A6 ---------------------------------------------------
 
 
 def test_clean_run_exits_zero(tmp_path: Path) -> None:
     run = _make_run(tmp_path / "run")
     result = _run_check(run)
     assert _report(run)["hard_failures"] == []
+    assert _report(run)["partial_stages"] == []
     assert result.returncode == 0, result.stderr
 
 
@@ -392,3 +398,58 @@ def test_non_utf8_stages_tsv_is_a_failure_line(tmp_path: Path) -> None:
     assert result.returncode == 1, result.stderr
     assert "malformed stages.tsv" in result.stderr
     assert (run / "report.json").is_file()
+
+
+# REQ-NTUI-BDRABCZUK-68E1746E4A81 ----------------------------------------------------
+
+
+def _write_partial_stages(run: Path) -> None:
+    """stages.tsv with two stages at exit 3, their rows out of alphabetical order."""
+    _write_stages(run, {"run_cortical_tiles": 3, "generate_snapshots": 3, **dict.fromkeys(STAGES[2:5], 0)})
+
+
+def test_stage_exit_3_is_no_hard_failure(tmp_path: Path) -> None:
+    run = _make_run(tmp_path / "run", NIGHTLY_STAGES)
+    _write_partial_stages(run)
+    result = _run_check(run)
+    assert "stage run_cortical_tiles exited 3" not in result.stderr
+    assert _report(run)["hard_failures"] == []
+
+
+# REQ-NTUI-BDRABCZUK-C9BD846E29BD ----------------------------------------------------
+
+
+def test_partial_stages_listed_in_file_order(tmp_path: Path) -> None:
+    run = _make_run(tmp_path / "run", NIGHTLY_STAGES)
+    _write_partial_stages(run)
+    _run_check(run)
+    assert _report(run)["partial_stages"] == ["run_cortical_tiles", "generate_snapshots"]
+
+
+def test_partial_stages_empty_on_clean_run(tmp_path: Path) -> None:
+    run = _make_run(tmp_path / "run")
+    _run_check(run)
+    assert _report(run)["partial_stages"] == []
+
+
+# REQ-NTUI-BDRABCZUK-3976FCDAB4D7 ----------------------------------------------------
+
+
+def test_partial_run_exits_3_naming_stages(tmp_path: Path) -> None:
+    run = _make_run(tmp_path / "run", NIGHTLY_STAGES)
+    _write_partial_stages(run)
+    result = _run_check(run)
+    assert result.returncode == 3, result.stderr
+    assert "run_cortical_tiles" in result.stderr
+    assert "generate_snapshots" in result.stderr
+
+
+# REQ-NTUI-BDRABCZUK-9EABD8E6D099 ----------------------------------------------------
+
+
+def test_hard_failure_wins_over_partial(tmp_path: Path) -> None:
+    run = _make_run(tmp_path / "run")
+    _write_stages(run, {**dict.fromkeys(STAGES, 0), "run_cortical_tiles": 3, "generate_embeddings": 1})
+    result = _run_check(run)
+    assert result.returncode == 1, result.stderr
+    assert _report(run)["partial_stages"] == ["run_cortical_tiles"]

@@ -8,8 +8,8 @@ value, else E2E_BASELINES_DIR of scripts/e2e/e2e.env: a shared rosette directory
 outside the per-commit code copy and outside git (user decision 2026-11-02). Any
 difference in per-stage exit codes, subject counts, QC counts, failed-subject ids or
 region-side coverage, an improvement included, fails the run and names the key and
-both values. Only ``--accept-baseline`` on a run with no hard failure writes the
-baseline; a missing baseline is reported as "no baseline". Without
+both values. Only ``--accept-baseline`` on a run with no hard failure and no partial
+stage writes the baseline; a missing baseline is reported as "no baseline". Without
 ``--tier``/``--layout`` the checker behaves as in tests/test_e2e_check_e2e.py.
 
 Each test runs a copy of scripts/e2e/{check_e2e.py,e2e_env.py,e2e.env} under tmp_path
@@ -27,8 +27,10 @@ Requirements (one test or more each):
 - REQ-E2ECI-BDRABCZUK-C01572FFFB22 baseline file unchanged without --accept-baseline
 - REQ-E2ECI-BDRABCZUK-EFFF10F1F399 report.json key baseline.differences
 - REQ-E2ECI-BDRABCZUK-12443B519CC1 missing baseline is reported, not a hard failure
-- REQ-E2ECI-BDRABCZUK-8B651F44BF51 --accept-baseline writes the baseline from a clean run
+- REQ-E2ECI-BDRABCZUK-98EBC9741528 --accept-baseline writes the baseline from a clean run
 - REQ-E2ECI-BDRABCZUK-23B256F2E0C6 a failing run never writes the baseline
+- REQ-NTUI-BDRABCZUK-4748BB6825D7 a partial run never writes the baseline
+- REQ-NTUI-BDRABCZUK-14B753D38D00 the refusal on a partial run exits 3 naming the baseline
 - REQ-E2ECI-BDRABCZUK-BE3EEE3CE81F --accept-baseline without tier and layout is a usage error
 - REQ-E2ECI-BDRABCZUK-C15554596494 unknown tier is a usage error
 - REQ-E2ECI-BDRABCZUK-5A73313FCF52 unknown layout is a usage error
@@ -318,6 +320,19 @@ def test_extra_stage_in_run_fails(tmp_path: Path) -> None:
     _line_naming("stages.generate_champollion_config.exit_code", result.stderr)
 
 
+def test_partial_run_differing_from_baseline_exits_1(tmp_path: Path) -> None:
+    """A stage exit 3 against a baseline holding 0 is a difference: exit 1, not the partial exit 3."""
+    e2e_dir, run, baseline = _setup(tmp_path)
+    assert baseline["stages"]["generate_snapshots"]["exit_code"] == 0
+    _write_baseline(e2e_dir, baseline)
+    _write_stages(run, {**dict.fromkeys(STAGES, 0), "generate_snapshots": 3})
+    result = _check_tier(e2e_dir, run)
+    assert result.returncode == 1, result.stderr
+    line = _line_naming("stages.generate_snapshots.exit_code", result.stderr)
+    assert "run 3, baseline 0" in line, line
+    assert _report(run)["partial_stages"] == ["generate_snapshots"]
+
+
 # REQ-E2ECI-BDRABCZUK-4D2888B44DA5 ---------------------------------------------------
 
 
@@ -392,7 +407,7 @@ def test_missing_baseline_is_reported(tmp_path: Path) -> None:
     assert _report(run)["hard_failures"] == []
 
 
-# REQ-E2ECI-BDRABCZUK-8B651F44BF51 ---------------------------------------------------
+# REQ-E2ECI-BDRABCZUK-98EBC9741528 ---------------------------------------------------
 
 
 def test_accept_baseline_creates_baseline(tmp_path: Path) -> None:
@@ -428,13 +443,45 @@ def test_failing_run_never_writes_baseline(tmp_path: Path, existing: bool) -> No
     e2e_dir, run, baseline = _setup(tmp_path)
     path = _baseline_path(e2e_dir)
     before = _write_baseline(e2e_dir, baseline).read_bytes() if existing else None
-    _write_stages(run, {**dict.fromkeys(STAGES, 0), "generate_snapshots": 3})  # a hard failure
+    _write_stages(run, {**dict.fromkeys(STAGES, 0), "generate_snapshots": 1})  # a hard failure
     result = _check_tier(e2e_dir, run, "--accept-baseline")
     assert result.returncode == 1, result.stderr
     if existing:
         assert path.read_bytes() == before
     else:
         assert not path.exists(), "a failing run wrote a baseline"
+
+
+# REQ-NTUI-BDRABCZUK-4748BB6825D7 ----------------------------------------------------
+
+
+@pytest.mark.parametrize("existing", [False, True], ids=["no-baseline", "existing-baseline"])
+def test_partial_run_never_writes_baseline(tmp_path: Path, existing: bool) -> None:
+    e2e_dir, run, baseline = _setup(tmp_path)
+    path = _baseline_path(e2e_dir)
+    before = _write_baseline(e2e_dir, baseline).read_bytes() if existing else None
+    _write_stages(run, {**dict.fromkeys(STAGES, 0), "generate_snapshots": 3})  # partial, no hard failure
+    _check_tier(e2e_dir, run, "--accept-baseline")
+    assert _report(run)["partial_stages"] == ["generate_snapshots"]
+    if existing:
+        assert path.read_bytes() == before
+    else:
+        assert not path.exists(), "a partial run wrote a baseline"
+
+
+# REQ-NTUI-BDRABCZUK-14B753D38D00 ----------------------------------------------------
+
+
+def test_partial_run_refusal_exits_3_naming_baseline(tmp_path: Path) -> None:
+    e2e_dir, run, _ = _setup(tmp_path)
+    _write_stages(run, {**dict.fromkeys(STAGES, 0), "generate_snapshots": 3})
+    result = _check_tier(e2e_dir, run, "--accept-baseline")
+    assert result.returncode == 3, result.stderr
+    report = _report(run)
+    assert report["hard_failures"] == []
+    assert report["baseline"]["status"] == "refused", report
+    line = _line_naming("baseline not written (run is partial)", result.stderr)
+    assert line.endswith(str(_baseline_path(e2e_dir))), line
 
 
 # REQ-E2ECI-BDRABCZUK-BE3EEE3CE81F ---------------------------------------------------

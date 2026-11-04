@@ -19,6 +19,8 @@ from champollion_utils.script_builder import ScriptBuilder
 from champollion_pipeline.config import PipelineConfig
 from champollion_pipeline.derivatives_layout import RUN_LOG_TIMESTAMP_FORMAT
 
+PARTIAL_STATUS = 3
+
 
 @dataclass
 class StageResult:
@@ -28,6 +30,7 @@ class StageResult:
     success: bool
     message: str
     return_code: int = 0
+    partial: bool = False
 
 
 class PipelineStage(ABC):
@@ -36,6 +39,7 @@ class PipelineStage(ABC):
     progress_message: ClassVar[str]
     success_message: ClassVar[str]
     failure_message: ClassVar[str]
+    partial_message: ClassVar[str] = "Completed with partial output"
 
     def __init__(self, name: str, config: PipelineConfig, logger: logging.Logger):
         self.name = name
@@ -81,6 +85,23 @@ class PipelineStage(ABC):
         """Run the parsed script and return its exit code."""
         return script.run()
 
+    def stage_result(self, return_code: int) -> StageResult:
+        """StageResult of the script's return code: 3 is partial, 0 a success, anything else a failure."""
+        if return_code == PARTIAL_STATUS:
+            return StageResult(
+                stage_name=self.name,
+                success=True,
+                message=self.partial_message,
+                return_code=return_code,
+                partial=True,
+            )
+        return StageResult(
+            stage_name=self.name,
+            success=(return_code == 0),
+            message=self.success_message if return_code == 0 else self.failure_message,
+            return_code=return_code,
+        )
+
     def execute(self) -> StageResult:
         """Execute the stage: precheck, log start, build and run the script, log the result."""
         early = self.precheck()
@@ -99,12 +120,7 @@ class PipelineStage(ABC):
                 with RunLogCapture(log_path) as capture:
                     return_code = self.run_script(script)
                     capture.exit_code = return_code if isinstance(return_code, int) else 1
-            result = StageResult(
-                stage_name=self.name,
-                success=(return_code == 0),
-                message=self.success_message if return_code == 0 else self.failure_message,
-                return_code=return_code,
-            )
+            result = self.stage_result(return_code)
         except Exception as e:
             self.log_failure()
             result = StageResult(stage_name=self.name, success=False, message=f"Failed: {e!s}", return_code=1)
@@ -124,8 +140,11 @@ class PipelineStage(ABC):
 
     def log_end(self, result: StageResult):
         """Log stage end."""
-        status = "✅ SUCCESS" if result.success else "❌ FAILED"
-        self.logger.info(f"{status}: {self.name} - {result.message}")
+        if result.partial:
+            self.logger.warning(f"⚠️ PARTIAL: {self.name} - {result.message}")
+        else:
+            status = "✅ SUCCESS" if result.success else "❌ FAILED"
+            self.logger.info(f"{status}: {self.name} - {result.message}")
         self.logger.info(f"{'=' * 60}\n")
 
     def subject_input_dir(self) -> str | None:  # noqa: V105 - used by main.py
