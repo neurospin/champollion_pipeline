@@ -73,7 +73,7 @@ def _execute_source(main_module, masks_version):
     config = _config(main_module, DATASETS_ROOT, masks_version)
     script_cls = MagicMock()
     script_cls.return_value.run.return_value = 0
-    with patch.object(main_module, "PutTogetherEmbeddings", script_cls):
+    with patch("champollion_pipeline.put_together_embeddings.PutTogetherEmbeddings", script_cls):
         result = _stage(main_module, config).execute()
     assert result.success, result.message
     script_cls.return_value.parse_args.assert_called_once()

@@ -37,16 +37,15 @@ package), so it is loaded by file path under a private module name.
 
 import dataclasses
 import importlib.util
-import logging
 import os
 import typing
 from pathlib import Path
-from unittest.mock import MagicMock, patch
 
 import pytest
 import yaml
 
 from champollion_pipeline.generate_embeddings import GenerateEmbeddings
+from tests.main_stage_helpers import embeddings_stage_argv, option_values
 
 MAIN_PY = Path(__file__).resolve().parent.parent / "main.py"
 
@@ -222,27 +221,13 @@ def _embeddings_config(main_module):
 
 def _stage_argv(main_module, config):
     """Run GenerateEmbeddingsStage.execute() with GenerateEmbeddings mocked; return the argv it built."""
-    script_cls = MagicMock()
-    script_cls.return_value.run.return_value = 0
-    with patch.object(main_module, "GenerateEmbeddings", script_cls):
-        stage = main_module.GenerateEmbeddingsStage(
-            "generate_embeddings", config, logging.getLogger("test_main_models_cache_config")
-        )
-        result = stage.execute()
-    assert result.success, result.message
-    script_cls.return_value.parse_args.assert_called_once()
-    return [str(token) for token in script_cls.return_value.parse_args.call_args[0][0]]
+    argv = embeddings_stage_argv(main_module, config, "generate_embeddings", "test_main_models_cache_config")
+    return [str(token) for token in argv]
 
 
 def _models_cache_tokens(argv):
     """Values given to --models-cache in argv, in either the '--models-cache=P' or the '--models-cache P' form."""
-    values = []
-    for i, token in enumerate(argv):
-        if token == MODELS_CACHE_OPTION:
-            values.append(argv[i + 1] if i + 1 < len(argv) else None)
-        elif token.startswith(MODELS_CACHE_OPTION + "="):
-            values.append(token.split("=", 1)[1])
-    return values
+    return option_values(argv, MODELS_CACHE_OPTION)
 
 
 def _parse_with_generate_embeddings(argv):

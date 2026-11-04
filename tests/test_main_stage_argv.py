@@ -2,10 +2,11 @@
 """
 Tests that main.py's orchestrator stages hand their target script an argument
 list that script's own parser accepts (REQ-STAGEARGV-01 .. REQ-STAGEARGV-07), and that
-main.py itself resolves those script classes when loaded (REQ-STAGEARGV-08).
+main.py's stages create those script classes (REQ-STAGEARGV-BDRABCZUK-1A3BDA3560E1), with
+no import warning on load (REQ-LAZYIMPORT-BDRABCZUK-49AEF8F4299B).
 
 Each stage builds an argv list and calls ``<Script>().parse_args(argv)``. Here
-the script class referenced by main.py is replaced by a MagicMock to capture
+the script class is replaced in its own module by a MagicMock to capture
 that argv without running anything, then the argv is parsed with the *real*
 script class's parser. An argparse rejection surfaces as ``SystemExit``.
 
@@ -14,13 +15,10 @@ loaded by file path under a private module name, as in
 test_main_morphologist_stage.py.
 """
 
-import importlib.util
 import json
-import logging
 import subprocess
 import sys
 from pathlib import Path
-from unittest.mock import MagicMock, patch
 
 import pytest
 
@@ -30,15 +28,20 @@ from champollion_pipeline.generate_morphologist_graphs import GenerateMorphologi
 from champollion_pipeline.generate_snapshots import GenerateSnapshots
 from champollion_pipeline.put_together_embeddings import PutTogetherEmbeddings
 from champollion_pipeline.run_cortical_tiles import RunCorticalTiles
+from tests.main_stage_helpers import MAIN_PY, capture_stage_argv, load_main_module, stage_paths_config
 
-MAIN_PY = Path(__file__).resolve().parent.parent / "main.py"
+_STAGE_SCRIPT_CLASSES = {
+    "GenerateMorphologistGraphs": "champollion_pipeline.generate_morphologist_graphs.GenerateMorphologistGraphs",
+    "RunCorticalTiles": "champollion_pipeline.run_cortical_tiles.RunCorticalTiles",
+    "GenerateChampollionConfig": "champollion_pipeline.generate_champollion_config.GenerateChampollionConfig",
+    "GenerateEmbeddings": "champollion_pipeline.generate_embeddings.GenerateEmbeddings",
+    "PutTogetherEmbeddings": "champollion_pipeline.put_together_embeddings.PutTogetherEmbeddings",
+    "GenerateSnapshots": "champollion_pipeline.generate_snapshots.GenerateSnapshots",
+}
 
 
 def _load_main_module():
-    spec = importlib.util.spec_from_file_location("_champollion_main_stage_argv_under_test", MAIN_PY)
-    module = importlib.util.module_from_spec(spec)
-    spec.loader.exec_module(module)
-    return module
+    return load_main_module("_champollion_main_stage_argv_under_test")
 
 
 @pytest.fixture(scope="module")
@@ -48,28 +51,18 @@ def main_module():
 
 def _base_config(main_module):
     """PipelineConfig with every path the six stages read set to a distinct value."""
-    config = main_module.PipelineConfig(models_path="/models", outputs_path="/outputs")
-    dataset = config.dataset
-    dataset.input_path = "/raw"  # noqa: V101
-    dataset.morphologist_graphs = "/graphs"  # noqa: V101
-    dataset.cortical_tiles_output = "/tiles"  # noqa: V101
-    dataset.crops_path = "/crops"  # noqa: V101
-    dataset.datasets_root = "/data/MYDATASET"  # noqa: V101
-    dataset.snapshots_path = "/snapshots"  # noqa: V101
-    return config
+    return stage_paths_config(main_module)
 
 
 def _captured_argv(main_module, stage_class_name, script_attr, config):
     """Run ``main_module.<stage_class_name>.execute()`` with ``script_attr`` mocked; return its argv."""
-    script_cls = MagicMock()
-    script_cls.return_value.run.return_value = 0
-    with patch.object(main_module, script_attr, script_cls, create=True):
-        stage_cls = getattr(main_module, stage_class_name)
-        stage = stage_cls(stage_class_name, config, logging.getLogger("test_main_stage_argv"))
-        result = stage.execute()
-    assert result.success, result.message
-    script_cls.return_value.parse_args.assert_called_once()
-    return list(script_cls.return_value.parse_args.call_args[0][0])
+    return capture_stage_argv(
+        getattr(main_module, stage_class_name),
+        _STAGE_SCRIPT_CLASSES[script_attr],
+        stage_class_name,
+        config,
+        "test_main_stage_argv",
+    )
 
 
 def _parse_with_real_parser(script_cls, argv):
@@ -217,28 +210,20 @@ class TestOtherStagesArgv:
 
 
 # Loads main.py exactly as `python main.py` would see it (no conftest sys.path tweaks, no soma stubs),
-# without running main(), and reports where each stage-script name resolved.
+# without running main(), and reports the class each stage's create_script returns.
 _LOAD_MAIN_SNIPPET = """
-import importlib.util, json, sys
+import importlib.util, json, logging, sys
 spec = importlib.util.spec_from_file_location("champollion_main_import_probe", sys.argv[1])
 module = importlib.util.module_from_spec(spec)
 spec.loader.exec_module(module)
 names = sys.argv[2:]
 resolved = {}
 for name in names:
-    obj = getattr(module, name, None)
-    resolved[name] = None if obj is None else obj.__module__ + "." + obj.__qualname__
+    stage = getattr(module, name + "Stage")(name, None, logging.getLogger("champollion_main_import_probe"))
+    script_cls = type(stage.create_script())
+    resolved[name] = script_cls.__module__ + "." + script_cls.__qualname__
 print("RESOLVED=" + json.dumps(resolved))
 """
-
-_STAGE_SCRIPT_CLASSES = {
-    "GenerateMorphologistGraphs": "champollion_pipeline.generate_morphologist_graphs.GenerateMorphologistGraphs",
-    "RunCorticalTiles": "champollion_pipeline.run_cortical_tiles.RunCorticalTiles",
-    "GenerateChampollionConfig": "champollion_pipeline.generate_champollion_config.GenerateChampollionConfig",
-    "GenerateEmbeddings": "champollion_pipeline.generate_embeddings.GenerateEmbeddings",
-    "PutTogetherEmbeddings": "champollion_pipeline.put_together_embeddings.PutTogetherEmbeddings",
-    "GenerateSnapshots": "champollion_pipeline.generate_snapshots.GenerateSnapshots",
-}
 
 
 @pytest.fixture(scope="module")
@@ -260,16 +245,16 @@ def loaded_main_report():
 
 @pytest.mark.unit
 class TestMainImportsStageScripts:
-    """REQ-STAGEARGV-08: loading main.py binds each stage-script name to the champollion_pipeline class."""
+    """REQ-STAGEARGV-BDRABCZUK-1A3BDA3560E1, REQ-LAZYIMPORT-BDRABCZUK-49AEF8F4299B."""
 
     @pytest.mark.parametrize("name", list(_STAGE_SCRIPT_CLASSES))
-    def test_stage_script_name_resolves_to_package_class(self, loaded_main_report, name):
-        """REQ-STAGEARGV-08: main.<name> is champollion_pipeline.<module>.<name>."""
+    def test_stage_create_script_returns_package_class(self, loaded_main_report, name):
+        """REQ-STAGEARGV-BDRABCZUK-1A3BDA3560E1: <name>Stage creates champollion_pipeline.<module>.<name>."""
         resolved, output = loaded_main_report
-        assert resolved[name] == _STAGE_SCRIPT_CLASSES[name], f"main.{name} -> {resolved[name]!r}\n{output}"
+        assert resolved[name] == _STAGE_SCRIPT_CLASSES[name], f"{name}Stage -> {resolved[name]!r}\n{output}"
 
     def test_no_could_not_import_warning(self, loaded_main_report):
-        """REQ-STAGEARGV-08: loading main.py prints no 'Could not import pipeline scripts' warning."""
+        """REQ-LAZYIMPORT-BDRABCZUK-49AEF8F4299B: no 'Could not import pipeline scripts' warning."""
         _, output = loaded_main_report
         assert "Could not import pipeline scripts" not in output
 

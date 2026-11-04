@@ -15,6 +15,8 @@ init_pipeline_process (root handlers) are stubbed; no stage runs.
 import ast
 import importlib.util
 import logging
+import sys
+import types
 from pathlib import Path
 from typing import ClassVar
 
@@ -23,6 +25,7 @@ import pytest
 from tests.log_assertions import LOG, OUTPUT, print_call_lines
 
 MAIN_PY = Path(__file__).resolve().parent.parent / "main.py"
+STREAMING_RUNNER = "champollion_pipeline.streaming.runner"
 
 
 class _NoRunOrchestrator:
@@ -101,10 +104,20 @@ def test_streaming_without_embeddings_only_logged_at_error(main_module, monkeypa
     )
 
 
+def _unimportable_runner() -> types.ModuleType:
+    """A stand-in for the runner module: importing a name from it raises ImportError."""
+
+    def fail_import(_name: str) -> None:
+        raise ImportError("No module named 'fake_parallel_runner_dep'")
+
+    runner = types.ModuleType(STREAMING_RUNNER)
+    runner.__getattr__ = fail_import  # noqa: V101
+    return runner
+
+
 def test_parallel_runner_import_failure_logged_at_error(main_module, monkeypatch, pipeline_caplog):
     _with_embeddings_only(main_module, monkeypatch, True)
-    monkeypatch.setattr(main_module, "run_parallel_pipeline", None)
-    monkeypatch.setattr(main_module, "_PARALLEL_RUNNER_IMPORT_ERROR", "No module named 'fake_parallel_runner_dep'")
+    monkeypatch.setitem(sys.modules, STREAMING_RUNNER, _unimportable_runner())
 
     assert _run_main(main_module, monkeypatch, "--mode", "streaming") == 1
 

@@ -1,6 +1,6 @@
 """main.py wiring of the streaming mode and of the file_indexer checker (TASK-STREAMING-BDRABCZUK-CA8E292B33D0).
 
-REQ-STREAMING-BDRABCZUK-6D651731635B: run_parallel_pipeline imported from champollion_pipeline.streaming.runner.
+REQ-STREAMING-BDRABCZUK-DB02C2CD6A1C: run_parallel_pipeline imported only inside the streaming mode function.
 REQ-STREAMING-BDRABCZUK-17D1E8A44C11: SubjectEligibilityChecker imported from champollion_pipeline.file_indexer.
 REQ-STREAMING-BDRABCZUK-B7A8E951F74C: main.py's only ImportError handler guards the streaming runner import alone.
 REQ-STREAMING-BDRABCZUK-AA54FBD84A93: streaming main() returns 1 when the streaming runner failed to import.
@@ -205,7 +205,7 @@ def _run_main(module, monkeypatch, *args: str) -> int:
 def _streaming_call(module, monkeypatch, *args: str, recorder: _OrchestratorRecorder | None = None) -> dict:
     """Run main() in streaming mode with *args and return the one run_parallel_pipeline call's bound arguments."""
     recorder = recorder or _OrchestratorRecorder()
-    monkeypatch.setattr(module, "run_parallel_pipeline", recorder)
+    monkeypatch.setattr(streaming_runner, "run_parallel_pipeline", recorder)
     _run_main(module, monkeypatch, *args)
     assert len(recorder.calls) == 1, f"expected one run_parallel_pipeline call, got {len(recorder.calls)}"
     return recorder.calls[0]
@@ -253,8 +253,18 @@ def _handler_type_names(handler: ast.ExceptHandler) -> set[str]:
 # ====================== Imports (static checks on main.py) ======================
 
 
-def test_run_parallel_pipeline_imported_from_streaming_runner():
-    assert "run_parallel_pipeline" in _module_level_imports("champollion_pipeline.streaming.runner")
+def test_run_parallel_pipeline_imported_inside_streaming_mode():
+    assert "run_parallel_pipeline" not in _module_level_imports(STREAMING_RUNNER)
+    function = next(
+        node for node in ast.walk(MAIN_TREE) if isinstance(node, ast.FunctionDef) and node.name == "_run_streaming_mode"
+    )
+    imported = {
+        alias.name
+        for node in ast.walk(function)
+        if isinstance(node, ast.ImportFrom) and node.module == STREAMING_RUNNER
+        for alias in node.names
+    }
+    assert "run_parallel_pipeline" in imported, f"_run_streaming_mode imports {sorted(imported)} from the runner"
 
 
 def test_subject_eligibility_checker_imported_from_file_indexer():
@@ -297,17 +307,15 @@ def test_main_py_has_no_sys_path_reference():
 @pytest.mark.parametrize("exit_code", [0, 1])
 def test_streaming_returns_orchestrator_exit_code(streaming_main, monkeypatch, exit_code):
     recorder = _OrchestratorRecorder(exit_code=exit_code)
-    monkeypatch.setattr(streaming_main, "run_parallel_pipeline", recorder)
+    monkeypatch.setattr(streaming_runner, "run_parallel_pipeline", recorder)
 
     assert _run_main(streaming_main, monkeypatch, "--mode", "streaming") == exit_code
     assert len(recorder.calls) == 1
 
 
 def test_streaming_runner_import_failure_returns_1(monkeypatch, work_dir, tmp_path):
-    runner = sys.modules[STREAMING_RUNNER]
     monkeypatch.setitem(sys.modules, STREAMING_RUNNER, None)  # any import of the runner now raises ImportError
     module = _load_main()
-    monkeypatch.setitem(sys.modules, STREAMING_RUNNER, runner)
     monkeypatch.setattr(module, "check_for_updates", lambda: None)
     monkeypatch.setattr(module, "init_pipeline_process", lambda: logging.getLogger())
     monkeypatch.setattr("champollion_utils.script_builder.init_process", lambda *a, **k: logging.getLogger())
@@ -323,7 +331,7 @@ def test_streaming_runner_import_failure_returns_1(monkeypatch, work_dir, tmp_pa
 def test_streaming_without_embeddings_only_skips_orchestrator(streaming_main, monkeypatch):
     streaming_main.test_config.dataset.embeddings_only = False
     recorder = _OrchestratorRecorder()
-    monkeypatch.setattr(streaming_main, "run_parallel_pipeline", recorder)
+    monkeypatch.setattr(streaming_runner, "run_parallel_pipeline", recorder)
 
     assert _run_main(streaming_main, monkeypatch, "--mode", "streaming") == 1
     assert recorder.calls == []
@@ -446,7 +454,7 @@ def test_sequential_pre_check_summary_logged(main_module, monkeypatch, tmp_path,
         )
         return 0
 
-    with patch.object(main_module.RunCorticalTiles, "run", side_effect=run_tiles):
+    with patch("champollion_pipeline.run_cortical_tiles.RunCorticalTiles.run", side_effect=run_tiles):
         assert _run_main(main_module, monkeypatch, "--stages", "run_cortical_tiles") == 0
 
     assert seen_before_run == [True], f"no OUTPUT record starting with {PRE_CHECK_PREFIX!r} before the stage script ran"
@@ -479,7 +487,7 @@ def _runner_docstring() -> str:
 
 def test_streaming_without_embeddings_only_error_names_yaml_setting(streaming_main, monkeypatch, pipeline_caplog):
     streaming_main.test_config.dataset.embeddings_only = False
-    monkeypatch.setattr(streaming_main, "run_parallel_pipeline", _OrchestratorRecorder())
+    monkeypatch.setattr(streaming_runner, "run_parallel_pipeline", _OrchestratorRecorder())
 
     assert _run_main(streaming_main, monkeypatch, "--mode", "streaming") == 1
 

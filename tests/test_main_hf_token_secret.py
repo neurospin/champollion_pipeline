@@ -97,7 +97,7 @@ class TestAmbientHfTokenPreserved:
 
         script_cls = MagicMock()
         script_cls.return_value.run.side_effect = _run  # noqa: V101
-        with patch.object(main_module, "GenerateEmbeddings", script_cls):
+        with patch("champollion_pipeline.generate_embeddings.GenerateEmbeddings", script_cls):
             stage = main_module.GenerateEmbeddingsStage(
                 "generate_embeddings", config, logging.getLogger("test_main_hf_token_secret")
             )

@@ -18,58 +18,33 @@ The YAML/DatasetConfig key stays ``dataset.masks_version``; only the option name
 on the generate_embeddings command line changes.
 """
 
-import importlib.util
-import logging
 import warnings
-from pathlib import Path
-from unittest.mock import MagicMock, patch
 
 import pytest
 
 from champollion_pipeline.generate_embeddings import GenerateEmbeddings
-
-MAIN_PY = Path(__file__).resolve().parent.parent / "main.py"
+from tests.main_stage_helpers import embeddings_stage_argv, load_main_module, masks_version_config
 
 NON_DEFAULT_MASKS_VERSION = "canonical_corrected_26_1"
 DEPRECATED_OPTION = "--masks-version"
 
 
-def _load_main_module():
-    spec = importlib.util.spec_from_file_location("_champollion_main_modelver_stage4_under_test", MAIN_PY)
-    module = importlib.util.module_from_spec(spec)
-    spec.loader.exec_module(module)
-    return module
-
-
 @pytest.fixture(scope="module")
 def main_module():
-    return _load_main_module()
+    return load_main_module("_champollion_main_modelver_stage4_under_test")
 
 
 def _config(main_module, hf_enabled):
     """PipelineConfig with a non-default masks_version and the requested model source."""
-    config = main_module.PipelineConfig(models_path="/models", outputs_path="/outputs")
-    dataset = config.dataset
-    dataset.datasets_root = "/data/MYDATASET"  # noqa: V101
-    dataset.masks_version = NON_DEFAULT_MASKS_VERSION  # noqa: V101
-    dataset.hf_enabled = hf_enabled  # noqa: V101
-    if hf_enabled:
-        dataset.hf_repo_id = "neurospin/Champollion_V1"  # noqa: V101
-    return config
+    return masks_version_config(main_module, NON_DEFAULT_MASKS_VERSION, hf_enabled)
 
 
 def _stage_argv(main_module, config):
     """Run GenerateEmbeddingsStage.execute() with GenerateEmbeddings mocked; return the argv it built."""
-    script_cls = MagicMock()
-    script_cls.return_value.run.return_value = 0
-    with patch.object(main_module, "GenerateEmbeddings", script_cls, create=True):
-        stage = main_module.GenerateEmbeddingsStage(
-            "GenerateEmbeddingsStage", config, logging.getLogger("test_main_modelver_stage4_model_version")
-        )
-        result = stage.execute()
-    assert result.success, result.message
-    script_cls.return_value.parse_args.assert_called_once()
-    return [str(token) for token in script_cls.return_value.parse_args.call_args[0][0]]
+    argv = embeddings_stage_argv(
+        main_module, config, "GenerateEmbeddingsStage", "test_main_modelver_stage4_model_version"
+    )
+    return [str(token) for token in argv]
 
 
 def _deprecated_tokens(argv):

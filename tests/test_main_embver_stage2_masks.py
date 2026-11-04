@@ -18,53 +18,23 @@ main.py lives at the repo root (not inside the installed package), so it is
 loaded by file path under a private module name.
 """
 
-import importlib.util
-import logging
-from pathlib import Path
-from unittest.mock import MagicMock, patch
-
 import pytest
 
 from champollion_pipeline.run_cortical_tiles import RunCorticalTiles
-
-MAIN_PY = Path(__file__).resolve().parent.parent / "main.py"
+from tests.main_stage_helpers import load_main_module, tiles_config, tiles_stage_argv
 
 DEFAULT_MASKS_VERSION = "canonical_25"
 OTHER_MASKS_VERSION = "canonical_corrected_26_1"
 
 
-def _load_main_module():
-    spec = importlib.util.spec_from_file_location("_champollion_main_embver_stage2_under_test", MAIN_PY)
-    module = importlib.util.module_from_spec(spec)
-    spec.loader.exec_module(module)
-    return module
-
-
 @pytest.fixture(scope="module")
 def main_module():
-    return _load_main_module()
-
-
-def _tiles_config(main_module):
-    """PipelineConfig with the paths RunCorticalTilesStage reads set to distinct values."""
-    config = main_module.PipelineConfig()
-    config.dataset.morphologist_graphs = "/graphs"  # noqa: V101
-    config.dataset.cortical_tiles_output = "/tiles"  # noqa: V101
-    return config
+    return load_main_module("_champollion_main_embver_stage2_under_test")
 
 
 def _stage_masks_value(main_module, config):
     """Run RunCorticalTilesStage.execute() with RunCorticalTiles mocked; return the parsed --masks value."""
-    script_cls = MagicMock()
-    script_cls.return_value.run.return_value = 0
-    with patch.object(main_module, "RunCorticalTiles", script_cls):
-        stage = main_module.RunCorticalTilesStage(
-            "run_cortical_tiles", config, logging.getLogger("test_main_embver_stage2_masks")
-        )
-        result = stage.execute()
-    assert result.success, result.message
-    script_cls.return_value.parse_args.assert_called_once()
-    argv = list(script_cls.return_value.parse_args.call_args[0][0])
+    argv = tiles_stage_argv(main_module, config, "test_main_embver_stage2_masks")
     try:
         namespace = RunCorticalTiles().parse_args(argv)
     except SystemExit as exc:
@@ -78,7 +48,7 @@ class TestRunCorticalTilesStageMasksArgv:
 
     def test_default_masks_version_passed_as_masks(self, main_module):
         """Unset dataset.masks_version -> run_cortical_tiles receives --masks canonical_25."""
-        config = _tiles_config(main_module)
+        config = tiles_config(main_module)
         masks, argv = _stage_masks_value(main_module, config)
         assert masks == DEFAULT_MASKS_VERSION, (
             "REQ-EMBVER-BDRABCZUK-C0F4A13F662F: run_cortical_tiles --masks is "
@@ -87,7 +57,7 @@ class TestRunCorticalTilesStageMasksArgv:
 
     def test_configured_masks_version_passed_as_masks(self, main_module):
         """dataset.masks_version set to a non-default tag -> run_cortical_tiles receives that tag as --masks."""
-        config = _tiles_config(main_module)
+        config = tiles_config(main_module)
         config.dataset.masks_version = OTHER_MASKS_VERSION  # noqa: V101
         masks, argv = _stage_masks_value(main_module, config)
         assert masks == OTHER_MASKS_VERSION, (
