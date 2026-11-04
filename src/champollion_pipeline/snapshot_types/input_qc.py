@@ -112,6 +112,15 @@ def _read_embedding_rows(csv_path) -> dict[str, bool] | None:
     return finite
 
 
+def has_kept_subject(csv_path, excluded) -> bool:
+    """True when the embeddings CSV holds an ID outside ``excluded``, that is a subject with qc 1 in input_qc.tsv."""
+    try:
+        rows = _read_embedding_rows(csv_path)
+    except (OSError, UnicodeDecodeError, csv.Error):
+        return False
+    return rows is not None and any(subject not in excluded for subject in rows)
+
+
 def check_embedding_inputs(report, csvs: Sequence[tuple[str, str, str]]) -> None:
     """Record, per ID of the selected CSVs, a missing or non-finite embeddings row (qc 0)."""
     usable = []

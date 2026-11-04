@@ -20,6 +20,7 @@ from tests.test_generate_snapshots import (
     _RecordingUmapModel,
     _run_snapshots,
     _umap_reference,
+    _write_snapshot,
 )
 
 # --- Stage 6 exit status (user decision 2026-11-04, "Fail only if nothing usable") ---
@@ -55,7 +56,7 @@ def _umap_all_excluded_args(temp_dir):
 def _run_with_renders_patched(args):
     """Run GenerateSnapshots with the sulcal render and the UMAP model patched; return its exit value."""
     with (
-        patch(_RENDER_SULCAL, side_effect=lambda graph_path, out, *a, **k: out),
+        patch(_RENDER_SULCAL, side_effect=_write_snapshot),
         patch(_LOAD_UMAP_MODEL, return_value=_RecordingUmapModel()),
     ):
         return _run_snapshots(args)
@@ -81,12 +82,12 @@ class TestSnapshotsExitPolicy:
         assert sorted(row["qc"] for row in rows.values()) == [0, 0]
         assert result == 1
 
-    def test_partial_exclusion_returns_0(self, temp_dir):
-        """REQ-NTUI-BDRABCZUK-B5B9D4243D2C."""
+    def test_partial_exclusion_returns_3(self, temp_dir):
+        """REQ-NTUI-BDRABCZUK-9A3DE0C40474."""
         result = _run_with_renders_patched(_sulcal_args(temp_dir, kept=("sub-01",), excluded=("sub-02", "sub-03")))
         rows = _qc_rows(os.path.join(temp_dir, "out"))
         assert sorted(row["qc"] for row in rows.values()) == [0, 0, 1]
-        assert result == 0
+        assert result == 3
 
     def test_one_error_record_per_excluded_subject(self, temp_dir, pipeline_caplog):
         """REQ-NTUI-BDRABCZUK-03AB88C9072B: one ERROR record per qc 0 row, holding its participant_id and reason."""

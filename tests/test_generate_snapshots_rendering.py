@@ -36,6 +36,7 @@ from champollion_pipeline.snapshot_types import brainvisa_imports
 from champollion_pipeline.snapshot_types import tiles as tiles_module
 from champollion_pipeline.snapshot_types.umap import _parse_embedding_csv_name
 from tests.log_assertions import LOG, OUTPUT
+from tests.test_generate_snapshots import _morphologist_subject
 
 _MODULE_ATTRS = {"anatomist.headless": "ana", "cortical_tiles.config": "config", "soma.aims": "aims"}
 
@@ -920,13 +921,17 @@ class TestRunDispatch:
         )
 
     def test_all_steps_run_by_default(self, tmp_path):
-        morphologist = tmp_path / "morphologist" / "sub-01" / "t1mri" / "default_acquisition" / "0"
-        (morphologist / "folds" / "3.1").mkdir(parents=True)
-        (morphologist / "folds" / "3.1" / "Lsulci_sub-01.arg").touch()
-        (morphologist / "folds" / "3.1" / "Rsulci_sub-01.arg").touch()
+        _morphologist_subject(tmp_path / "morphologist", "sub-01")
         script = self._script(tmp_path, ["--morphologist_dir", str(tmp_path / "morphologist")])
+
+        def render_sulcal(*args, **kwargs):
+            for hemi in ("left", "right"):
+                (tmp_path / "out" / f"sulcal_graph_{hemi}.png").write_bytes(b"png")
+            return ["s.png"]
+
         sulcal, tiles, umap = self._patched(script)
         with sulcal as s, tiles as t, umap as u:
+            s.side_effect = render_sulcal  # noqa: V101
             assert script.run() == 0
         s.assert_called_once()
         t.assert_called_once()
