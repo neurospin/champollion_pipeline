@@ -14,6 +14,7 @@ setup
 installation
 usage
 troubleshooting
+migration
 ```
 
 ```{toctree}
