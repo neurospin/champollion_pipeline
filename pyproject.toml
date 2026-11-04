@@ -43,10 +43,6 @@ champollion-labelling-qc = "champollion_pipeline.generate_labelling_qc:main"
 where = ["src"]
 exclude = ["compare_sulcal*"]
 
-[tool.ruff]
-line-length = 120
-exclude = [".pixi", "external"]
-
 [tool.pytest.ini_options]
 testpaths = ["tests"]
 markers = [
