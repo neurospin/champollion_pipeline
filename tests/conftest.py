@@ -51,6 +51,17 @@ def reset_cwd():
 
 
 @pytest.fixture(autouse=True)  # noqa: V103
+def _stub_stage2_output_qc(monkeypatch):
+    """Let a test that mocks the stage 2 crop step reach the end of run() with no crop on disk.
+
+    tests/test_run_cortical_tiles_output_qc.py overrides this fixture to run the real check.
+    """
+    module = sys.modules.get("champollion_pipeline.run_cortical_tiles")
+    if module is not None:
+        monkeypatch.setattr(module.RunCorticalTiles, "_write_output_qc", MagicMock(return_value=("", True)))
+
+
+@pytest.fixture(autouse=True)  # noqa: V103
 def restore_logging_and_excepthooks():
     """Restore the root logger handlers and level and the exception hooks after each test.
 
