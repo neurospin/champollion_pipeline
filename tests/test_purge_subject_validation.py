@@ -37,7 +37,7 @@ def _tree(derivatives: Path) -> None:
         subject_dir = derivatives / stage / KEPT_SUBJECT
         subject_dir.mkdir(parents=True)
         (subject_dir / "data.nii.gz").touch()
-    mask_dir = derivatives / "crops" / "2mm" / "region_a" / "mask"
+    mask_dir = derivatives / "crops" / "canonical_25" / "2mm" / "region_a" / "mask"
     (mask_dir / "Rcrops").mkdir(parents=True)
     (mask_dir / "Rcrops" / f"{KEPT_SUBJECT}.nii.gz").touch()
     np.save(mask_dir / "Rskeleton.npy", np.zeros((1, 1, 4, 4, 4), dtype=np.float32))

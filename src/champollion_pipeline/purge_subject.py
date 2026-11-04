@@ -12,15 +12,16 @@ import logging
 import os
 import shutil
 from datetime import datetime
-from os.path import exists, join
+from os.path import exists, isdir, join
 from pathlib import Path
 
 import numpy as np
 import pandas as pd
 from champollion_utils.script_builder import ScriptBuilder
 
-from champollion_pipeline.derivatives_layout import compute_run_log_path
+from champollion_pipeline.derivatives_layout import DEFAULT_MASKS_VERSION, compute_run_log_path
 from champollion_pipeline.process_setup import init_pipeline_process
+from champollion_pipeline.utils.cortical_tiles_config import CROPS_DIRNAME, compute_versioned_crops_dir
 from champollion_pipeline.utils.subject_name import subject_name_problem
 
 logger = logging.getLogger(__name__)
@@ -44,6 +45,12 @@ class PurgeSubject(ScriptBuilder):
             )
             .add_required_argument("--subject", "Subject ID to remove (e.g. sub-123456).")
             .add_flag("--dry-run", "Print what would be deleted without deleting.")
+            .add_optional_argument(
+                "--masks",
+                "Mask version of the crops to purge: crops/<masks>/2mm under the derivatives directory "
+                "(default canonical_25). Files under other crops/<version>/ trees are left untouched.",
+                default=DEFAULT_MASKS_VERSION,
+            )
         )
 
     def _log(self, msg: str) -> None:
@@ -168,12 +175,31 @@ class PurgeSubject(ScriptBuilder):
             str(Path(self.args.derivatives).parent), self.script_name, datetime.now().astimezone()
         )
 
+    def _versioned_crops_dir(self, derivatives: str) -> str:
+        """crops/<masks>/2mm under derivatives; ValueError, before any deletion, for an unusable --masks."""
+        masks = self.args.masks
+        reason = subject_name_problem(masks)
+        if reason is not None:
+            raise ValueError(f"Invalid --masks {masks!r}: {reason}.")
+        return compute_versioned_crops_dir(derivatives, masks)
+
+    def _warn_missing_crops_dir(self, derivatives: str, crops_dir: str) -> None:
+        """One WARNING naming the missing crops/<masks>/2mm, with a hint when a legacy crops/2mm exists."""
+        message = f"No crops directory for --masks {self.args.masks}: {crops_dir} not found, skipping crop purge."
+        legacy = join(derivatives, CROPS_DIRNAME, "2mm")
+        if isdir(legacy):
+            message += (
+                f" A legacy unversioned crops directory exists at {legacy}: rerun run_cortical_tiles.py "
+                f"to move it under crops/<masks_version>/2mm."
+            )
+        logger.warning(message)
+
     def run(self):
         derivatives = self.args.derivatives
         if not exists(derivatives):
             raise ValueError(f"Derivatives directory not found: {derivatives}")
 
-        crops_2mm = join(derivatives, "crops", "2mm")
+        crops_dir = self._versioned_crops_dir(derivatives)
         subject = self.args.subject
 
         reason = subject_name_problem(subject)
@@ -181,7 +207,7 @@ class PurgeSubject(ScriptBuilder):
             logger.error(f"Refusing --subject {subject!r}: {reason}.")
             return 1
 
-        dirs, crop_files, has_array_rows = self._plan(derivatives, crops_2mm)
+        dirs, crop_files, has_array_rows = self._plan(derivatives, crops_dir)
         if not dirs and not crop_files and not has_array_rows:
             logger.error(
                 f"Refusing --subject {subject!r}: no per-subject directory, crop file "
@@ -204,12 +230,12 @@ class PurgeSubject(ScriptBuilder):
 
         for _stage_dir, subj_dir in dirs:
             self._remove_dir(subj_dir)
-        if exists(crops_2mm):
+        if exists(crops_dir):
             for f in crop_files:
                 self._remove_file(str(f))
-            self._purge_aggregated_arrays(crops_2mm)
+            self._purge_aggregated_arrays(crops_dir)
         else:
-            logger.warning("No crops/2mm directory found — skipping crop purge.")
+            self._warn_missing_crops_dir(derivatives, crops_dir)
 
         action = "Would remove" if self.args.dry_run else "Removed"
         logger.output(f"Done. {action} all data for subject '{subject}'.")
