@@ -41,6 +41,10 @@ cortical_tiles has succeeded, and its resume skip keys on that marker instead of
 - REQ-STREAMING-BDRABCZUK-48CAF41169BC no marker on a dry run
 - REQ-STREAMING-BDRABCZUK-1C66412CFADC resume skip on a matching marker (supersedes 334C117E751A, skip on crops)
 - REQ-STREAMING-BDRABCZUK-A4A3BB54DF57 no skip without a matching marker, crops or not
+
+Task TASK-NTUI-BDRABCZUK-6F08E0BCFD78 (scan excluded by the cohort QC file):
+- REQ-NTUI-BDRABCZUK-D68D60D97215 ScanExcludedBySkQc gives SKIPPED
+- REQ-NTUI-BDRABCZUK-616097AD3620 no completion marker for it
 """
 
 from __future__ import annotations
@@ -292,6 +296,42 @@ def test_stage_failure_logs_error(ctx: _Context, scan: ScanId, failing: str) -> 
     worker.run_scan_worker(scan, ctx.settings, ctx.dataset, raw_scan=ctx.raw_scan)
     errors = ctx.messages(logging.ERROR)
     assert any(scan.path_prefix in text and message in text for text in errors), errors
+
+
+# --- scan excluded by the cohort QC file ------------------------------------------------------------
+
+
+@SCANS
+def test_scan_excluded_by_sk_qc_returns_skipped(ctx: _Context, scan: ScanId) -> None:
+    worker = ctx.load()
+    ctx.fake.errors["tiles"] = stages.ScanExcludedBySkQc("excluded by the cohort QC file")
+    result = worker.run_scan_worker(scan, ctx.settings, ctx.dataset)
+    assert result.scan == scan
+    assert result.status == worker.WorkerStatus.SKIPPED
+
+
+@SCANS
+def test_scan_excluded_by_sk_qc_after_morphologist_returns_skipped(ctx: _Context, scan: ScanId) -> None:
+    worker = ctx.load()
+    ctx.fake.errors["tiles"] = stages.ScanExcludedBySkQc("excluded by the cohort QC file")
+    result = worker.run_scan_worker(scan, ctx.settings, ctx.dataset, raw_scan=ctx.raw_scan)
+    assert result.status == worker.WorkerStatus.SKIPPED
+
+
+@SCANS
+def test_scan_excluded_by_sk_qc_writes_no_marker(ctx: _Context, scan: ScanId) -> None:
+    worker = ctx.load()
+    ctx.fake.errors["tiles"] = stages.ScanExcludedBySkQc("excluded by the cohort QC file")
+    worker.run_scan_worker(scan, ctx.settings, ctx.dataset)
+    assert not os.path.exists(_marker_path(worker, ctx.dataset, scan))
+
+
+def test_scan_excluded_by_sk_qc_removes_stale_marker(ctx: _Context) -> None:
+    worker = ctx.load()
+    path = _write_marker(worker, ctx.dataset, CLASSIC_SCAN, "stale")
+    ctx.fake.errors["tiles"] = stages.ScanExcludedBySkQc("excluded by the cohort QC file")
+    worker.run_scan_worker(CLASSIC_SCAN, ctx.settings, ctx.dataset)
+    assert not os.path.exists(path)
 
 
 # --- skips ----------------------------------------------------------------------------------------
