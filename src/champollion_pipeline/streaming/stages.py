@@ -13,16 +13,29 @@ import os
 import tempfile
 from typing import Protocol
 
+from cortical_tiles.brainvisa.utils.skip_list import SKIP_LIST_FILENAME, SKIP_SIDES, load_skip_entries
+
 from champollion_pipeline.config import DatasetConfig
 from champollion_pipeline.generate_morphologist_graphs import GenerateMorphologistGraphs
-from champollion_pipeline.run_cortical_tiles import RunCorticalTiles
+from champollion_pipeline.run_cortical_tiles import (
+    CROP_STATUS_PARTIAL,
+    INPUT_QC_FILENAME,
+    REASON_EXCLUDED_BY_SK_QC,
+    RunCorticalTiles,
+)
 from champollion_pipeline.utils.lib import DERIVATIVES_FOLDER
+from champollion_pipeline.utils.qc_report import read_qc_tsv
 
 from .settings import StreamingSettings
 
 logger = logging.getLogger(__name__)
 
 SCAN_TILES_DIRNAME = "scans"
+PARTIAL_CODE = CROP_STATUS_PARTIAL
+
+
+class ScanExcludedBySkQc(RuntimeError):
+    """cortical_tiles refused a scan only because its subject has qc 0 in the cohort QC file (--sk_qc_path)."""
 
 
 class Scan(Protocol):
@@ -90,8 +103,43 @@ def _cortical_tiles_argv(
     return argv
 
 
+def _report_partial_result(p: str, skip_dir: str, code: int) -> None:
+    """Warn the skipped subjects of each side of a partial cortical_tiles run; ValueError on a malformed skip list."""
+    malformed: list[str] = []
+    reported = False
+    for side in SKIP_SIDES:
+        path = os.path.join(skip_dir, SKIP_LIST_FILENAME.format(side=side))
+        try:
+            subjects = sorted({entry.subject for entry in load_skip_entries(skip_dir, side)})
+        except ValueError as error:
+            malformed.append(f"{path}: {error}")
+            continue
+        if subjects:
+            reported = True
+            logger.warning(
+                f"cortical_tiles partial result for scan {p}: side {side} skipped subjects: {', '.join(subjects)}"
+            )
+    if not reported:
+        logger.warning(f"cortical_tiles partial result for scan {p}: return code {code}, no skip-list entry")
+    if malformed:
+        raise ValueError(f"cortical_tiles malformed skip list for scan {p}: {'; '.join(malformed)}")
+
+
+def _is_excluded_by_sk_qc_only(tiles_dir: str) -> bool:
+    """True when the scan's input_qc.tsv has a qc 0 record and every qc 0 record's only reason is excluded_by_sk_qc."""
+    try:
+        records = read_qc_tsv(os.path.join(tiles_dir, DERIVATIVES_FOLDER, INPUT_QC_FILENAME))
+    except (OSError, ValueError):
+        return False
+    reasons = [record["reason"] for record in records if record["qc"] == 0]
+    return bool(reasons) and all(reason == REASON_EXCLUDED_BY_SK_QC for reason in reasons)
+
+
 def run_cortical_tiles_for_scan(scan: Scan, settings: StreamingSettings, dataset: DatasetConfig) -> None:
-    """Run cortical_tiles on one scan; a non-zero return code raises RuntimeError."""
+    """Run cortical_tiles on one scan; code 3 is a partial result, any other non-zero code raises RuntimeError.
+
+    A scan excluded only by the cohort QC file raises ScanExcludedBySkQc, a RuntimeError the worker turns into SKIPPED.
+    """
     p = scan.path_prefix
     scan_input = os.path.join(settings.subjects_dir, p)
     if not os.path.isdir(scan_input):
@@ -103,13 +151,17 @@ def run_cortical_tiles_for_scan(scan: Scan, settings: StreamingSettings, dataset
         script = RunCorticalTiles()
         script.parse_args(_cortical_tiles_argv(input_dir, out, settings, dataset))
         code = script.run()
-    if code != 0:
+    if code not in (0, PARTIAL_CODE):
+        if _is_excluded_by_sk_qc_only(out):
+            raise ScanExcludedBySkQc(f"cortical_tiles scan {p} excluded by the cohort QC file (return code {code})")
         raise RuntimeError(f"cortical_tiles failed for scan {p} with return code {code}")
     crops = find_scan_crops_root(out, dataset.masks_version)
     if crops is None:
         logger.warning(f"cortical_tiles QC: no {dataset.masks_version} 2mm crops for scan {p} under {out}")
-        return
-    logger.output(f"cortical_tiles crops for scan {p}: {crops}")
+    else:
+        logger.output(f"cortical_tiles crops for scan {p}: {crops}")
+    if code == PARTIAL_CODE:
+        _report_partial_result(p, os.path.join(out, DERIVATIVES_FOLDER), code)
 
 
 def run_morphologist_for_scan(raw_scan: str, settings: StreamingSettings, dataset: DatasetConfig) -> None:  # noqa: V107 - uniform producer runner signature

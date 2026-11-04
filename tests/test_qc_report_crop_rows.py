@@ -138,6 +138,25 @@ class TestFoldlabelKind:
         assert _rows(temp_dir, kinds=("foldlabel",))[_SUBJECT]["reason"] == _gap("foldlabel", "L")
 
 
+class TestSides:
+    def test_gap_on_a_side_left_out_is_ignored(self, cohort_crops):
+        crop_array(cohort_crops, _REGION, "L", "skeleton").unlink()
+
+        rows = _rows(cohort_crops, sides=("R",))
+
+        assert (rows[_SUBJECT]["qc"], rows[_SUBJECT]["reason"]) == (1, "")
+
+    def test_gap_on_a_requested_side_is_reported(self, cohort_crops):
+        crop_array(cohort_crops, _REGION, "R", "skeleton").unlink()
+
+        assert _rows(cohort_crops, sides=("R",))[_SUBJECT]["reason"] == _gap("skeleton", "R")
+
+    def test_sides_default_to_both(self, temp_dir):
+        add_crops(temp_dir, _COHORT, [_REGION], ("mask",), sides="")
+
+        assert _rows(temp_dir, kinds=("mask",))[_SUBJECT]["reason"] == ";".join(_gap("mask", side) for side in "LR")
+
+
 class TestSeveralReasons:
     def test_reasons_follow_region_side_kind_order(self, temp_dir):
         regions = (_OTHER_REGION, _REGION)

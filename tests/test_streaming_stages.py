@@ -1,7 +1,8 @@
 """Tests for the per-scan producer runners of a streaming run.
 
-Tasks TASK-STREAMING-BDRABCZUK-E489672EF410 (runners) and TASK-STREAMING-BDRABCZUK-B96FC9F850D8
-(Morphologist layout rework: a scan is <subject>/t1mri/<acquisition>, ScanId.path_prefix).
+Tasks TASK-STREAMING-BDRABCZUK-E489672EF410 (runners), TASK-STREAMING-BDRABCZUK-B96FC9F850D8
+(Morphologist layout rework: a scan is <subject>/t1mri/<acquisition>, ScanId.path_prefix) and
+TASK-CTFAIL-BDRABCZUK-7891065F5839 (cortical_tiles partial exit code 3).
 
 Morphologist and cortical_tiles never run: the script classes are replaced by
 recording stand-ins, and every input is a synthetic Morphologist subjects tree.
@@ -18,7 +19,12 @@ Requirements:
 - REQ-STREAMING-BDRABCZUK-B2E6D8F46CBA tiles --sk_qc_path
 - REQ-STREAMING-BDRABCZUK-CC2558CBC6C9 tiles --sk_qc_input_only
 - REQ-STREAMING-BDRABCZUK-864832B0CA24 tiles --skel-seed
-- REQ-STREAMING-BDRABCZUK-23EB245D68C6 tiles non-zero code raises naming the scan folder
+- REQ-STREAMING-BDRABCZUK-A80F8EF5CD68 tiles non-zero code other than 3 raises naming the scan folder
+- REQ-STREAMING-BDRABCZUK-7E058B722A13 tiles code 3 returns without raising
+- REQ-STREAMING-BDRABCZUK-A6C96BC58290 tiles code 3 reports the skipped subjects of each side
+- REQ-STREAMING-BDRABCZUK-169C759D8E80 tiles code 3 with empty skip lists still warns
+- REQ-STREAMING-BDRABCZUK-B3969B91B998 tiles code 3 QC warning on missing crops
+- REQ-STREAMING-BDRABCZUK-B81D7A58CD91 tiles code 3 with a malformed skip list raises
 - REQ-STREAMING-BDRABCZUK-A4F61AE8D57D tiles removes the single-scan directory
 - REQ-STREAMING-BDRABCZUK-CC2A9B2BB067 tiles missing scan input
 - REQ-STREAMING-BDRABCZUK-449229795FBD tiles QC warning on missing crops naming the scan folder
@@ -28,12 +34,18 @@ Requirements:
 - REQ-STREAMING-BDRABCZUK-D5A8352E93D7 Morphologist removes the single-scan directory
 - REQ-STREAMING-BDRABCZUK-000ABB1CB055 Morphologist missing raw scan
 - REQ-STREAMING-BDRABCZUK-686264DAB6F3 stages module leaves sys.path untouched
+
+Task TASK-NTUI-BDRABCZUK-6F08E0BCFD78 (scan excluded by the cohort QC file):
+- REQ-NTUI-BDRABCZUK-23DC7F44C5E4 excluded_by_sk_qc alone raises ScanExcludedBySkQc
+- REQ-NTUI-BDRABCZUK-D0C08576AC55 another input QC reason raises plain RuntimeError
+- REQ-NTUI-BDRABCZUK-ED79E59EA289 absent or unreadable input_qc.tsv raises plain RuntimeError
 """
 
 from __future__ import annotations
 
 import ast
 import importlib.util
+import json
 import logging
 import os
 import re
@@ -46,7 +58,8 @@ from champollion_pipeline.file_indexer import ScanId
 from champollion_pipeline.run_cortical_tiles import RunCorticalTiles
 from champollion_pipeline.streaming import stages
 from champollion_pipeline.streaming.settings import StreamingSettings
-from champollion_pipeline.utils.lib import CORTICAL_TILES_VERSION
+from champollion_pipeline.utils.lib import CORTICAL_TILES_VERSION, DERIVATIVES_FOLDER
+from champollion_pipeline.utils.qc_report import write_qc_tsv
 
 STAGES_MODULE = "champollion_pipeline.streaming.stages"
 PATH_TO_GRAPH = "t1mri/default_acquisition/default_analysis/folds/3.3/base"
@@ -359,6 +372,208 @@ def test_tiles_qc_missing_crops_warns_without_raising(tiles, settings, dataset, 
     assert tiles.runs == 1
     warnings = [r for r in stages_records if r.levelno == logging.WARNING and scan.path_prefix in r.getMessage()]
     assert warnings, [(r.levelname, r.getMessage()) for r in stages_records]
+
+
+# --- run_cortical_tiles_for_scan: partial exit code 3 ---------------------------------------------
+
+PARTIAL_CODE = 3
+
+
+def _skip_list_path(dataset: DatasetConfig, scan: ScanId, side: str) -> Path:
+    """Path of a side's skip list: cortical_tiles writes it in its output_dir, <tiles dir>/<DERIVATIVES_FOLDER>."""
+    tiles_dir = Path(stages.compute_scan_tiles_dir(dataset.cortical_tiles_output, scan))
+    return tiles_dir / DERIVATIVES_FOLDER / f"skip_list_{side}.jsonl"
+
+
+def _write_skip_list(dataset: DatasetConfig, scan: ScanId, side: str, entries: list[tuple[str, str]]) -> Path:
+    """Write (subject, step) entries in the cortical_tiles format: one JSON object per line."""
+    path = _skip_list_path(dataset, scan, side)
+    path.parent.mkdir(parents=True, exist_ok=True)
+    lines = [
+        json.dumps({"subject": subject, "step": step, "exc_type": "ValueError", "message": "synthetic failure"})
+        for subject, step in entries
+    ]
+    path.write_text("".join(f"{line}\n" for line in lines), encoding="utf-8")
+    return path
+
+
+def _make_crops(dataset: DatasetConfig, scan: ScanId) -> None:
+    """Create the scan's crops root, so the missing-crops QC warning stays out of the report tests."""
+    tiles_dir = Path(stages.compute_scan_tiles_dir(dataset.cortical_tiles_output, scan))
+    (tiles_dir / DERIVATIVES_FOLDER / "crops" / dataset.masks_version / "2mm").mkdir(parents=True)
+
+
+def _warning_messages(records: list[logging.LogRecord]) -> list[str]:
+    return [r.getMessage() for r in records if r.levelno == logging.WARNING]
+
+
+@SCANS
+def test_tiles_partial_code_returns_without_raising(tiles, settings, dataset, scan: ScanId) -> None:
+    tiles.return_code = PARTIAL_CODE
+    _write_skip_list(dataset, scan, "L", [("skipped-a", "generate_crops")])
+    _make_crops(dataset, scan)
+    stages.run_cortical_tiles_for_scan(scan, settings, dataset)
+    assert tiles.runs == 1
+
+
+@SCANS
+def test_tiles_partial_warning_names_distinct_subjects_of_side(
+    tiles, settings, dataset, stages_records, scan: ScanId
+) -> None:
+    tiles.return_code = PARTIAL_CODE
+    entries = [("skipped-a", "resample_files"), ("skipped-a", "generate_crops"), ("skipped-b", "generate_crops")]
+    _write_skip_list(dataset, scan, "L", entries)
+    _make_crops(dataset, scan)
+    stages.run_cortical_tiles_for_scan(scan, settings, dataset)
+    warnings = _warning_messages(stages_records)
+    assert len(warnings) == 1, warnings
+    assert scan.path_prefix in warnings[0]
+    assert re.search(r"\bL\b", warnings[0])
+    assert warnings[0].count("skipped-a") == 1
+    assert warnings[0].count("skipped-b") == 1
+
+
+def test_tiles_partial_warning_one_record_per_side(tiles, settings, dataset, stages_records) -> None:
+    tiles.return_code = PARTIAL_CODE
+    _write_skip_list(dataset, CLASSIC_SCAN, "L", [("skipped-a", "generate_crops")])
+    _write_skip_list(dataset, CLASSIC_SCAN, "R", [("skipped-b", "resample_files")])
+    _make_crops(dataset, CLASSIC_SCAN)
+    stages.run_cortical_tiles_for_scan(CLASSIC_SCAN, settings, dataset)
+    warnings = _warning_messages(stages_records)
+    assert len(warnings) == 2, warnings
+    left = [message for message in warnings if re.search(r"\bL\b", message)]
+    right = [message for message in warnings if re.search(r"\bR\b", message)]
+    assert len(left) == 1 and "skipped-a" in left[0] and "skipped-b" not in left[0], warnings
+    assert len(right) == 1 and "skipped-b" in right[0] and "skipped-a" not in right[0], warnings
+
+
+@pytest.mark.parametrize(
+    "case",
+    [("L", "R", False), ("L", "R", True), ("R", "L", False), ("R", "L", True)],
+    ids=["left-other-missing", "left-other-empty", "right-other-missing", "right-other-empty"],
+)
+def test_tiles_partial_warning_absent_for_side_without_entry(
+    tiles, settings, dataset, stages_records, case: tuple[str, str, bool]
+) -> None:
+    side, other, empty_file = case
+    tiles.return_code = PARTIAL_CODE
+    _write_skip_list(dataset, CLASSIC_SCAN, side, [("skipped-a", "generate_crops")])
+    if empty_file:
+        _write_skip_list(dataset, CLASSIC_SCAN, other, [])
+    _make_crops(dataset, CLASSIC_SCAN)
+    stages.run_cortical_tiles_for_scan(CLASSIC_SCAN, settings, dataset)
+    warnings = _warning_messages(stages_records)
+    assert len(warnings) == 1, warnings
+    assert re.search(rf"\b{side}\b", warnings[0])
+    assert not re.search(rf"\b{other}\b", warnings[0])
+
+
+@pytest.mark.parametrize("empty_files", [False, True], ids=["lists-missing", "lists-empty"])
+def test_tiles_partial_without_skip_entry_warns(tiles, settings, dataset, stages_records, empty_files: bool) -> None:
+    tiles.return_code = PARTIAL_CODE
+    if empty_files:
+        _write_skip_list(dataset, CLASSIC_SCAN, "L", [])
+        _write_skip_list(dataset, CLASSIC_SCAN, "R", [])
+    _make_crops(dataset, CLASSIC_SCAN)
+    stages.run_cortical_tiles_for_scan(CLASSIC_SCAN, settings, dataset)
+    warnings = _warning_messages(stages_records)
+    assert len(warnings) == 1, warnings
+    assert CLASSIC_SCAN.path_prefix in warnings[0]
+    assert re.search(rf"\b{PARTIAL_CODE}\b", warnings[0])
+
+
+@SCANS
+def test_tiles_partial_missing_crops_warns(tiles, settings, dataset, stages_records, scan: ScanId) -> None:
+    tiles.return_code = PARTIAL_CODE
+    _write_skip_list(dataset, scan, "L", [("skipped-a", "generate_crops")])
+    stages.run_cortical_tiles_for_scan(scan, settings, dataset)
+    warnings = _warning_messages(stages_records)
+    assert any(scan.path_prefix in message and dataset.masks_version in message for message in warnings), warnings
+
+
+@pytest.mark.parametrize(
+    "line",
+    ["not json", json.dumps({"subject": "skipped-a"}), json.dumps(["skipped-a"])],
+    ids=["not-json", "missing-keys", "not-an-object"],
+)
+def test_tiles_partial_malformed_skip_list_raises(tiles, settings, dataset, line: str) -> None:
+    tiles.return_code = PARTIAL_CODE
+    path = _skip_list_path(dataset, CLASSIC_SCAN, "R")
+    path.parent.mkdir(parents=True)
+    path.write_text(f"{line}\n", encoding="utf-8")
+    with pytest.raises(ValueError) as excinfo:
+        stages.run_cortical_tiles_for_scan(CLASSIC_SCAN, settings, dataset)
+    assert str(path) in str(excinfo.value)
+
+
+@pytest.mark.parametrize("code", [1, 2, 4, 130, -9])
+def test_tiles_other_nonzero_codes_raise(tiles, settings, dataset, code: int) -> None:
+    tiles.return_code = code
+    with pytest.raises(RuntimeError) as excinfo:
+        stages.run_cortical_tiles_for_scan(CLASSIC_SCAN, settings, dataset)
+    assert CLASSIC_SCAN.path_prefix in str(excinfo.value)
+    assert re.search(rf"(?<!\d){code}(?!\d)", str(excinfo.value))
+
+
+def _write_input_qc(dataset: DatasetConfig, scan: ScanId, rows: list[tuple[str, int, str]]) -> Path:
+    """Write the scan's input_qc.tsv, as RunCorticalTiles does: <tiles dir>/<DERIVATIVES_FOLDER>/input_qc.tsv."""
+    tiles_dir = Path(stages.compute_scan_tiles_dir(dataset.cortical_tiles_output, scan))
+    path = tiles_dir / DERIVATIVES_FOLDER / "input_qc.tsv"
+    write_qc_tsv(path, [{"participant_id": pid, "qc": qc, "reason": reason} for pid, qc, reason in rows])
+    return path
+
+
+@SCANS
+def test_tiles_excluded_by_sk_qc_raises_scan_excluded(tiles, settings, dataset, scan: ScanId) -> None:
+    tiles.return_code = 1
+    _write_input_qc(dataset, scan, [("subj01", 0, "excluded_by_sk_qc")])
+    with pytest.raises(stages.ScanExcludedBySkQc) as excinfo:
+        stages.run_cortical_tiles_for_scan(scan, settings, dataset)
+    assert isinstance(excinfo.value, RuntimeError)
+    assert scan.path_prefix in str(excinfo.value)
+
+
+@pytest.mark.parametrize(
+    "reason",
+    [
+        "not_in_sk_qc_file",
+        "missing_graph_L",
+        "missing_graph_R",
+        "missing_graph_L;missing_graph_R",
+        "missing_graph_L;excluded_by_sk_qc",
+        "no_subject_folder",
+        "invalid_sk_qc_file",
+    ],
+)
+def test_tiles_other_input_qc_reason_raises_plain_runtime_error(tiles, settings, dataset, reason: str) -> None:
+    tiles.return_code = 1
+    _write_input_qc(dataset, CLASSIC_SCAN, [("subj01", 0, reason)])
+    with pytest.raises(RuntimeError) as excinfo:
+        stages.run_cortical_tiles_for_scan(CLASSIC_SCAN, settings, dataset)
+    assert not isinstance(excinfo.value, stages.ScanExcludedBySkQc)
+    assert CLASSIC_SCAN.path_prefix in str(excinfo.value)
+
+
+def test_tiles_mixed_input_qc_records_raise_plain_runtime_error(tiles, settings, dataset) -> None:
+    tiles.return_code = 1
+    _write_input_qc(dataset, CLASSIC_SCAN, [("a", 0, "excluded_by_sk_qc"), ("b", 0, "not_in_sk_qc_file")])
+    with pytest.raises(RuntimeError) as excinfo:
+        stages.run_cortical_tiles_for_scan(CLASSIC_SCAN, settings, dataset)
+    assert not isinstance(excinfo.value, stages.ScanExcludedBySkQc)
+
+
+@pytest.mark.parametrize("content", [None, "", "not a qc file", "participant_id\tqc\nsubj01\t7\n"])
+def test_tiles_without_readable_input_qc_raises_plain_runtime_error(
+    tiles, settings, dataset, content: str | None
+) -> None:
+    tiles.return_code = 1
+    if content is not None:
+        path = _write_input_qc(dataset, CLASSIC_SCAN, [("subj01", 0, "excluded_by_sk_qc")])
+        path.write_text(content, encoding="utf-8")
+    with pytest.raises(RuntimeError) as excinfo:
+        stages.run_cortical_tiles_for_scan(CLASSIC_SCAN, settings, dataset)
+    assert not isinstance(excinfo.value, stages.ScanExcludedBySkQc)
+    assert CLASSIC_SCAN.path_prefix in str(excinfo.value)
 
 
 # --- run_morphologist_for_scan ---------------------------------------------------------------------

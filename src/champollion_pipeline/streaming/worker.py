@@ -3,7 +3,8 @@
 run_scan_worker runs in a ProcessPool child. It skips a dry run or a scan whose completion marker
 matches the masks version, captures the stages' output into <log_dir>/<path_prefix>/worker.log, writes
 the completion marker <tiles_dir>/tiles_complete.json once every stage succeeded, and turns any stage
-failure into a FAILED WorkerResult. Not thread-safe: RunLogCapture redirects the process-wide fds 1 and 2.
+failure into a FAILED WorkerResult, except a scan excluded only by the cohort QC file (SKIPPED, no marker).
+Not thread-safe: RunLogCapture redirects the process-wide fds 1 and 2.
 """
 
 from __future__ import annotations
@@ -25,6 +26,7 @@ from champollion_pipeline.process_setup import init_pipeline_process
 
 from .settings import StreamingSettings
 from .stages import (
+    ScanExcludedBySkQc,
     compute_scan_tiles_dir,
     run_cortical_tiles_for_scan,
     run_morphologist_for_scan,
@@ -91,8 +93,11 @@ def run_scan_worker(
         except OSError as error:
             logger.error(f"worker: scan {p} failed: worker log {log_path} unusable: {error}")
             return WorkerResult(scan, WorkerStatus.FAILED)
-        ok = _run_stages(scan, settings, dataset, raw_scan, p) and _write_marker(marker, dataset.masks_version, p)
-        capture.exit_code = 0 if ok else 1
+        outcome = _run_stages(scan, settings, dataset, raw_scan, p)
+        ok = outcome is WorkerStatus.OK and _write_marker(marker, dataset.masks_version, p)
+        capture.exit_code = 0 if ok or outcome is WorkerStatus.SKIPPED else 1
+    if outcome is WorkerStatus.SKIPPED:
+        return WorkerResult(scan, WorkerStatus.SKIPPED)
     if not ok:
         return WorkerResult(scan, WorkerStatus.FAILED)
     logger.output(f"worker: scan {p} done, tiles in {tiles_dir}")
@@ -111,8 +116,8 @@ def _write_marker(marker: str, masks_version: str, p: str) -> bool:
 
 def _run_stages(
     scan: ScanId, settings: StreamingSettings, dataset: DatasetConfig, raw_scan: str | None, p: str
-) -> bool:
-    """Run the scan's stages in order; log and return False at the first failure."""
+) -> WorkerStatus:
+    """Run the scan's stages in order; return OK, or at the first failure SKIPPED (cohort QC exclusion) or FAILED."""
     stages = []
     if raw_scan is not None:
         stages.append(("Morphologist", lambda: run_morphologist_for_scan(raw_scan, settings, dataset)))
@@ -120,7 +125,10 @@ def _run_stages(
     for stage, call in stages:
         try:
             call()
+        except ScanExcludedBySkQc as error:
+            logger.warning(f"worker: scan {p} skipped, excluded by the cohort QC file: {error}")
+            return WorkerStatus.SKIPPED
         except (Exception, SystemExit) as error:
             logger.error(f"worker: scan {p} failed in {stage}: {type(error).__name__}: {error}", exc_info=error)
-            return False
-    return True
+            return WorkerStatus.FAILED
+    return WorkerStatus.OK
