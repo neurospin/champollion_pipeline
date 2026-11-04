@@ -113,7 +113,7 @@ pixi run update
 ```
 
 If you hit issues (submodule URL mismatch, missing `hatchling`, stale pixi tasks, etc.),
-see [migration_manual.md](migration_manual.md) for symptoms and fixes.
+see [docs/migration.md](docs/migration.md) for symptoms and fixes.
 
 ---
 
