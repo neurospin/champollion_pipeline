@@ -252,7 +252,7 @@ class GenerateLabellingQC(ScriptBuilder):
         return compute_run_log_path(os.path.dirname(self.args.output), self.script_name, datetime.now().astimezone())
 
     def run(self) -> int:
-        """Walk subjects directory, check labelling graphs, write QC TSV."""
+        """Walk subjects directory, check labelling graphs, write QC TSV; return 1 when no subject has qc 1."""
         subjects_dir = self.args.input
         if not os.path.isdir(subjects_dir):
             raise ValueError(f"Input is not a directory: {subjects_dir}")
@@ -280,6 +280,12 @@ class GenerateLabellingQC(ScriptBuilder):
         for reason, count in sorted(reason_counts.items()):
             logger.output(f"{reason}: {count}")
 
+        for row in rows:
+            if row["qc"] == "0":
+                logger.error(f"labelling QC excluded {row['participant_id']}: {row['reason']}")
+        if n_pass == 0:
+            logger.fail(f"no subject passed the labelling QC, see {self.args.output}")
+            return 1
         return 0
 
 

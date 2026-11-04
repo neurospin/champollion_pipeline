@@ -24,10 +24,15 @@ Requirements:
                                      deepcnn_session_auto, default_session_auto (supersedes LABELQC-07)
     REQ-NTUI-BDRABCZUK-E64219B58CE2  utils.lib.LABELLING_SESSION_CANDIDATES value and order
     REQ-NTUI-BDRABCZUK-0A642185F530  QC and run_cortical_tiles share that one constant object
+    REQ-NTUI-BDRABCZUK-8BCA43385704  no qc 1 row: return 1
+    REQ-NTUI-BDRABCZUK-56EA02A496CC  a qc 1 row: return 0
+    REQ-NTUI-BDRABCZUK-B4162A83CD2E  one ERROR record per qc 0 row
+    REQ-NTUI-BDRABCZUK-3B4200D63549  no qc 1 row: one FAIL record naming the QC file
 """
 
 import csv
 import importlib
+import logging
 import subprocess
 import sys
 import textwrap
@@ -35,6 +40,8 @@ from pathlib import Path
 
 import pytest
 from cortical_tiles.brainvisa.utils.subjects import select_good_qc
+
+from tests.log_assertions import FAIL
 
 _REPO_ROOT = Path(__file__).resolve().parent.parent
 _SRC_DIR = _REPO_ROOT / "src"
@@ -439,3 +446,79 @@ class TestWithoutAims:
         assert proc.returncode == 0, proc.stderr
         rows = _read_rows(output)
         assert [(r["participant_id"], r["qc"]) for r in rows] == [("s01", "1"), ("s02", "0")]
+
+
+# ---------------------------------------------------------------------------
+# Exit status (user decision 2026-11-04, "Fail only if nothing usable")
+# ---------------------------------------------------------------------------
+
+
+def _run_status(subjects: Path, output: Path) -> int:
+    """Run the script on ``subjects`` and return its exit value."""
+    script = _new_script()
+    script.parse_args([str(subjects), str(output), "--path_to_graph", CLASSIC_PATH])
+    return script.run()
+
+
+def _module_messages(capture, level: int) -> list[str]:
+    """Messages of the generate_labelling_qc logger's records at exactly ``level``."""
+    return [r.getMessage() for r in capture.records if r.name == MODULE and r.levelno == level]
+
+
+class TestExitPolicy:
+    def test_no_qc1_row_returns_1(self, subjects, output):
+        """REQ-NTUI-BDRABCZUK-8BCA43385704: the QC file is still written."""
+        _make_subject(subjects, "s01", sides=("L",))
+        _make_subject(subjects, "s02", sides=())
+        assert _run_status(subjects, output) == 1
+        assert [r["qc"] for r in _read_rows(output)] == ["0", "0"]
+
+    def test_no_subject_returns_1(self, subjects, output):
+        """REQ-NTUI-BDRABCZUK-8BCA43385704: a subjects directory with no subdirectory leaves no qc 1 row."""
+        assert _run_status(subjects, output) == 1
+        assert _read_rows(output) == []
+
+    def test_qc1_row_returns_0(self, subjects, output):
+        """REQ-NTUI-BDRABCZUK-56EA02A496CC."""
+        _make_subject(subjects, "s01")
+        _make_subject(subjects, "s02", sides=("L",))
+        assert _run_status(subjects, output) == 0
+
+    def test_one_error_record_per_qc0_row(self, subjects, output, pipeline_caplog):
+        """REQ-NTUI-BDRABCZUK-B4162A83CD2E: one ERROR record per qc 0 row, holding its participant_id and reason."""
+        _make_subject(subjects, "s01")
+        _make_subject(subjects, "s02", sides=("L",))
+        _make_subject(subjects, "s03", with_session_dir=False)
+        _run_status(subjects, output)
+        messages = _module_messages(pipeline_caplog, logging.ERROR)
+        assert len(messages) == 2, messages
+        assert len([m for m in messages if "s02" in m and "missing_R" in m]) == 1, messages
+        assert len([m for m in messages if "s03" in m and "no_session_dir" in m]) == 1, messages
+
+    def test_no_error_record_when_all_pass(self, subjects, output, pipeline_caplog):
+        """REQ-NTUI-BDRABCZUK-B4162A83CD2E: no qc 0 row, no ERROR record."""
+        _make_subject(subjects, "s01")
+        _run_status(subjects, output)
+        assert _module_messages(pipeline_caplog, logging.ERROR) == []
+
+    def test_no_qc1_row_emits_one_fail_record(self, subjects, output, pipeline_caplog):
+        """REQ-NTUI-BDRABCZUK-3B4200D63549."""
+        _make_subject(subjects, "s01", sides=("L",))
+        _run_status(subjects, output)
+        messages = _module_messages(pipeline_caplog, FAIL)
+        assert len(messages) == 1, messages
+        assert str(output) in messages[0]
+
+    def test_no_subject_emits_one_fail_record(self, subjects, output, pipeline_caplog):
+        """REQ-NTUI-BDRABCZUK-3B4200D63549: a run with no subject also says why it failed."""
+        _run_status(subjects, output)
+        messages = _module_messages(pipeline_caplog, FAIL)
+        assert len(messages) == 1, messages
+        assert str(output) in messages[0]
+
+    def test_qc1_row_emits_no_fail_record(self, subjects, output, pipeline_caplog):
+        """REQ-NTUI-BDRABCZUK-3B4200D63549: a qc 1 row left, no FAIL record."""
+        _make_subject(subjects, "s01")
+        _make_subject(subjects, "s02", sides=("L",))
+        _run_status(subjects, output)
+        assert _module_messages(pipeline_caplog, FAIL) == []

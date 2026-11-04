@@ -28,7 +28,7 @@ def test_working_directory_logged_at_log(tmp_path, pipeline_caplog):
     script.parse_args([str(input_dir), str(output_dir)])
 
     with patch("champollion_pipeline.generate_morphologist_graphs.getcwd", return_value=WORKING_DIRECTORY):
-        assert script.run() == 0
+        assert script.run() == 1
 
     record = pipeline_caplog.assert_logged(LOG, WORKING_DIRECTORY)
     assert record.name == LOGGER_NAME

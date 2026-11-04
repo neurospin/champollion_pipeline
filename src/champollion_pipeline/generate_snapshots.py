@@ -45,6 +45,7 @@ from champollion_pipeline.snapshot_types.tiles import (
     generate_tiles_snapshot,
 )
 from champollion_pipeline.snapshot_types.umap import discover_umap_pairs, generate_umap_snapshot, list_embedding_csvs
+from champollion_pipeline.utils.qc_report import read_qc_tsv
 
 logger = logging.getLogger(__name__)
 
@@ -66,6 +67,18 @@ __all__ = [
 
 # Camera orientation (x, y, z, w) of each hemisphere's sulcal graph snapshot
 SULCAL_VIEW_QUATERNIONS = {"left": (0.5, 0.5, 0.5, 0.5), "right": (0.5, -0.5, -0.5, 0.5)}
+
+
+def _report_exclusions(qc_path: str) -> int:
+    """Log one ERROR per qc 0 row of qc_path and one FAIL when it keeps no subject; return the stage status."""
+    records = read_qc_tsv(qc_path)
+    for record in records:
+        if record["qc"] == 0:
+            logger.error(f"snapshots input QC excluded {record['participant_id']}: {record['reason']}")
+    if records and not any(record["qc"] == 1 for record in records):
+        logger.fail(f"no subject passed the snapshots input QC, see {qc_path}")
+        return 1
+    return 0
 
 
 class GenerateSnapshots(ScriptBuilder):
@@ -109,11 +122,11 @@ class GenerateSnapshots(ScriptBuilder):
         return compute_run_log_path(self.args.output_dir, "snapshots", datetime.now().astimezone())
 
     def run(self) -> int:
-        """Run the input QC, then all requested snapshot generation steps; always returns 0."""
+        """Run the input QC, then all requested snapshot generation steps; return the input QC status."""
         os.makedirs(self.args.output_dir, exist_ok=True)
 
         run_sulcal, run_tiles, run_umap = self._selected_steps()
-        excluded = self._run_input_qc(run_sulcal, run_tiles, run_umap)
+        excluded, status = self._run_input_qc(run_sulcal, run_tiles, run_umap)
 
         size = (self.args.width, self.args.height)
         all_snapshots = []
@@ -134,7 +147,7 @@ class GenerateSnapshots(ScriptBuilder):
             json.dump({"snapshots": all_snapshots}, f, indent=2)
         logger.output(f"Manifest saved to: {manifest_path}")
 
-        return 0
+        return status
 
     def _selected_steps(self) -> tuple[bool, bool, bool]:
         """Return (run_sulcal, run_tiles, run_umap) from the --*-only flags (none set runs all)."""
@@ -165,8 +178,8 @@ class GenerateSnapshots(ScriptBuilder):
         candidate = osp.join(tiles_dir, "crops", "2mm")
         return candidate if osp.isdir(candidate) else tiles_dir
 
-    def _run_input_qc(self, run_sulcal, run_tiles, run_umap) -> frozenset[str]:
-        """Check the selected steps' inputs, write the QC file, warn, and return the excluded subjects."""
+    def _run_input_qc(self, run_sulcal, run_tiles, run_umap) -> tuple[frozenset[str], int]:
+        """Check the selected steps' inputs, write the QC file, report it, and return (excluded subjects, status)."""
         report = SnapshotsInputQC()
         morphologist_dir = self._morphologist_dir()
         if run_sulcal and morphologist_dir:
@@ -181,8 +194,7 @@ class GenerateSnapshots(ScriptBuilder):
         check_embedding_inputs(report, csvs)
 
         qc_path = report.write(self.args.output_dir)
-        excluded = report.excluded()
-        log_warning(f"snapshots input QC excluded {len(excluded)} subject(s), see {qc_path}", excluded)
+        status = _report_exclusions(qc_path)
         if umap_dirs:
             reference_data_dir = umap_dirs[1]
             log_warning(
@@ -201,7 +213,7 @@ class GenerateSnapshots(ScriptBuilder):
                     "missing region graph file(s)",
                     find_missing_region_graphs(self.args.champollion_data_root, crops_dir, self.args.tiles_level),
                 )
-        return frozenset(excluded)
+        return frozenset(report.excluded()), status
 
     def _run_sulcal(self, size, excluded=frozenset()):
         """Generate sulcal graph snapshots of the first subject not excluded by the input QC."""

@@ -731,22 +731,6 @@ class TestSnapshotsInputQC:
         assert row["qc"] == 0
         assert set(row["reason"].split(";")) == {"missing_sulcal_graph_left", "missing_sulcal_graph_right"}
 
-    def test_excluded_subjects_named_in_one_warning_and_exit_zero(self, temp_dir, pipeline_caplog):
-        """REQ-NTUI-BDRABCZUK-1D96922B292C: one WARNING record names the excluded subjects; the run returns 0."""
-        morph = os.path.join(temp_dir, "morphologist")
-        _morphologist_subject(morph, "sub-01")
-        _morphologist_subject(morph, "sub-02", graphs=("R",), meshes=("R",))
-        _morphologist_subject(morph, "sub-03", graphs=("L",), meshes=("L",))
-        output_dir = os.path.join(temp_dir, "out")
-
-        with patch(_RENDER_SULCAL, side_effect=lambda graph_path, out, *a, **k: out):
-            result = _run_snapshots(["--output_dir", output_dir, "--morphologist_dir", morph, "--sulcal-only"])
-
-        naming_lines = [line for line in _warnings(pipeline_caplog) if "sub-02" in line and "sub-03" in line]
-        assert result == 0
-        assert len(naming_lines) == 1
-        assert os.path.exists(os.path.join(output_dir, QC_FILE))
-
     def test_sulcal_step_skips_excluded_subject(self, temp_dir):
         """REQ BB1489CABD7D: the sulcal step renders no graph of a subject with qc 0."""
         morph = os.path.join(temp_dir, "morphologist")
