@@ -6,6 +6,7 @@ Calls champollion/evaluate.py for each region in models_path.
 
 import argparse
 import cProfile
+import csv
 import logging
 import os
 import pstats
@@ -15,6 +16,7 @@ import subprocess
 import sys
 import tempfile
 import warnings
+from collections.abc import Mapping, Sequence
 from datetime import datetime
 from io import StringIO
 from os.path import abspath, dirname, exists, join
@@ -23,6 +25,7 @@ from pathlib import Path
 from champollion.metrics.cka_coherence import test_models_coherence_from_directory
 from champollion_utils.script_builder import ScriptBuilder
 
+from champollion_pipeline._stage_base import PARTIAL_STATUS
 from champollion_pipeline.derivatives_layout import (
     DEFAULT_MASKS_VERSION,
     compute_models_cache_dir,
@@ -55,8 +58,21 @@ from champollion_pipeline.models.fetch import RemoteArchiveStrategy as RemoteArc
 from champollion_pipeline.models.fetch import fetch_model_set
 from champollion_pipeline.process_setup import init_pipeline_process
 from champollion_pipeline.utils.lib import CORTICAL_TILES_VERSION
+from champollion_pipeline.utils.qc_report import (
+    ID_COLUMN,
+    QC_COLUMN,
+    REASON_COLUMN,
+    REASON_SEPARATOR,
+    fetch_crop_qc_rows,
+    write_qc_tsv,
+)
 
 PROVENANCE_FILE_NAME = "provenance.json"
+INPUT_QC_FILENAME = "input_qc.tsv"
+INPUT_QC_KINDS = ("skeleton",)  # evaluate.py reads no other crop kind
+EMBEDDINGS_FILENAME = "full_embeddings.csv"
+EMBEDDINGS_ID_COLUMN = "ID"
+FAILED_STATUS = 1
 
 logger = logging.getLogger(__name__)
 
@@ -85,6 +101,82 @@ def read_pipeline_commit() -> str | None:
     if result.returncode != 0 or not re.fullmatch(r"[0-9a-f]{40}", commit):
         return None
     return commit
+
+
+def _compute_region_side(region: str) -> str:
+    """Hemisphere side of a region model: L for *_left, else R."""
+    return "L" if region.endswith("_left") else "R"
+
+
+def fetch_region_model_qc_rows(
+    crops_2mm_dir: str, crops_by_side: Mapping[str, Sequence[str]]
+) -> list[dict[str, object]]:
+    """One QC row per subject, sorted, over the crop folders of each side: qc 0 with the reasons of all its sides.
+
+    The cohort is the union of the sides, so that a side whose files are wholly absent still shows its gap.
+    """
+    sides = sorted(crops_by_side)
+    cohort = {
+        row[ID_COLUMN]
+        for side in sides
+        for row in fetch_crop_qc_rows(crops_2mm_dir, crops_by_side[side], INPUT_QC_KINDS, sides=(side,))
+    }
+    reasons: dict[str, list[str]] = {subject: [] for subject in cohort}
+    for side in sides:
+        for row in fetch_crop_qc_rows(
+            crops_2mm_dir, crops_by_side[side], INPUT_QC_KINDS, subjects=cohort, sides=(side,)
+        ):
+            if row[REASON_COLUMN]:
+                reasons[row[ID_COLUMN]].append(row[REASON_COLUMN])
+    return [
+        {ID_COLUMN: subject, QC_COLUMN: 0 if found else 1, REASON_COLUMN: REASON_SEPARATOR.join(found)}
+        for subject, found in sorted(reasons.items())
+    ]
+
+
+def _report_input_qc(rows: list[dict[str, object]], qc_path: str) -> int:
+    """Log one ERROR per qc 0 row; return FAILED_STATUS, after one FAIL record, when no row has qc 1,
+    PARTIAL_STATUS with a qc 0 row, else 0."""
+    excluded = [row for row in rows if row[QC_COLUMN] == 0]
+    for row in excluded:
+        logger.error(f"input QC excluded {row[ID_COLUMN]}: {row[REASON_COLUMN]}")
+    if len(excluded) == len(rows):
+        logger.fail(f"no subject passed the embeddings input QC, see {qc_path}")
+        return FAILED_STATUS
+    return PARTIAL_STATUS if excluded else 0
+
+
+def remove_subject_rows(csv_path: str, subjects: frozenset[str]) -> int:
+    """Drop the rows of ``subjects`` from the embeddings CSV at ``csv_path``, atomically; return the dropped count.
+
+    The header and the kept rows keep their bytes and the file its mode. An empty file, a header with no ID cell
+    or a file holding none of ``subjects`` stays untouched and gives 0; a line too short to hold the ID cell is kept.
+    """
+    with open(csv_path, encoding="utf-8", newline="") as handle:
+        lines = handle.readlines()
+    header = next(csv.reader(lines[:1]), [])
+    if EMBEDDINGS_ID_COLUMN not in header:
+        return 0
+    id_index = header.index(EMBEDDINGS_ID_COLUMN)
+    kept = lines[:1]
+    for line in lines[1:]:
+        cells = next(csv.reader([line]), [])
+        if len(cells) <= id_index or cells[id_index] not in subjects:
+            kept.append(line)
+    dropped = len(lines) - len(kept)
+    if not dropped:
+        return 0
+    fd, tmp_path = tempfile.mkstemp(dir=dirname(csv_path), prefix=".embeddings_", suffix=".tmp")
+    try:
+        with os.fdopen(fd, "w", encoding="utf-8", newline="") as handle:
+            handle.writelines(kept)
+        shutil.copymode(csv_path, tmp_path)
+        os.replace(tmp_path, csv_path)
+    except BaseException:
+        if exists(tmp_path):
+            os.remove(tmp_path)
+        raise
+    return dropped
 
 
 class GenerateEmbeddings(ScriptBuilder):
@@ -179,6 +271,7 @@ class GenerateEmbeddings(ScriptBuilder):
             )
         )
         self._models_source: dict | None = None
+        self._excluded_subjects: frozenset[str] = frozenset()
 
     def _make_regions_tmpdir(self, models_path: str) -> str:
         """Return a temp dir containing symlinks to only the requested region subdirs."""
@@ -465,7 +558,11 @@ class GenerateEmbeddings(ScriptBuilder):
             )
 
         try:
+            input_status = self._run_input_qc(crops_2mm_dir, output_base)
+            if input_status == FAILED_STATUS:
+                return input_status
             result = self._run_per_region(evaluate_script, crops_2mm_dir, output_base)
+            self._remove_excluded_rows(output_base)
         finally:
             if tmpdir:
                 shutil.rmtree(tmpdir)
@@ -475,7 +572,7 @@ class GenerateEmbeddings(ScriptBuilder):
         if self.args.run_cka:
             self._run_cka_test(output_base)
 
-        return result
+        return result or input_status
 
     def _find_crop_dir(self, crops_2mm_dir: str, region_model_name: str) -> str:
         """Map a model region name back to its crop directory name.
@@ -495,6 +592,45 @@ class GenerateEmbeddings(ScriptBuilder):
                     return dname
         return base
 
+    def _find_checked_region_dirs(self) -> list[str]:
+        """Region model dirs of the run; ValueError when there is none or when a region has no weights."""
+        models_path = self.args.models_path
+        region_dirs = find_region_model_dirs(models_path)
+        if not region_dirs:
+            raise ValueError(f"No region model directories (containing logs/) found under {models_path}")
+        check_region_weights(region_dirs, models_path, self.args.checkpoint_epoch)
+        return region_dirs
+
+    def _compute_crops_by_side(self, region_dirs: list[str], crops_2mm_dir: str) -> dict[str, list[str]]:
+        """Crop folder name of each region model, by the hemisphere side the model uses."""
+        crops_by_side: dict[str, list[str]] = {}
+        for model_path in region_dirs:
+            region = resolve_region_name(model_path, self.args.models_path)
+            crops_by_side.setdefault(_compute_region_side(region), []).append(
+                self._find_crop_dir(crops_2mm_dir, region)
+            )
+        return crops_by_side
+
+    def _run_input_qc(self, crops_2mm_dir: str, output_base: str) -> int:
+        """Write <output_base>/input_qc.tsv, keep its qc 0 subjects for _remove_excluded_rows and return
+        0, PARTIAL_STATUS with a qc 0 row, or FAILED_STATUS with no qc 1 row."""
+        region_dirs = self._find_checked_region_dirs()
+        rows = fetch_region_model_qc_rows(crops_2mm_dir, self._compute_crops_by_side(region_dirs, crops_2mm_dir))
+        qc_path = join(output_base, INPUT_QC_FILENAME)
+        write_qc_tsv(qc_path, rows)
+        self._excluded_subjects = frozenset(row[ID_COLUMN] for row in rows if row[QC_COLUMN] == 0)
+        return _report_input_qc(rows, qc_path)
+
+    def _remove_excluded_rows(self, output_base: str) -> None:
+        """Drop the qc 0 subjects from the full_embeddings.csv of each region model of the run, reused ones too."""
+        if not self._excluded_subjects:
+            return
+        models_path = self.args.models_path
+        for model_path in find_region_model_dirs(models_path):
+            path = join(output_base, resolve_region_name(model_path, models_path), EMBEDDINGS_FILENAME)
+            if exists(path):
+                remove_subject_rows(path, self._excluded_subjects)
+
     def _run_per_region(self, evaluate_script: str, crops_2mm_dir: str, output_base: str) -> int:
         """Invoke champollion/evaluate.py for each region in models_path.
 
@@ -503,11 +639,7 @@ class GenerateEmbeddings(ScriptBuilder):
         """
         models_path = self.args.models_path
         epoch = self.args.checkpoint_epoch
-        region_dirs = find_region_model_dirs(models_path)
-
-        if not region_dirs:
-            raise ValueError(f"No region model directories (containing logs/) found under {models_path}")
-        check_region_weights(region_dirs, models_path, epoch)
+        region_dirs = self._find_checked_region_dirs()
 
         n_regions = len(region_dirs)
         logger.trace(f"Generating embeddings for {n_regions} regions → {output_base}")
@@ -518,12 +650,12 @@ class GenerateEmbeddings(ScriptBuilder):
             region = resolve_region_name(model_path, models_path)
             # Machine-read by champollion_sulcal_mcp (FOLD_RE): one record per region directory.
             logger.trace(f"Fold {fold}/{n_regions}: {region}")
-            side = "L" if region.endswith("_left") else "R"
+            side = _compute_region_side(region)
             crop_name = self._find_crop_dir(crops_2mm_dir, region)
             mask_dir = join(crops_2mm_dir, crop_name, "mask")
             skels_path = join(mask_dir, f"{side}skeleton.npy")
             subjects_path = join(mask_dir, f"{side}skeleton_subject.csv")
-            saving_path = join(output_base, region, "full_embeddings.csv")
+            saving_path = join(output_base, region, EMBEDDINGS_FILENAME)
 
             if exists(saving_path) and not getattr(self.args, "overwrite", False):
                 logger.trace(f"[SKIP] {region} — already exists (--overwrite to recompute)")
