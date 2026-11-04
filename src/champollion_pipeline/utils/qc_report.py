@@ -180,7 +180,7 @@ def read_qc_tsv(path: str | os.PathLike, delimiter: str = "\t") -> list[dict[str
     return records
 
 
-def _read_crop_subjects(path: str, is_bids: bool) -> set[str]:
+def read_crop_subjects(path: str, is_bids: bool = False) -> set[str]:
     """Non-empty Subject cells of a crop subject CSV, cut to the participant_id with ``is_bids``.
 
     An absent or unreadable file, or one without a Subject column, gives the empty set.
@@ -194,36 +194,39 @@ def _read_crop_subjects(path: str, is_bids: bool) -> set[str]:
 
 
 def _list_crop_steps(
-    crops_dir: str | os.PathLike, regions: Sequence[str], kinds: Sequence[str], is_bids: bool
+    crops_dir: str | os.PathLike, regions: Sequence[str], kinds: Sequence[str], is_bids: bool, sides: Sequence[str]
 ) -> list[tuple[str, bool, set[str] | None]]:
     """(reason, array usable, subjects of the CSV) by region, side, kind; the kind mask has no CSV, so None."""
     steps = []
     for region in regions:
         folder = os.path.join(crops_dir, region, CROP_MASK_FOLDER)
-        for side in CROP_SIDES:
+        for side in sides:
             for kind in kinds:
                 stem = os.path.join(folder, side + CROP_FILE_STEMS.get(kind, kind))
                 array = f"{stem}.npy"
                 is_usable = os.path.isfile(array) and os.path.getsize(array) > 0
-                listed = None if kind == CROP_KIND_MASK else _read_crop_subjects(f"{stem}_subject.csv", is_bids)
+                listed = None if kind == CROP_KIND_MASK else read_crop_subjects(f"{stem}_subject.csv", is_bids)
                 steps.append((f"{REASON_MISSING_CROP}:{kind}:{side}:{region}", is_usable, listed))
     return steps
 
 
-def fetch_crop_qc_rows(
+def fetch_crop_qc_rows(  # noqa: PLR0913 - keyword-only sides, stage 2 positional call kept
     crops_dir: str | os.PathLike,
     regions: Sequence[str],
     kinds: Sequence[str],
     subjects: Iterable[str] | None = None,
     is_bids: bool = False,
+    *,
+    sides: Sequence[str] = CROP_SIDES,
 ) -> list[dict[str, object]]:
     """One QC row per subject over the crop files of ``kinds`` in <crops_dir>/<region>/mask, sorted by participant_id.
 
     The shared crop-completeness check: ``subjects`` None takes the subjects the subject CSVs name, so
     ``kinds`` holding mask alone gives no row. A subject gets a missing_crop reason for an unusable array
-    or a CSV not listing it. Read-only; an absent or unreadable file is a gap, never an exception.
+    or a CSV not listing it, on the hemisphere ``sides`` only. Read-only; an absent or unreadable file is a
+    gap, never an exception.
     """
-    steps = _list_crop_steps(crops_dir, regions, kinds, is_bids)
+    steps = _list_crop_steps(crops_dir, regions, kinds, is_bids, sides)
     if subjects is None:
         cohort = set().union(*(listed for _, _, listed in steps if listed is not None))
     else:
