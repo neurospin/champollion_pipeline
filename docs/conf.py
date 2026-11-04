@@ -24,6 +24,7 @@ html_theme = "furo"
 html_static_path = ["_static"]
 
 myst_enable_extensions = ["colon_fence", "deflist"]
+myst_heading_anchors = 3
 myst_fence_as_directive = {"mermaid"}
 
 source_suffix = {".md": "markdown", ".rst": "restructuredtext"}
