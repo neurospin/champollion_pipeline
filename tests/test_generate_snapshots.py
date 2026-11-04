@@ -267,7 +267,8 @@ class TestGenerateSnapshotsRun:
         args = _one_subject_args(temp_dir)
         script = GenerateSnapshots()
         script.parse_args(args)
-        result = script.run()
+        with patch(_RENDER_SULCAL, side_effect=_write_snapshot):
+            result = script.run()
         assert result == 0
         assert os.path.isdir(args[1])
 
@@ -288,7 +289,8 @@ class TestGenerateSnapshotsRun:
         """Test that run() returns 0 on success."""
         script = GenerateSnapshots()
         script.parse_args(_one_subject_args(temp_dir))
-        assert script.run() == 0
+        with patch(_RENDER_SULCAL, side_effect=_write_snapshot):
+            assert script.run() == 0
 
 
 class TestOnlyFlagLogic:
@@ -409,7 +411,10 @@ class TestMainFunction:
     def test_main_creates_output_dir(self, temp_dir):
         """Test that main creates the output directory."""
         args = _one_subject_args(temp_dir)
-        with patch("sys.argv", ["generate_snapshots.py", *args]):
+        with (
+            patch("sys.argv", ["generate_snapshots.py", *args]),
+            patch(_RENDER_SULCAL, side_effect=_write_snapshot),
+        ):
             result = main()
             assert result == 0
             assert os.path.isdir(args[1])
@@ -434,7 +439,11 @@ class TestMainFunction:
 
     def test_sulcal_only_does_not_run_tiles_or_umap(self, temp_dir):
         """Test that --sulcal-only skips tiles and umap."""
-        with patch("sys.argv", ["generate_snapshots.py", *_one_subject_args(temp_dir), "--sulcal-only"]):
+        args = [*_one_subject_args(temp_dir), "--sulcal-only"]
+        with (
+            patch("sys.argv", ["generate_snapshots.py", *args]),
+            patch(_RENDER_SULCAL, side_effect=_write_snapshot),
+        ):
             result = main()
             assert result == 0
 
@@ -455,7 +464,11 @@ class TestMainFunction:
 
     def test_umap_only_does_not_run_sulcal_or_tiles(self, temp_dir):
         """Test that --umap-only skips sulcal and tiles."""
-        with patch("sys.argv", ["generate_snapshots.py", *_one_subject_args(temp_dir, umap=True), "--umap-only"]):
+        args = [*_one_subject_args(temp_dir, umap=True), "--umap-only"]
+        with (
+            patch("sys.argv", ["generate_snapshots.py", *args]),
+            patch(_LOAD_UMAP_MODEL, return_value=_RecordingUmapModel()),
+        ):
             result = main()
             assert result == 0
 
@@ -559,6 +572,12 @@ class _RecordingUmapModel:
             self.on_transform()
         self.inputs.append(np.array(values))
         return np.zeros((len(values), 2))
+
+
+def _write_snapshot(graph_path, out, *args, **kwargs):
+    """Render stand-in writing a non-empty file, so the stage output QC finds the snapshot."""
+    Path(out).write_bytes(b"png")
+    return out
 
 
 def _run_snapshots(args):
@@ -907,8 +926,8 @@ def _all_steps_args(temp_dir):
 def _run_all_steps(temp_dir, extra=()):
     """Run GenerateSnapshots on _all_steps_args with the Anatomist renders and the UMAP model patched."""
     with (
-        patch(_RENDER_SULCAL, side_effect=lambda graph_path, out, *a, **k: out),
-        patch(_RENDER_TILES, return_value=[]),
+        patch(_RENDER_SULCAL, side_effect=_write_snapshot),
+        patch(_RENDER_TILES, side_effect=lambda crops, out, *a, **k: [_write_snapshot(crops, out[:-4] + "_left.png")]),
         patch(_LOAD_UMAP_MODEL, return_value=_RecordingUmapModel()),
     ):
         return _run_snapshots([*_all_steps_args(temp_dir), *extra])
@@ -948,7 +967,7 @@ SNAPSHOTS_LOGGER = "champollion_pipeline.generate_snapshots"
 
 
 class TestSnapshotFailureTraceback:
-    """A caught render failure is logged at ERROR with its traceback; the run still exits 0."""
+    """A caught render failure is logged at ERROR with its traceback; the exit status comes from the QC reports."""
 
     def test_sulcal_failure_error_carries_traceback(self, temp_dir, pipeline_caplog):
         error = RuntimeError("synthetic sulcal render failure 2b8e")
@@ -956,10 +975,10 @@ class TestSnapshotFailureTraceback:
         def render(graph_path, out, *args, **kwargs):
             if graph_path.endswith("Lsulci_sub-01.arg"):
                 raise error
-            return out
+            return _write_snapshot(graph_path, out)
 
         with patch(_RENDER_SULCAL, side_effect=render) as rendered:
-            assert _run_snapshots([*_all_steps_args(temp_dir), "--sulcal-only"]) == 0
+            assert _run_snapshots([*_all_steps_args(temp_dir), "--sulcal-only"]) == 3
         assert rendered.call_count == 2, "the right hemisphere is still rendered after the left one failed"
         record = pipeline_caplog.assert_traceback_logged(logging.ERROR, error)
         assert record.name == SNAPSHOTS_LOGGER
@@ -967,13 +986,13 @@ class TestSnapshotFailureTraceback:
     def test_tiles_failure_error_carries_traceback(self, temp_dir, pipeline_caplog):
         error = RuntimeError("synthetic tiles render failure 5a1c")
         with patch(_RENDER_TILES, side_effect=error):
-            assert _run_snapshots([*_all_steps_args(temp_dir), "--tiles-only"]) == 0
+            assert _run_snapshots([*_all_steps_args(temp_dir), "--tiles-only"]) == 1
         record = pipeline_caplog.assert_traceback_logged(logging.ERROR, error)
         assert record.name == SNAPSHOTS_LOGGER
 
     def test_umap_failure_error_carries_traceback(self, temp_dir, pipeline_caplog):
         error = ValueError("synthetic umap render failure 8f4d")
         with patch(_RENDER_UMAP, side_effect=error):
-            assert _run_snapshots([*_all_steps_args(temp_dir), "--umap-only"]) == 0
+            assert _run_snapshots([*_all_steps_args(temp_dir), "--umap-only"]) == 1
         record = pipeline_caplog.assert_traceback_logged(logging.ERROR, error)
         assert record.name == SNAPSHOTS_LOGGER

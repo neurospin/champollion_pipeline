@@ -28,8 +28,10 @@ from champollion_pipeline.snapshot_types.input_qc import (
     find_crop_regions_without_mask,
     find_missing_region_graphs,
     find_missing_umap_references,
+    has_kept_subject,
     log_warning,
 )
+from champollion_pipeline.snapshot_types.output_qc import OUTPUT_QC_FILENAME, SnapshotsOutputQC
 from champollion_pipeline.snapshot_types.sulcal import (
     _detect_hemi,
     find_first_kept_subject_graphs,
@@ -41,11 +43,17 @@ from champollion_pipeline.snapshot_types.sulcal import (
 from champollion_pipeline.snapshot_types.tiles import (
     ICBM_MESH_DIR_FALLBACK,
     REGION_GRAPH_ROOT_HINT,
+    compute_tiles_snapshot_path,
     find_completed_regions,
     generate_tiles_snapshot,
 )
-from champollion_pipeline.snapshot_types.umap import discover_umap_pairs, generate_umap_snapshot, list_embedding_csvs
-from champollion_pipeline.utils.qc_report import read_qc_tsv
+from champollion_pipeline.snapshot_types.umap import (
+    compute_umap_snapshot_path,
+    discover_umap_pairs,
+    generate_umap_snapshot,
+    list_embedding_csvs,
+)
+from champollion_pipeline.utils.qc_report import read_qc_tsv, write_run_qc_tsv
 
 logger = logging.getLogger(__name__)
 
@@ -68,17 +76,43 @@ __all__ = [
 # Camera orientation (x, y, z, w) of each hemisphere's sulcal graph snapshot
 SULCAL_VIEW_QUATERNIONS = {"left": (0.5, 0.5, 0.5, 0.5), "right": (0.5, -0.5, -0.5, 0.5)}
 
+FAILED_STATUS = 1
+# Partial success, the status stage 2 gives a partial run
+PARTIAL_STATUS = 3
+
 
 def _report_exclusions(qc_path: str, rows_expected: bool) -> int:
-    """Log one ERROR per qc 0 row and one FAIL when no row has qc 1 (a zero-row file only if rows_expected)."""
+    """Log one ERROR per qc 0 row and one FAIL when no row has qc 1 (a zero-row file only if rows_expected).
+
+    Return FAILED_STATUS on that FAIL, PARTIAL_STATUS with qc 0 and qc 1 rows, else 0.
+    """
     records = read_qc_tsv(qc_path)
     for record in records:
         if record["qc"] == 0:
             logger.error(f"snapshots input QC excluded {record['participant_id']}: {record['reason']}")
     if (records or rows_expected) and not any(record["qc"] == 1 for record in records):
         logger.fail(f"no subject passed the snapshots input QC, see {qc_path}")
-        return 1
-    return 0
+        return FAILED_STATUS
+    return PARTIAL_STATUS if any(record["qc"] == 0 for record in records) else 0
+
+
+def _report_output_qc(report: SnapshotsOutputQC, output_dir: str) -> int:
+    """Write output_qc.tsv, log one ERROR per qc 0 row and one FAIL when no file is usable; return the status."""
+    rows = report.compute_rows()
+    qc_path = osp.join(output_dir, OUTPUT_QC_FILENAME)
+    write_run_qc_tsv(qc_path, rows)
+    lost = [row for row in rows if row["qc"] == 0]
+    for row in lost:
+        logger.error(f"snapshots output QC lost {row['check']}: {row['reason']}")
+    if rows and len(lost) == len(rows):
+        logger.fail(f"no expected snapshot is usable, see {qc_path}")
+        return FAILED_STATUS
+    return PARTIAL_STATUS if lost else 0
+
+
+def _compute_stage_status(input_status: int, output_status: int) -> int:
+    """Return the stage status: failed wins over partial, partial over 0."""
+    return FAILED_STATUS if FAILED_STATUS in (input_status, output_status) else max(input_status, output_status)
 
 
 class GenerateSnapshots(ScriptBuilder):
@@ -116,17 +150,18 @@ class GenerateSnapshots(ScriptBuilder):
             .add_optional_argument("--tiles_level", "Region threshold level (0-3)", default=1, type_=int)
             .add_optional_argument("--champollion_data_root", "Override path to Champollion data directory")
         )
+        self._output_qc = SnapshotsOutputQC()
 
     def default_log_path(self) -> str:
         """Run-log path of a bare --log: <output_dir>/.log/snapshots_<stamp>.log."""
         return compute_run_log_path(self.args.output_dir, "snapshots", datetime.now().astimezone())
 
     def run(self) -> int:
-        """Run the input QC, then all requested snapshot generation steps; return the input QC status."""
+        """Run the input QC, the requested snapshot steps and the output QC; return the stage status."""
         os.makedirs(self.args.output_dir, exist_ok=True)
 
         run_sulcal, run_tiles, run_umap = self._selected_steps()
-        excluded, status = self._run_input_qc(run_sulcal, run_tiles, run_umap)
+        excluded, input_status = self._run_input_qc(run_sulcal, run_tiles, run_umap)
 
         size = (self.args.width, self.args.height)
         all_snapshots = []
@@ -147,7 +182,8 @@ class GenerateSnapshots(ScriptBuilder):
             json.dump({"snapshots": all_snapshots}, f, indent=2)
         logger.output(f"Manifest saved to: {manifest_path}")
 
-        return status
+        output_status = _report_output_qc(self._output_qc, self.args.output_dir)
+        return _compute_stage_status(input_status, output_status)
 
     def _selected_steps(self) -> tuple[bool, bool, bool]:
         """Return (run_sulcal, run_tiles, run_umap) from the --*-only flags (none set runs all)."""
@@ -245,6 +281,7 @@ class GenerateSnapshots(ScriptBuilder):
                 logger.trace(f"White mesh: {white_mesh}")
             acq_tag = f"_{acquisition}" if acquisition else ""
             out = osp.join(self.args.output_dir, f"sulcal_graph{acq_tag}_{hemi}.png")
+            self._output_qc.expect(out)
             try:
                 snap = generate_sulcal_graph_snapshot(
                     graph_path,
@@ -271,6 +308,19 @@ class GenerateSnapshots(ScriptBuilder):
             f"(and --subject) to select a single graph."
         )
 
+    def _expect_tiles_files(self, out, crops_dir):
+        """Register the snapshot file of each hemisphere with a completed crop region."""
+        completed = find_completed_regions(crops_dir)
+        for hemi, regions in completed.items():
+            if regions:
+                self._output_qc.expect(compute_tiles_snapshot_path(out, hemi))
+
+    def _expect_umap_files(self, out, pairs, excluded):
+        """Register the plot file of each discovered pair whose embeddings CSV holds a kept subject."""
+        for csv_path, _, _, region, hemi in pairs:
+            if has_kept_subject(csv_path, excluded):
+                self._output_qc.expect(compute_umap_snapshot_path(out, region, hemi))
+
     def _run_tiles(self, size):
         """Generate cortical tiles snapshots."""
         snapshots = []
@@ -279,6 +329,7 @@ class GenerateSnapshots(ScriptBuilder):
         if crops_dir:
             logger.trace("Generating cortical tiles snapshots...")
             out = osp.join(self.args.output_dir, "tiles_masks.png")
+            self._expect_tiles_files(out, crops_dir)
             try:
                 snaps = generate_tiles_snapshot(
                     crops_dir,
@@ -317,6 +368,8 @@ class GenerateSnapshots(ScriptBuilder):
 
         logger.trace("Generating UMAP scatter plots...")
         out = osp.join(self.args.output_dir, "umap.png")
+        pairs = discover_umap_pairs(self.args.embeddings_dir, self.args.reference_data_dir, regions=regions)
+        self._expect_umap_files(out, pairs, excluded)
         try:
             snaps = generate_umap_snapshot(
                 self.args.embeddings_dir,
@@ -325,6 +378,7 @@ class GenerateSnapshots(ScriptBuilder):
                 size,
                 regions=regions,
                 exclude_ids=excluded,
+                pairs=pairs,
             )
             snapshots.extend(snaps)
         except Exception as e:

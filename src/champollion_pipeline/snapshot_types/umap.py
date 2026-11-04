@@ -56,6 +56,12 @@ def compute_umap_reference_paths(reference_data_dir, region, hemi):
     )
 
 
+def compute_umap_snapshot_path(output_path, region, hemi):
+    """Return the plot path of one pair: <base>_<region>_<hemi><ext>, ext .png when the path has none."""
+    base, ext = osp.splitext(output_path)
+    return f"{base}_{region}_{hemi}{ext or '.png'}"
+
+
 def _iter_embedding_csvs(embeddings_dir):
     """Yield (path, region, hemi) per ``*_embeddings.csv`` in sorted order; (None, None) when unparseable."""
     for csv_path in sorted(glob.glob(osp.join(embeddings_dir, "*_embeddings.csv"))):
@@ -97,8 +103,15 @@ def discover_umap_pairs(embeddings_dir, reference_data_dir, regions=None):
     return pairs
 
 
-def generate_umap_snapshot(  # noqa: PLR0913 - snapshot API; keyword-only QC exclusion set
-    embeddings_dir, reference_data_dir, output_path, size=(800, 600), regions=None, *, exclude_ids=frozenset()
+def generate_umap_snapshot(  # noqa: PLR0913 - snapshot API; keyword-only QC exclusion set and discovered pairs
+    embeddings_dir,
+    reference_data_dir,
+    output_path,
+    size=(800, 600),
+    regions=None,
+    *,
+    exclude_ids=frozenset(),
+    pairs=None,
 ):
     """Generate UMAP scatter plots for embedding regions.
 
@@ -117,24 +130,24 @@ def generate_umap_snapshot(  # noqa: PLR0913 - snapshot API; keyword-only QC exc
             generate plots for all available regions.
         exclude_ids: Subject IDs whose rows are dropped before projection
             (subjects excluded by the stage input QC).
+        pairs: Pairs already returned by ``discover_umap_pairs``; ``None``
+            discovers them here.
 
     Returns:
         List of generated snapshot file paths.
     """
     matplotlib.use("Agg")
 
-    basename = osp.splitext(output_path)[0]
-    ext = osp.splitext(output_path)[1] or ".png"
     snapshots = []
 
-    pairs = discover_umap_pairs(embeddings_dir, reference_data_dir, regions=regions)
+    pairs = discover_umap_pairs(embeddings_dir, reference_data_dir, regions=regions) if pairs is None else pairs
     if not pairs:
         logger.warning("No matching (embedding CSV, UMAP model) pairs found")
         return snapshots
 
     for pair in pairs:
         region, hemi = pair[3], pair[4]
-        snap = _plot_umap_pair(pair, size, f"{basename}_{region}_{hemi}{ext}", exclude_ids)
+        snap = _plot_umap_pair(pair, size, compute_umap_snapshot_path(output_path, region, hemi), exclude_ids)
         if snap:
             snapshots.append(snap)
 

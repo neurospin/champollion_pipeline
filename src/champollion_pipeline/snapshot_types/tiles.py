@@ -31,6 +31,12 @@ def compute_region_graph_path(champollion_data_root, side, level):
     return osp.join(f"{champollion_data_root}/mask/2mm/regions/meshes", f"{side}regions_model_{level}.arg")
 
 
+def compute_tiles_snapshot_path(output_path, hemi):
+    """Return the snapshot path of one hemisphere: <base>_<hemi><ext>, ext .png when the path has none."""
+    base, ext = osp.splitext(output_path)
+    return f"{base}_{hemi}{ext or '.png'}"
+
+
 def find_completed_regions(crops_dir):
     """Scan the crops directory to find which regions were processed.
 
@@ -106,9 +112,6 @@ def generate_tiles_snapshot(crops_dir, output_path, size=(800, 600), level=1, ch
     if icbm_mesh_dir is None:
         icbm_mesh_dir = ICBM_MESH_DIR_FALLBACK
 
-    basename = osp.splitext(output_path)[0]
-    ext = osp.splitext(output_path)[1] or ".png"
-
     hemispheres = [
         ("left", "L", (0.5, 0.5, 0.5, 0.5), "mni_icbm152_nlin_asym_09c_Lhemi.gii"),
         ("right", "R", (0.5, -0.5, -0.5, 0.5), "mni_icbm152_nlin_asym_09c_Rhemi.gii"),
@@ -154,7 +157,7 @@ def generate_tiles_snapshot(crops_dir, output_path, size=(800, 600), level=1, ch
         win.focusView()
         a.sync()
 
-        snap_path = f"{basename}_{hemi_name}{ext}"
+        snap_path = compute_tiles_snapshot_path(output_path, hemi_name)
         image = win.snapshotImage(size[0], size[1])
         image.save(snap_path)
         snapshots.append(snap_path)
