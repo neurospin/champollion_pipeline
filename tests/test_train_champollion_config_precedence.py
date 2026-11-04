@@ -26,6 +26,7 @@ import pytest
 
 from champollion_pipeline import train_champollion
 from champollion_pipeline.train_champollion import TrainChampollion
+from tests.test_train_champollion import _build_model_dir
 
 pytest.importorskip("hydra")
 
@@ -117,6 +118,7 @@ def _run_training(tmp_path, monkeypatch, config_dir):
         assert cmd[0] == "python3", f"unexpected interpreter in {cmd}"
         proc = subprocess.run([sys.executable, *cmd[1:]], cwd=os.getcwd(), capture_output=True, text=True)
         assert proc.returncode == 0, f"stub train.py failed for argv {cmd}:\n{proc.stderr}"
+        _build_model_dir(tmp_path / "models")
         return proc.returncode
 
     monkeypatch.setattr(script, "execute_command", real_execute)

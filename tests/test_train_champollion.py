@@ -194,13 +194,18 @@ class TestRunCudaHandling:
 class TestRunTraining:
     """Test _run_training command construction."""
 
-    def _run(self, script, tmp_path, output_dir=None):
-        """Call _run_training with chdir and subprocess mocked; return argv list."""
+    def _run(self, script, tmp_path, model_dir=None):
+        """Call _run_training with chdir and subprocess mocked; return argv list.
+
+        A model_dir receives the model folder train.py would leave there.
+        """
         captured = {}
 
         def fake_execute(cmd, shell=False):
             captured["cmd"] = cmd
             captured["shell"] = shell
+            if model_dir is not None:
+                _build_model_dir(model_dir)
             return 0
 
         script.execute_command = fake_execute
@@ -231,7 +236,7 @@ class TestRunTraining:
     def test_creates_output_dir_and_returns_command_result(self, tmp_path):
         out = tmp_path / "new" / "models"
         script = make_script([*BASE_ARGS, "--output_dir", str(out)])
-        captured = self._run(script, tmp_path)
+        captured = self._run(script, tmp_path, model_dir=out)
         assert out.is_dir()
         assert captured["result"] == 0
         assert captured["shell"] is False
@@ -411,7 +416,12 @@ class TestRunRestoresWorkingDirectory:
 
     def test_cwd_restored_after_successful_training(self, tmp_path, virtual_cwd):
         script = self._script(tmp_path)
-        script.execute_command = lambda cmd, shell=False: 0
+
+        def fake_train(cmd, shell=False):
+            _build_model_dir(tmp_path / "m")
+            return 0
+
+        script.execute_command = fake_train
         assert script.run() == 0
         assert virtual_cwd["cwd"] == self.START_CWD
 
@@ -621,10 +631,45 @@ class TestTrainingOutputQc:
         for check in QC_CHECKS:
             assert str(tmp_path) not in self._row(out, check)["reason"]
 
-    @pytest.mark.parametrize("status", [0, 1, 3])
-    def test_exit_status_is_train_status(self, tmp_path, status):
-        out, result = self._run(tmp_path, status=status, files=(), hydra=None)
-        assert "0" in [row["qc"] for row in self._read(out)[1]]
+    @pytest.mark.parametrize("status", [1, 3, -9])
+    @pytest.mark.parametrize("model", [{}, {"files": (), "hydra": None}], ids=["usable", "unusable"])
+    def test_non_zero_train_status_kept(self, tmp_path, status, model):
+        """REQ-NTUI-BDRABCZUK-EB4047648AA3: a train.py failure keeps its own status, usable folder or not."""
+        _, result = self._run(tmp_path, status=status, **model)
+        assert result == status
+
+    @pytest.mark.parametrize("hydra", ["seed: 1\n", None], ids=["hydra_ok", "hydra_missing"])
+    def test_failing_weights_row_fails_stage(self, tmp_path, hydra):
+        """REQ-NTUI-BDRABCZUK-3F4C505E5EE4: train.py succeeded but left no weights stage 4 can load."""
+        out, result = self._run(tmp_path, files=(), hydra=hydra)
+        assert self._row(out, "weights")["qc"] == "0"
+        assert result == 1
+
+    @pytest.mark.parametrize("hydra", [None, "- not\n- a mapping\n"], ids=["missing", "not_a_mapping"])
+    def test_failing_hydra_config_row_fails_stage(self, tmp_path, hydra):
+        """REQ-NTUI-BDRABCZUK-DF8E5B59563F: train.py succeeded but left no config stage 4 can load."""
+        out, result = self._run(tmp_path, hydra=hydra)
+        assert self._row(out, "weights")["qc"] == "1"
+        assert self._row(out, "hydra_config")["qc"] == "0"
+        assert result == 1
+
+    @pytest.mark.parametrize(
+        ("losses", "losses_qc"),
+        [(FINITE_LOSSES, "1"), ({"Loss/Val": [float("nan")]}, "0")],
+        ids=["finite_losses", "nan_losses"],
+    )
+    def test_usable_folder_keeps_status_zero(self, tmp_path, losses, losses_qc):
+        """REQ-NTUI-BDRABCZUK-266B9909FE38: a failing losses row alone stays report-only."""
+        out, result = self._run(tmp_path, losses=losses)
+        assert self._row(out, "losses")["qc"] == losses_qc
+        assert result == 0
+
+    @pytest.mark.parametrize("status", [0, 3])
+    def test_unbuilt_report_keeps_train_status(self, tmp_path, status):
+        """REQ-NTUI-BDRABCZUK-5001818C9B2C: without a report the train.py status stands, whatever the folder holds."""
+        with patch.object(train_champollion, "write_run_qc_tsv", side_effect=OSError("disk full")):
+            out, result = self._run(tmp_path, status=status, files=(), hydra=None)
+        assert not (out / QC_FILE).exists()
         assert result == status
 
     def test_failing_checks_logged_at_warning(self, tmp_path, pipeline_caplog):
