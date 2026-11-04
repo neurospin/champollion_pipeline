@@ -69,13 +69,13 @@ __all__ = [
 SULCAL_VIEW_QUATERNIONS = {"left": (0.5, 0.5, 0.5, 0.5), "right": (0.5, -0.5, -0.5, 0.5)}
 
 
-def _report_exclusions(qc_path: str) -> int:
-    """Log one ERROR per qc 0 row of qc_path and one FAIL when it keeps no subject; return the stage status."""
+def _report_exclusions(qc_path: str, rows_expected: bool) -> int:
+    """Log one ERROR per qc 0 row and one FAIL when no row has qc 1 (a zero-row file only if rows_expected)."""
     records = read_qc_tsv(qc_path)
     for record in records:
         if record["qc"] == 0:
             logger.error(f"snapshots input QC excluded {record['participant_id']}: {record['reason']}")
-    if records and not any(record["qc"] == 1 for record in records):
+    if (records or rows_expected) and not any(record["qc"] == 1 for record in records):
         logger.fail(f"no subject passed the snapshots input QC, see {qc_path}")
         return 1
     return 0
@@ -194,7 +194,7 @@ class GenerateSnapshots(ScriptBuilder):
         check_embedding_inputs(report, csvs)
 
         qc_path = report.write(self.args.output_dir)
-        status = _report_exclusions(qc_path)
+        status = _report_exclusions(qc_path, rows_expected=run_sulcal or run_umap)
         if umap_dirs:
             reference_data_dir = umap_dirs[1]
             log_warning(

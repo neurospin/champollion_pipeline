@@ -920,7 +920,11 @@ class TestRunDispatch:
         )
 
     def test_all_steps_run_by_default(self, tmp_path):
-        script = self._script(tmp_path)
+        morphologist = tmp_path / "morphologist" / "sub-01" / "t1mri" / "default_acquisition" / "0"
+        (morphologist / "folds" / "3.1").mkdir(parents=True)
+        (morphologist / "folds" / "3.1" / "Lsulci_sub-01.arg").touch()
+        (morphologist / "folds" / "3.1" / "Rsulci_sub-01.arg").touch()
+        script = self._script(tmp_path, ["--morphologist_dir", str(tmp_path / "morphologist")])
         sulcal, tiles, umap = self._patched(script)
         with sulcal as s, tiles as t, umap as u:
             assert script.run() == 0
