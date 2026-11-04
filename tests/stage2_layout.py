@@ -7,6 +7,7 @@ import json
 from pathlib import Path
 from unittest.mock import MagicMock, patch
 
+import numpy as np
 import pytest
 
 from champollion_pipeline.run_cortical_tiles import RunCorticalTiles
@@ -14,6 +15,7 @@ from champollion_pipeline.run_cortical_tiles import RunCorticalTiles
 GRAPH_DIR = "graphs"
 SUBJECT = "subj01"
 TEMPLATE_CONFIG = Path(__file__).resolve().parent.parent / "pipeline_loop_2mm.json"
+CROP_STEMS = {"foldlabel": "label"}  # crop kinds whose files carry another stem than the kind name
 
 
 @pytest.fixture(autouse=True)  # noqa: V103
@@ -39,6 +41,32 @@ def add_graphs(input_dir, subject=SUBJECT, graph_dir=GRAPH_DIR, sides="LR"):
     folder.mkdir(parents=True, exist_ok=True)
     for side in sides:
         (folder / f"{side}{subject}.arg").touch()
+
+
+def crop_array(crops_dir, region, side, kind):
+    """Path of the <side><stem>.npy file of ``kind`` in the mask folder of ``region``."""
+    return Path(crops_dir) / region / "mask" / f"{side}{CROP_STEMS.get(kind, kind)}.npy"
+
+
+def crop_csv(crops_dir, region, side, kind):
+    """Path of the <side><stem>_subject.csv file of ``kind`` in the mask folder of ``region``."""
+    array = crop_array(crops_dir, region, side, kind)
+    return array.with_name(f"{array.stem}_subject.csv")
+
+
+def add_crops(crops_dir, subjects, regions, kinds=("skeleton",), sides="LR"):
+    """Lay the array of each of ``kinds`` per region and side, with a subject CSV naming ``subjects``.
+
+    The kind mask gets its array alone: _generate_mask_npys writes no subject CSV.
+    """
+    for region in regions:
+        for side in sides:
+            for kind in kinds:
+                array = crop_array(crops_dir, region, side, kind)
+                array.parent.mkdir(parents=True, exist_ok=True)
+                np.save(array, np.zeros((len(subjects), 1)))
+                if kind != "mask":
+                    crop_csv(crops_dir, region, side, kind).write_text("\n".join(["Subject", *subjects]) + "\n")
 
 
 def stage_dirs(root, graph_dir=GRAPH_DIR):

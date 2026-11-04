@@ -37,10 +37,21 @@ from soma import aims
 
 from champollion_pipeline.derivatives_layout import compute_run_log_path
 from champollion_pipeline.generate_labelling_qc import REASON_NO_SESSION_DIR, fetch_subject_row
+from champollion_pipeline.generate_masks import _REGIONS_DEFAULT
 from champollion_pipeline.process_setup import init_pipeline_process
-from champollion_pipeline.utils.cortical_tiles_config import CorticalTilesConfigFactory, versioned_crops_exist
+from champollion_pipeline.utils.cortical_tiles_config import (
+    CorticalTilesConfigFactory,
+    compute_versioned_crops_dir,
+    versioned_crops_exist,
+)
 from champollion_pipeline.utils.lib import DERIVATIVES_FOLDER, LABELLING_SESSION_CANDIDATES
-from champollion_pipeline.utils.qc_report import read_qc_tsv, write_qc_tsv
+from champollion_pipeline.utils.qc_report import (
+    CROP_KIND_MASK,
+    REASON_SEPARATOR,
+    fetch_crop_qc_rows,
+    read_qc_tsv,
+    write_qc_tsv,
+)
 from champollion_pipeline.utils.subject_name import subject_name_problem
 
 logger = logging.getLogger(__name__)
@@ -72,7 +83,10 @@ REASON_NOT_IN_SK_QC = "not_in_sk_qc_file"
 REASON_EXCLUDED_BY_SK_QC = "excluded_by_sk_qc"
 REASON_NO_SUBJECT_FOLDER = "no_subject_folder"
 REASON_INVALID_SK_QC = "invalid_sk_qc_file"
-REASON_SEPARATOR = ";"
+OUTPUT_QC_FILENAME = "output_qc.tsv"
+CROP_KIND_DISTBOTTOM = "distbottom"
+CROP_KIND_SKELETON = "skeleton"
+CROP_STATUS_PARTIAL = 3  # generate_sulcal_regions.py: some subjects skipped, at least one left
 
 
 class _ExplicitLabellingSession(argparse.Action):
@@ -568,6 +582,40 @@ class RunCorticalTiles(ScriptBuilder):
                 log(f"input QC excluded {row['participant_id']}: {row['reason']}")
         return qc_path, any(row["qc"] == 1 for row in rows)
 
+    def _list_input_types(self) -> list[str]:
+        """Input types of this run: --input-types, else INPUT_TYPES_DEFAULT."""
+        return list(self.args.input_types or INPUT_TYPES_DEFAULT)
+
+    def _list_crop_kinds(self) -> list[str]:
+        """Crop kinds the output QC checks: the input types, distbottom on request with skeleton, then mask."""
+        input_types = self._list_input_types()
+        has_distbottom = self.args.with_distbottom and CROP_KIND_SKELETON in input_types
+        return [*input_types, *([CROP_KIND_DISTBOTTOM] if has_distbottom else []), CROP_KIND_MASK]
+
+    def _write_output_qc(self, output_abs: str) -> tuple[str, bool]:
+        """Write output_qc.tsv, one record per qc 0 row; return its path and whether a subject passed."""
+        derivatives = join(output_abs, DERIVATIVES_FOLDER)
+        requested_cfg = CorticalTilesConfigFactory.from_args(self.args)
+        crops_dir = compute_versioned_crops_dir(derivatives, requested_cfg.masks_version, requested_cfg.out_voxel_size)
+        input_records = read_qc_tsv(join(derivatives, INPUT_QC_FILENAME))
+        subjects = [str(record["participant_id"]) for record in input_records if record["qc"] == 1]
+        regions = self.args.regions or _REGIONS_DEFAULT
+        rows = fetch_crop_qc_rows(crops_dir, regions, self._list_crop_kinds(), subjects, self.args.bids)
+        qc_path = join(derivatives, OUTPUT_QC_FILENAME)
+        write_qc_tsv(qc_path, rows)
+        for row in rows:
+            if row["qc"] == 0:
+                logger.error(f"output QC excluded {row['participant_id']}: {row['reason']}")
+        return qc_path, any(row["qc"] == 1 for row in rows)
+
+    def _apply_output_qc(self, output_abs: str, status: int) -> int:
+        """Run the output QC: 1 with a FAIL record when no subject passed it, else ``status``."""
+        qc_path, has_complete_subject = self._write_output_qc(output_abs)
+        if not has_complete_subject:
+            logger.fail(f"no subject passed the output QC, see {qc_path}")
+            return 1
+        return status
+
     def _generate_mask_npys(self, output_abs: str) -> None:
         """Convert {side}mask_cropped.nii.gz → {side}mask.npy for every region.
 
@@ -622,8 +670,7 @@ class RunCorticalTiles(ScriptBuilder):
         if self.args.skel_seed is not None:
             cmd.extend(["--skel_seed", str(self.args.skel_seed)])
 
-        input_types = self.args.input_types or list(INPUT_TYPES_DEFAULT)
-        cmd.extend(["-y", *input_types])
+        cmd.extend(["-y", *self._list_input_types()])
         return cmd
 
     def run(self):
@@ -651,7 +698,7 @@ class RunCorticalTiles(ScriptBuilder):
         config_file_path: str = join(output_abs, "pipeline_loop_2mm.json")
 
         if not self._preflight_check(output_abs, config_file_path):
-            return 0
+            return self._apply_output_qc(output_abs, 0)
 
         # Copy pipeline config template into the output (derivatives) directory.
         # generate_sulcal_regions.py reads it from {path_dataset}/pipeline_loop_2mm.json,
@@ -709,14 +756,14 @@ class RunCorticalTiles(ScriptBuilder):
 
         result = self.execute_command(cmd, shell=False, cwd=script_dir)
 
-        if result != 0:
+        if result not in (0, CROP_STATUS_PARTIAL):
             return result
 
         self._write_transform_qc(output_abs)  # TEMPORARY (DEF-CORTILES-BDRABCZUK-8A44DAD7F312)
         self._generate_mask_npys(output_abs)
 
         # Whole-brain volume: fuse L+R skeletons, then strip the ventricle
-        # from the fused volume. Runs only after a successful crop (see the
+        # from the fused volume. Runs after a complete or partial crop (see the
         # guard above), alongside the per-region crops above -- fuse first,
         # since remove_ventricle(F)
         # reads from the exact <skeleton_src_dir>/F/ tree
@@ -744,7 +791,7 @@ class RunCorticalTiles(ScriptBuilder):
         )
         self._remove_ventricle_whole_brain(skeleton_src_dir, input_abs, output_abs)
 
-        return result
+        return self._apply_output_qc(output_abs, result)
 
     def _remove_ventricle_whole_brain(self, skeleton_src_dir: str, input_abs: str, output_abs: str) -> None:
         """Strip the ventricle from each fused volume, grouping subjects by labelling session.
@@ -755,7 +802,7 @@ class RunCorticalTiles(ScriptBuilder):
         Without --bids, a ``*`` in path_to_graph is resolved per subject, so
         groups are keyed by (session, graph path). Subjects that cannot be
         resolved are left out with one warning; the crops are unaffected and
-        run() still returns the crop result. labelling_qc.tsv is written first;
+        the output QC decides the exit status. labelling_qc.tsv is written first;
         with no qc 1 row, one warning names it and no volume is processed.
         """
         if self.args.labelling_session_explicit:
