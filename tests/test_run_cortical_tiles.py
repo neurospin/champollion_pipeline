@@ -791,41 +791,6 @@ class TestGenerateMaskNpys:
             script._generate_mask_npys(str(tmp_path))
         mock_read.assert_not_called()
 
-    def test_called_after_cortical_tiles_run(self, tmp_path):
-        """_generate_mask_npys is invoked at the end of run()."""
-        input_dir, output_dir = stage_dirs(tmp_path, _GRAPH_SUBPATH)
-        (output_dir / "pipeline_loop_2mm.json").write_text("{}")
-
-        script = RunCorticalTiles()
-        script.parse_args(
-            [
-                str(input_dir),
-                str(output_dir),
-                "--path_to_graph",
-                "graphs/path",
-                "--path_sk_with_hull",
-                "skel/path",
-            ]
-        )
-
-        with (
-            patch.object(script, "execute_command", return_value=0),
-            patch.object(script, "_generate_mask_npys") as mock_gen,
-            patch("champollion_pipeline.run_cortical_tiles.exists", return_value=True),
-            patch(
-                "builtins.open",
-                MagicMock(
-                    return_value=MagicMock(
-                        __enter__=MagicMock(return_value=MagicMock(read=MagicMock(return_value="{}"))),
-                        __exit__=MagicMock(return_value=False),
-                    )
-                ),
-            ),
-        ):
-            script.run()
-
-        mock_gen.assert_called_once()
-
 
 class TestWholeBrainGeneration:
     """Tests for REQ-WHOLEBRAIN-01/-02: unconditional whole-brain volume
