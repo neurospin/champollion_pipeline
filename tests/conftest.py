@@ -62,6 +62,20 @@ def _stub_stage2_output_qc(monkeypatch):
 
 
 @pytest.fixture(autouse=True)  # noqa: V103
+def _stub_stage3_input_qc(monkeypatch):
+    """Let a test of generate_champollion_config.py reach the end of run() with no complete crop on disk.
+
+    One passing subject, no report on disk. raising=False: both names join the module with the input QC.
+    tests/test_generate_champollion_config_input_qc.py overrides this fixture to run the real check.
+    """
+    module = sys.modules.get("champollion_pipeline.generate_champollion_config")
+    if module is not None:
+        row = {"participant_id": "sub-stub", "qc": 1, "reason": ""}
+        monkeypatch.setattr(module, "fetch_crop_qc_rows", MagicMock(return_value=[row]), raising=False)
+        monkeypatch.setattr(module, "write_qc_tsv", MagicMock(), raising=False)
+
+
+@pytest.fixture(autouse=True)  # noqa: V103
 def restore_logging_and_excepthooks():
     """Restore the root logger handlers and level and the exception hooks after each test.
 

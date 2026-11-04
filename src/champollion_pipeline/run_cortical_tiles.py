@@ -41,6 +41,7 @@ from champollion_pipeline.generate_labelling_qc import REASON_NO_SESSION_DIR, fe
 from champollion_pipeline.generate_masks import _REGIONS_DEFAULT
 from champollion_pipeline.process_setup import init_pipeline_process
 from champollion_pipeline.utils.cortical_tiles_config import (
+    INPUT_TYPES_DEFAULT,
     CorticalTilesConfigFactory,
     compute_versioned_crops_dir,
     versioned_crops_exist,
@@ -68,7 +69,6 @@ EXCLUDED_NO_LABELLED_GRAPH = "no_labelled_graph"  # graph folder found, no candi
 EXCLUSION_REASONS = (EXCLUDED_NO_GRAPH_FOLDER, EXCLUDED_SEVERAL_GRAPH_FOLDERS, EXCLUDED_NO_LABELLED_GRAPH)
 LABELLING_QC_FILENAME = "labelling_qc.tsv"
 LABELLING_QC_EXTRA_COLUMNS = ("labelled_L", "labelled_R")  # with write_qc_tsv: generate_labelling_qc.QC_COLUMNS
-INPUT_TYPES_DEFAULT = ("skeleton", "foldlabel")
 # TEMPORARY (DEF-CORTILES-BDRABCZUK-8A44DAD7F312): the prefix-ID guard below (and its flag, check and test file)
 # goes once cortical_tiles stops globbing {subject}*/ in generate_ICBM2009c_transforms.py.
 PREFIX_PAIRS_SHOWN = 5  # prefix pairs named in the refusal or warning
