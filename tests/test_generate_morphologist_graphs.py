@@ -17,9 +17,11 @@ import pytest
 
 from champollion_pipeline.generate_morphologist_graphs import GenerateMorphologistGraphs, main
 from champollion_pipeline.utils.qc_report import read_qc_tsv
+from tests.log_assertions import FAIL
 
 _SRC_DIR = Path(__file__).resolve().parents[1] / "src"
 _NIFTI1_VOX_OFFSET = 352
+_STAGE_LOGGER = "champollion_pipeline.generate_morphologist_graphs"
 
 
 def _nifti_bytes(dims=(4, 4, 4), zooms=None, *, sizeof_hdr=348, magic=b"n+1\0", missing_bytes=0):
@@ -490,6 +492,11 @@ def _run_stage(input_dir, output_dir, status=0, extra_args=()):
     return result, mock_exec
 
 
+def _stage_messages(caplog, level):
+    """Messages of the stage logger's records at exactly ``level``."""
+    return [r.getMessage() for r in caplog.records if r.name == _STAGE_LOGGER and r.levelno == level]
+
+
 class TestInputQcFile:
     """The input QC file, one row per participant_id."""
 
@@ -648,7 +655,7 @@ class TestInputQcReasons:
 
 
 class TestInputQcGating:
-    """What the stage does with the QC verdicts (user decision 2026-10-27: QC never fails the stage)."""
+    """What the stage does with the QC verdicts (user decision 2026-11-04: fail only if nothing usable)."""
 
     def test_only_qc1_files_in_command(self, qc_dirs):
         """REQ-NTUI-BDRABCZUK-31C5B86C78D0."""
@@ -664,15 +671,23 @@ class TestInputQcGating:
         assert sorted(image_args) == ["good1.nii.gz", "good2.nii"]
         assert _qc_by_id(output_dir)["bad"][0] == 0
 
-    def test_no_qc1_returns_0_without_morphologist(self, qc_dirs):
-        """REQ-NTUI-BDRABCZUK-E1FE4637F72D."""
+    def test_no_qc1_returns_1_without_morphologist(self, qc_dirs):
+        """REQ-NTUI-BDRABCZUK-770C19BAE210."""
         input_dir, output_dir = qc_dirs
         (input_dir / "bad.nii.gz").write_bytes(gzip.compress(b"garbage"))
         _write_nifti(input_dir / "flat.nii", dims=(4, 4))
         result, mock_exec = _run_stage(input_dir, output_dir, status=9)
         assert _qc_by_id(output_dir) == {"bad": (0, "unreadable_header"), "flat": (0, "not_3d")}
         mock_exec.assert_not_called()
-        assert result == 0
+        assert result == 1
+
+    def test_empty_input_returns_1_without_morphologist(self, qc_dirs):
+        """REQ-NTUI-BDRABCZUK-770C19BAE210: no input image file leaves no participant_id with qc 1."""
+        input_dir, output_dir = qc_dirs
+        result, mock_exec = _run_stage(input_dir, output_dir, status=9)
+        assert _qc_by_id(output_dir) == {}
+        mock_exec.assert_not_called()
+        assert result == 1
 
     def test_bids_command_passes_qc1_file_names(self, qc_dirs):
         """REQ-NTUI-BDRABCZUK-31C5B86C78D0 under --bids: qc 1 file names only; a no_bids_subject file is left out."""
@@ -687,30 +702,54 @@ class TestInputQcGating:
         image_args = [a for a in cmd if a.endswith((".nii.gz", ".nii", ".gz"))]
         assert sorted(image_args) == ["sub-01_ses-1_T1w.nii.gz", "sub-01_ses-2_T1w.nii.gz", "sub-02_T1w.nii"]
 
-    def test_one_warning_record_names_excluded(self, qc_dirs, caplog):
-        """REQ-NTUI-BDRABCZUK-A4354BA1930C: one WARNING record through the module logger."""
+    def test_one_error_record_per_excluded_subject(self, qc_dirs, caplog):
+        """REQ-NTUI-BDRABCZUK-CD6C22B423A2: one ERROR record per qc 0 row, holding its participant_id and reason."""
+        input_dir, output_dir = qc_dirs
+        _write_nifti(input_dir / "sub-good.nii.gz")
+        (input_dir / "sub-bad.nii.gz").write_bytes(gzip.compress(b"garbage"))
+        _write_nifti(input_dir / "sub-flat.nii", dims=(4, 4))
+        with caplog.at_level(logging.WARNING, logger=_STAGE_LOGGER):
+            _run_stage(input_dir, output_dir)
+        messages = _stage_messages(caplog, logging.ERROR)
+        assert len(messages) == 2, messages
+        assert len([m for m in messages if "sub-bad" in m and "unreadable_header" in m]) == 1, messages
+        assert len([m for m in messages if "sub-flat" in m and "not_3d" in m]) == 1, messages
+
+    def test_no_warning_record_when_all_pass(self, qc_dirs, caplog):
+        """REQ-NTUI-BDRABCZUK-CD6C22B423A2: no qc 0 row, no ERROR record, nor any WARNING."""
+        input_dir, output_dir = qc_dirs
+        _write_nifti(input_dir / "good.nii.gz")
+        with caplog.at_level(logging.WARNING, logger=_STAGE_LOGGER):
+            _run_stage(input_dir, output_dir)
+        assert [r for r in caplog.records if r.name == _STAGE_LOGGER and r.levelno >= logging.WARNING] == []
+
+    def test_no_qc1_emits_one_fail_record(self, qc_dirs, caplog):
+        """REQ-NTUI-BDRABCZUK-3378CC0BC420."""
+        input_dir, output_dir = qc_dirs
+        (input_dir / "bad.nii.gz").write_bytes(gzip.compress(b"garbage"))
+        with caplog.at_level(logging.WARNING, logger=_STAGE_LOGGER):
+            _run_stage(input_dir, output_dir)
+        messages = _stage_messages(caplog, FAIL)
+        assert len(messages) == 1, messages
+        assert str(_input_qc_path(output_dir)) in messages[0]
+
+    def test_empty_input_emits_one_fail_record(self, qc_dirs, caplog):
+        """REQ-NTUI-BDRABCZUK-3378CC0BC420: a run with no input image file also says why it failed."""
+        input_dir, output_dir = qc_dirs
+        with caplog.at_level(logging.WARNING, logger=_STAGE_LOGGER):
+            _run_stage(input_dir, output_dir)
+        messages = _stage_messages(caplog, FAIL)
+        assert len(messages) == 1, messages
+        assert str(_input_qc_path(output_dir)) in messages[0]
+
+    def test_partial_exclusion_emits_no_fail_record(self, qc_dirs, caplog):
+        """REQ-NTUI-BDRABCZUK-3378CC0BC420: a qc 1 row left, no FAIL record."""
         input_dir, output_dir = qc_dirs
         _write_nifti(input_dir / "good.nii.gz")
         (input_dir / "bad.nii.gz").write_bytes(gzip.compress(b"garbage"))
-        _write_nifti(input_dir / "flat.nii", dims=(4, 4))
-        logger_name = "champollion_pipeline.generate_morphologist_graphs"
-        with caplog.at_level(logging.WARNING, logger=logger_name):
+        with caplog.at_level(logging.WARNING, logger=_STAGE_LOGGER):
             _run_stage(input_dir, output_dir)
-        records = [r for r in caplog.records if r.name == logger_name and r.levelno == logging.WARNING]
-        assert len(records) == 1, [r.getMessage() for r in caplog.records]
-        prefix = f"input QC excluded 2 subject(s), see {_input_qc_path(output_dir)}: "
-        message = records[0].getMessage()
-        assert message.startswith(prefix), message
-        assert sorted(message[len(prefix) :].split(", ")) == ["bad", "flat"]
-
-    def test_no_warning_record_when_all_pass(self, qc_dirs, caplog):
-        """REQ-NTUI-BDRABCZUK-A4354BA1930C: no qc 0 row, no WARNING record."""
-        input_dir, output_dir = qc_dirs
-        _write_nifti(input_dir / "good.nii.gz")
-        logger_name = "champollion_pipeline.generate_morphologist_graphs"
-        with caplog.at_level(logging.WARNING, logger=logger_name):
-            _run_stage(input_dir, output_dir)
-        assert [r for r in caplog.records if r.name == logger_name and r.levelno >= logging.WARNING] == []
+        assert _stage_messages(caplog, FAIL) == []
 
     @pytest.mark.parametrize("status", [0, 7])
     def test_partial_exclusion_returns_morphologist_status(self, qc_dirs, status):

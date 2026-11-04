@@ -107,7 +107,7 @@ class GenerateMorphologistGraphs(ScriptBuilder):
         return participant_id, False
 
     def _run_input_qc(self, input_files):
-        """Check each input file, write input_qc.tsv, log one warning, and return the kept file names."""
+        """Check each input file, write input_qc.tsv, log each exclusion, and return the kept file names."""
         by_subject = {}
         no_bids = set()
         for name in input_files:
@@ -131,9 +131,11 @@ class GenerateMorphologistGraphs(ScriptBuilder):
 
         qc_path = join(self.args.output, DERIVATIVES_DIRNAME, MORPHOLOGIST_DERIVATIVES_FOLDER, INPUT_QC_FILENAME)
         write_qc_tsv(qc_path, rows)
-        excluded = [row["participant_id"] for row in rows if row["qc"] == 0]
-        if excluded:
-            logger.warning("input QC excluded %d subject(s), see %s: %s", len(excluded), qc_path, ", ".join(excluded))
+        for row in rows:
+            if row["qc"] == 0:
+                logger.error("input QC excluded %s: %s", row["participant_id"], row["reason"])
+        if not kept:
+            logger.fail("no input file passed the input QC, see %s", qc_path)
         return [name for name in input_files if name in kept]
 
     def default_log_path(self) -> str:
@@ -155,7 +157,7 @@ class GenerateMorphologistGraphs(ScriptBuilder):
         input_files = self._get_input_files()
         kept = self._run_input_qc(input_files)
         if not kept:
-            return 0
+            return 1
 
         # Build command
         # Force nonoverlap format by default to prevent morphologist-cli from auto-detecting
