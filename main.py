@@ -6,8 +6,11 @@ This is the main entry point for the Champollion pipeline.
 It orchestrates all pipeline stages using a simple configuration management system.
 
 Usage:
-    # Run full pipeline with default config
+    # Run the default config (enables only generate_embeddings)
     python main.py
+
+    # Run the full pipeline (all stages; needs a config file)
+    python main.py --config configs/my_config.yaml --enable-all-stages
 
     # Run with specific config file
     python main.py --config configs/my_config.yaml
