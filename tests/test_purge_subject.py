@@ -17,11 +17,19 @@ from tests.log_assertions import OUTPUT
 # ---------------------------------------------------------------------------
 
 
-def _make_script(derivatives: str, subject: str, dry_run: bool = False) -> PurgeSubject:
+def _make_script(derivatives: str, subject: str, dry_run: bool = False, masks: str | None = None) -> PurgeSubject:
     script = PurgeSubject()
-    args = script.parse_args([derivatives, "--subject", subject] + (["--dry-run"] if dry_run else []))
+    argv = [derivatives, "--subject", subject] + (["--dry-run"] if dry_run else [])
+    if masks is not None:
+        argv += ["--masks", masks]
+    args = script.parse_args(argv)
     script.args = args
     return script
+
+
+def _snapshot(root) -> dict:
+    """Map every file under root (relative path) to its bytes."""
+    return {str(f.relative_to(root)): f.read_bytes() for f in sorted(root.rglob("*")) if f.is_file()}
 
 
 def _make_crop_file(crops_2mm, region: str, side_prefix: str, subject: str, ext: str = ".nii.gz"):
@@ -82,17 +90,27 @@ class TestRunValidation:
         with pytest.raises(ValueError, match="not found"):
             script.run()
 
-    def test_skips_crop_purge_when_crops_2mm_missing(self, tmp_path, pipeline_caplog):
-        """REQ-LOGGING-BDRABCZUK-D1792CAE3479: the skipped crop purge is a WARNING record."""
+    @pytest.mark.parametrize(
+        ("present", "masks"),
+        [
+            pytest.param(None, None, id="no-crops"),
+            pytest.param(("crops", "2mm"), None, id="legacy-crops-2mm-only"),
+            pytest.param(("crops", "canonical_25", "2mm"), "v_test", id="other-mask-version-only"),
+        ],
+    )
+    def test_skips_crop_purge_when_crops_2mm_missing(self, tmp_path, pipeline_caplog, present, masks):
+        """REQ-LOGGING-BDRABCZUK-1C45DB9E9400: no crops/<M>/2mm for --masks <M> gives a skipped-crop-purge WARNING."""
         (tmp_path / "skeletons" / "sub-01").mkdir(parents=True)
-        script = _make_script(str(tmp_path), "sub-01")
+        if present is not None:
+            tmp_path.joinpath(*present).mkdir(parents=True)
+        script = _make_script(str(tmp_path), "sub-01", masks=masks)
         result = script.run()
         assert result == 0
         record = pipeline_caplog.assert_logged(logging.WARNING, "skipping crop purge")
         assert record.name == "champollion_pipeline.purge_subject"
 
     def test_returns_zero_on_success(self, tmp_path):
-        crops_2mm = tmp_path / "crops" / "2mm"
+        crops_2mm = tmp_path / "crops" / "canonical_25" / "2mm"
         crops_2mm.mkdir(parents=True)
         (tmp_path / "skeletons" / "sub-01").mkdir(parents=True)
         script = _make_script(str(tmp_path), "sub-01")
@@ -312,16 +330,20 @@ class TestPurgeAggregatedArrays:
 
 
 class TestRunEndToEnd:
-    def test_full_purge_removes_all_traces(self, tmp_path):
-        subject = "sub-01"
-        crops_2mm = tmp_path / "crops" / "2mm"
-
+    @staticmethod
+    def _populate(tmp_path, subject):
+        """Skeleton dir, crop file and aggregated array of subject under crops/canonical_25/2mm."""
+        crops_2mm = tmp_path / "crops" / "canonical_25" / "2mm"
         skel_dir = tmp_path / "skeletons" / subject
         skel_dir.mkdir(parents=True)
         (skel_dir / "x.nii.gz").touch()
-
         crop_file = _make_crop_file(crops_2mm, "region_a", "Lcrops", subject)
         _make_aggregated_array(crops_2mm, "region_a", "Lskeleton", [subject, "sub-02"])
+        return crops_2mm, skel_dir, crop_file
+
+    def test_full_purge_removes_all_traces(self, tmp_path):
+        subject = "sub-01"
+        crops_2mm, skel_dir, crop_file = self._populate(tmp_path, subject)
 
         script = _make_script(str(tmp_path), subject)
         result = script.run()
@@ -335,14 +357,7 @@ class TestRunEndToEnd:
 
     def test_dry_run_leaves_everything_intact(self, tmp_path):
         subject = "sub-01"
-        crops_2mm = tmp_path / "crops" / "2mm"
-
-        skel_dir = tmp_path / "skeletons" / subject
-        skel_dir.mkdir(parents=True)
-        (skel_dir / "x.nii.gz").touch()
-
-        crop_file = _make_crop_file(crops_2mm, "region_a", "Lcrops", subject)
-        _make_aggregated_array(crops_2mm, "region_a", "Lskeleton", [subject, "sub-02"])
+        crops_2mm, skel_dir, crop_file = self._populate(tmp_path, subject)
 
         script = _make_script(str(tmp_path), subject, dry_run=True)
         script.run()
@@ -351,3 +366,113 @@ class TestRunEndToEnd:
         assert crop_file.exists()
         arr = np.load(str(crops_2mm / "region_a" / "mask" / "Lskeleton.npy"))
         assert arr.shape[0] == 2
+
+
+# ---------------------------------------------------------------------------
+# --masks: versioned crops root crops/<masks>/2mm
+# ---------------------------------------------------------------------------
+
+
+class TestMasksArgument:
+    def test_masks_defaults_to_canonical_25(self, tmp_path):
+        """REQ-PATTERNS-BDRABCZUK-7A4C1CB45061: no --masks yields masks canonical_25."""
+        args = PurgeSubject().parse_args([str(tmp_path), "--subject", "sub-01"])
+        assert getattr(args, "masks", None) == "canonical_25"
+
+
+class TestMasksNameGuard:
+    """A --masks value that cannot name a crops/<masks> directory is refused before any deletion."""
+
+    @staticmethod
+    def _populate(tmp_path):
+        skel_dir = tmp_path / "skeletons" / "sub-01"
+        skel_dir.mkdir(parents=True)
+        (skel_dir / "x.nii.gz").touch()
+        # Crop files where an unguarded crops/<masks>/2mm would land: crops/canonical_25/2mm
+        # ("canonical_25/../canonical_25"), crops/2mm ("" and "."), <derivatives>/2mm ("..").
+        for crops_dir in (tmp_path / "crops" / "canonical_25" / "2mm", tmp_path / "crops" / "2mm", tmp_path / "2mm"):
+            _make_crop_file(crops_dir, "region_a", "Lcrops", "sub-01")
+
+    @pytest.mark.parametrize("masks", ["a/b", "canonical_25/../canonical_25"])
+    def test_masks_with_path_separator_raises_before_deleting(self, tmp_path, masks):
+        """REQ-PATTERNS-BDRABCZUK-C023189CF7DA: a --masks value containing a path separator."""
+        self._populate(tmp_path)
+        before = _snapshot(tmp_path)
+        script = _make_script(str(tmp_path), "sub-01", masks=masks)
+        with pytest.raises(ValueError):
+            script.run()
+        assert _snapshot(tmp_path) == before
+
+    @pytest.mark.parametrize("masks", ["", ".", ".."])
+    def test_degenerate_masks_raises_before_deleting(self, tmp_path, masks):
+        """REQ-PATTERNS-BDRABCZUK-97378461582B: an empty, '.' or '..' --masks value."""
+        self._populate(tmp_path)
+        before = _snapshot(tmp_path)
+        script = _make_script(str(tmp_path), "sub-01", masks=masks)
+        with pytest.raises(ValueError):
+            script.run()
+        assert _snapshot(tmp_path) == before
+
+
+class TestVersionedCropsRoot:
+    """REQ-PATTERNS-BDRABCZUK-75B777B6C467 (purge half): crops are read from crops/<masks>/2mm only."""
+
+    def test_default_masks_purges_crop_file_under_canonical_25(self, tmp_path):
+        """REQ-PATTERNS-BDRABCZUK-75B777B6C467, -7A4C1CB45061, -BF1732DC44EE."""
+        (tmp_path / "skeletons" / "sub-01").mkdir(parents=True)
+        target = _make_crop_file(tmp_path / "crops" / "canonical_25" / "2mm", "region_a", "Lcrops", "sub-01")
+        _make_crop_file(tmp_path / "crops" / "other_v" / "2mm", "region_a", "Lcrops", "sub-01")
+        other_before = _snapshot(tmp_path / "crops" / "other_v")
+
+        assert _make_script(str(tmp_path), "sub-01").run() == 0
+
+        assert not target.exists()
+        assert _snapshot(tmp_path / "crops" / "other_v") == other_before
+
+    def test_explicit_masks_purges_crop_file_under_that_version(self, tmp_path):
+        """REQ-PATTERNS-BDRABCZUK-75B777B6C467, -BF1732DC44EE."""
+        (tmp_path / "skeletons" / "sub-01").mkdir(parents=True)
+        target = _make_crop_file(tmp_path / "crops" / "v_test" / "2mm", "region_a", "Lcrops", "sub-01")
+        _make_crop_file(tmp_path / "crops" / "canonical_25" / "2mm", "region_a", "Lcrops", "sub-01")
+        other_before = _snapshot(tmp_path / "crops" / "canonical_25")
+
+        assert _make_script(str(tmp_path), "sub-01", masks="v_test").run() == 0
+
+        assert not target.exists()
+        assert _snapshot(tmp_path / "crops" / "canonical_25") == other_before
+
+    def test_explicit_masks_filters_aggregate_rows_under_that_version(self, tmp_path):
+        """REQ-PATTERNS-BDRABCZUK-75B777B6C467, -BF1732DC44EE: aggregate rows of the chosen version only."""
+        versioned = tmp_path / "crops" / "v_test" / "2mm"
+        _make_aggregated_array(versioned, "region_a", "Lskeleton", ["sub-01", "sub-02"])
+        other = tmp_path / "crops" / "canonical_25" / "2mm"
+        _make_aggregated_array(other, "region_a", "Lskeleton", ["sub-01", "sub-02"])
+        other_before = _snapshot(tmp_path / "crops" / "canonical_25")
+
+        assert _make_script(str(tmp_path), "sub-01", masks="v_test").run() == 0
+
+        df = pd.read_csv(str(versioned / "region_a" / "mask" / "Lskeleton_subject.csv"))
+        assert df.iloc[:, 0].astype(str).tolist() == ["sub-02"]
+        assert np.load(str(versioned / "region_a" / "mask" / "Lskeleton.npy")).shape[0] == 1
+        assert _snapshot(tmp_path / "crops" / "canonical_25") == other_before
+
+    def test_missing_versioned_crops_warning_names_path(self, tmp_path, pipeline_caplog):
+        """REQ-PATTERNS-BDRABCZUK-4F1E0B3D0980: the warning names crops/<masks>/2mm."""
+        (tmp_path / "skeletons" / "sub-01").mkdir(parents=True)
+
+        _make_script(str(tmp_path), "sub-01", masks="v_test").run()
+
+        record = pipeline_caplog.assert_logged(logging.WARNING, str(tmp_path / "crops" / "v_test" / "2mm"))
+        assert record.name == "champollion_pipeline.purge_subject"
+
+    def test_legacy_crops_only_warning_names_versioned_path(self, tmp_path, pipeline_caplog):
+        """REQ-PATTERNS-BDRABCZUK-4F1E0B3D0980, -BF1732DC44EE: a legacy crops/2mm is neither read nor changed."""
+        (tmp_path / "skeletons" / "sub-01").mkdir(parents=True)
+        _make_crop_file(tmp_path / "crops" / "2mm", "region_a", "Lcrops", "sub-01")
+        legacy_before = _snapshot(tmp_path / "crops" / "2mm")
+
+        _make_script(str(tmp_path), "sub-01").run()
+
+        record = pipeline_caplog.assert_logged(logging.WARNING, str(tmp_path / "crops" / "canonical_25" / "2mm"))
+        assert record.name == "champollion_pipeline.purge_subject"
+        assert _snapshot(tmp_path / "crops" / "2mm") == legacy_before
