@@ -16,16 +16,14 @@ main.py lives at the repo root (not inside the installed package), so it is
 loaded by file path under a private module name, as in test_main_stage_argv.py.
 """
 
-import importlib.util
-import logging
 from pathlib import Path
-from unittest.mock import MagicMock, patch
+from unittest.mock import patch
 
 import pytest
 
 from champollion_pipeline.generate_embeddings import GenerateEmbeddings
+from tests.main_stage_helpers import embeddings_stage_argv, load_main_module
 
-MAIN_PY = Path(__file__).resolve().parent.parent / "main.py"
 DERIVATIVES = "derivatives"
 CHAMPOLLION_FOLDER = "champollion_V1"
 REGION_EMBEDDINGS = "region_embeddings"
@@ -34,16 +32,9 @@ OTHER_MASKS = "canonical_corrected_26_1"
 DATASETS_ROOT = "/data/MYDATASET"
 
 
-def _load_main_module():
-    spec = importlib.util.spec_from_file_location("_champollion_main_embver_stage4_under_test", MAIN_PY)
-    module = importlib.util.module_from_spec(spec)
-    spec.loader.exec_module(module)
-    return module
-
-
 @pytest.fixture(scope="module")
 def main_module():
-    return _load_main_module()
+    return load_main_module("_champollion_main_embver_stage4_under_test")
 
 
 def _expected_region_embeddings(datasets_root, masks):
@@ -93,16 +84,7 @@ def _orchestrated_output(main_module, masks_version):
     if masks_version is not None:
         config.dataset.masks_version = masks_version  # noqa: V101
 
-    script_cls = MagicMock()
-    script_cls.return_value.run.return_value = 0
-    with patch.object(main_module, "GenerateEmbeddings", script_cls):
-        stage = main_module.GenerateEmbeddingsStage(
-            "GenerateEmbeddingsStage", config, logging.getLogger("test_embver_stage4_default_output")
-        )
-        result = stage.execute()
-    assert result.success, result.message
-    script_cls.return_value.parse_args.assert_called_once()
-    argv = list(script_cls.return_value.parse_args.call_args[0][0])
+    argv = embeddings_stage_argv(main_module, config, "GenerateEmbeddingsStage", "test_embver_stage4_default_output")
     namespace = GenerateEmbeddings().parse_args(argv)
     assert namespace.output is not None, f"no --output passed to generate_embeddings; argv={argv!r}"
     return namespace.output

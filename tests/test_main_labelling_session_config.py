@@ -29,15 +29,14 @@ package), so it is loaded by file path under a private module name.
 
 import dataclasses
 import importlib.util
-import logging
 import typing
 from pathlib import Path
-from unittest.mock import MagicMock, patch
 
 import pytest
 import yaml
 
 from champollion_pipeline.run_cortical_tiles import RunCorticalTiles
+from tests.main_stage_helpers import option_values, tiles_config, tiles_stage_argv
 
 MAIN_PY = Path(__file__).resolve().parent.parent / "main.py"
 
@@ -171,37 +170,14 @@ class TestSaveToYamlLabellingSession:
 # ---------------------------------------------------------------- RunCorticalTilesStage
 
 
-def _tiles_config(main_module):
-    """PipelineConfig with the paths RunCorticalTilesStage reads set to distinct values."""
-    config = main_module.PipelineConfig()
-    config.dataset.morphologist_graphs = "/graphs"  # noqa: V101
-    config.dataset.cortical_tiles_output = "/tiles"  # noqa: V101
-    return config
-
-
 def _stage_argv(main_module, config):
     """Run RunCorticalTilesStage.execute() with RunCorticalTiles mocked; return the argv it built."""
-    script_cls = MagicMock()
-    script_cls.return_value.run.return_value = 0
-    with patch.object(main_module, "RunCorticalTiles", script_cls):
-        stage = main_module.RunCorticalTilesStage(
-            "run_cortical_tiles", config, logging.getLogger("test_main_labelling_session_config")
-        )
-        result = stage.execute()
-    assert result.success, result.message
-    script_cls.return_value.parse_args.assert_called_once()
-    return [str(token) for token in script_cls.return_value.parse_args.call_args[0][0]]
+    return [str(token) for token in tiles_stage_argv(main_module, config, "test_main_labelling_session_config")]
 
 
 def _labelling_session_tokens(argv):
     """Values given to --labelling_session in argv, in either the '--opt=S' or the '--opt S' form."""
-    values = []
-    for i, token in enumerate(argv):
-        if token == LABELLING_SESSION_OPTION:
-            values.append(argv[i + 1] if i + 1 < len(argv) else None)
-        elif token.startswith(LABELLING_SESSION_OPTION + "="):
-            values.append(token.split("=", 1)[1])
-    return values
+    return option_values(argv, LABELLING_SESSION_OPTION)
 
 
 def _parse_with_real_parser(argv, req_id):
@@ -217,7 +193,7 @@ class TestRunCorticalTilesStageLabellingSessionArgv:
 
     def test_non_empty_labelling_session_passed_as_option(self, main_module):
         """REQ-WHOLEBRAIN-BDRABCZUK-D657457C56CF: labelling_session '0_auto' -> --labelling_session 0_auto."""
-        config = _tiles_config(main_module)
+        config = tiles_config(main_module)
         config.dataset.labelling_session = CONFIGURED_SESSION  # noqa: V101
 
         argv = _stage_argv(main_module, config)
@@ -242,7 +218,7 @@ class TestRunCorticalTilesStageLabellingSessionArgv:
         The '' comes from the DatasetConfig default (REQ-WHOLEBRAIN-BDRABCZUK-B6C5701E5530), not from an
         attribute set by the test, so the check is meaningful only once that setting exists.
         """
-        config = _tiles_config(main_module)
+        config = tiles_config(main_module)
         assert getattr(config.dataset, "labelling_session", "<no attribute>") == "", (
             f"{REQ_NO_FORWARD}: the default dataset config has no labelling_session setting of '' "
             f"(got {getattr(config.dataset, 'labelling_session', '<no attribute>')!r})"

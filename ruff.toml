@@ -15,3 +15,4 @@ max-statements = 50
 
 [lint.per-file-ignores]
 "__init__.py" = ["F401"]
+"main.py" = ["PLC0415"]

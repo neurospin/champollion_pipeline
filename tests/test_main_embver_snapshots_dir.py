@@ -59,7 +59,7 @@ def _snapshots_namespace(main_module, config):
     """Run GenerateSnapshotsStage.execute() with the script mocked; return the argv parsed by the real parser."""
     script_cls = MagicMock()
     script_cls.return_value.run.return_value = 0
-    with patch.object(main_module, "GenerateSnapshots", script_cls):
+    with patch("champollion_pipeline.generate_snapshots.GenerateSnapshots", script_cls):
         stage = main_module.GenerateSnapshotsStage("GenerateSnapshotsStage", config, LOGGER)
         result = stage.execute()
     assert result.success, result.message

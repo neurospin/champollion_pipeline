@@ -3,32 +3,19 @@
 Tests for main.py's GenerateMorphologistGraphsStage argument wiring (REQ-BIDS-04).
 
 main.py lives at the repo root (not inside the installed package), so it is
-loaded here by file path under a private module name. Its top-level imports
-of the pipeline scripts are wrapped in try/except, so GenerateMorphologistGraphs
-may be absent from the loaded module; each test patches it in (create=True)
-and inspects the argument list handed to parse_args().
+loaded here by file path under a private module name. The stage imports
+GenerateMorphologistGraphs when it runs, so each test patches the class in its
+own module and inspects the argument list handed to parse_args().
 """
-
-import importlib.util
-import logging
-from pathlib import Path
-from unittest.mock import MagicMock, patch
 
 import pytest
 
-MAIN_PY = Path(__file__).resolve().parent.parent / "main.py"
-
-
-def _load_main_module():
-    spec = importlib.util.spec_from_file_location("_champollion_main_under_test", MAIN_PY)
-    module = importlib.util.module_from_spec(spec)
-    spec.loader.exec_module(module)
-    return module
+from tests.main_stage_helpers import capture_stage_argv, load_main_module
 
 
 @pytest.fixture(scope="module")
 def main_module():
-    return _load_main_module()
+    return load_main_module("_champollion_main_under_test")
 
 
 def _stage_args(main_module, bids, parallel=None):
@@ -40,17 +27,13 @@ def _stage_args(main_module, bids, parallel=None):
     if parallel is not None:
         config.parallel = parallel
 
-    script_cls = MagicMock()
-    script_cls.return_value.run.return_value = 0
-    with patch.object(main_module, "GenerateMorphologistGraphs", script_cls, create=True):
-        stage = main_module.GenerateMorphologistGraphsStage(
-            "generate_morphologist_graphs", config, logging.getLogger("test_main_morphologist_stage")
-        )
-        result = stage.execute()
-
-    assert result.success, result.message
-    script_cls.return_value.parse_args.assert_called_once()
-    return list(script_cls.return_value.parse_args.call_args[0][0])
+    return capture_stage_argv(
+        main_module.GenerateMorphologistGraphsStage,
+        "champollion_pipeline.generate_morphologist_graphs.GenerateMorphologistGraphs",
+        "generate_morphologist_graphs",
+        config,
+        "test_main_morphologist_stage",
+    )
 
 
 @pytest.mark.unit

@@ -17,31 +17,18 @@ main.py lives at the repo root (not inside the installed package), so it is
 loaded by file path under a private module name, as in test_main_stage_argv.py.
 """
 
-import importlib.util
-import logging
-from pathlib import Path
-from unittest.mock import MagicMock, patch
-
 import pytest
 
 from champollion_pipeline.generate_champollion_config import GenerateChampollionConfig
-
-MAIN_PY = Path(__file__).resolve().parent.parent / "main.py"
+from tests.main_stage_helpers import capture_stage_argv, load_main_module
 
 DEFAULT_MASKS_VERSION = "canonical_25"
 OTHER_MASKS_VERSION = "canonical_corrected_26_1"
 
 
-def _load_main_module():
-    spec = importlib.util.spec_from_file_location("_champollion_main_embver_stage3_under_test", MAIN_PY)
-    module = importlib.util.module_from_spec(spec)
-    spec.loader.exec_module(module)
-    return module
-
-
 @pytest.fixture(scope="module")
 def main_module():
-    return _load_main_module()
+    return load_main_module("_champollion_main_embver_stage3_under_test")
 
 
 def _config(main_module, masks_version=None):
@@ -56,16 +43,13 @@ def _config(main_module, masks_version=None):
 
 def _captured_argv(main_module, config):
     """Run GenerateChampollionConfigStage.execute() with the script class mocked; return the argv it built."""
-    script_cls = MagicMock()
-    script_cls.return_value.run.return_value = 0
-    with patch.object(main_module, "GenerateChampollionConfig", script_cls):
-        stage = main_module.GenerateChampollionConfigStage(
-            "generate_champollion_config", config, logging.getLogger("test_main_embver_stage3_masks")
-        )
-        result = stage.execute()
-    assert result.success, result.message
-    script_cls.return_value.parse_args.assert_called_once()
-    return list(script_cls.return_value.parse_args.call_args[0][0])
+    return capture_stage_argv(
+        main_module.GenerateChampollionConfigStage,
+        "champollion_pipeline.generate_champollion_config.GenerateChampollionConfig",
+        "generate_champollion_config",
+        config,
+        "test_main_embver_stage3_masks",
+    )
 
 
 def _parse_with_real_parser(argv):

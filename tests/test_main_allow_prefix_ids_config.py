@@ -31,16 +31,15 @@ package), so it is loaded by file path under a private module name.
 
 import dataclasses
 import importlib.util
-import logging
 import sys
 import typing
 from pathlib import Path
-from unittest.mock import MagicMock, patch
 
 import pytest
 import yaml
 
 from champollion_pipeline.run_cortical_tiles import RunCorticalTiles
+from tests.main_stage_helpers import tiles_config, tiles_stage_argv
 
 MAIN_PY = Path(__file__).resolve().parent.parent / "main.py"
 
@@ -171,26 +170,9 @@ class TestSaveToYamlAllowPrefixIds:
 # ---------------------------------------------------------------- RunCorticalTilesStage
 
 
-def _tiles_config(main_module):
-    """PipelineConfig with the paths RunCorticalTilesStage reads set to distinct values."""
-    config = main_module.PipelineConfig()
-    config.dataset.morphologist_graphs = "/graphs"  # noqa: V101
-    config.dataset.cortical_tiles_output = "/tiles"  # noqa: V101
-    return config
-
-
 def _stage_argv(main_module, config):
     """Run RunCorticalTilesStage.execute() with RunCorticalTiles mocked; return the argv it built."""
-    script_cls = MagicMock()
-    script_cls.return_value.run.return_value = 0
-    with patch.object(main_module, "RunCorticalTiles", script_cls):
-        stage = main_module.RunCorticalTilesStage(
-            "run_cortical_tiles", config, logging.getLogger("test_main_allow_prefix_ids_config")
-        )
-        result = stage.execute()
-    assert result.success, result.message
-    script_cls.return_value.parse_args.assert_called_once()
-    return [str(token) for token in script_cls.return_value.parse_args.call_args[0][0]]
+    return [str(token) for token in tiles_stage_argv(main_module, config, "test_main_allow_prefix_ids_config")]
 
 
 def _parse_with_real_parser(argv, req_id):
@@ -210,7 +192,7 @@ class TestRunCorticalTilesStageAllowPrefixIdsArgv:
 
     def test_true_allow_prefix_ids_passes_flag(self, main_module):
         """REQ-CORTILES-BDRABCZUK-EFAEAA66C3A1: allow_prefix_ids True -> --allow-prefix-ids."""
-        config = _tiles_config(main_module)
+        config = tiles_config(main_module)
         config.dataset.allow_prefix_ids = True  # noqa: V101
 
         argv = _stage_argv(main_module, config)
@@ -231,7 +213,7 @@ class TestRunCorticalTilesStageAllowPrefixIdsArgv:
         The False comes from the DatasetConfig default (REQ-CORTILES-BDRABCZUK-A2E8D130693C), not from an
         attribute set by the test, so the check is meaningful only once that setting exists.
         """
-        config = _tiles_config(main_module)
+        config = tiles_config(main_module)
         assert getattr(config.dataset, "allow_prefix_ids", "<no attribute>") is False, (
             f"{REQ_NO_FORWARD}: the default dataset config has no allow_prefix_ids setting of False "
             f"(got {getattr(config.dataset, 'allow_prefix_ids', '<no attribute>')!r})"

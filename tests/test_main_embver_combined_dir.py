@@ -11,29 +11,19 @@ the real PutTogetherEmbeddings parser. main.py lives at the repo root, so it is
 loaded by file path under a private module name.
 """
 
-import importlib.util
-import logging
 from pathlib import Path
-from unittest.mock import MagicMock, patch
 
 import pytest
 
 from champollion_pipeline.put_together_embeddings import PutTogetherEmbeddings
+from tests.main_stage_helpers import capture_stage_argv, load_main_module
 
-MAIN_PY = Path(__file__).resolve().parent.parent / "main.py"
 DATASETS_ROOT = "/data/MYDATASET"
-
-
-def _load_main_module():
-    spec = importlib.util.spec_from_file_location("_champollion_main_embver_combined_dir_under_test", MAIN_PY)
-    module = importlib.util.module_from_spec(spec)
-    spec.loader.exec_module(module)
-    return module
 
 
 @pytest.fixture(scope="module")
 def main_module():
-    return _load_main_module()
+    return load_main_module("_champollion_main_embver_combined_dir_under_test")
 
 
 def _config(main_module):
@@ -48,16 +38,13 @@ def _config(main_module):
 
 def _combine_output_path(main_module, config):
     """Run PutTogetherEmbeddingsStage with the script mocked; return the parsed --output_path."""
-    script_cls = MagicMock()
-    script_cls.return_value.run.return_value = 0
-    with patch.object(main_module, "PutTogetherEmbeddings", script_cls):
-        stage = main_module.PutTogetherEmbeddingsStage(
-            "PutTogetherEmbeddingsStage", config, logging.getLogger("test_main_embver_combined_dir")
-        )
-        result = stage.execute()
-    assert result.success, result.message
-    script_cls.return_value.parse_args.assert_called_once()
-    argv = list(script_cls.return_value.parse_args.call_args[0][0])
+    argv = capture_stage_argv(
+        main_module.PutTogetherEmbeddingsStage,
+        "champollion_pipeline.put_together_embeddings.PutTogetherEmbeddings",
+        "PutTogetherEmbeddingsStage",
+        config,
+        "test_main_embver_combined_dir",
+    )
     try:
         namespace = PutTogetherEmbeddings().parse_args(argv)
     except SystemExit as exc:

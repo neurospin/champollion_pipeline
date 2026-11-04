@@ -272,7 +272,7 @@ def _stage_namespace(main_module, stage_class_name, script_cls, config):
     """Run the stage with its script mocked; parse the captured argv with the script's real parser."""
     mocked = MagicMock()
     mocked.return_value.run.return_value = 0
-    with patch.object(main_module, script_cls.__name__, mocked, create=True):
+    with patch(f"{script_cls.__module__}.{script_cls.__name__}", mocked):
         stage = getattr(main_module, stage_class_name)(
             stage_class_name, config, logging.getLogger("test_main_profile_propagation")
         )

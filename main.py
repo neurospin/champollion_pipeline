@@ -44,21 +44,8 @@ from champollion_pipeline.derivatives_layout import (
     compute_snapshots_dir,
 )
 from champollion_pipeline.file_indexer import SubjectEligibilityChecker
-from champollion_pipeline.generate_champollion_config import GenerateChampollionConfig
-from champollion_pipeline.generate_embeddings import GenerateEmbeddings
-from champollion_pipeline.generate_morphologist_graphs import GenerateMorphologistGraphs
-from champollion_pipeline.generate_snapshots import GenerateSnapshots
 from champollion_pipeline.process_setup import init_pipeline_process
-from champollion_pipeline.put_together_embeddings import PutTogetherEmbeddings
-from champollion_pipeline.run_cortical_tiles import RunCorticalTiles
 from champollion_pipeline.streaming import StreamingSettings
-
-_PARALLEL_RUNNER_IMPORT_ERROR: str | None = None
-try:
-    from champollion_pipeline.streaming.runner import run_parallel_pipeline
-except ImportError as e:
-    run_parallel_pipeline = None
-    _PARALLEL_RUNNER_IMPORT_ERROR = str(e)
 
 logger = logging.getLogger("champollion_pipeline.main")
 
@@ -117,7 +104,9 @@ class GenerateMorphologistGraphsStage(PipelineStage):
             args.append("--parallel")
         return args
 
-    def create_script(self) -> GenerateMorphologistGraphs:
+    def create_script(self) -> ScriptBuilder:
+        from champollion_pipeline.generate_morphologist_graphs import GenerateMorphologistGraphs
+
         return GenerateMorphologistGraphs()
 
 
@@ -163,7 +152,9 @@ class RunCorticalTilesStage(PipelineStage):
             args.extend(["--regions", *self.config.dataset.regions])
         return args
 
-    def create_script(self) -> RunCorticalTiles:
+    def create_script(self) -> ScriptBuilder:
+        from champollion_pipeline.run_cortical_tiles import RunCorticalTiles
+
         return RunCorticalTiles()
 
     def subject_input_dir(self) -> str | None:
@@ -210,7 +201,9 @@ class GenerateChampollionConfigStage(PipelineStage):
             f"--masks={self.config.dataset.masks_version}",
         ]
 
-    def create_script(self) -> GenerateChampollionConfig:
+    def create_script(self) -> ScriptBuilder:
+        from champollion_pipeline.generate_champollion_config import GenerateChampollionConfig
+
         return GenerateChampollionConfig()
 
 
@@ -290,10 +283,12 @@ class GenerateEmbeddingsStage(PipelineStage):
             args.extend(["--regions", *_compute_embeddings_region_names(dataset.regions)])
         return args
 
-    def create_script(self) -> GenerateEmbeddings:
+    def create_script(self) -> ScriptBuilder:
+        from champollion_pipeline.generate_embeddings import GenerateEmbeddings
+
         return GenerateEmbeddings()
 
-    def run_script(self, script: GenerateEmbeddings) -> int:
+    def run_script(self, script: ScriptBuilder) -> int:
         dataset = self.config.dataset
         hf_token = dataset.hf_token if dataset.hf_enabled else None
         with _scoped_env("HF_TOKEN", hf_token):
@@ -356,7 +351,9 @@ class PutTogetherEmbeddingsStage(PipelineStage):
         )
         return [_compute_region_embeddings_source(dataset), f"--output_path={output_path}"]
 
-    def create_script(self) -> PutTogetherEmbeddings:
+    def create_script(self) -> ScriptBuilder:
+        from champollion_pipeline.put_together_embeddings import PutTogetherEmbeddings
+
         return PutTogetherEmbeddings()
 
 
@@ -396,7 +393,9 @@ class GenerateSnapshotsStage(PipelineStage):
             args.append(f"--champollion_data_root={self.config.dataset.champollion_data_root}")
         return args
 
-    def create_script(self) -> GenerateSnapshots:
+    def create_script(self) -> ScriptBuilder:
+        from champollion_pipeline.generate_snapshots import GenerateSnapshots
+
         return GenerateSnapshots()
 
 
@@ -730,8 +729,10 @@ def _run_streaming_mode(config: PipelineConfig, args: argparse.Namespace, *, run
             "(training aggregates subjects and must remain batch)."
         )
         return 1
-    if run_parallel_pipeline is None:
-        logger.error(f"could not import champollion_pipeline.streaming.runner: {_PARALLEL_RUNNER_IMPORT_ERROR}")
+    try:
+        from champollion_pipeline.streaming.runner import run_parallel_pipeline
+    except ImportError as e:
+        logger.error(f"could not import champollion_pipeline.streaming.runner: {e}")
         return 1
     return run_parallel_pipeline(
         _build_streaming_settings(config, args, run_log_path), config.dataset, _compute_models_source(config)

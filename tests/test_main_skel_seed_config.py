@@ -33,15 +33,14 @@ package), so it is loaded by file path under a private module name.
 
 import dataclasses
 import importlib.util
-import logging
 import typing
 from pathlib import Path
-from unittest.mock import MagicMock, patch
 
 import pytest
 import yaml
 
 from champollion_pipeline.run_cortical_tiles import RunCorticalTiles
+from tests.main_stage_helpers import option_values, tiles_config, tiles_stage_argv
 
 MAIN_PY = Path(__file__).resolve().parent.parent / "main.py"
 
@@ -197,37 +196,14 @@ class TestSaveToYamlSkelSeed:
 # ---------------------------------------------------------------- RunCorticalTilesStage
 
 
-def _tiles_config(main_module):
-    """PipelineConfig with the paths RunCorticalTilesStage reads set to distinct values."""
-    config = main_module.PipelineConfig()
-    config.dataset.morphologist_graphs = "/graphs"  # noqa: V101
-    config.dataset.cortical_tiles_output = "/tiles"  # noqa: V101
-    return config
-
-
 def _stage_argv(main_module, config):
     """Run RunCorticalTilesStage.execute() with RunCorticalTiles mocked; return the argv it built."""
-    script_cls = MagicMock()
-    script_cls.return_value.run.return_value = 0
-    with patch.object(main_module, "RunCorticalTiles", script_cls):
-        stage = main_module.RunCorticalTilesStage(
-            "run_cortical_tiles", config, logging.getLogger("test_main_skel_seed_config")
-        )
-        result = stage.execute()
-    assert result.success, result.message
-    script_cls.return_value.parse_args.assert_called_once()
-    return [str(token) for token in script_cls.return_value.parse_args.call_args[0][0]]
+    return [str(token) for token in tiles_stage_argv(main_module, config, "test_main_skel_seed_config")]
 
 
 def _skel_seed_tokens(argv):
     """Values given to --skel-seed in argv, in either the '--skel-seed=N' or the '--skel-seed N' form."""
-    values = []
-    for i, token in enumerate(argv):
-        if token == SKEL_SEED_OPTION:
-            values.append(argv[i + 1] if i + 1 < len(argv) else None)
-        elif token.startswith(SKEL_SEED_OPTION + "="):
-            values.append(token.split("=", 1)[1])
-    return values
+    return option_values(argv, SKEL_SEED_OPTION)
 
 
 def _parser_declares_skel_seed():
@@ -259,14 +235,14 @@ class TestRunCorticalTilesStageSkelSeedArgv:
 
     def test_integer_skel_seed_passed_as_skel_seed_option(self, main_module):
         """REQ-SKELSEED-BDRABCZUK-A2EC0E672F57: dataset.skel_seed 7 -> run_cortical_tiles receives --skel-seed 7."""
-        config = _tiles_config(main_module)
+        config = tiles_config(main_module)
         config.dataset.skel_seed = CONFIGURED_SKEL_SEED  # noqa: V101
 
         _assert_forwarded(_stage_argv(main_module, config), CONFIGURED_SKEL_SEED)
 
     def test_zero_skel_seed_passed_as_skel_seed_option(self, main_module):
         """REQ-SKELSEED-BDRABCZUK-A2EC0E672F57: 0 is a valid seed and is forwarded (not dropped as falsy)."""
-        config = _tiles_config(main_module)
+        config = tiles_config(main_module)
         config.dataset.skel_seed = 0  # noqa: V101
 
         _assert_forwarded(_stage_argv(main_module, config), 0)
@@ -277,7 +253,7 @@ class TestRunCorticalTilesStageSkelSeedArgv:
         The None comes from the DatasetConfig default (REQ-SKELSEED-BDRABCZUK-136B4964314B), not from an
         attribute set by the test, so the check is meaningful only once that setting exists.
         """
-        config = _tiles_config(main_module)
+        config = tiles_config(main_module)
         assert hasattr(config.dataset, "skel_seed") and config.dataset.skel_seed is None, (
             f"{REQ_NO_FORWARD}: the default dataset config has no skel_seed setting of None "
             f"(got {getattr(config.dataset, 'skel_seed', '<no attribute>')!r})"
