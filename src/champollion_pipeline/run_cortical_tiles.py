@@ -35,6 +35,7 @@ from joblib import cpu_count
 from soma import aims
 
 from champollion_pipeline.derivatives_layout import compute_run_log_path
+from champollion_pipeline.generate_labelling_qc import REASON_NO_SESSION_DIR, fetch_subject_row
 from champollion_pipeline.process_setup import init_pipeline_process
 from champollion_pipeline.utils.cortical_tiles_config import CorticalTilesConfigFactory, versioned_crops_exist
 from champollion_pipeline.utils.lib import DERIVATIVES_FOLDER, LABELLING_SESSION_CANDIDATES
@@ -51,6 +52,8 @@ EXCLUDED_NO_GRAPH_FOLDER = "no_graph_folder"  # non-BIDS: --path_to_graph matche
 EXCLUDED_SEVERAL_GRAPH_FOLDERS = "several_graph_folders"  # non-BIDS: it matches two or more folders
 EXCLUDED_NO_LABELLED_GRAPH = "no_labelled_graph"  # graph folder found, no candidate session dir in it
 EXCLUSION_REASONS = (EXCLUDED_NO_GRAPH_FOLDER, EXCLUDED_SEVERAL_GRAPH_FOLDERS, EXCLUDED_NO_LABELLED_GRAPH)
+LABELLING_QC_FILENAME = "labelling_qc.tsv"
+LABELLING_QC_EXTRA_COLUMNS = ("labelled_L", "labelled_R")  # with write_qc_tsv: generate_labelling_qc.QC_COLUMNS
 INPUT_TYPES_DEFAULT = ("skeleton", "foldlabel")
 # TEMPORARY (DEF-CORTILES-BDRABCZUK-8A44DAD7F312): the prefix-ID guard below (and its flag, check and test file)
 # goes once cortical_tiles stops globbing {subject}*/ in generate_ICBM2009c_transforms.py.
@@ -171,6 +174,31 @@ def resolve_graph_paths(morpho_dir: str, path_to_graph: str, subject: str) -> li
             continue
         rels.add(rel)
     return sorted(rels)
+
+
+def fetch_labelling_qc_row(
+    morpho_dir: str, path_to_graph: str, subject: str, candidates: tuple[str, ...], bids: bool
+) -> dict[str, str]:
+    """labelling_qc.tsv row of a fused subject, at the graphs whole-brain ventricle removal reads.
+
+    With BIDS names the fused id splits into the subject folder and the keys that replace ``*``,
+    as in cortical_tiles' get_labelled_graph. Without them ``*`` must match exactly one folder;
+    none or several gives what generate_labelling_qc computes there, which never expands it.
+    """
+    if bids:
+        folder, _, keys = subject.partition("_")
+        row = fetch_subject_row(morpho_dir, folder, path_to_graph.replace(GRAPH_WILDCARD, keys), candidates, False)
+        return {**row, "participant_id": subject}
+    graph_paths = resolve_graph_paths(morpho_dir, path_to_graph, subject)
+    if len(graph_paths) == 1:
+        return fetch_subject_row(morpho_dir, subject, graph_paths[0], candidates, False)
+    return {
+        "participant_id": subject,
+        "qc": "0",
+        "labelled_L": "False",
+        "labelled_R": "False",
+        "reason": REASON_NO_SESSION_DIR,
+    }
 
 
 # TEMPORARY (DEF-CORTILES-BDRABCZUK-9C7D2B9265BC)
@@ -428,6 +456,21 @@ class RunCorticalTiles(ScriptBuilder):
         else:
             logger.output(f"transform QC: {len(rows)} subject(s), no byte-identical transform, see {qc_path}.")
 
+    def _write_labelling_qc(
+        self, subjects: list[str], input_abs: str, output_abs: str, candidates: tuple[str, ...]
+    ) -> tuple[str, bool]:
+        """Write labelling_qc.tsv, one ERROR per failing subject; return its path and whether a subject passed."""
+        rows = [
+            fetch_labelling_qc_row(input_abs, self.args.path_to_graph, subject, candidates, self.args.bids)
+            for subject in sorted(subjects)
+        ]
+        qc_path = join(output_abs, DERIVATIVES_FOLDER, LABELLING_QC_FILENAME)
+        write_qc_tsv(qc_path, rows, extra_columns=LABELLING_QC_EXTRA_COLUMNS)
+        for row in rows:
+            if row["qc"] == "0":
+                logger.error(f"labelling QC excluded {row['participant_id']}: {row['reason']}")
+        return qc_path, any(row["qc"] == "1" for row in rows)
+
     def _generate_mask_npys(self, output_abs: str) -> None:
         """Convert {side}mask_cropped.nii.gz → {side}mask.npy for every region.
 
@@ -604,7 +647,8 @@ class RunCorticalTiles(ScriptBuilder):
         Without --bids, a ``*`` in path_to_graph is resolved per subject, so
         groups are keyed by (session, graph path). Subjects that cannot be
         resolved are left out with one warning; the crops are unaffected and
-        run() still returns the crop result.
+        run() still returns the crop result. labelling_qc.tsv is written first;
+        with no qc 1 row, one warning names it and no volume is processed.
         """
         if self.args.labelling_session_explicit:
             candidates = (self.args.labelling_session,)
@@ -616,9 +660,15 @@ class RunCorticalTiles(ScriptBuilder):
             logger.warning(f"No fused volume under {skeleton_src_dir}/F; whole-brain ventricle removal skipped.")
             return
 
+        qc_path, has_usable_subject = self._write_labelling_qc(list(fused), input_abs, output_abs, candidates)
         groups, excluded = self._group_whole_brain_subjects(list(fused), input_abs, candidates)
-        if excluded:
-            logger.warning(exclusion_warning(excluded, self.args.path_to_graph, candidates))
+        exclusions = exclusion_warning(excluded, self.args.path_to_graph, candidates) if excluded else ""
+        if not has_usable_subject:
+            left_out = f"Whole-brain volume left out: no subject passed the labelling pre-check, see {qc_path}."
+            logger.warning(f"{left_out} {exclusions}".rstrip())
+            return
+        if exclusions:
+            logger.warning(exclusions)
 
         def call(src_dir: str, session: str, graph_path: str) -> None:
             remove_ventricle.remove_ventricle(
