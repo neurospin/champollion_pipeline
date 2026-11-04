@@ -3,11 +3,12 @@
 
 Usage: ``python3 scripts/e2e/check_e2e.py <run dir> [--tier T --layout L [--baselines-dir DIR]
 [--accept-baseline]]``. Writes ``<run dir>/report.json`` (per-stage exit code, subject counts,
-QC counts, failed subjects, region-side coverage, hard failures) and prints each hard failure
-on stderr as ``check_e2e: ...``. With ``--tier``/``--layout`` it also compares those facts with
-the shared baseline ``<E2E_BASELINES_DIR>/<tier>-<layout>.json``; any difference is a hard
-failure. Only ``--accept-baseline`` on a run without hard failures writes that baseline.
-Exit 0 when there is no hard failure, 1 otherwise, 2 on a usage error (nothing written).
+QC counts, failed subjects, region-side coverage, partial stages, hard failures) and prints
+each hard failure on stderr as ``check_e2e: ...``. With ``--tier``/``--layout`` it also compares
+those facts with the shared baseline ``<E2E_BASELINES_DIR>/<tier>-<layout>.json``; any difference
+is a hard failure. Only ``--accept-baseline`` on a run with no hard failure and no partial stage
+writes that baseline. Exit 0 on a clean run, 3 on a partial stage without hard failure, 1 on a
+hard failure, 2 on a usage error (nothing written).
 The run-directory layout is written by scripts/e2e/run_e2e.sh; E2E_RUN_PROFILE_DIRNAME
 comes from e2e.env. Standard library only, so it runs without aims, on the host or in the SIF.
 """
@@ -30,6 +31,7 @@ import e2e_env
 EXIT_OK = 0
 EXIT_FAILED = 1
 EXIT_USAGE = 2
+EXIT_PARTIAL = 3
 
 STAGES_TSV = "stages.tsv"
 STAGES_HEADER = ["stage", "exit_code"]
@@ -141,6 +143,20 @@ def sidecar_stages(proc: Path) -> set[str]:
     return stages
 
 
+def partial_stages(rows: list[tuple[str, int]]) -> list[str]:
+    """Stages of the rows that exited EXIT_PARTIAL, in file order."""
+    return [stage for stage, code in rows if code == EXIT_PARTIAL]
+
+
+def exit_status(report: dict) -> int:
+    """Exit code of a finished report; names the partial stages on stderr when the run exits EXIT_PARTIAL."""
+    if report["hard_failures"]:
+        return EXIT_FAILED
+    for stage in report["partial_stages"]:
+        sys.stderr.write(f"check_e2e: partial stage {stage}\n")
+    return EXIT_PARTIAL if report["partial_stages"] else EXIT_OK
+
+
 def check_run(run: Path, settings: dict[str, str] | None = None, check: Check | None = None) -> dict:
     """Run every check on ``run`` (absolute) and return the report object.
 
@@ -150,7 +166,7 @@ def check_run(run: Path, settings: dict[str, str] | None = None, check: Check | 
     rows = read_stages(run, check)
     ran = [stage for stage, _ in rows]
     for stage, code in rows:
-        if code != 0:
+        if code not in (EXIT_OK, EXIT_PARTIAL):
             check.fail(f"stage {stage} exited {code}")
 
     full = sorted((run / CHAMPOLLION).glob("**/full_embeddings.csv"))
@@ -198,6 +214,7 @@ def check_run(run: Path, settings: dict[str, str] | None = None, check: Check | 
         "run_dir": str(run),
         "stages": stages,
         "region_sides": sorted(path.name.removesuffix(COMBINED_SUFFIX) for path in combined),
+        "partial_stages": partial_stages(rows),
         "hard_failures": check.failures,
     }
 
@@ -262,6 +279,10 @@ def baseline_step(report: dict, check: Check, args: argparse.Namespace, settings
     if args.accept_baseline:
         if check.failures:
             sys.stderr.write(f"check_e2e: baseline not written (run has hard failures): {path}\n")
+            result["status"] = "refused"
+            return result
+        if report["partial_stages"]:
+            sys.stderr.write(f"check_e2e: baseline not written (run is partial): {path}\n")
             result["status"] = "refused"
             return result
         try:
@@ -369,7 +390,7 @@ def main(argv: list[str] | None = None) -> int:
         report["baseline"] = baseline
         report["hard_failures"] = hard_failures
     (run / "report.json").write_text(json.dumps(report, indent=2) + "\n")
-    return EXIT_FAILED if report["hard_failures"] else EXIT_OK
+    return exit_status(report)
 
 
 if __name__ == "__main__":

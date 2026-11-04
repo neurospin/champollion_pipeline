@@ -9,9 +9,11 @@ Two groups:
   registered stages inherit ``execute`` from
   ``champollion_pipeline._stage_base.PipelineStage`` and main.py's
   ``StageResult`` is the one ``_stage_base`` defines;
-* behaviour pins (REQ-STAGEBASE-BDRABCZUK-AA25F0BE4331, -6DAAFCC8C5DA,
+* behaviour pins (REQ-STAGEBASE-BDRABCZUK-AA25F0BE4331, -A8C9D5E51F8E,
   -85434902211A): what ``execute`` returns and logs, as main.py did at commit
-  136054f, so the refactor cannot change it.
+  136054f, so the refactor cannot change it;
+* partial runs (TASK-NTUI-BDRABCZUK-F4B049F41963): a stage exit 3 is partial,
+  not failed; the chain continues and the run returns 3 unless a stage failed.
 
 Each stage's script class is replaced in main.py's namespace by a MagicMock, as
 in test_main_stage_argv.py; main.py is loaded by file path under a private
@@ -129,21 +131,22 @@ class TestScriptException:
 
 @pytest.mark.unit
 class TestReturnCodeResult:
-    """REQ-STAGEBASE-BDRABCZUK-6DAAFCC8C5DA: the script's return code maps to the stage's own result."""
+    """REQ-STAGEBASE-BDRABCZUK-A8C9D5E51F8E: a return code other than 3 maps to the stage's own result."""
 
-    @pytest.mark.parametrize("return_code", [0, 3])
+    @pytest.mark.parametrize("return_code", [0, 1, 2])
     @pytest.mark.parametrize("key", sorted(STAGES))
     def test_return_code_maps_to_stage_message(self, main_module, key, return_code):
-        """REQ-STAGEBASE-BDRABCZUK-6DAAFCC8C5DA: return code kept, success only on 0, message as at 136054f."""
+        """REQ-STAGEBASE-BDRABCZUK-A8C9D5E51F8E: code kept, success only on 0, not partial, message as at 136054f."""
         _, _, ok_message, failed_message = STAGES[key]
         stage = _make_stage(main_module, key)
         with patch(_script_path(key), _script_mock(run_return=return_code)):
             result = stage.execute()
         expected_message = ok_message if return_code == 0 else failed_message
-        assert (result.stage_name, result.success, result.return_code, result.message) == (
+        assert (result.stage_name, result.success, result.return_code, result.partial, result.message) == (
             key,
             return_code == 0,
             return_code,
+            False,
             expected_message,
         )
 
@@ -195,3 +198,123 @@ class TestStageLogging:
             1,
             "hf_enabled requires dataset.hf_repo_id",
         )
+
+
+class _ExitCodeStage(_stage_base.PipelineStage):
+    """A stage whose script returns ``code``, run through the real PipelineStage.execute."""
+
+    progress_message = "running"
+    success_message = "done"
+    failure_message = "broken"
+
+    def __init__(self, name, config, logger, code, ran):
+        super().__init__(name, config, logger)
+        self.code = code
+        self.ran = ran
+
+    def validate(self):
+        return True
+
+    def build_args(self):
+        return []
+
+    def create_script(self):
+        return MagicMock()
+
+    def run_script(self, script):
+        self.ran.append(self.name)
+        return self.code
+
+
+TILES = "run_cortical_tiles"
+CONFIG = "generate_champollion_config"
+EMBEDDINGS = "generate_embeddings"
+
+
+def _run_pipeline(main_module, codes, stop_on_error=True, dependencies=None):
+    """Run the orchestrator over stages exiting ``codes`` (stage -> code); return (run's code, stages that ran)."""
+    config = main_module.PipelineConfig(
+        log_to_file=False, stop_on_error=stop_on_error, stages=dict.fromkeys(codes, True)
+    )
+    if dependencies is not None:
+        config.dependencies = dependencies  # noqa: V101
+    orchestrator = main_module.PipelineOrchestrator(config)
+    ran = []
+    orchestrator.stages = {
+        name: _ExitCodeStage(name, config, orchestrator.logger, code, ran) for name, code in codes.items()
+    }
+    return orchestrator.run(), ran
+
+
+def _messages(pipeline_caplog, level=None):
+    """Messages of the captured pipeline records, at ``level`` when given."""
+    return [r.getMessage() for r in pipeline_caplog.records if level is None or r.levelno == level]
+
+
+@pytest.mark.unit
+class TestPartialResult:
+    """A script exit 3 yields a partial StageResult, logged as a warning."""
+
+    @pytest.mark.parametrize("key", sorted(STAGES))
+    def test_code_3_returns_partial_result(self, main_module, key):
+        """REQ-NTUI-BDRABCZUK-F2A2E7F29B56: return code 3, success true, partial true, a message saying partial."""
+        stage = _make_stage(main_module, key)
+        with patch(_script_path(key), _script_mock(run_return=3)):
+            result = stage.execute()
+        assert (result.stage_name, result.success, result.return_code, result.partial) == (key, True, 3, True)
+        assert "partial" in result.message.lower()
+
+    @pytest.mark.parametrize("key", sorted(STAGES))
+    def test_partial_end_logged_as_warning(self, main_module, key, pipeline_caplog):
+        """REQ-NTUI-BDRABCZUK-15992F19C989: a WARNING naming the stage and saying partial, no SUCCESS record."""
+        stage_cls = main_module.PipelineOrchestrator.STAGE_REGISTRY[key]
+        stage = stage_cls(key, stage_paths_config(main_module), logging.getLogger("champollion_pipeline.partial_test"))
+        with patch(_script_path(key), _script_mock(run_return=3)):
+            stage.execute()
+        warnings = _messages(pipeline_caplog, logging.WARNING)
+        assert any(key in message and "partial" in message.lower() for message in warnings), warnings
+        assert not any("SUCCESS" in message for message in _messages(pipeline_caplog))
+
+
+@pytest.mark.unit
+class TestPartialRun:
+    """A partial stage does not stop the chain; the run reports partial unless a stage failed."""
+
+    @pytest.mark.parametrize("stop_on_error", [True, False])
+    def test_next_stage_runs_after_partial(self, main_module, stop_on_error, pipeline_caplog):
+        """REQ-NTUI-BDRABCZUK-204CE0FCD8A0: the stage after a partial one runs, whatever stop_on_error."""
+        _, ran = _run_pipeline(main_module, {TILES: 0, CONFIG: 3, EMBEDDINGS: 0}, stop_on_error)
+        assert ran == [TILES, CONFIG, EMBEDDINGS]
+
+    @pytest.mark.parametrize(
+        "codes",
+        [{TILES: 3, CONFIG: 0}, {TILES: 0, CONFIG: 3}, {TILES: 3, CONFIG: 3}],
+        ids=["first", "last", "both"],
+    )
+    def test_run_returns_3_when_partial_without_failure(self, main_module, codes, pipeline_caplog):
+        """REQ-NTUI-BDRABCZUK-494FB7AE040B: partial stages and no failed stage return 3."""
+        code, ran = _run_pipeline(main_module, codes)
+        assert (code, ran) == (3, list(codes))
+
+    @pytest.mark.parametrize(
+        ("codes", "options"),
+        [
+            ({TILES: 3, CONFIG: 1}, {}),
+            ({TILES: 3, CONFIG: 2}, {}),
+            ({TILES: 1, CONFIG: 3}, {"stop_on_error": False, "dependencies": {}}),
+        ],
+        ids=["fails-after-partial", "fails-with-2-after-partial", "fails-before-partial"],
+    )
+    def test_failed_stage_wins_over_partial(self, main_module, codes, options, pipeline_caplog):
+        """REQ-NTUI-BDRABCZUK-676B4050D99C: a failed stage beside a partial one makes the run return 1."""
+        code, ran = _run_pipeline(main_module, codes, **options)
+        assert (code, ran) == (1, list(codes))
+
+    def test_summary_warns_with_partial_stage_names(self, main_module, pipeline_caplog):
+        """REQ-NTUI-BDRABCZUK-59DC2F19CCB7: one WARNING names the partial stages, no success line."""
+        _run_pipeline(main_module, {TILES: 3, CONFIG: 0, EMBEDDINGS: 3})
+        warnings = _messages(pipeline_caplog, logging.WARNING)
+        assert any(
+            "partial" in message.lower() and TILES in message and EMBEDDINGS in message for message in warnings
+        ), warnings
+        assert not any("Pipeline completed successfully" in message for message in _messages(pipeline_caplog))

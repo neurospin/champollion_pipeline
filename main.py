@@ -37,7 +37,7 @@ from champollion_utils.process import active_profiling, start_profiling
 from champollion_utils.script_builder import ScriptBuilder
 from champollion_utils.update_check import check_for_updates
 
-from champollion_pipeline._stage_base import PipelineStage, StageResult
+from champollion_pipeline._stage_base import PARTIAL_STATUS, PipelineStage, StageResult
 from champollion_pipeline.config import ConfigLoader, DatasetConfig, PipelineConfig
 from champollion_pipeline.derivatives_layout import (
     HEMISPHERES,
@@ -511,7 +511,7 @@ class PipelineOrchestrator:
         )
         checker.check(save_index_to=index_path).log_summary()
 
-    def _run_stage(self, stage_name: str, completed_stages: list[str]) -> bool:
+    def _run_stage(self, stage_name: str, completed_stages: list[str], partial_stages: list[str]) -> bool:
         """Check, validate, report and execute one registered stage; True on success."""
         if not self._check_dependencies(stage_name, completed_stages):
             return False
@@ -522,13 +522,15 @@ class PipelineOrchestrator:
         self._report_pre_stage(stage_name, stage)
         with _stage_segment(stage_name):
             result = stage.execute()
+        if result.partial:
+            partial_stages.append(stage_name)
         if result.success:
             return True
         if self.config.stop_on_error:
             self.logger.error("Stopping pipeline due to stage failure")
         return False
 
-    def _log_summary(self, completed_stages: list[str], failed_stages: list[str]) -> int:
+    def _log_summary(self, completed_stages: list[str], failed_stages: list[str], partial_stages: list[str]) -> int:
         """Log the execution summary and return the pipeline exit code."""
         self.logger.info("\n" + "=" * 60)
         self.logger.info("Pipeline Execution Summary")
@@ -538,6 +540,9 @@ class PipelineOrchestrator:
             self.logger.info(f"Failed stages: {failed_stages}")
             self.logger.error("❌ Pipeline completed with errors")
             return 1
+        if partial_stages:
+            self.logger.warning(f"⚠️ Pipeline completed with partial stages: {partial_stages}")
+            return PARTIAL_STATUS
         self.logger.info("✅ Pipeline completed successfully")
         return 0
 
@@ -556,19 +561,20 @@ class PipelineOrchestrator:
 
         completed_stages = []
         failed_stages = []
+        partial_stages = []
 
         for stage_name in enabled_stages:
             if stage_name not in self.stages:
                 self.logger.warning(f"Stage '{stage_name}' not registered. Skipping.")
                 continue
-            if self._run_stage(stage_name, completed_stages):
+            if self._run_stage(stage_name, completed_stages, partial_stages):
                 completed_stages.append(stage_name)
                 continue
             failed_stages.append(stage_name)
             if self.config.stop_on_error:
                 break
 
-        return self._log_summary(completed_stages, failed_stages)
+        return self._log_summary(completed_stages, failed_stages, partial_stages)
 
 
 # ====================== CLI Interface ======================
