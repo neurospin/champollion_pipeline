@@ -24,6 +24,7 @@ from unittest.mock import MagicMock, patch
 import pytest
 
 from champollion_pipeline.run_cortical_tiles import RunCorticalTiles
+from tests.stage2_layout import add_graphs
 
 pytestmark = pytest.mark.unit  # noqa: V107
 
@@ -37,7 +38,7 @@ SEVEN_PAIRS = [(f"sub-{letter}", f"sub-{letter}0") for letter in "abcdefg"]
 
 def _layout(input_dir: Path, folders, files=()) -> None:
     for name in folders:
-        (input_dir / name).mkdir()
+        add_graphs(input_dir, name)
     for name in files:
         (input_dir / name).write_text("x")
 

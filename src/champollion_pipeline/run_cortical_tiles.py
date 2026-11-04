@@ -17,6 +17,7 @@ the correct labelled masks are used during region extraction.
 """
 
 import argparse
+import csv
 import glob
 import json
 import logging
@@ -39,7 +40,7 @@ from champollion_pipeline.generate_labelling_qc import REASON_NO_SESSION_DIR, fe
 from champollion_pipeline.process_setup import init_pipeline_process
 from champollion_pipeline.utils.cortical_tiles_config import CorticalTilesConfigFactory, versioned_crops_exist
 from champollion_pipeline.utils.lib import DERIVATIVES_FOLDER, LABELLING_SESSION_CANDIDATES
-from champollion_pipeline.utils.qc_report import write_qc_tsv
+from champollion_pipeline.utils.qc_report import read_qc_tsv, write_qc_tsv
 from champollion_pipeline.utils.subject_name import subject_name_problem
 
 logger = logging.getLogger(__name__)
@@ -63,6 +64,15 @@ PREFIX_PAIRS_SHOWN = 5  # prefix pairs named in the refusal or warning
 TRANSFORM_QC_FILENAME = "transform_qc.tsv"
 TRANSFORM_SIDES = ("L", "R")
 TRANSFORM_STEM = "transform_to_ICBM2009c_"  # files are <side><TRANSFORM_STEM><ID>.trm
+INPUT_QC_FILENAME = "input_qc.tsv"
+GRAPH_SIDES = ("L", "R")  # not TRANSFORM_SIDES: that constant is TEMPORARY
+SK_QC_TSV_MARK = ".tsv"  # as cortical_tiles: tab-separated when the path contains it, else comma-separated
+REASON_MISSING_GRAPH_STEM = "missing_graph_"  # + side
+REASON_NOT_IN_SK_QC = "not_in_sk_qc_file"
+REASON_EXCLUDED_BY_SK_QC = "excluded_by_sk_qc"
+REASON_NO_SUBJECT_FOLDER = "no_subject_folder"
+REASON_INVALID_SK_QC = "invalid_sk_qc_file"
+REASON_SEPARATOR = ";"
 
 
 class _ExplicitLabellingSession(argparse.Action):
@@ -201,12 +211,77 @@ def fetch_labelling_qc_row(
     }
 
 
+def list_input_subjects(input_dir: str) -> list[str]:
+    """Sorted non-dot subdirectory names of ``input_dir``; none for a non-directory."""
+    if not isdir(input_dir):
+        return []
+    return sorted(e.name for e in os.scandir(input_dir) if e.is_dir() and not e.name.startswith("."))
+
+
+def fetch_sk_qc_ids(path: str) -> dict[str, int]:
+    """Map each participant_id of a --sk_qc_path file to its qc.
+
+    The file is read as cortical_tiles reads it: tab-separated when the path contains .tsv, else
+    comma-separated. Raises OSError, ValueError or csv.Error on a file to refuse.
+    """
+    records = read_qc_tsv(path, delimiter="\t" if SK_QC_TSV_MARK in path else ",")
+    sk_qc = {str(record["participant_id"]): int(record["qc"]) for record in records}
+    if "" in sk_qc:
+        raise ValueError(f"{path}: empty participant_id")
+    return sk_qc
+
+
+def has_hemisphere_graph(input_abs: str, path_to_graph: str, subject: str, side: str) -> bool:
+    """True when a folder path_to_graph matches for ``subject`` holds a <side>*.arg file."""
+    for graph_path in resolve_graph_paths(input_abs, path_to_graph, subject):
+        pattern = join(glob.escape(join(input_abs, subject, graph_path)), f"{side}*.arg")
+        if any(os.path.isfile(match) for match in glob.glob(pattern)):
+            return True
+    return False
+
+
+def compute_sk_qc_reason(subject: str, sk_qc: dict[str, int] | None, is_refused: bool) -> str | None:
+    """Reason the --sk_qc_path file gives against ``subject``, None when it gives none."""
+    if is_refused:
+        return REASON_INVALID_SK_QC
+    if sk_qc is None:
+        return None
+    if subject not in sk_qc:
+        return REASON_NOT_IN_SK_QC
+    return REASON_EXCLUDED_BY_SK_QC if sk_qc[subject] == 0 else None
+
+
+def fetch_input_qc_rows(
+    input_abs: str, path_to_graph: str, sk_qc: dict[str, int] | None, is_refused: bool, is_input_only: bool
+) -> list[dict[str, object]]:
+    """input_qc.tsv rows: one per input subject folder, then, unless ``is_input_only``, the file ids with no folder.
+
+    A subject's reasons come in a fixed order: missing_graph_L, missing_graph_R, the --sk_qc_path file reason.
+    """
+    subjects = list_input_subjects(input_abs)
+    rows: list[dict[str, object]] = []
+    for subject in subjects:
+        reasons = [
+            f"{REASON_MISSING_GRAPH_STEM}{side}"
+            for side in GRAPH_SIDES
+            if not has_hemisphere_graph(input_abs, path_to_graph, subject, side)
+        ]
+        sk_qc_reason = compute_sk_qc_reason(subject, sk_qc, is_refused)
+        if sk_qc_reason:
+            reasons.append(sk_qc_reason)
+        rows.append({"participant_id": subject, "qc": 0 if reasons else 1, "reason": REASON_SEPARATOR.join(reasons)})
+    if sk_qc is not None and not is_input_only:
+        rows.extend(
+            {"participant_id": subject, "qc": 0, "reason": REASON_NO_SUBJECT_FOLDER}
+            for subject in sorted(set(sk_qc) - set(subjects))
+        )
+    return rows
+
+
 # TEMPORARY (DEF-CORTILES-BDRABCZUK-9C7D2B9265BC)
 def find_dotted_ids(input_dir: str) -> list[str]:
     """Sorted input subject IDs (non-dot subdirectory names) that contain a dot; none for a non-directory."""
-    if not isdir(input_dir):
-        return []
-    return sorted(e.name for e in os.scandir(input_dir) if e.is_dir() and not e.name.startswith(".") and "." in e.name)
+    return [name for name in list_input_subjects(input_dir) if "." in name]
 
 
 # TEMPORARY (DEF-CORTILES-BDRABCZUK-8A44DAD7F312)
@@ -216,9 +291,7 @@ def find_prefix_id_pairs(input_dir: str) -> list[tuple[str, str]]:
     Subject IDs are the non-dot subdirectory names of ``input_dir``, as cortical_tiles lists them
     (with or without --bids). An input that is not a directory gives no pair.
     """
-    if not isdir(input_dir):
-        return []
-    names = sorted(e.name for e in os.scandir(input_dir) if e.is_dir() and not e.name.startswith("."))
+    names = list_input_subjects(input_dir)
     pairs = []
     for i, shorter in enumerate(names):
         for longer in names[i + 1 :]:
@@ -274,6 +347,11 @@ class RunCorticalTiles(ScriptBuilder):
             )
             .add_required_argument("--path_sk_with_hull", "Contains the sub-path where to get the skeleton with hull.")
             .add_optional_argument("--sk_qc_path", "The path to the QC file if it exists.", default="")
+            .add_flag(
+                "--sk_qc_input_only",
+                "Limit the input QC to the subjects of the input: an id of the --sk_qc_path file with no "
+                "input subject folder gets no input_qc.tsv row. For a run on part of the cohort the file covers.",
+            )
             .add_optional_argument("--njobs", "Number of CPU cores allowed to use.", default=None, type_=int)
             .add_argument(
                 "--input-types",
@@ -471,6 +549,25 @@ class RunCorticalTiles(ScriptBuilder):
                 logger.error(f"labelling QC excluded {row['participant_id']}: {row['reason']}")
         return qc_path, any(row["qc"] == "1" for row in rows)
 
+    def _write_input_qc(self, input_abs: str, output_abs: str, sk_qc_abs: str) -> tuple[str, bool]:
+        """Write input_qc.tsv, one record per qc 0 row; return its path and whether a subject passed."""
+        sk_qc = None
+        is_refused = False
+        if sk_qc_abs:
+            try:
+                sk_qc = fetch_sk_qc_ids(sk_qc_abs)
+            except (OSError, ValueError, csv.Error) as error:
+                logger.error(f"--sk_qc_path file {self.args.sk_qc_path} refused: {error}")
+                is_refused = True
+        rows = fetch_input_qc_rows(input_abs, self.args.path_to_graph, sk_qc, is_refused, self.args.sk_qc_input_only)
+        qc_path = join(output_abs, DERIVATIVES_FOLDER, INPUT_QC_FILENAME)
+        write_qc_tsv(qc_path, rows)
+        for row in rows:
+            if row["qc"] == 0:
+                log = logger.warning if row["reason"] == REASON_EXCLUDED_BY_SK_QC else logger.error
+                log(f"input QC excluded {row['participant_id']}: {row['reason']}")
+        return qc_path, any(row["qc"] == 1 for row in rows)
+
     def _generate_mask_npys(self, output_abs: str) -> None:
         """Convert {side}mask_cropped.nii.gz → {side}mask.npy for every region.
 
@@ -501,7 +598,35 @@ class RunCorticalTiles(ScriptBuilder):
             datetime.now().astimezone(),
         )
 
-    def run(self):  # noqa: PLR0915 - linear stage sequence; split deferred to the guard/QC removal task
+    def _build_crop_command(self, script_path: str, sk_qc_abs: str) -> list[str]:
+        """Command line of generate_sulcal_regions.py for this run."""
+        cmd = [
+            sys.executable,
+            script_path,
+            "-d",
+            abspath(self.args.output),
+            "--path_to_graph",
+            self.args.path_to_graph,
+            "--path_sk_with_hull",
+            self.args.path_sk_with_hull,
+            "--njobs",
+            str(self.args.njobs),
+        ]
+
+        if self.args.regions:
+            cmd.extend(["-r", *self.args.regions])
+
+        if sk_qc_abs:
+            cmd.extend(["--sk_qc_path", sk_qc_abs])
+
+        if self.args.skel_seed is not None:
+            cmd.extend(["--skel_seed", str(self.args.skel_seed)])
+
+        input_types = self.args.input_types or list(INPUT_TYPES_DEFAULT)
+        cmd.extend(["-y", *input_types])
+        return cmd
+
+    def run(self):
         """Execute the cortical_tiles script."""
         logger.trace(f"input: {self.args.input}")
         logger.trace(f"output: {self.args.output}")
@@ -513,8 +638,14 @@ class RunCorticalTiles(ScriptBuilder):
         # Convert input to absolute path
         input_abs = abspath(self.args.input)
         output_abs = abspath(self.args.output)
+        sk_qc_abs = abspath(self.args.sk_qc_path) if self.args.sk_qc_path else ""
         # TEMPORARY (DEF-CORTILES-BDRABCZUK-8A44DAD7F312, -9C7D2B9265BC)
         if not self._check_subject_ids(input_abs, output_abs):
+            return 1
+
+        qc_path, has_usable_subject = self._write_input_qc(input_abs, output_abs, sk_qc_abs)
+        if not has_usable_subject:
+            logger.fail(f"no subject passed the input QC, see {qc_path}")
             return 1
 
         config_file_path: str = join(output_abs, "pipeline_loop_2mm.json")
@@ -542,7 +673,7 @@ class RunCorticalTiles(ScriptBuilder):
             config["path_to_graph"] = self.args.path_to_graph
             config["path_to_skeleton_with_hull"] = self.args.path_sk_with_hull
             config["masks_version"] = self.args.masks if self.args.masks else "canonical_25"
-            config["skel_qc_path"] = self.args.sk_qc_path if self.args.sk_qc_path else ""
+            config["skel_qc_path"] = sk_qc_abs
             if self.args.bids:
                 config["bids"] = True
             config["skip_distbottom"] = not self.args.with_distbottom
@@ -574,30 +705,7 @@ class RunCorticalTiles(ScriptBuilder):
         # The script runs from its own directory (subprocess cwd)
         script_dir = dirname(script_path)
 
-        cmd = [
-            sys.executable,
-            script_path,
-            "-d",
-            abspath(self.args.output),
-            "--path_to_graph",
-            self.args.path_to_graph,
-            "--path_sk_with_hull",
-            self.args.path_sk_with_hull,
-            "--njobs",
-            str(self.args.njobs),
-        ]
-
-        if self.args.regions:
-            cmd.extend(["-r", *self.args.regions])
-
-        if self.args.sk_qc_path:
-            cmd.extend(["--sk_qc_path", self.args.sk_qc_path])
-
-        if self.args.skel_seed is not None:
-            cmd.extend(["--skel_seed", str(self.args.skel_seed)])
-
-        input_types = self.args.input_types or list(INPUT_TYPES_DEFAULT)
-        cmd.extend(["-y", *input_types])
+        cmd = self._build_crop_command(script_path, sk_qc_abs)
 
         result = self.execute_command(cmd, shell=False, cwd=script_dir)
 

@@ -12,6 +12,7 @@ from unittest.mock import MagicMock, patch
 import pytest
 
 from champollion_pipeline.run_cortical_tiles import RunCorticalTiles
+from tests.stage2_layout import add_graphs
 
 pytestmark = pytest.mark.unit  # noqa: V107
 
@@ -25,7 +26,7 @@ def _run(base: Path, input_name: str = "input", output_name: str = "output"):
     output_dir = base / output_name
     input_dir.mkdir()
     output_dir.mkdir()
-    (input_dir / "sub-a").mkdir()
+    add_graphs(input_dir, "sub-a")
 
     script = RunCorticalTiles()
     script.parse_args([str(input_dir), str(output_dir), "--path_to_graph", "graphs", "--path_sk_with_hull", "skeleton"])

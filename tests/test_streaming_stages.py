@@ -16,6 +16,7 @@ Requirements:
 - REQ-STREAMING-BDRABCZUK-57C480955842 tiles --bids
 - REQ-STREAMING-BDRABCZUK-F40CA50E003B tiles --regions
 - REQ-STREAMING-BDRABCZUK-B2E6D8F46CBA tiles --sk_qc_path
+- REQ-STREAMING-BDRABCZUK-CC2558CBC6C9 tiles --sk_qc_input_only
 - REQ-STREAMING-BDRABCZUK-864832B0CA24 tiles --skel-seed
 - REQ-STREAMING-BDRABCZUK-23EB245D68C6 tiles non-zero code raises naming the scan folder
 - REQ-STREAMING-BDRABCZUK-A4F61AE8D57D tiles removes the single-scan directory
@@ -289,6 +290,15 @@ def test_tiles_no_sk_qc_path_when_empty(tiles, settings, dataset) -> None:
     stages.run_cortical_tiles_for_scan(CLASSIC_SCAN, settings, dataset)
     assert tiles.argv is not None
     assert not [arg for arg in tiles.argv if arg.startswith("--sk_qc_path")]
+
+
+def test_tiles_sk_qc_input_only_follows_sk_qc_path(tiles, settings, dataset) -> None:
+    scoped = {}
+    for sk_qc_path in ("/synthetic/qc.tsv", ""):
+        dataset.sk_qc_path = sk_qc_path
+        stages.run_cortical_tiles_for_scan(CLASSIC_SCAN, settings, dataset)
+        scoped[sk_qc_path] = _tiles_namespace(tiles.argv).sk_qc_input_only
+    assert scoped == {"/synthetic/qc.tsv": True, "": False}
 
 
 def test_tiles_skel_seed_forwarded(tiles, settings, dataset) -> None:

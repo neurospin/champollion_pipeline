@@ -20,6 +20,7 @@ from champollion_pipeline.generate_champollion_config import _DEFAULT_CHAMPOLLIO
 from champollion_pipeline.put_together_embeddings import PutTogetherEmbeddings
 from champollion_pipeline.run_cortical_tiles import RunCorticalTiles
 from champollion_pipeline.train_champollion import _CONTRASTIVE_DIR
+from tests.stage2_layout import add_graphs
 
 # Repo root = parent of src/, i.e. two levels above the package directory.
 PACKAGE_DIR = Path(champollion_pipeline.__file__).resolve().parent
@@ -74,6 +75,7 @@ class TestExternalPathResolution:
 
         expected = EXTERNAL_DIR / "cortical_tiles" / "cortical_tiles" / "brainvisa" / "generate_sulcal_regions.py"
 
+        add_graphs(temp_dir)
         script = RunCorticalTiles()
         script.parse_args(
             [
