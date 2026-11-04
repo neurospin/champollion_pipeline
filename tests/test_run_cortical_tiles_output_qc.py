@@ -4,17 +4,21 @@ Stage 2 output QC tests of run_cortical_tiles.py: output_qc.tsv and the exit pol
 2026-11-04, "Fail only if nothing usable"). Synthetic fixtures only.
 
 The crop files are laid by the mocked crop step, the mask arrays by the mocked mask step. A subject
-excluded by the input QC gets no row whether or not it stays in the crop files, so no test here
-depends on the cortical_tiles version pinned by the gitlink.
+excluded by the input QC gets no row whether or not it stays in the crop files. The skip lists are
+written by the record_skip of the cortical_tiles version pinned by the gitlink, so their format is
+the real one. TestCropChild alone runs a real child process, a stand-in for generate_sulcal_regions.py.
 """
 
 import json
 import logging
+import re
+import sys
 from dataclasses import dataclass
 from pathlib import Path
 from unittest.mock import MagicMock, patch
 
 import pytest
+from cortical_tiles.brainvisa.utils.skip_list import SKIP_LIST_FILENAME, record_skip
 
 from champollion_pipeline.generate_masks import _REGIONS_DEFAULT
 from champollion_pipeline.run_cortical_tiles import RunCorticalTiles
@@ -22,9 +26,10 @@ from champollion_pipeline.utils.cortical_tiles_config import compute_versioned_c
 from champollion_pipeline.utils.lib import DERIVATIVES_FOLDER, LABELLING_SESSION_CANDIDATES
 from champollion_pipeline.utils.qc_report import read_qc_tsv
 from tests.log_assertions import FAIL
-from tests.stage2_layout import GRAPH_DIR, TEMPLATE_CONFIG, add_crops, add_graphs
+from tests.stage2_layout import GRAPH_DIR, TEMPLATE_CONFIG, add_crops, add_graphs, crop_csv
 
-_LOGGER_NAME = "champollion_pipeline.run_cortical_tiles"
+_MODULE = "champollion_pipeline.run_cortical_tiles"
+_LOGGER_NAME = _MODULE
 _QC_FILE = "output_qc.tsv"
 _CROP_SCRIPT = "generate_sulcal_regions.py"
 _TRANSFORM_QC_FILE = "transform_qc.tsv"
@@ -37,6 +42,19 @@ _DEFAULT_KINDS = ("skeleton", "foldlabel")
 _SUBJECT = "sub-01"
 _OTHER_SUBJECT = "sub-02"
 _COHORT = {_SUBJECT: "LR", _OTHER_SUBJECT: "LR"}
+_COHORT_OF_THREE = {**_COHORT, "sub-03": "LR"}
+_OUTPUT_QC_RECORD_START = "output QC excluded"
+_STEP = "generate_foldlabels"
+_OTHER_STEP = "generate_crops"
+_CHILD_LINE = "stand-in crop script output"
+_CHILD_SOURCE = """\
+import shutil
+import sys
+
+shutil.copytree(sys.argv[1], sys.argv[2], dirs_exist_ok=True)
+print(sys.argv[3], flush=True)
+sys.exit(int(sys.argv[4]))
+"""
 
 
 @pytest.fixture(autouse=True)  # noqa: V103
@@ -63,6 +81,20 @@ class _StageRun:
 
 
 @dataclass(frozen=True)
+class _Skip:
+    """One skip-list entry: the crop step records it and leaves ``subject`` out of the subject CSVs of ``side``."""
+
+    subject: str = _OTHER_SUBJECT
+    side: str = "L"
+    step: str = _STEP
+    message: str = "no fold graph"
+
+    def reason(self):
+        """The output_qc.tsv reason of this entry, the recorded exception being a ValueError."""
+        return f"skipped:{self.side}:{self.step}:ValueError:{self.message}"
+
+
+@dataclass(frozen=True)
 class _CropStep:
     """What the mocked crop and mask steps do: ``crop_subjects`` None takes the subjects of the run."""
 
@@ -75,6 +107,8 @@ class _CropStep:
     has_existing_crops: bool = False
     has_fused_subject: bool = False
     legacy_version: str | None = None
+    skips: tuple[_Skip, ...] = ()
+    malformed_sides: str = ""
 
 
 def _add_legacy_conflict(output_dir, derivatives, version):
@@ -96,13 +130,28 @@ def _add_fused_subject(input_dir, derivatives, subject):
     (fused_dir / f"Fresampled_skeleton_{subject}.nii.gz").touch()
 
 
+def _add_skips(derivatives, crops_dir, step):
+    """Write the skip lists of ``step`` under ``derivatives``, dropping each entry's subject from its side's CSVs."""
+    for side in step.malformed_sides:
+        (derivatives / SKIP_LIST_FILENAME.format(side=side)).write_text("not json\n")
+    for skip in step.skips:
+        record_skip(derivatives, skip.side, skip.step, skip.subject, ValueError(skip.message))
+        for region in step.crop_regions:
+            for kind in step.kinds:
+                path = crop_csv(crops_dir, region, skip.side, kind)
+                kept = [line for line in path.read_text().splitlines() if line != skip.subject]
+                path.write_text("\n".join(kept) + "\n")
+
+
 def _run_stage(temp_dir, subjects, extra_args=None, **crop_step):
     """Run run() on ``subjects`` (``{subject: hemispheres holding a graph}``); ``crop_step``: fields of _CropStep.
 
     The mocked crop step returns the crop status and lays the crops under the crops folder of the masks version;
     the mocked mask step lays the mask arrays. With ``has_existing_crops`` both lie on disk before run() starts,
     with ``has_fused_subject`` the crop step also leaves each subject a volume for whole-brain ventricle removal,
-    with ``legacy_version`` legacy crops conflict with the crops of that version.
+    with ``legacy_version`` legacy crops conflict with the crops of that version, with ``skips`` it writes
+    those skip-list entries (before run() with ``has_existing_crops``), with ``malformed_sides`` a skip list refused
+    by its reader on these sides.
     ``extra_args`` defaults to --regions with ``_REGIONS``.
     """
     step = _CropStep(**crop_step)
@@ -121,11 +170,13 @@ def _run_stage(temp_dir, subjects, extra_args=None, **crop_step):
         _add_legacy_conflict(output_dir, derivatives, step.legacy_version)
     if step.has_existing_crops:
         add_crops(crops_dir, listed, step.crop_regions, (*step.kinds, *(("mask",) if step.has_masks else ())))
+        _add_skips(derivatives, crops_dir, step)
 
     def execute(command, *_args, **_kwargs):
         if any(_CROP_SCRIPT in str(part) for part in command):
             crop_runs.append(_CROP_SCRIPT)
             add_crops(crops_dir, listed, step.crop_regions, step.kinds)
+            _add_skips(derivatives, crops_dir, step)
             for subject in subjects if step.has_fused_subject else ():
                 _add_fused_subject(input_dir, derivatives, subject)
         return step.crop_status
@@ -169,6 +220,19 @@ def _run_stage(temp_dir, subjects, extra_args=None, **crop_step):
 def _messages_at(level, pipeline_caplog):
     """Messages of the run_cortical_tiles logger records at exactly ``level``."""
     return [r.getMessage() for r in pipeline_caplog.records if r.name == _LOGGER_NAME and r.levelno == level]
+
+
+def _summary_records(pipeline_caplog):
+    """ERROR records of the logger, the one record per qc 0 row of output_qc.tsv left out."""
+    errors = _messages_at(logging.ERROR, pipeline_caplog)
+    return [message for message in errors if not message.startswith(_OUTPUT_QC_RECORD_START)]
+
+
+def _record_of(records, side, step):
+    """The only record naming ``side`` as a word and ``step``."""
+    found = [message for message in records if re.search(rf"\b{side}\b", message) and step in message]
+    assert len(found) == 1, records
+    return found[0]
 
 
 class TestReport:
@@ -489,3 +553,179 @@ class TestExitPolicy:
 
         assert {row["qc"] for row in run.rows().values()} == {0}
         run.fuse.assert_called_once()
+
+
+class TestSkipSummary:
+    """Crop status 3: one ERROR record per side and step read from the skip lists."""
+
+    _SKIPS = (_Skip(_OTHER_SUBJECT), _Skip(_SUBJECT), _Skip(_OTHER_SUBJECT, "R", _OTHER_STEP))
+
+    def test_one_record_per_side_and_step(self, temp_dir, pipeline_caplog):
+        _run_stage(temp_dir, _COHORT_OF_THREE, crop_status=_PARTIAL_STATUS, skips=self._SKIPS)
+
+        assert len(_summary_records(pipeline_caplog)) == 2
+
+    def test_record_names_side_step_and_sorted_subjects(self, temp_dir, pipeline_caplog):
+        _run_stage(temp_dir, _COHORT_OF_THREE, crop_status=_PARTIAL_STATUS, skips=self._SKIPS)
+
+        records = _summary_records(pipeline_caplog)
+        left = _record_of(records, "L", _STEP)
+        right = _record_of(records, "R", _OTHER_STEP)
+        assert left.index(_SUBJECT) < left.index(_OTHER_SUBJECT)
+        assert _OTHER_SUBJECT in right
+        assert _SUBJECT not in right
+
+    def test_record_names_a_subject_once(self, temp_dir, pipeline_caplog):
+        _run_stage(temp_dir, _COHORT, crop_status=_PARTIAL_STATUS, skips=(_Skip(), _Skip(message="other region")))
+
+        records = _summary_records(pipeline_caplog)
+        assert len(records) == 1
+        assert records[0].count(_OTHER_SUBJECT) == 1
+
+
+class TestSkipReasons:
+    """A subject skipped on a side shows the skip-list cause of that side in place of missing_crop."""
+
+    @staticmethod
+    def _reasons(run, subject=_OTHER_SUBJECT):
+        """Reasons of the row of ``subject``."""
+        return run.rows()[subject]["reason"].split(";")
+
+    def test_row_holds_the_skip_reason(self, temp_dir):
+        run = _run_stage(temp_dir, _COHORT, skips=(_Skip(),))
+
+        assert run.rows()[_OTHER_SUBJECT]["qc"] == 0
+        assert _Skip().reason() in self._reasons(run)
+
+    def test_row_holds_a_reason_per_step(self, temp_dir):
+        skips = (_Skip(), _Skip(step=_OTHER_STEP), _Skip(side="R"))
+
+        run = _run_stage(temp_dir, _COHORT, skips=skips)
+
+        assert sorted(self._reasons(run)) == sorted(skip.reason() for skip in skips)
+
+    def test_error_record_shows_the_skip_reason(self, temp_dir, pipeline_caplog):
+        _run_stage(temp_dir, _COHORT, skips=(_Skip(),))
+
+        errors = _messages_at(logging.ERROR, pipeline_caplog)
+        assert any(message.startswith(_OUTPUT_QC_RECORD_START) and _Skip().reason() in message for message in errors)
+
+    def test_rerun_reads_the_skip_list(self, temp_dir):
+        run = _run_stage(temp_dir, _COHORT, skips=(_Skip(),), has_existing_crops=True)
+
+        assert run.crop_runs == []
+        assert _Skip().reason() in self._reasons(run)
+
+    def test_skip_reason_replaces_the_missing_crop_reasons_of_the_side(self, temp_dir):
+        run = _run_stage(temp_dir, _COHORT, skips=(_Skip(),))
+
+        assert self._reasons(run) == [_Skip().reason()]
+
+    def test_side_without_an_entry_keeps_its_missing_crop_reasons(self, temp_dir):
+        run = _run_stage(temp_dir, _COHORT, crop_subjects=[_SUBJECT], skips=(_Skip(),))
+
+        reasons = self._reasons(run)
+        assert f"missing_crop:skeleton:R:{_REGIONS[0]}" in reasons
+        assert not [reason for reason in reasons if reason.startswith("missing_crop") and ":L:" in reason]
+
+    def test_session_skipped_beside_a_complete_session_keeps_qc_1(self, temp_dir):
+        args = ["--regions", *_REGIONS, "--bids"]
+        skip = _Skip(f"{_SUBJECT}_ses-1")
+
+        row = _run_stage(temp_dir, {_SUBJECT: "LR"}, args, crop_subjects=[f"{_SUBJECT}_ses-2"], skips=(skip,)).rows()
+
+        assert (row[_SUBJECT]["qc"], row[_SUBJECT]["reason"]) == (1, "")
+
+    def test_bids_session_key_reaches_its_participant(self, temp_dir):
+        args = ["--regions", *_REGIONS, "--bids"]
+        skip = _Skip(f"{_OTHER_SUBJECT}_ses-1")
+
+        run = _run_stage(temp_dir, _COHORT, args, crop_subjects=[f"{_SUBJECT}_ses-1"], skips=(skip,))
+
+        assert skip.reason() in self._reasons(run)
+
+    def test_non_bids_entry_matches_the_whole_subject(self, temp_dir):
+        skip = _Skip(f"{_OTHER_SUBJECT}_ses-1")
+
+        run = _run_stage(temp_dir, _COHORT, crop_subjects=[_SUBJECT], skips=(skip,))
+
+        assert run.rows()[_OTHER_SUBJECT]["qc"] == 0
+        assert skip.reason() not in self._reasons(run)
+        assert f"missing_crop:skeleton:L:{_REGIONS[0]}" in self._reasons(run)
+
+    def test_message_separators_become_spaces(self, temp_dir):
+        run = _run_stage(temp_dir, _COHORT, skips=(_Skip(message="a\nb\rc\td;e"),))
+
+        assert self._reasons(run) == [_Skip(message="a b c d e").reason()]
+
+    def test_repeated_entry_gives_one_reason(self, temp_dir):
+        assert self._reasons(_run_stage(temp_dir, _COHORT, skips=(_Skip(), _Skip()))) == [_Skip().reason()]
+
+
+class TestMalformedSkipList:
+    """A skip list its reader refuses costs the skip reasons of that side, not the report."""
+
+    def test_error_record_names_the_file(self, temp_dir, pipeline_caplog):
+        _run_stage(temp_dir, _COHORT, crop_status=_PARTIAL_STATUS, malformed_sides="L")
+
+        assert any(SKIP_LIST_FILENAME.format(side="L") in message for message in _summary_records(pipeline_caplog))
+
+    def test_other_side_keeps_its_skip_reason(self, temp_dir):
+        skip = _Skip(side="R")
+
+        run = _run_stage(temp_dir, _COHORT, crop_subjects=[_SUBJECT], skips=(skip,), malformed_sides="L")
+
+        reasons = run.rows()[_OTHER_SUBJECT]["reason"].split(";")
+        assert skip.reason() in reasons
+        assert f"missing_crop:skeleton:L:{_REGIONS[0]}" in reasons
+
+
+class TestCropChild:
+    """Crop status 3 from a real child process, through ScriptBuilder.main(), --log and execute_command unmocked."""
+
+    @staticmethod
+    def _run_main(temp_dir, monkeypatch):
+        """Run main() on a stand-in crop script exiting 3; return its exit code, output_qc.tsv and run-log paths.
+
+        The stand-in copies a tree holding the crops of _SUBJECT and a skip list naming _OTHER_SUBJECT on side L.
+        """
+        root = Path(temp_dir)
+        input_dir, output_dir, staged = root / "input", root / "output", root / "staged"
+        output_dir.mkdir()
+        for subject in _COHORT:
+            add_graphs(input_dir, subject)
+        derivatives = output_dir / DERIVATIVES_FOLDER
+        crops_dir = Path(compute_versioned_crops_dir(str(derivatives), _MASKS_DEFAULT))
+        staged_crops = staged / crops_dir.relative_to(derivatives)
+        add_crops(staged_crops, list(_COHORT), _REGIONS, (*_DEFAULT_KINDS, "mask"))
+        _add_skips(staged, staged_crops, _CropStep(skips=(_Skip(),)))
+        child = root / "crop_stand_in.py"
+        child.write_text(_CHILD_SOURCE)
+        log_path = root / "run.log"
+        command = [sys.executable, str(child), str(staged), str(derivatives), _CHILD_LINE, str(_PARTIAL_STATUS)]
+        argv = [str(input_dir), str(output_dir), "--path_to_graph", GRAPH_DIR, "--path_sk_with_hull", "skeleton/path"]
+        monkeypatch.setattr(sys, "argv", ["run_cortical_tiles", *argv, "--regions", *_REGIONS, f"--log={log_path}"])
+        monkeypatch.setattr("champollion_utils.script_builder.check_for_updates", lambda *_a, **_k: None)
+        monkeypatch.setattr("champollion_utils.script_builder.init_process", lambda *_a, **_k: None)
+        script = RunCorticalTiles()
+        with (
+            patch.object(script, "_build_crop_command", return_value=command),
+            patch(f"{_MODULE}.add_left_and_right_volumes.add_left_and_right_volumes"),
+            patch(f"{_MODULE}.remove_ventricle.remove_ventricle"),
+        ):
+            result = script.main()
+        return result, derivatives / _QC_FILE, log_path
+
+    def test_child_status_3_runs_the_stage_to_its_end(self, temp_dir, monkeypatch, pipeline_caplog):
+        result, qc_path, _ = self._run_main(temp_dir, monkeypatch)
+
+        rows = {row["participant_id"]: row for row in read_qc_tsv(qc_path)}
+        assert result == _PARTIAL_STATUS
+        assert rows[_SUBJECT]["qc"] == 1
+        assert rows[_OTHER_SUBJECT]["reason"] == _Skip().reason()
+        assert _OTHER_SUBJECT in _record_of(_summary_records(pipeline_caplog), "L", _STEP)
+
+    def test_child_stdout_reaches_the_run_log(self, temp_dir, monkeypatch):
+        _, _, log_path = self._run_main(temp_dir, monkeypatch)
+
+        assert _CHILD_LINE in log_path.read_text()
