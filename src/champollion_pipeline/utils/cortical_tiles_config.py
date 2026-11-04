@@ -4,6 +4,7 @@ from dataclasses import dataclass
 
 CROPS_DIRNAME = "crops"
 DEFAULT_VOXEL_SIZE = 2.0
+INPUT_TYPES_DEFAULT = ("skeleton", "foldlabel")
 
 
 @dataclass
