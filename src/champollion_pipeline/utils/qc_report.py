@@ -141,16 +141,17 @@ def _write_atomic(path: str | os.PathLike, header: Sequence[str], rows: Iterable
         raise
 
 
-def read_qc_tsv(path: str | os.PathLike) -> list[dict[str, object]]:
-    """Return one record per data row of a tab-separated QC file.
+def read_qc_tsv(path: str | os.PathLike, delimiter: str = "\t") -> list[dict[str, object]]:
+    """Return one record per data row of a QC file, tab-separated unless ``delimiter`` says otherwise.
 
+    ``delimiter`` exists for the comma-separated --sk_qc_path files cortical_tiles accepts.
     Values are the cell text, except qc which becomes int 0 or 1. A file
     without a reason column gets ``reason = ""`` on every record. Raises
     ValueError, message starting with the path, on a missing participant_id
     or qc column, a repeated participant_id or a qc cell other than 0 or 1.
     """
     with open(path, encoding="utf-8", newline="") as handle:
-        reader = csv.DictReader(handle, delimiter="\t")
+        reader = csv.DictReader(handle, delimiter=delimiter)
         header = list(reader.fieldnames or [])
         for column in (ID_COLUMN, QC_COLUMN):
             if column not in header:

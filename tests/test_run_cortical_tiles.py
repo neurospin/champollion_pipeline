@@ -22,24 +22,12 @@ from hypothesis import strategies as st
 from champollion_pipeline.run_cortical_tiles import RunCorticalTiles, main
 from champollion_pipeline.utils.lib import DERIVATIVES_FOLDER
 from tests.log_assertions import LOG
-
-
-@pytest.fixture(autouse=True)  # noqa: V103
-def _stub_whole_brain_functions(monkeypatch):
-    """Prevent the real whole-brain submodule calls from running in tests that
-    don't care about them (REQ-WHOLEBRAIN-01 runs unconditionally in run()).
-    TestWholeBrainGeneration patches these itself, taking precedence within
-    its own `with patch(...)` blocks.
-    """
-    monkeypatch.setattr(
-        "champollion_pipeline.run_cortical_tiles.add_left_and_right_volumes.add_left_and_right_volumes",
-        MagicMock(),
-    )
-    monkeypatch.setattr(
-        "champollion_pipeline.run_cortical_tiles.remove_ventricle.remove_ventricle",
-        MagicMock(),
-    )
-
+from tests.stage2_layout import (  # noqa: F401
+    _stub_whole_brain_functions,  # noqa: V103 - autouse fixture
+    add_graphs,
+    run_on_config,
+    stage_dirs,
+)
 
 # Signature of the real cortical_tiles remove_ventricle(), captured before any
 # test patches it, so fakes can read its arguments however they are passed.
@@ -54,24 +42,31 @@ def _skeleton_dir(output_dir):
     return Path(output_dir).resolve() / DERIVATIVES_FOLDER / "skeletons" / "2mm"
 
 
+def _make_skeletons(output_dir, subject):
+    """Write the subject's L, R and fused F resampled skeletons under the skeleton directory."""
+    for side in ("L", "R", "F"):
+        side_dir = _skeleton_dir(output_dir) / side
+        side_dir.mkdir(parents=True, exist_ok=True)
+        (side_dir / f"{side}resampled_skeleton_{subject}.nii.gz").touch()
+
+
 def _make_subject(input_dir, output_dir, subject, sessions):
     """Lay out one subject on disk as run() finds it after the crop and fusion steps.
 
-    ``sessions`` lists the Morphologist labelling sessions holding a labelled
-    graph for the subject, at
+    The subject holds its two Morphologist graphs in <path_to_graph>. ``sessions``
+    lists the Morphologist labelling sessions holding a labelled graph for the
+    subject, at
     ``<input>/<subject>/<path_to_graph>/<session>/<side><subject>_<session>.arg``
     (the layout cortical_tiles' remove_ventricle reads). The subject's L, R and
     fused F resampled skeletons are written under the skeleton directory.
     """
+    add_graphs(input_dir, subject, _GRAPH_SUBPATH)
     for session in sessions:
         session_dir = Path(input_dir) / subject / _GRAPH_SUBPATH / session
         session_dir.mkdir(parents=True)
         for side in ("L", "R"):
             (session_dir / f"{side}{subject}_{session}.arg").touch()
-    for side in ("L", "R", "F"):
-        side_dir = _skeleton_dir(output_dir) / side
-        side_dir.mkdir(parents=True, exist_ok=True)
-        (side_dir / f"{side}resampled_skeleton_{subject}.nii.gz").touch()
+    _make_skeletons(output_dir, subject)
 
 
 def _add_fixture_subject(input_dir, output_dir):
@@ -185,267 +180,12 @@ class TestRunCorticalTilesInit:
             script.parse_args([])  # Should fail due to missing required args
 
 
-class TestRunCorticalTilesArguments:
-    """Test argument parsing."""
-
-    def test_parse_required_arguments(self):
-        """Test parsing required arguments."""
-        script = RunCorticalTiles()
-        args = script.parse_args(
-            ["/input", "/output", "--path_to_graph", "graphs/path", "--path_sk_with_hull", "skeleton/path"]
-        )
-        assert args.input == "/input"
-        assert args.output == "/output"
-        assert args.path_to_graph == "graphs/path"
-        assert args.path_sk_with_hull == "skeleton/path"
-
-    def test_optional_region_file(self):
-        """Test optional region-file argument."""
-        script = RunCorticalTiles()
-        args = script.parse_args(
-            [
-                "/input",
-                "/output",
-                "--path_to_graph",
-                "graphs/path",
-                "--path_sk_with_hull",
-                "skeleton/path",
-                "--region-file",
-                "/path/to/regions.json",
-            ]
-        )
-        assert args.region_file == "/path/to/regions.json"
-
-    def test_optional_sk_qc_path_default(self):
-        """Test that sk_qc_path defaults to empty string."""
-        script = RunCorticalTiles()
-        args = script.parse_args(
-            ["/input", "/output", "--path_to_graph", "graphs/path", "--path_sk_with_hull", "skeleton/path"]
-        )
-        assert args.sk_qc_path == ""
-
-    def test_optional_njobs_default(self):
-        """Test that njobs defaults to None."""
-        script = RunCorticalTiles()
-        args = script.parse_args(
-            ["/input", "/output", "--path_to_graph", "graphs/path", "--path_sk_with_hull", "skeleton/path"]
-        )
-        assert args.njobs is None
-
-    def test_njobs_custom_value(self):
-        """Test setting custom njobs value."""
-        script = RunCorticalTiles()
-        args = script.parse_args(
-            [
-                "/input",
-                "/output",
-                "--path_to_graph",
-                "graphs/path",
-                "--path_sk_with_hull",
-                "skeleton/path",
-                "--njobs",
-                "10",
-            ]
-        )
-        assert args.njobs == 10
-
-    def test_missing_required_arguments(self):
-        """Test that missing required arguments raise error."""
-        script = RunCorticalTiles()
-        with pytest.raises(SystemExit):
-            script.parse_args(["/input", "/output"])  # Missing path_to_graph and path_sk_with_hull
-
-    def test_input_types_default_none(self):
-        """Test that input_types defaults to None."""
-        script = RunCorticalTiles()
-        args = script.parse_args(["/input", "/output", "--path_to_graph", "graphs", "--path_sk_with_hull", "skeleton"])
-        assert args.input_types is None
-
-    def test_input_types_can_be_set(self):
-        """Test that --input-types accepts multiple values."""
-        script = RunCorticalTiles()
-        args = script.parse_args(
-            [
-                "/input",
-                "/output",
-                "--path_to_graph",
-                "graphs",
-                "--path_sk_with_hull",
-                "skeleton",
-                "--input-types",
-                "skeleton",
-                "foldlabel",
-                "extremities",
-            ]
-        )
-        assert args.input_types == ["skeleton", "foldlabel", "extremities"]
-
-    def test_skip_distbottom_default_false(self):
-        """Test that --skip-distbottom defaults to False."""
-        script = RunCorticalTiles()
-        args = script.parse_args(["/input", "/output", "--path_to_graph", "graphs", "--path_sk_with_hull", "skeleton"])
-        assert args.skip_distbottom is False
-
-    def test_skip_distbottom_can_be_set(self):
-        """Test that --skip-distbottom can be set to True."""
-        script = RunCorticalTiles()
-        args = script.parse_args(
-            ["/input", "/output", "--path_to_graph", "graphs", "--path_sk_with_hull", "skeleton", "--skip-distbottom"]
-        )
-        assert args.skip_distbottom is True
-
-    def test_bids_default_false(self):
-        """--bids is an opt-in flag on RunCorticalTiles's parser, defaulting to False (REQ-BIDS-01/-02)."""
-        script = RunCorticalTiles()
-        args = script.parse_args(["/input", "/output", "--path_to_graph", "graphs", "--path_sk_with_hull", "skeleton"])
-        assert args.bids is False
-
-    def test_bids_can_be_set(self):
-        """--bids is recognized by RunCorticalTiles's parser and sets args.bids to True (REQ-BIDS-01/-02).
-
-        main.py's RunCorticalTilesStage already appends --bids when
-        config.dataset.bids is set; without this flag the receiving parser
-        rejects it.
-        """
-        script = RunCorticalTiles()
-        args = script.parse_args(
-            ["/input", "/output", "--path_to_graph", "graphs", "--path_sk_with_hull", "skeleton", "--bids"]
-        )
-        assert args.bids is True
-
-
-class TestNjobsHandling:
-    """Test njobs calculation and validation."""
-
-    @patch("champollion_pipeline.run_cortical_tiles.cpu_count", return_value=24)
-    def test_njobs_none_uses_default_calculation(self, _mock_cpu):
-        """Test that njobs=None calculates min(22, cpu_count-2)."""
-        script = RunCorticalTiles()
-        script.parse_args(["/input", "/output", "--path_to_graph", "graphs", "--path_sk_with_hull", "skeleton"])
-
-        with (
-            patch.object(script, "validate_paths", return_value=True),
-            patch.object(script, "execute_command", return_value=0),
-        ):
-            script.run()
-
-            # njobs should be min(22, 24-2) = 22
-            assert script.args.njobs == 22
-
-    @patch("champollion_pipeline.run_cortical_tiles.cpu_count", return_value=8)
-    def test_njobs_none_with_low_cpu_count(self, _mock_cpu):
-        """Test njobs calculation with low CPU count."""
-        script = RunCorticalTiles()
-        script.parse_args(["/input", "/output", "--path_to_graph", "graphs", "--path_sk_with_hull", "skeleton"])
-
-        with (
-            patch.object(script, "validate_paths", return_value=True),
-            patch.object(script, "execute_command", return_value=0),
-        ):
-            script.run()
-
-            # njobs should be min(22, 8-2) = 6
-            assert script.args.njobs == 6
-
-    @patch("champollion_pipeline.run_cortical_tiles.cpu_count", return_value=8)
-    def test_njobs_exceeds_cpu_count_logs_warning(self, _mock_cpu, pipeline_caplog):
-        """REQ-LOGGING-BDRABCZUK-AA4776030940: njobs >= cpu_count is logged at WARNING with both counts."""
-        script = RunCorticalTiles()
-        script.parse_args(
-            [
-                "/input",
-                "/output",
-                "--path_to_graph",
-                "graphs",
-                "--path_sk_with_hull",
-                "skeleton",
-                "--njobs",
-                "10",  # More than cpu_count
-            ]
-        )
-
-        with (
-            patch.object(script, "validate_paths", return_value=True),
-            patch.object(script, "execute_command", return_value=0),
-        ):
-            script.run()
-
-        record = pipeline_caplog.assert_logged(logging.WARNING, "10")
-        assert record.name == _LOGGER_NAME
-        assert re.search(r"\b10\b.*\b8\b", record.getMessage()), record.getMessage()
-
-    @patch("champollion_pipeline.run_cortical_tiles.cpu_count", return_value=1)
-    def test_njobs_minimum_one_with_cpu_count_one(self, _mock_cpu):
-        """njobs is at least 1 even on a single-core machine (cpu_count=1)."""
-        script = RunCorticalTiles()
-        script.parse_args(["/input", "/output", "--path_to_graph", "graphs", "--path_sk_with_hull", "skeleton"])
-
-        with (
-            patch.object(script, "validate_paths", return_value=True),
-            patch.object(script, "execute_command", return_value=0),
-        ):
-            script.run()
-            # max(1, min(22, 1 - 2)) = max(1, -1) = 1
-            assert script.args.njobs == 1
-
-    @patch("champollion_pipeline.run_cortical_tiles.cpu_count", return_value=2)
-    def test_njobs_minimum_one_with_cpu_count_two(self, _mock_cpu):
-        """njobs is at least 1 on a dual-core machine (cpu_count=2)."""
-        script = RunCorticalTiles()
-        script.parse_args(["/input", "/output", "--path_to_graph", "graphs", "--path_sk_with_hull", "skeleton"])
-
-        with (
-            patch.object(script, "validate_paths", return_value=True),
-            patch.object(script, "execute_command", return_value=0),
-        ):
-            script.run()
-            # max(1, min(22, 2 - 2)) = max(1, 0) = 1
-            assert script.args.njobs == 1
-
-
-class TestValidatePaths:
-    """Test path validation."""
-
-    def test_validate_paths_success(self, temp_dir):
-        """Test successful path validation."""
-        script = RunCorticalTiles()
-        input_dir = Path(temp_dir) / "input"
-        output_dir = Path(temp_dir) / "output"
-        input_dir.mkdir()
-        output_dir.mkdir()
-
-        script.parse_args(
-            [str(input_dir), str(output_dir), "--path_to_graph", "graphs", "--path_sk_with_hull", "skeleton"]
-        )
-
-        assert script.validate_paths([str(input_dir), str(output_dir)]) is True
-
-    def test_validate_paths_failure_raises_error(self):
-        """Test that invalid paths raise ValueError."""
-        script = RunCorticalTiles()
-        script.parse_args(
-            [
-                "/nonexistent/input",
-                "/nonexistent/output",
-                "--path_to_graph",
-                "graphs",
-                "--path_sk_with_hull",
-                "skeleton",
-            ]
-        )
-
-        with (
-            patch.object(script, "validate_paths", return_value=False),
-            pytest.raises(ValueError, match="Please input valid paths"),
-        ):
-            script.run()
-
-
 class TestBuildCommand:
     """Test command building."""
 
     def test_command_includes_required_parameters(self, temp_dir):
         """Test that command includes all required parameters."""
+        add_graphs(temp_dir, graph_dir="custom/graph/path")
         script = RunCorticalTiles()
         script.parse_args(
             [temp_dir, temp_dir, "--path_to_graph", "custom/graph/path", "--path_sk_with_hull", "custom/skeleton/path"]
@@ -469,6 +209,7 @@ class TestBuildCommand:
 
     def test_command_includes_input_types_when_set(self, temp_dir):
         """Test that --input-types adds -y flag to command."""
+        add_graphs(temp_dir)
         script = RunCorticalTiles()
         script.parse_args(
             [
@@ -497,6 +238,9 @@ class TestBuildCommand:
 
     def test_command_includes_sk_qc_path_when_set(self, temp_dir):
         """Test that --sk_qc_path is included when set."""
+        add_graphs(temp_dir)
+        qc_file = Path(temp_dir) / "qc.tsv"
+        qc_file.write_text("participant_id\tqc\nsubj01\t1\n")
         script = RunCorticalTiles()
         script.parse_args(
             [
@@ -507,7 +251,7 @@ class TestBuildCommand:
                 "--path_sk_with_hull",
                 "skeleton",
                 "--sk_qc_path",
-                "/path/to/qc.tsv",
+                str(qc_file),
             ]
         )
 
@@ -519,7 +263,7 @@ class TestBuildCommand:
 
             cmd = mock_exec.call_args[0][0]
             assert "--sk_qc_path" in cmd
-            assert "/path/to/qc.tsv" in cmd
+            assert str(qc_file) in cmd
 
 
 class TestSkipDistbottom:
@@ -527,67 +271,20 @@ class TestSkipDistbottom:
 
     def test_skip_distbottom_modifies_config(self, temp_dir):
         """Test that --skip-distbottom sets skip_distbottom in pipeline JSON."""
-        input_dir = Path(temp_dir) / "input"
-        output_dir = Path(temp_dir) / "output"
-        input_dir.mkdir()
-        output_dir.mkdir()
-        config_data = {"graphs_dir": "", "other_key": "value"}
-        config_path = output_dir / "pipeline_loop_2mm.json"
-        config_path.write_text(json.dumps(config_data))
+        input_dir, output_dir = stage_dirs(temp_dir)
 
-        script = RunCorticalTiles()
-        script.parse_args(
-            [
-                str(input_dir),
-                str(output_dir),
-                "--path_to_graph",
-                "graphs",
-                "--path_sk_with_hull",
-                "skeleton",
-                "--skip-distbottom",
-            ]
+        # Read back config and check skip_distbottom was set
+        updated_config = run_on_config(
+            input_dir, output_dir, {"graphs_dir": "", "other_key": "value"}, "--skip-distbottom"
         )
-
-        with (
-            patch.object(script, "validate_paths", return_value=True),
-            patch.object(script, "execute_command", return_value=0),
-        ):
-            script.run()
-
-            # Read back config and check skip_distbottom was set
-            updated_config = json.loads(config_path.read_text())
-            assert updated_config.get("skip_distbottom") is True
+        assert updated_config.get("skip_distbottom") is True
 
     def test_no_distbottom_flag_sets_skip_distbottom_true(self, temp_dir):
         """Without a distbottom flag, skip_distbottom defaults to true (REQ-TILESDEF-02)."""
-        input_dir = Path(temp_dir) / "input"
-        output_dir = Path(temp_dir) / "output"
-        input_dir.mkdir()
-        output_dir.mkdir()
-        config_data = {"graphs_dir": "", "other_key": "value"}
-        config_path = output_dir / "pipeline_loop_2mm.json"
-        config_path.write_text(json.dumps(config_data))
+        input_dir, output_dir = stage_dirs(temp_dir)
 
-        script = RunCorticalTiles()
-        script.parse_args(
-            [
-                str(input_dir),
-                str(output_dir),
-                "--path_to_graph",
-                "graphs",
-                "--path_sk_with_hull",
-                "skeleton",
-            ]
-        )
-
-        with (
-            patch.object(script, "validate_paths", return_value=True),
-            patch.object(script, "execute_command", return_value=0),
-        ):
-            script.run()
-
-            updated_config = json.loads(config_path.read_text())
-            assert updated_config.get("skip_distbottom") is True
+        updated_config = run_on_config(input_dir, output_dir, {"graphs_dir": "", "other_key": "value"})
+        assert updated_config.get("skip_distbottom") is True
 
     def test_both_distbottom_flags_are_mutually_exclusive(self):
         """Passing both --with-distbottom and --skip-distbottom raises SystemExit."""
@@ -608,132 +305,39 @@ class TestSkipDistbottom:
 
     def test_graphs_dir_set_to_input(self, temp_dir):
         """Test that graphs_dir in config is set to input path."""
-        input_dir = Path(temp_dir) / "input"
-        output_dir = Path(temp_dir) / "output"
-        input_dir.mkdir()
-        output_dir.mkdir()
-        config_data = {"graphs_dir": "$local", "other_key": "value"}
-        config_path = output_dir / "pipeline_loop_2mm.json"
-        config_path.write_text(json.dumps(config_data))
+        input_dir, output_dir = stage_dirs(temp_dir)
 
-        script = RunCorticalTiles()
-        script.parse_args(
-            [
-                str(input_dir),
-                str(output_dir),
-                "--path_to_graph",
-                "graphs",
-                "--path_sk_with_hull",
-                "skeleton",
-            ]
-        )
-
-        with (
-            patch.object(script, "validate_paths", return_value=True),
-            patch.object(script, "execute_command", return_value=0),
-        ):
-            script.run()
-
-            updated = json.loads(config_path.read_text())
-            assert updated["graphs_dir"] == str(input_dir.resolve())
+        updated = run_on_config(input_dir, output_dir, {"graphs_dir": "$local", "other_key": "value"})
+        assert updated["graphs_dir"] == str(input_dir.resolve())
 
     def test_output_dir_set_from_output_arg(self, temp_dir):
         """Test that output_dir in config is set to output/DERIVATIVES_FOLDER."""
 
+        add_graphs(temp_dir)
         output_dir = Path(temp_dir) / "derivatives"
         output_dir.mkdir()
 
         # Config is placed inside the output (derivatives) directory, not the subjects dir
-        config_data = {"graphs_dir": "$local", "output_dir": "$local"}
-        config_path = output_dir / "pipeline_loop_2mm.json"
-        config_path.write_text(json.dumps(config_data))
-
-        script = RunCorticalTiles()
-        script.parse_args(
-            [
-                temp_dir,
-                str(output_dir),
-                "--path_to_graph",
-                "graphs",
-                "--path_sk_with_hull",
-                "skeleton",
-            ]
-        )
-
-        with (
-            patch.object(script, "validate_paths", return_value=True),
-            patch.object(script, "execute_command", return_value=0),
-        ):
-            script.run()
-
-            updated = json.loads(config_path.read_text())
-            expected = str(output_dir.resolve() / DERIVATIVES_FOLDER)
-            assert updated["output_dir"] == expected
+        updated = run_on_config(temp_dir, output_dir, {"graphs_dir": "$local", "output_dir": "$local"})
+        expected = str(output_dir.resolve() / DERIVATIVES_FOLDER)
+        assert updated["output_dir"] == expected
 
     def test_existing_skip_distbottom_preserved_when_flag_not_passed(self, temp_dir):
         """Existing skip_distbottom=True in config persists when flag is not passed."""
-        input_dir = Path(temp_dir) / "input"
-        output_dir = Path(temp_dir) / "output"
-        input_dir.mkdir()
-        output_dir.mkdir()
-        config_data = {"graphs_dir": "", "output_dir": "", "skip_distbottom": True}
-        config_path = output_dir / "pipeline_loop_2mm.json"
-        config_path.write_text(json.dumps(config_data))
+        input_dir, output_dir = stage_dirs(temp_dir)
 
-        script = RunCorticalTiles()
-        script.parse_args(
-            [
-                str(input_dir),
-                str(output_dir),
-                "--path_to_graph",
-                "graphs",
-                "--path_sk_with_hull",
-                "skeleton",
-            ]
-        )
-
-        with (
-            patch.object(script, "validate_paths", return_value=True),
-            patch.object(script, "execute_command", return_value=0),
-        ):
-            script.run()
-
-            updated = json.loads(config_path.read_text())
-            # Key is preserved from original config
-            assert updated.get("skip_distbottom") is True
+        updated = run_on_config(input_dir, output_dir, {"graphs_dir": "", "output_dir": "", "skip_distbottom": True})
+        # Key is preserved from original config
+        assert updated.get("skip_distbottom") is True
 
     def test_config_with_null_values_overwritten_correctly(self, temp_dir):
         """JSON null (None) for graphs_dir/output_dir is overwritten with correct paths."""
 
-        input_dir = Path(temp_dir) / "input"
-        output_dir = Path(temp_dir) / "output"
-        input_dir.mkdir()
-        output_dir.mkdir()
-        config_data = {"graphs_dir": None, "output_dir": None}
-        config_path = output_dir / "pipeline_loop_2mm.json"
-        config_path.write_text(json.dumps(config_data))
+        input_dir, output_dir = stage_dirs(temp_dir)
 
-        script = RunCorticalTiles()
-        script.parse_args(
-            [
-                str(input_dir),
-                str(output_dir),
-                "--path_to_graph",
-                "graphs",
-                "--path_sk_with_hull",
-                "skeleton",
-            ]
-        )
-
-        with (
-            patch.object(script, "validate_paths", return_value=True),
-            patch.object(script, "execute_command", return_value=0),
-        ):
-            script.run()
-
-            updated = json.loads(config_path.read_text())
-            assert updated["graphs_dir"] == str(input_dir.resolve())
-            assert updated["output_dir"] == str(output_dir.resolve() / DERIVATIVES_FOLDER)
+        updated = run_on_config(input_dir, output_dir, {"graphs_dir": None, "output_dir": None})
+        assert updated["graphs_dir"] == str(input_dir.resolve())
+        assert updated["output_dir"] == str(output_dir.resolve() / DERIVATIVES_FOLDER)
 
 
 class TestBidsConfig:
@@ -746,33 +350,8 @@ class TestBidsConfig:
     """
 
     def _run(self, temp_dir, config_data, extra_args=None):
-        input_dir = Path(temp_dir) / "input"
-        output_dir = Path(temp_dir) / "output"
-        input_dir.mkdir()
-        output_dir.mkdir()
-        config_path = output_dir / "pipeline_loop_2mm.json"
-        config_path.write_text(json.dumps(config_data))
-
-        script = RunCorticalTiles()
-        script.parse_args(
-            [
-                str(input_dir),
-                str(output_dir),
-                "--path_to_graph",
-                "graphs",
-                "--path_sk_with_hull",
-                "skeleton",
-            ]
-            + (extra_args or [])
-        )
-
-        with (
-            patch.object(script, "validate_paths", return_value=True),
-            patch.object(script, "execute_command", return_value=0),
-        ):
-            script.run()
-
-        return json.loads(config_path.read_text())
+        input_dir, output_dir = stage_dirs(temp_dir)
+        return run_on_config(input_dir, output_dir, config_data, *(extra_args or []))
 
     def test_bids_flag_sets_bids_true_in_config(self, temp_dir):
         """With --bids, the written pipeline_loop_2mm.json has "bids": true, overriding the template's false."""
@@ -790,10 +369,7 @@ class TestGraphPathConfigOverride:
 
     def _run_with_config(self, temp_dir, config_data, graph_path, skel_path):
 
-        input_dir = Path(temp_dir) / "input"
-        output_dir = Path(temp_dir) / "output"
-        input_dir.mkdir()
-        output_dir.mkdir()
+        input_dir, output_dir = stage_dirs(temp_dir, graph_path)
         config_path = output_dir / "pipeline_loop_2mm.json"
         config_path.write_text(json.dumps(config_data))
         script = RunCorticalTiles()
@@ -864,10 +440,7 @@ class TestConfigLocationInvariants:
 
     def test_config_copied_to_output_not_input(self, temp_dir):
         """pipeline_loop_2mm.json is copied to output dir, never to input dir."""
-        input_dir = Path(temp_dir) / "input"
-        output_dir = Path(temp_dir) / "output"
-        input_dir.mkdir()
-        output_dir.mkdir()
+        input_dir, output_dir = stage_dirs(temp_dir)
         # No pre-existing config: forces the cp branch
 
         script = RunCorticalTiles()
@@ -898,10 +471,7 @@ class TestConfigLocationInvariants:
 
     def test_d_arg_points_to_output_not_input(self, temp_dir):
         """-d in the generate_sulcal_regions command is output dir, not input dir."""
-        input_dir = Path(temp_dir) / "input"
-        output_dir = Path(temp_dir) / "output"
-        input_dir.mkdir()
-        output_dir.mkdir()
+        input_dir, output_dir = stage_dirs(temp_dir)
         config_path = output_dir / "pipeline_loop_2mm.json"
         config_path.write_text(json.dumps({"graphs_dir": "", "output_dir": ""}))
 
@@ -937,10 +507,7 @@ class TestHypothesisConfigInvariants:
 
         tmp = tempfile.mkdtemp()
         try:
-            input_dir = Path(tmp) / "input"
-            output_dir = Path(tmp) / "output"
-            input_dir.mkdir()
-            output_dir.mkdir()
+            input_dir, output_dir = stage_dirs(tmp, "g")
             config_path = output_dir / "pipeline_loop_2mm.json"
             config_path.write_text(json.dumps(config_data))
             script = RunCorticalTiles()
@@ -1044,7 +611,7 @@ class TestHypothesisConfigInvariants:
             try:
                 input_dir = Path(tmp) / in_name
                 output_dir = Path(tmp) / out_name
-                input_dir.mkdir(exist_ok=True)
+                add_graphs(input_dir, graph_dir="g")
                 output_dir.mkdir(exist_ok=True)
                 (output_dir / "pipeline_loop_2mm.json").write_text(json.dumps({"graphs_dir": "", "output_dir": ""}))
                 script = RunCorticalTiles()
@@ -1077,6 +644,7 @@ class TestRunMethod:
 
     def test_run_executes_with_shell_false(self, temp_dir):
         """Test that command is executed with shell=False."""
+        add_graphs(temp_dir)
         script = RunCorticalTiles()
         script.parse_args([temp_dir, temp_dir, "--path_to_graph", "graphs", "--path_sk_with_hull", "skeleton"])
 
@@ -1091,6 +659,7 @@ class TestRunMethod:
 
     def test_run_returns_command_result(self, temp_dir):
         """Test that run returns the result from execute_command."""
+        add_graphs(temp_dir)
         script = RunCorticalTiles()
         script.parse_args([temp_dir, temp_dir, "--path_to_graph", "graphs", "--path_sk_with_hull", "skeleton"])
 
@@ -1103,6 +672,7 @@ class TestRunMethod:
 
     def test_run_logs_input_output(self, temp_dir, pipeline_caplog):
         """run logs the input and output paths at LOG (REQ-LOGGING-BDRABCZUK-72B7182FAE4D, -3CD073B72CB8)."""
+        add_graphs(temp_dir)
         script = RunCorticalTiles()
         script.parse_args([temp_dir, temp_dir, "--path_to_graph", "graphs", "--path_sk_with_hull", "skeleton"])
 
@@ -1145,10 +715,7 @@ class TestRunCorticalTilesIntegration:
     def test_full_workflow(self, temp_dir):
         """Test complete workflow."""
         script = RunCorticalTiles()
-        input_dir = Path(temp_dir) / "input"
-        output_dir = Path(temp_dir) / "output"
-        input_dir.mkdir()
-        output_dir.mkdir()
+        input_dir, output_dir = stage_dirs(temp_dir, _GRAPH_SUBPATH)
 
         script.parse_args(
             [
@@ -1226,10 +793,7 @@ class TestGenerateMaskNpys:
 
     def test_called_after_cortical_tiles_run(self, tmp_path):
         """_generate_mask_npys is invoked at the end of run()."""
-        input_dir = tmp_path / "input"
-        output_dir = tmp_path / "output"
-        input_dir.mkdir()
-        output_dir.mkdir()
+        input_dir, output_dir = stage_dirs(tmp_path, _GRAPH_SUBPATH)
         (output_dir / "pipeline_loop_2mm.json").write_text("{}")
 
         script = RunCorticalTiles()
@@ -1664,7 +1228,7 @@ def _resolved_graph_path(acquisition):
 
 
 def _make_wildcard_subject(input_dir, output_dir, subject, acquisitions):
-    """Lay out one subject whose labelled graphs sit under one folder per entry of
+    """Lay out one subject whose graphs and labelled graphs sit under one folder per entry of
     ``acquisitions``, each matching ``_WILDCARD_PATH_TO_GRAPH``:
     ``<input>/<subject>/t1mri/<acquisition>/default_analysis/folds/3.1/<session>/<side><subject>_<session>.arg``.
     The subject folder exists even when ``acquisitions`` is empty. The L, R and
@@ -1672,14 +1236,12 @@ def _make_wildcard_subject(input_dir, output_dir, subject, acquisitions):
     """
     (Path(input_dir) / subject).mkdir(parents=True)
     for acquisition in acquisitions:
+        add_graphs(input_dir, subject, _resolved_graph_path(acquisition))
         session_dir = Path(input_dir) / subject / _resolved_graph_path(acquisition) / _WILDCARD_SESSION
         session_dir.mkdir(parents=True)
         for side in ("L", "R"):
             (session_dir / f"{side}{subject}_{_WILDCARD_SESSION}.arg").touch()
-    for side in ("L", "R", "F"):
-        side_dir = _skeleton_dir(output_dir) / side
-        side_dir.mkdir(parents=True, exist_ok=True)
-        (side_dir / f"{side}resampled_skeleton_{subject}.nii.gz").touch()
+    _make_skeletons(output_dir, subject)
 
 
 def _run_wildcard_step(temp_dir, subjects):

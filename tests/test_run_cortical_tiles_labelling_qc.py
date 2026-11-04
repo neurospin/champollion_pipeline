@@ -14,10 +14,12 @@ import pytest
 from champollion_pipeline.run_cortical_tiles import RunCorticalTiles
 from champollion_pipeline.utils.lib import DERIVATIVES_FOLDER
 from champollion_pipeline.utils.qc_report import read_qc_tsv
+from tests.stage2_layout import add_graphs
 from tests.test_run_cortical_tiles import (  # noqa: F401
     _GRAPH_SUBPATH,
     _LOGGER_NAME,
     _WILDCARD_SESSION,
+    _make_skeletons,
     _make_subject,
     _run_whole_brain_step,
     _run_wildcard_step,
@@ -126,13 +128,17 @@ def _make_labelled_subject(input_dir, output_dir, subject, graphs):
 
 
 def _make_bids_volume(input_dir, output_dir, fused_id, sides):
-    """Lay out the fused volume ``<folder>_<keys>`` of a BIDS subject: its labelled
-    graphs sit at ``<input>/<folder>/<path_to_graph, * replaced by keys>/<session>/``,
-    named after the folder alone, as cortical_tiles' get_labelled_graph reads them.
+    """Lay out the fused volume ``<folder>_<keys>`` of a BIDS subject: its graphs sit at
+    ``<input>/<folder>/<path_to_graph, * replaced by keys>/`` and its labelled graphs in
+    ``<session>/`` below, named after the folder alone, as cortical_tiles' get_labelled_graph
+    reads them. The only input folder is ``<folder>``: a ``<folder>_<keys>`` one would trip the
+    prefix-ID guard.
     """
-    _make_subject(input_dir, output_dir, fused_id, [])
+    _make_skeletons(output_dir, fused_id)
     folder, keys = fused_id.split("_", 1)
-    session_dir = Path(input_dir) / folder / _BIDS_PATH_TO_GRAPH.replace("*", keys) / _WILDCARD_SESSION
+    graph_dir = _BIDS_PATH_TO_GRAPH.replace("*", keys)
+    add_graphs(input_dir, folder, graph_dir)
+    session_dir = Path(input_dir) / folder / graph_dir / _WILDCARD_SESSION
     session_dir.mkdir(parents=True)
     for side in sides:
         (session_dir / f"{side}{folder}_{_WILDCARD_SESSION}.arg").touch()

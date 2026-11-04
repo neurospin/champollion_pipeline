@@ -82,6 +82,7 @@ def _cortical_tiles_argv(
         argv.append(f"--skel-seed={dataset.skel_seed}")
     if dataset.sk_qc_path:
         argv.append(f"--sk_qc_path={dataset.sk_qc_path}")
+        argv.append("--sk_qc_input_only")
     if dataset.bids:
         argv.append("--bids")
     if dataset.regions:

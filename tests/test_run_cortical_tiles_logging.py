@@ -14,7 +14,8 @@ REQ-LOGGING-BDRABCZUK-E8ADAAC230D6: no *mask_cropped.nii.gz file: WARNING.
 REQ-LOGGING-BDRABCZUK-499A5AA26075: each written mask .npy path is logged at OUTPUT.
 REQ-LOGGING-BDRABCZUK-B8918C62EB6A: the written mask .npy count is logged at OUTPUT.
 REQ-LOGGING-BDRABCZUK-12F726C73E22: no fused volume under F: WARNING with the skeleton source directory.
-(REQ-LOGGING-BDRABCZUK-AA4776030940, --njobs at or above the core count, and
+(REQ-LOGGING-BDRABCZUK-AA4776030940, --njobs at or above the core count:
+tests/test_run_cortical_tiles_arguments.py.
 REQ-LABELSESSION-BDRABCZUK-56365C1DEE1F, the exclusion warning: tests/test_run_cortical_tiles.py.
 REQ-LOGGING-BDRABCZUK-C96C8DAAF703 and -22ABEF2F2CBD: tests/test_logging_convention.py, through
 LOG_CONVERTED_MODULES.)
@@ -31,6 +32,7 @@ import pytest
 from champollion_pipeline.run_cortical_tiles import RunCorticalTiles
 from champollion_pipeline.utils.lib import DERIVATIVES_FOLDER
 from tests.log_assertions import LOG, OUTPUT
+from tests.stage2_layout import add_graphs
 
 pytestmark = pytest.mark.unit  # noqa: V107
 
@@ -99,6 +101,7 @@ def _run_mocked(script: RunCorticalTiles) -> None:
 
 def test_input_logged_at_log(tmp_path, pipeline_caplog):
     input_dir = tmp_path / "graphs_input"
+    add_graphs(input_dir)
     _run_mocked(_script(input_dir, tmp_path / "tiles_output"))
 
     _assert_record(pipeline_caplog, LOG, str(input_dir))
@@ -106,6 +109,7 @@ def test_input_logged_at_log(tmp_path, pipeline_caplog):
 
 def test_output_logged_at_log(tmp_path, pipeline_caplog):
     output_dir = tmp_path / "tiles_output"
+    add_graphs(tmp_path / "graphs_input")
     _run_mocked(_script(tmp_path / "graphs_input", output_dir))
 
     _assert_record(pipeline_caplog, LOG, str(output_dir))

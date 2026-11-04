@@ -24,6 +24,7 @@ import pytest
 from champollion_pipeline.run_cortical_tiles import RunCorticalTiles
 from champollion_pipeline.utils.lib import DERIVATIVES_FOLDER
 from champollion_pipeline.utils.qc_report import read_qc_tsv
+from tests.stage2_layout import add_graphs
 
 pytestmark = pytest.mark.unit  # noqa: V107
 
@@ -60,7 +61,7 @@ def _run(temp_dir: str, transforms: dict[tuple[str, str], str], exit_code: int =
     input_dir.mkdir()
     output_dir.mkdir()
     for subject in sorted({subject for _, subject in transforms}):
-        (input_dir / subject).mkdir()
+        add_graphs(input_dir, subject)
 
     def execute(command, *_args, **_kwargs):
         if any(str(part).endswith(CORTICAL_TILES_SCRIPT) for part in command):

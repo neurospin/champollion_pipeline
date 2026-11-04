@@ -218,6 +218,7 @@ Pass `--masks canonical_25` (or another version) to override the default.
 | `--path_to_graph` | **Required.** Glob pattern to `.arg` graph files, relative to the subjects dir. |
 | `--path_sk_with_hull` | **Required.** Skeleton-with-hull sub-path, relative to the subjects dir. |
 | `--sk_qc_path` | Path to QC TSV file |
+| `--sk_qc_input_only` | Limit the input QC to the subjects of the input: an id of the `--sk_qc_path` file with no input subject folder gets no `input_qc.tsv` row. For a run on part of the cohort the file covers. |
 | `--njobs` | Number of CPU cores (default: auto) |
 | `--region-file` | Accepted but currently has no effect (dead code upstream) — do not rely on it. |
 | `--input-types` | Input types to generate (e.g. `skeleton foldlabel extremities`). Default: `skeleton foldlabel` — extremities only when listed explicitly. |

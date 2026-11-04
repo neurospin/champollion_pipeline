@@ -28,6 +28,7 @@ from packaging.version import Version
 
 from champollion_pipeline.generate_morphologist_graphs import GenerateMorphologistGraphs
 from champollion_pipeline.run_cortical_tiles import RunCorticalTiles
+from tests.stage2_layout import add_graphs
 
 try:
     import tomllib
@@ -91,7 +92,7 @@ def _morphologist(tmp_path: Path) -> GenerateMorphologistGraphs:
 def _cortical_tiles(tmp_path: Path) -> RunCorticalTiles:
     input_dir = tmp_path / "graphs_in"
     output_dir = tmp_path / "tiles_out"
-    input_dir.mkdir()
+    add_graphs(input_dir)
     output_dir.mkdir()
     # An existing pipeline config skips the template copy, so generate_sulcal_regions is the only command.
     (output_dir / "pipeline_loop_2mm.json").write_text("{}", encoding="utf-8")
