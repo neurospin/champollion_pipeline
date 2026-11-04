@@ -34,6 +34,11 @@ Requirements:
 - REQ-STREAMING-BDRABCZUK-D5A8352E93D7 Morphologist removes the single-scan directory
 - REQ-STREAMING-BDRABCZUK-000ABB1CB055 Morphologist missing raw scan
 - REQ-STREAMING-BDRABCZUK-686264DAB6F3 stages module leaves sys.path untouched
+
+Task TASK-NTUI-BDRABCZUK-6F08E0BCFD78 (scan excluded by the cohort QC file):
+- REQ-NTUI-BDRABCZUK-23DC7F44C5E4 excluded_by_sk_qc alone raises ScanExcludedBySkQc
+- REQ-NTUI-BDRABCZUK-D0C08576AC55 another input QC reason raises plain RuntimeError
+- REQ-NTUI-BDRABCZUK-ED79E59EA289 absent or unreadable input_qc.tsv raises plain RuntimeError
 """
 
 from __future__ import annotations
@@ -54,6 +59,7 @@ from champollion_pipeline.run_cortical_tiles import RunCorticalTiles
 from champollion_pipeline.streaming import stages
 from champollion_pipeline.streaming.settings import StreamingSettings
 from champollion_pipeline.utils.lib import CORTICAL_TILES_VERSION, DERIVATIVES_FOLDER
+from champollion_pipeline.utils.qc_report import write_qc_tsv
 
 STAGES_MODULE = "champollion_pipeline.streaming.stages"
 PATH_TO_GRAPH = "t1mri/default_acquisition/default_analysis/folds/3.3/base"
@@ -507,6 +513,67 @@ def test_tiles_other_nonzero_codes_raise(tiles, settings, dataset, code: int) ->
         stages.run_cortical_tiles_for_scan(CLASSIC_SCAN, settings, dataset)
     assert CLASSIC_SCAN.path_prefix in str(excinfo.value)
     assert re.search(rf"(?<!\d){code}(?!\d)", str(excinfo.value))
+
+
+def _write_input_qc(dataset: DatasetConfig, scan: ScanId, rows: list[tuple[str, int, str]]) -> Path:
+    """Write the scan's input_qc.tsv, as RunCorticalTiles does: <tiles dir>/<DERIVATIVES_FOLDER>/input_qc.tsv."""
+    tiles_dir = Path(stages.compute_scan_tiles_dir(dataset.cortical_tiles_output, scan))
+    path = tiles_dir / DERIVATIVES_FOLDER / "input_qc.tsv"
+    write_qc_tsv(path, [{"participant_id": pid, "qc": qc, "reason": reason} for pid, qc, reason in rows])
+    return path
+
+
+@SCANS
+def test_tiles_excluded_by_sk_qc_raises_scan_excluded(tiles, settings, dataset, scan: ScanId) -> None:
+    tiles.return_code = 1
+    _write_input_qc(dataset, scan, [("subj01", 0, "excluded_by_sk_qc")])
+    with pytest.raises(stages.ScanExcludedBySkQc) as excinfo:
+        stages.run_cortical_tiles_for_scan(scan, settings, dataset)
+    assert isinstance(excinfo.value, RuntimeError)
+    assert scan.path_prefix in str(excinfo.value)
+
+
+@pytest.mark.parametrize(
+    "reason",
+    [
+        "not_in_sk_qc_file",
+        "missing_graph_L",
+        "missing_graph_R",
+        "missing_graph_L;missing_graph_R",
+        "missing_graph_L;excluded_by_sk_qc",
+        "no_subject_folder",
+        "invalid_sk_qc_file",
+    ],
+)
+def test_tiles_other_input_qc_reason_raises_plain_runtime_error(tiles, settings, dataset, reason: str) -> None:
+    tiles.return_code = 1
+    _write_input_qc(dataset, CLASSIC_SCAN, [("subj01", 0, reason)])
+    with pytest.raises(RuntimeError) as excinfo:
+        stages.run_cortical_tiles_for_scan(CLASSIC_SCAN, settings, dataset)
+    assert not isinstance(excinfo.value, stages.ScanExcludedBySkQc)
+    assert CLASSIC_SCAN.path_prefix in str(excinfo.value)
+
+
+def test_tiles_mixed_input_qc_records_raise_plain_runtime_error(tiles, settings, dataset) -> None:
+    tiles.return_code = 1
+    _write_input_qc(dataset, CLASSIC_SCAN, [("a", 0, "excluded_by_sk_qc"), ("b", 0, "not_in_sk_qc_file")])
+    with pytest.raises(RuntimeError) as excinfo:
+        stages.run_cortical_tiles_for_scan(CLASSIC_SCAN, settings, dataset)
+    assert not isinstance(excinfo.value, stages.ScanExcludedBySkQc)
+
+
+@pytest.mark.parametrize("content", [None, "", "not a qc file", "participant_id\tqc\nsubj01\t7\n"])
+def test_tiles_without_readable_input_qc_raises_plain_runtime_error(
+    tiles, settings, dataset, content: str | None
+) -> None:
+    tiles.return_code = 1
+    if content is not None:
+        path = _write_input_qc(dataset, CLASSIC_SCAN, [("subj01", 0, "excluded_by_sk_qc")])
+        path.write_text(content, encoding="utf-8")
+    with pytest.raises(RuntimeError) as excinfo:
+        stages.run_cortical_tiles_for_scan(CLASSIC_SCAN, settings, dataset)
+    assert not isinstance(excinfo.value, stages.ScanExcludedBySkQc)
+    assert CLASSIC_SCAN.path_prefix in str(excinfo.value)
 
 
 # --- run_morphologist_for_scan ---------------------------------------------------------------------
