@@ -2,21 +2,19 @@
 """
 Unit tests for the champollion_pipeline package __init__.
 
-Each script is imported behind a ``try/except ImportError`` guard so the
-package stays importable in partial pixi environments (embeddings-only on
-Jean-Zay, no brainvisa, no torch...).  These tests exercise both the happy
-path and the degraded path by re-executing the package body with submodule
-imports forced to fail.
+Stage classes are exported lazily through a PEP 562 module ``__getattr__``
+so the package stays importable in partial pixi environments (embeddings-only
+on Jean-Zay, no brainvisa, no torch...).  These tests exercise both the happy
+path and the degraded path by making a stage submodule unimportable.
 """
 
-import builtins
-import importlib
+import sys
 
 import pytest
 
 import champollion_pipeline
 
-# Names imported by champollion_pipeline/__init__.py, in declaration order.
+# Lazy exports of champollion_pipeline/__init__.py (_LAZY_EXPORTS), in declaration order.
 GUARDED_SUBMODULES = [
     "generate_morphologist_graphs",
     "run_cortical_tiles",
@@ -28,6 +26,7 @@ GUARDED_SUBMODULES = [
     "prune_failed_subjects",
     "purge_subject",
     "generate_masks",
+    "generate_labelling_qc",
 ]
 
 EXPORTED_CLASSES = [
@@ -41,30 +40,17 @@ EXPORTED_CLASSES = [
     "PruneFailedSubjects",
     "PurgeSubject",
     "GenerateMasks",
+    "GenerateLabellingQC",
 ]
 
 
-def reload_with_blocked_submodules(blocked):
-    """Re-execute the package body with the named relative imports failing."""
-    real_import = builtins.__import__
-
-    def guarded_import(name, globals=None, locals=None, fromlist=(), level=0):
-        if level > 0 and name in blocked:
-            raise ImportError(f"simulated missing optional dependency for {name}")
-        return real_import(name, globals, locals, fromlist, level)
-
-    builtins.__import__ = guarded_import
-    try:
-        importlib.reload(champollion_pipeline)
-    finally:
-        builtins.__import__ = real_import
-
-
-@pytest.fixture  # noqa: V103
-def restore_package():
-    """Reload the package normally after a test has degraded it."""
-    yield
-    importlib.reload(champollion_pipeline)
+def block_submodules(monkeypatch, blocked):
+    """Make the named stage submodules unimportable and drop their cached classes."""
+    for submodule in blocked:
+        monkeypatch.setitem(sys.modules, f"champollion_pipeline.{submodule}", None)
+    for submodule, class_name in zip(GUARDED_SUBMODULES, EXPORTED_CLASSES, strict=True):
+        if submodule in blocked:
+            monkeypatch.delitem(vars(champollion_pipeline), class_name, raising=False)
 
 
 class TestPackageMetadata:
@@ -86,25 +72,35 @@ class TestPackageExports:
         assert hasattr(champollion_pipeline, class_name)
 
 
+class TestLazyExportsMatchTests:
+    """Keep the test lists in step with the package's lazy export table."""
+
+    def test_lists_equal_lazy_exports(self):
+        assert dict(zip(EXPORTED_CLASSES, GUARDED_SUBMODULES, strict=True)) == champollion_pipeline._LAZY_EXPORTS
+
+
 class TestGuardedImports:
-    """Test the ImportError fallbacks for partial environments."""
+    """Test that a missing optional dependency only hides its own class."""
 
-    @pytest.mark.usefixtures("restore_package")
-    def test_package_still_imports_when_every_submodule_fails(self):
-        reload_with_blocked_submodules(set(GUARDED_SUBMODULES))
+    def test_package_still_works_when_every_submodule_fails(self, monkeypatch):
+        block_submodules(monkeypatch, set(GUARDED_SUBMODULES))
         assert champollion_pipeline.__version__
+        assert not any(hasattr(champollion_pipeline, c) for c in EXPORTED_CLASSES)
 
-    @pytest.mark.parametrize("submodule,class_name", list(zip(GUARDED_SUBMODULES, EXPORTED_CLASSES, strict=False)))
-    @pytest.mark.usefixtures("restore_package")
-    def test_single_failing_submodule_is_tolerated(self, submodule, class_name):
-        reload_with_blocked_submodules({submodule})
-        # The package imported successfully even though this one script did not.
+    @pytest.mark.parametrize("submodule,class_name", list(zip(GUARDED_SUBMODULES, EXPORTED_CLASSES, strict=True)))
+    def test_single_failing_submodule_is_tolerated(self, monkeypatch, submodule, class_name):
+        block_submodules(monkeypatch, {submodule})
         assert champollion_pipeline.__version__
+        assert not hasattr(champollion_pipeline, class_name)
         others = [c for c in EXPORTED_CLASSES if c != class_name]
         assert all(hasattr(champollion_pipeline, c) for c in others)
 
-    @pytest.mark.usefixtures("restore_package")
-    def test_package_recovers_after_a_degraded_reload(self):
-        reload_with_blocked_submodules(set(GUARDED_SUBMODULES))
-        importlib.reload(champollion_pipeline)
+    def test_package_recovers_after_a_failed_access(self, monkeypatch):
+        with monkeypatch.context() as m:
+            block_submodules(m, set(GUARDED_SUBMODULES))
+            assert not hasattr(champollion_pipeline, "GenerateEmbeddings")
         assert all(hasattr(champollion_pipeline, c) for c in EXPORTED_CLASSES)
+
+    def test_unknown_name_raises_attribute_error(self):
+        with pytest.raises(AttributeError):
+            champollion_pipeline.NoSuchStage  # noqa: B018

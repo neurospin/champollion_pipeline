@@ -1,42 +1,38 @@
 """Champollion pipeline — end-to-end sulcal embedding pipeline."""
 
-import contextlib
+import importlib
 
 __version__ = "0.2.32"
 
-# Each script has optional dependencies (brainvisa, torch…) that may
-# not be installed in every pixi environment. Guard each import so the package
-# is importable in partial envs (e.g. embeddings-only on Jean-Zay).
+# Stage classes are exported lazily (PEP 562): importing the package, or a
+# toolchain-free submodule such as config, loads none of soma, cortical_tiles
+# or champollion. A class whose submodule cannot be imported in this pixi
+# environment (e.g. embeddings-only on Jean-Zay) is simply absent.
+_LAZY_EXPORTS: dict[str, str] = {
+    "GenerateMorphologistGraphs": "generate_morphologist_graphs",
+    "RunCorticalTiles": "run_cortical_tiles",
+    "GenerateChampollionConfig": "generate_champollion_config",
+    "GenerateEmbeddings": "generate_embeddings",
+    "PutTogetherEmbeddings": "put_together_embeddings",
+    "GenerateSnapshots": "generate_snapshots",
+    "TrainChampollion": "train_champollion",
+    "PruneFailedSubjects": "prune_failed_subjects",
+    "PurgeSubject": "purge_subject",
+    "GenerateMasks": "generate_masks",
+    "GenerateLabellingQC": "generate_labelling_qc",
+}
 
-with contextlib.suppress(ImportError):
-    from .generate_morphologist_graphs import GenerateMorphologistGraphs
 
-with contextlib.suppress(ImportError):
-    from .run_cortical_tiles import RunCorticalTiles
-
-with contextlib.suppress(ImportError):
-    from .generate_champollion_config import GenerateChampollionConfig
-
-with contextlib.suppress(ImportError):
-    from .generate_embeddings import GenerateEmbeddings
-
-with contextlib.suppress(ImportError):
-    from .put_together_embeddings import PutTogetherEmbeddings
-
-with contextlib.suppress(ImportError):
-    from .generate_snapshots import GenerateSnapshots
-
-with contextlib.suppress(ImportError):
-    from .train_champollion import TrainChampollion
-
-with contextlib.suppress(ImportError):
-    from .prune_failed_subjects import PruneFailedSubjects
-
-with contextlib.suppress(ImportError):
-    from .purge_subject import PurgeSubject
-
-with contextlib.suppress(ImportError):
-    from .generate_masks import GenerateMasks
-
-with contextlib.suppress(ImportError):
-    from .generate_labelling_qc import GenerateLabellingQC
+def __getattr__(name: str) -> object:  # noqa: V103 - PEP 562 module attribute hook
+    """Import a stage class's submodule on first access and cache the class."""
+    if name not in _LAZY_EXPORTS:
+        raise AttributeError(f"module {__name__!r} has no attribute {name!r}")
+    try:
+        module = importlib.import_module(f".{_LAZY_EXPORTS[name]}", __name__)
+    except ImportError as exc:
+        raise AttributeError(
+            f"module {__name__!r} has no attribute {name!r} ({_LAZY_EXPORTS[name]} unavailable: {exc})"
+        ) from exc
+    value = getattr(module, name)
+    globals()[name] = value
+    return value
