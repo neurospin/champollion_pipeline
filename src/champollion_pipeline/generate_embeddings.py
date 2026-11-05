@@ -11,7 +11,6 @@ import os
 import pstats
 import re
 import shutil
-import subprocess
 import sys
 import tempfile
 import warnings
@@ -71,6 +70,7 @@ from champollion_pipeline.models.version_options import (
 )
 from champollion_pipeline.process_setup import init_pipeline_process
 from champollion_pipeline.utils.lib import CORTICAL_TILES_VERSION
+from champollion_pipeline.utils.pipeline_commit import read_pipeline_commit
 from champollion_pipeline.utils.qc_report import log_qc_exclusions, read_qc_tsv, write_qc_tsv
 
 PROVENANCE_FILE_NAME = "provenance.json"
@@ -89,21 +89,6 @@ def _parse_non_negative_int(value: str) -> int:
     if number < 0:
         raise argparse.ArgumentTypeError(f"must be a non-negative integer, got {value!r}")
     return number
-
-
-def read_pipeline_commit() -> str | None:
-    """40-hex git commit of the champollion_pipeline source checkout, or None when git cannot report it."""
-    repo_dir = dirname(abspath(__file__))
-    try:
-        result = subprocess.run(
-            ["git", "-C", repo_dir, "rev-parse", "HEAD"], capture_output=True, text=True, check=False, timeout=10
-        )
-    except (OSError, subprocess.SubprocessError):
-        return None
-    commit = result.stdout.strip()
-    if result.returncode != 0 or not re.fullmatch(r"[0-9a-f]{40}", commit):
-        return None
-    return commit
 
 
 class GenerateEmbeddings(ScriptBuilder):

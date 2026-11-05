@@ -380,7 +380,7 @@ Each run writes `provenance.json` next to the per-region outputs (in the `--outp
 - `model_version`: from the model set's `model_set.json` when present, else `--model-version`;
 - `checkpoint_epoch`: the `--checkpoint-epoch` used;
 - `models_source`: where the models came from (local path, Hugging Face repo and subfolder, or archive URL);
-- `pipeline_commit`: the git commit of this pipeline checkout, or `null` when git cannot report it.
+- `pipeline_commit`: the HEAD commit of the repository rooted at the pipeline code directory, else the commit in that directory's `COMMIT` file, else `null`; never the commit of an enclosing repository.
 
 ### Excluding `models_cache/` from dataset sync and archives
 
