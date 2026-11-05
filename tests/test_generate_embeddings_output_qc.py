@@ -64,6 +64,9 @@ def _complete(subjects=_COHORT, width=_WIDTH):
     return _table(*(_line(subject, (_NUMBER,) * width) for subject in subjects), width=width)
 
 
+_WITH_STRAY = _complete((*_COHORT, _STRAY))
+
+
 def _config(width):
     """Text of a region .hydra/config.yaml holding ``width`` as its backbone_output_size."""
     return f"backbone_output_size: {width}\n"
@@ -178,6 +181,16 @@ def _only(reason, region=_REGION):
     return Counter({f"{reason}:{region}": 1})
 
 
+def _assert_each_row_fails_on(tmp_path, stage, reason):
+    """Run ``stage``: the rows of _COHORT and _STRAY are qc 0, each holding ``reason`` of _REGION once."""
+    run = _finish(tmp_path, stage)
+
+    assert run.qc_values() == dict.fromkeys((*_COHORT, _STRAY), 0)
+    assert {subject: held[f"{reason}:{_REGION}"] for subject, held in run.reasons().items()} == dict.fromkeys(
+        (*_COHORT, _STRAY), 1
+    )
+
+
 class TestReport:
     @pytest.mark.parametrize("has_output_option", [True, False], ids=["output_option", "default_folder"])
     def test_report_lands_beside_the_input_report(self, tmp_path, has_output_option):
@@ -254,6 +267,36 @@ class TestRegionReasons:
 
         assert run.qc_values() == {_SUBJECT: 0, _OTHER_SUBJECT: 0}
         assert run.reasons() == {_SUBJECT: _only(reason), _OTHER_SUBJECT: _only(reason)}
+
+    @pytest.mark.parametrize(
+        ("tables", "reason"),
+        [
+            ({_REGION: None, _OTHER_REGION: _WITH_STRAY}, "missing_embeddings"),
+            ({_REGION: b"\xff\xfe\x00", _OTHER_REGION: _WITH_STRAY}, "unreadable_embeddings"),
+            (
+                {_REGION: _table(_line(_SUBJECT), _line(_OTHER_SUBJECT), _line(_STRAY), _line(""))},
+                "unreadable_embeddings",
+            ),
+        ],
+        ids=["absent_file", "unreadable_file", "empty_id_cell_beside_the_id"],
+    )
+    def test_unexpected_id_gets_the_reason_of_the_file(self, tmp_path, tables, reason):
+        _assert_each_row_fails_on(tmp_path, _Stage(tables=tables), reason)
+
+
+class TestUnexpectedIdText:
+    """An ID of a file keeps its text through write_qc_tsv and read_qc_tsv."""
+
+    @pytest.mark.parametrize(
+        "stray", ["a\tb", "a\nb", "a\r\nb", "a\rb"], ids=["tab", "line_feed", "crlf", "carriage_return"]
+    )
+    def test_id_holding_a_separator_round_trips(self, tmp_path, stray):
+        table = _table(_line(_SUBJECT), _line(_OTHER_SUBJECT), _line(f'"{stray}"'))
+
+        run = _finish(tmp_path, _Stage(tables={_REGION: table}))
+
+        assert run.qc_values() == {_SUBJECT: 1, _OTHER_SUBJECT: 1, stray: 0}
+        assert run.reasons()[stray] == _only("unexpected_row")
 
 
 class TestSubjectReasons:
@@ -336,6 +379,12 @@ class TestWidthSource:
         run = _finish(tmp_path, _Stage(configs={_REGION: text}))
 
         assert run.reasons() == {_SUBJECT: _only("unknown_width"), _OTHER_SUBJECT: _only("unknown_width")}
+
+    @pytest.mark.parametrize("file_region", _REGIONS, ids=["same_file", "other_file"])
+    def test_unexpected_id_gets_the_reason_of_the_config(self, tmp_path, file_region):
+        stage = _Stage(tables={file_region: _WITH_STRAY}, configs={_REGION: None})
+
+        _assert_each_row_fails_on(tmp_path, stage, "unknown_width")
 
 
 class TestSeveralReasons:
