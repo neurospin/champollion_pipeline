@@ -124,6 +124,18 @@ def _stub_stage5_input_qc(monkeypatch):
 
 
 @pytest.fixture(autouse=True)  # noqa: V103
+def _stub_stage5_output_qc(monkeypatch):
+    """Let a test of put_together_embeddings.py reach the end of run() with no valid copy on disk.
+
+    No report on disk, status 0. raising=False: the name joins the class with the output QC.
+    tests/test_put_together_embeddings_output_qc.py overrides this fixture to run the real check.
+    """
+    module = sys.modules.get("champollion_pipeline.put_together_embeddings")
+    if module is not None:
+        monkeypatch.setattr(module.PutTogetherEmbeddings, "_run_output_qc", MagicMock(return_value=0), raising=False)
+
+
+@pytest.fixture(autouse=True)  # noqa: V103
 def restore_logging_and_excepthooks():
     """Restore the root logger handlers and level and the exception hooks after each test.
 
