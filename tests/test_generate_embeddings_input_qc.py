@@ -18,7 +18,7 @@ from champollion_pipeline.derivatives_layout import DEFAULT_MASKS_VERSION, compu
 from champollion_pipeline.generate_embeddings import GenerateEmbeddings
 from champollion_pipeline.utils.lib import CORTICAL_TILES_VERSION
 from champollion_pipeline.utils.qc_report import fetch_crop_qc_rows, read_qc_tsv
-from tests.log_assertions import FAIL
+from tests.log_assertions import FAIL, assert_one_subject_error
 from tests.stage2_layout import add_crops, crop_array
 from tests.test_generate_embeddings_any_failure import FakeEvaluate, make_models, make_script
 
@@ -274,10 +274,8 @@ class TestErrorRecords:
     def test_one_error_record_per_qc0_row(self, tmp_path, pipeline_caplog):
         run = _run_stage(tmp_path, _Stage(_lay_partial))
 
-        errors = _messages_at(logging.ERROR, pipeline_caplog)
-        assert len(errors) == 1
-        assert _OTHER_SUBJECT in errors[0]
-        assert run.rows()[_OTHER_SUBJECT]["reason"] in errors[0]
+        reason = run.rows()[_OTHER_SUBJECT]["reason"]
+        assert_one_subject_error(_messages_at(logging.ERROR, pipeline_caplog), _OTHER_SUBJECT, reason)
 
     def test_no_error_record_on_complete_crops(self, tmp_path, pipeline_caplog):
         run = _run_stage(tmp_path)
