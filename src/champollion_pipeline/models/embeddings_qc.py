@@ -22,6 +22,7 @@ from champollion_pipeline.utils.qc_report import (
 
 INPUT_QC_KINDS = ("skeleton",)  # evaluate.py reads no other crop kind
 EMBEDDINGS_FILENAME = "full_embeddings.csv"
+REGION_COPY_SUFFIX = "_embeddings.csv"
 EMBEDDINGS_ID_COLUMN = "ID"
 MODEL_CONFIG_PARTS = (".hydra", "config.yaml")
 MODEL_WIDTH_KEY = "backbone_output_size"
@@ -77,6 +78,11 @@ def fetch_region_model_qc_rows(
         {ID_COLUMN: subject, QC_COLUMN: 0 if found else 1, REASON_COLUMN: REASON_SEPARATOR.join(found)}
         for subject, found in sorted(reasons.items())
     ]
+
+
+def compute_region_copy_path(output_path: str, region: str) -> str:
+    """The combined copy of ``region``: <output_path>/<region>_embeddings.csv."""
+    return join(output_path, f"{region}{REGION_COPY_SUFFIX}")
 
 
 def compute_excluded_subjects(rows: Iterable[Mapping[str, object]]) -> frozenset[str]:
@@ -227,10 +233,29 @@ def fetch_region_files_qc_rows(
 
     A reason of a whole file reaches every row.
     """
+    files = [(region, join(output_base, region, EMBEDDINGS_FILENAME), width) for region, width in region_widths]
+    return _fetch_csv_files_qc_rows(files, expected_subjects)
+
+
+def fetch_region_copies_qc_rows(
+    output_path: str, region_widths: Iterable[tuple[str, int | None]], input_rows: Iterable[Mapping[str, object]]
+) -> list[dict[str, object]]:
+    """One output QC row per qc 1 subject of ``input_rows`` and per unexpected ID, sorted, over the combined copies.
+
+    A reason of a whole file reaches every row.
+    """
+    expected = {row[ID_COLUMN] for row in input_rows if row[QC_COLUMN] == 1}
+    files = [(region, compute_region_copy_path(output_path, region), width) for region, width in region_widths]
+    return _fetch_csv_files_qc_rows(files, expected)
+
+
+def _fetch_csv_files_qc_rows(
+    region_files: Iterable[tuple[str, str, int | None]], expected_subjects: Iterable[str]
+) -> list[dict[str, object]]:
+    """One QC row per expected subject and per unexpected ID, sorted, over the (region, CSV path, width) triples."""
     expected = set(expected_subjects)
     reasons: dict[str, dict[str, None]] = {subject: {} for subject in expected}
-    for region, width in region_widths:
-        csv_path = join(output_base, region, EMBEDDINGS_FILENAME)
+    for region, csv_path, width in region_files:
         found = fetch_embeddings_csv_reasons(csv_path, region, expected, width)
         for subject, subject_reasons in found.items():
             reasons.setdefault(subject, {}).update(dict.fromkeys(subject_reasons))
