@@ -57,6 +57,7 @@ from champollion_pipeline.utils.qc_report import (
     write_qc_tsv,
 )
 from champollion_pipeline.utils.subject_name import subject_name_problem
+from champollion_pipeline.utils.transform_qc import transform_qc_rows
 
 logger = logging.getLogger(__name__)
 
@@ -77,10 +78,8 @@ PREFIX_PAIRS_SHOWN = 5  # prefix pairs named in the refusal or warning
 # TEMPORARY (DEF-CORTILES-BDRABCZUK-8A44DAD7F312): transform QC, a report of subjects whose ICBM2009c
 # transform is byte-identical to another subject's; goes with the prefix-ID guard.
 TRANSFORM_QC_FILENAME = "transform_qc.tsv"
-TRANSFORM_SIDES = ("L", "R")
-TRANSFORM_STEM = "transform_to_ICBM2009c_"  # files are <side><TRANSFORM_STEM><ID>.trm
 INPUT_QC_FILENAME = "input_qc.tsv"
-GRAPH_SIDES = ("L", "R")  # not TRANSFORM_SIDES: that constant is TEMPORARY
+GRAPH_SIDES = ("L", "R")
 SK_QC_TSV_MARK = ".tsv"  # as cortical_tiles: tab-separated when the path contains it, else comma-separated
 REASON_MISSING_GRAPH_STEM = "missing_graph_"  # + side
 REASON_NOT_IN_SK_QC = "not_in_sk_qc_file"
@@ -102,42 +101,6 @@ class _ExplicitLabellingSession(argparse.Action):
 
 
 ROOT_FORBIDDEN_SUBSTRINGS = ("ses-", "acq-", "run-", "_cropped")
-
-
-def transform_qc_rows(transforms_dir: str) -> list[dict[str, object]]:
-    """QC rows of the ICBM2009c transforms in <transforms_dir>/<side>/, one per subject, sorted by ID.
-
-    A subject fails (qc 0) when its transform file on a side has exactly the same bytes as another
-    subject's on that side; L and R are never compared with each other. Pure: no logging, no write.
-    """
-    flagged: dict[str, list[str]] = {}
-    subjects: set[str] = set()
-    for side in TRANSFORM_SIDES:
-        side_dir = join(transforms_dir, side)
-        if not isdir(side_dir):
-            continue
-        prefix = side + TRANSFORM_STEM
-        groups: dict[bytes, list[str]] = {}
-        with os.scandir(side_dir) as entries:
-            for entry in entries:
-                name = entry.name
-                if not (entry.is_file() and name.startswith(prefix) and name.endswith(".trm")):
-                    continue
-                subject = name[len(prefix) : -len(".trm")]
-                if not subject:
-                    continue
-                with open(entry.path, "rb") as handle:
-                    groups.setdefault(handle.read(), []).append(subject)
-                subjects.add(subject)
-        for group in groups.values():
-            for subject in group:
-                others = sorted(other for other in group if other != subject)
-                if others:
-                    flagged.setdefault(subject, []).append(f"{side} transform byte-identical to {', '.join(others)}")
-    return [
-        {"participant_id": subject, "qc": 0 if subject in flagged else 1, "reason": "; ".join(flagged.get(subject, []))}
-        for subject in sorted(subjects)
-    ]
 
 
 def list_side_volumes(volumes_dir: str, filename: str, side: str = "F") -> dict[str, str]:
