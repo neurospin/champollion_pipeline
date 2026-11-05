@@ -26,20 +26,17 @@ from champollion.metrics.cka_coherence import test_models_coherence_from_directo
 from champollion_utils.script_builder import ScriptBuilder
 
 from champollion_pipeline._stage_base import PARTIAL_STATUS
+from champollion_pipeline.derivatives_layout import DEFAULT_MASKS_VERSION as DEFAULT_MASKS_VERSION
 from champollion_pipeline.derivatives_layout import (
-    DEFAULT_MASKS_VERSION,
     compute_models_cache_dir,
     compute_region_embeddings_dir,
     compute_run_log_derivatives_dir,
     compute_run_log_path,
 )
-from champollion_pipeline.models.cache import (
-    MODEL_SET_FILE_NAME,
-    ensure_models_cache_dir,
-    read_model_set,
-    write_json_atomic,
-)
+from champollion_pipeline.models.cache import MODEL_SET_FILE_NAME as MODEL_SET_FILE_NAME
 from champollion_pipeline.models.cache import ModelSet as ModelSet
+from champollion_pipeline.models.cache import ensure_models_cache_dir, write_json_atomic
+from champollion_pipeline.models.cache import read_model_set as read_model_set
 from champollion_pipeline.models.cache import write_model_set as write_model_set
 from champollion_pipeline.models.checkpoint import (
     DEFAULT_CHECKPOINT_EPOCH,
@@ -56,6 +53,13 @@ from champollion_pipeline.models.fetch import LocalPathStrategy as LocalPathStra
 from champollion_pipeline.models.fetch import ModelFetchStrategy as ModelFetchStrategy
 from champollion_pipeline.models.fetch import RemoteArchiveStrategy as RemoteArchiveStrategy
 from champollion_pipeline.models.fetch import fetch_model_set
+from champollion_pipeline.models.version_options import (
+    check_local_model_set,
+    check_version_mismatch,
+    find_marker_model_version,
+    resolve_masks_default,
+    resolve_model_version_alias,
+)
 from champollion_pipeline.process_setup import init_pipeline_process
 from champollion_pipeline.utils.lib import CORTICAL_TILES_VERSION
 from champollion_pipeline.utils.qc_report import (
@@ -320,88 +324,11 @@ class GenerateEmbeddings(ScriptBuilder):
     def parse_args(self, args: list[str] | None = None) -> argparse.Namespace:
         """Parse args, then resolve the deprecated --masks-version alias into model_version."""
         parsed = super().parse_args(args)
-        self._resolve_model_version_alias()
-        self._resolve_masks_default()
-        self._check_version_mismatch()
-        self._check_local_model_set()
+        resolve_model_version_alias(self.args, self.parser)
+        resolve_masks_default(self.args)
+        check_version_mismatch(self.args, self.parser)
+        check_local_model_set(self.args, self.parser)
         return parsed
-
-    def _resolve_model_version_alias(self) -> None:
-        """Copy --masks-version into model_version with a FutureWarning; exit 2 if the two flags differ."""
-        alias = self.args.masks_version
-        if alias is None:
-            return
-        model_version = self.args.model_version
-        if model_version is not None and model_version != alias:
-            self.parser.error(
-                f"--model-version {model_version!r} and --masks-version {alias!r} differ; --masks-version is a "
-                "deprecated alias of --model-version, pass only --model-version"
-            )
-        warnings.warn(
-            "--masks-version is deprecated; use --model-version instead "
-            "(same value, the Hugging Face model-set subfolder).",
-            FutureWarning,
-            stacklevel=2,
-        )
-        self.args.model_version = alias
-
-    def _resolve_masks_default(self) -> None:
-        """Fill --masks when it was not given: the model version if set, else DEFAULT_MASKS_VERSION."""
-        if self.args.masks is None:
-            model_version = self.args.model_version
-            self.args.masks = model_version if model_version is not None else DEFAULT_MASKS_VERSION
-
-    def _check_version_mismatch(self) -> None:
-        """Exit 2 when --masks and --model-version differ, unless --allow-version-mismatch (then warn)."""
-        model_version, masks = self.args.model_version, self.args.masks
-        if model_version is None or masks == model_version:
-            return
-        if not self.args.allow_version_mismatch:
-            self.parser.error(
-                f"--masks {masks!r} and --model-version {model_version!r} differ: --masks picks the input crops, "
-                "--model-version the model set; pass --allow-version-mismatch to run with both"
-            )
-        warnings.warn(
-            f"--masks {masks!r} and --model-version {model_version!r} differ; running anyway "
-            f"(--allow-version-mismatch): crops {masks!r}, models {model_version!r}",
-            UserWarning,
-            stacklevel=2,
-        )
-
-    def _check_local_model_set(self) -> None:
-        """Exit 2 when a local model set's model_set.json is invalid, or names other masks than --masks unless
-        --allow-version-mismatch (then warn). A local directory without a marker: warn that it cannot be checked.
-        Not a local directory: nothing."""
-        models_dir = self.args.models_path
-        if not os.path.isdir(models_dir):
-            return
-        if not os.path.isfile(join(models_dir, MODEL_SET_FILE_NAME)):
-            masks = self.args.masks
-            warnings.warn(
-                f"{join(models_dir, MODEL_SET_FILE_NAME)} not found: the local model set cannot be checked against "
-                f"--masks {masks!r}; running anyway with --masks {masks!r}",
-                UserWarning,
-                stacklevel=2,
-            )
-            return
-        try:
-            model_set = read_model_set(models_dir)
-        except ValueError as err:
-            self.parser.error(str(err))
-        path, marker_masks, masks = join(models_dir, MODEL_SET_FILE_NAME), model_set.masks, self.args.masks
-        if marker_masks == masks:
-            return
-        if not self.args.allow_version_mismatch:
-            self.parser.error(
-                f"{path} masks {marker_masks!r} and --masks {masks!r} differ: the local model set was trained on "
-                f"{marker_masks!r} crops; pass --masks {marker_masks!r}, or --allow-version-mismatch to run with both"
-            )
-        warnings.warn(
-            f"{path} masks {marker_masks!r} and --masks {masks!r} differ; running anyway (--allow-version-mismatch): "
-            f"crops {masks!r}, models trained on {marker_masks!r}",
-            UserWarning,
-            stacklevel=2,
-        )
 
     def fetch_models(self, models_path):
         """
@@ -426,24 +353,9 @@ class GenerateEmbeddings(ScriptBuilder):
         )
         return fetched
 
-    def _read_marker_model_version(self, fetched_models_path: str) -> str | None:
-        """The model_version of the fetched model set's model_set.json, or None when absent or unreadable."""
-        path = join(fetched_models_path, MODEL_SET_FILE_NAME)
-        if not os.path.isfile(path):
-            return None
-        try:
-            return read_model_set(fetched_models_path).model_version
-        except (ValueError, OSError) as err:
-            warnings.warn(
-                f"Could not read {path} for provenance.json ({err}); model_version falls back to --model-version",
-                UserWarning,
-                stacklevel=2,
-            )
-            return None
-
     def _build_provenance(self, fetched_models_path: str) -> dict:
         """masks, model_version, checkpoint_epoch, models_source and pipeline_commit of this run, in that order."""
-        model_version = self._read_marker_model_version(fetched_models_path)
+        model_version = find_marker_model_version(fetched_models_path)
         if model_version is None:
             model_version = getattr(self.args, "model_version", None)
         return {
