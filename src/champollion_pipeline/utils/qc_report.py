@@ -16,7 +16,7 @@ import numbers
 import os
 import tempfile
 from collections.abc import Iterable, Mapping, Sequence
-from typing import Protocol
+from typing import Protocol, TextIO
 
 ID_COLUMN = "participant_id"
 QC_COLUMN = "qc"
@@ -142,6 +142,17 @@ def write_run_qc_tsv(path: str | os.PathLike, rows: Iterable[Mapping[str, object
     _write_atomic(path, [CHECK_COLUMN, QC_COLUMN, REASON_COLUMN], checked)
 
 
+class _LineFeedRows:
+    """File-like front of ``handle``: each csv row keeps its quoting and ends in a line feed."""
+
+    def __init__(self, handle: TextIO) -> None:
+        self._handle = handle
+
+    def write(self, line: str) -> int:
+        """Write one csv row, its ``\\r\\n`` terminator turned into ``\\n``."""
+        return self._handle.write(line.removesuffix("\r\n") + "\n")
+
+
 def _write_atomic(path: str | os.PathLike, header: Sequence[str], rows: Iterable[Mapping[str, str]]) -> None:
     """Write ``rows`` under ``header`` to a temporary file, then move it onto ``path``."""
     directory = os.path.dirname(os.path.abspath(os.fspath(path)))
@@ -150,7 +161,11 @@ def _write_atomic(path: str | os.PathLike, header: Sequence[str], rows: Iterable
     try:
         with os.fdopen(fd, "w", encoding="utf-8", newline="") as handle:
             writer = csv.DictWriter(
-                handle, fieldnames=list(header), delimiter="\t", lineterminator="\n", extrasaction="ignore"
+                _LineFeedRows(handle),
+                fieldnames=list(header),
+                delimiter="\t",
+                lineterminator="\r\n",
+                extrasaction="ignore",
             )
             writer.writeheader()
             writer.writerows(rows)
