@@ -13,7 +13,7 @@ This document describes the internal mechanics of the two external submodules:
 generate_sulcal_regions.py  -d <output_dir>  --path_to_graph …  --path_sk_with_hull …  --njobs N
 ```
 
-Invoked by `src/run_cortical_tiles.py`, which first writes a resolved `pipeline_loop_2mm.json` into the output directory and then calls this script from its own directory.
+Invoked by `src/champollion_pipeline/run_cortical_tiles.py`, which first writes a resolved `pipeline_loop_2mm.json` into the output directory and then calls this script from its own directory.
 
 ### Outer loop
 
@@ -92,6 +92,7 @@ Key fields resolved at runtime:
 |---|---|
 | `graphs_dir` | Root directory of Morphologist subject folders |
 | `output_dir` | Where derivatives are written |
+| `brain_regions_json` | Absolute path of the packaged region table `resources/sulci_regions_champollion_V1.json` |
 | `path_to_graph` | Sub-path under each subject to the `.arg` graph |
 | `path_to_skeleton_with_hull` | Sub-path to the skeleton-with-hull NIfTI |
 | `masks_version` | Which canonical mask set to use (`canonical_25` by default) |

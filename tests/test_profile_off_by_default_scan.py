@@ -2,8 +2,8 @@
 """
 Profiling is never on by default in what the repository ships (profiling design Contract 0, test 0c).
 
-Scanned: pixi.toml, reference.yaml, pipeline_loop_2mm.json, install.sh, the YAML files under src/, the
-files under slurm/ and the files under scripts/ outside scripts/e2e/ (the e2e runner profiles every run
+Scanned: pixi.toml, the packaged reference.yaml and pipeline_loop_2mm.json, install.sh, the YAML files under src/,
+the files under slurm/ and the files under scripts/ outside scripts/e2e/ (the e2e runner profiles every run
 on purpose: user decision 2026-10-27, Q17).
 
 Requirements:
@@ -18,7 +18,8 @@ from pathlib import Path
 import pytest
 
 REPO_ROOT = Path(__file__).resolve().parent.parent
-TOP_LEVEL_FILES = ("pixi.toml", "reference.yaml", "pipeline_loop_2mm.json", "install.sh")
+RESOURCES = "src/champollion_pipeline/resources"
+TOP_LEVEL_FILES = ("pixi.toml", f"{RESOURCES}/reference.yaml", f"{RESOURCES}/pipeline_loop_2mm.json", "install.sh")
 EXEMPT_DIR = REPO_ROOT / "scripts" / "e2e"
 MAX_BYTES = 2_000_000
 # profile_dir is a config key: Python sources may name a variable or annotate a parameter profile_dir.
@@ -63,7 +64,8 @@ def test_scan_covers_top_level_files():
     """The scan reads the top-level shipped files (guards against a scan that silently reads nothing)."""
     scanned = {path.relative_to(REPO_ROOT).as_posix() for path in _scanned_files()}
     assert "pixi.toml" in scanned
-    assert "reference.yaml" in scanned
+    assert f"{RESOURCES}/reference.yaml" in scanned
+    assert f"{RESOURCES}/pipeline_loop_2mm.json" in scanned
 
 
 @pytest.mark.unit

@@ -519,7 +519,7 @@ class GenerateMasks(ScriptBuilder):
         regions = self.args.regions if self.args.regions else _REGIONS_DEFAULT
         sides = self.args.sides
 
-        json_path = abspath(join(dirname(__file__), "..", "..", "sulci_regions_champollion_V1.json"))
+        json_path = abspath(join(dirname(__file__), "resources", "sulci_regions_champollion_V1.json"))
         sulci = get_sulci_for_regions(regions, sides, json_path)
         logger.trace(
             f"generate_masks.py: {len(sulci)} unique sulci from {len(regions)} region(s) × {len(sides)} side(s)"
