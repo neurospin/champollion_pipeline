@@ -324,12 +324,15 @@ def replace_missing_crop_reasons(
     return [_replace_row_reasons(row, index) for row in rows]
 
 
-def log_input_qc_exclusions(rows: Iterable[Mapping[str, object]], stage_logger: logging.Logger) -> int:
-    """Log one ERROR per qc 0 row on stage_logger and return how many rows have qc 0."""
+def log_qc_exclusions(rows: Iterable[Mapping[str, object]], stage_logger: logging.Logger, step: str = "input") -> int:
+    """Log one ERROR per qc 0 row on stage_logger, in the name of ``step``, and return how many rows have qc 0."""
     excluded = [row for row in rows if row[QC_COLUMN] == 0]
     for row in excluded:
-        stage_logger.error(f"input QC excluded {row[ID_COLUMN]}: {row[REASON_COLUMN]}", stacklevel=2)
+        stage_logger.error(f"{step} QC excluded {row[ID_COLUMN]}: {row[REASON_COLUMN]}", stacklevel=2)
     return len(excluded)
+
+
+log_input_qc_exclusions = log_qc_exclusions  # the name stage 3 imports
 
 
 def summarise_qc(records: Iterable[Mapping[str, object]]) -> dict[str, object]:
