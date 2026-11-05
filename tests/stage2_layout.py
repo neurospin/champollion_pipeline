@@ -21,6 +21,7 @@ CROP_STEMS = {"foldlabel": "label"}  # crop kinds whose files carry another stem
 # Signature of the real cortical_tiles remove_ventricle(), captured before any
 # test patches it, so fakes can read its arguments however they are passed.
 REMOVE_VENTRICLE_SIGNATURE = inspect.signature(remove_ventricle_module.remove_ventricle)
+CROP_MARKER = "crops_complete.marker"
 
 
 @pytest.fixture(autouse=True)  # noqa: V103
@@ -86,6 +87,14 @@ def add_crops(crops_dir, subjects, regions, kinds=("skeleton",), sides="LR"):
                 np.save(array, np.zeros((len(subjects), 1)))
                 if kind != "mask":
                     crop_csv(crops_dir, region, side, kind).write_text("\n".join(["Subject", *subjects]) + "\n")
+
+
+def add_crop_marker(crops_dir):
+    """Lay the completion marker of a finished crop run in ``crops_dir``; return its path."""
+    marker = Path(crops_dir) / CROP_MARKER
+    marker.parent.mkdir(parents=True, exist_ok=True)
+    marker.touch()
+    return marker
 
 
 def stage_dirs(root, graph_dir=GRAPH_DIR):

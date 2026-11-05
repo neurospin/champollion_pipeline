@@ -32,7 +32,7 @@ import pytest
 from champollion_pipeline.run_cortical_tiles import RunCorticalTiles
 from champollion_pipeline.utils.lib import DERIVATIVES_FOLDER
 from tests.log_assertions import LOG, OUTPUT
-from tests.stage2_layout import add_graphs
+from tests.stage2_layout import add_crop_marker, add_graphs
 
 pytestmark = pytest.mark.unit  # noqa: V107
 
@@ -69,10 +69,11 @@ def _legacy_layout(output_dir: Path, *, with_versioned: bool) -> Path:
 
 
 def _existing_requested_crops(output_dir: Path) -> Path:
-    """Non-empty crops/NEW_VERSION/2mm/ and no pipeline_loop_2mm.json; returns the config path."""
+    """Non-empty crops/NEW_VERSION/2mm/, marked complete, and no pipeline_loop_2mm.json; returns the config path."""
     versioned = _crops(output_dir) / NEW_VERSION / "2mm"
     versioned.mkdir(parents=True)
     (versioned / "region.nii.gz").write_text("x")
+    add_crop_marker(versioned)
     return output_dir / "pipeline_loop_2mm.json"
 
 

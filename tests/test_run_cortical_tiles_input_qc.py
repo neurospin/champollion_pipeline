@@ -553,8 +553,8 @@ class TestSkQcInputOnly:
     def test_crop_command_does_not_depend_on_the_option(self, temp_dir):
         sk_qc = _sk_qc_file(temp_dir, [("sub-01", 1), ("sub-09", 1)])
 
-        plain = _run_stage(temp_dir, {"sub-01": "LR"}, ["--sk_qc_path", sk_qc])
-        scoped = _run_stage(temp_dir, {"sub-01": "LR"}, ["--sk_qc_path", sk_qc, _SCOPE_OPTION])
+        plain = _run_stage(temp_dir, {"sub-01": "LR"}, ["--sk_qc_path", sk_qc, "--overwrite"])
+        scoped = _run_stage(temp_dir, {"sub-01": "LR"}, ["--sk_qc_path", sk_qc, _SCOPE_OPTION, "--overwrite"])
 
         assert scoped.qc_path.is_file()
         assert len(scoped.crop_commands) == 1

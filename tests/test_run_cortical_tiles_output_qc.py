@@ -26,7 +26,15 @@ from champollion_pipeline.utils.cortical_tiles_config import compute_versioned_c
 from champollion_pipeline.utils.lib import DERIVATIVES_FOLDER, LABELLING_SESSION_CANDIDATES
 from champollion_pipeline.utils.qc_report import read_qc_tsv
 from tests.log_assertions import FAIL
-from tests.stage2_layout import GRAPH_DIR, TEMPLATE_CONFIG, add_crops, add_graphs, crop_csv, write_whole_brain_volumes
+from tests.stage2_layout import (
+    GRAPH_DIR,
+    TEMPLATE_CONFIG,
+    add_crop_marker,
+    add_crops,
+    add_graphs,
+    crop_csv,
+    write_whole_brain_volumes,
+)
 
 _MODULE = "champollion_pipeline.run_cortical_tiles"
 _LOGGER_NAME = _MODULE
@@ -147,11 +155,11 @@ def _run_stage(temp_dir, subjects, extra_args=None, **crop_step):
     """Run run() on ``subjects`` (``{subject: hemispheres holding a graph}``); ``crop_step``: fields of _CropStep.
 
     The mocked crop step returns the crop status and lays the crops under the crops folder of the masks version;
-    the mocked mask step lays the mask arrays. With ``has_existing_crops`` both lie on disk before run() starts,
-    with ``has_fused_subject`` the crop step also leaves each subject a volume for whole-brain ventricle removal,
-    with ``legacy_version`` legacy crops conflict with the crops of that version, with ``skips`` it writes
-    those skip-list entries (before run() with ``has_existing_crops``), with ``malformed_sides`` a skip list refused
-    by its reader on these sides.
+    the mocked mask step lays the mask arrays. With ``has_existing_crops`` both lie on disk, marked complete, before
+    run() starts, with ``has_fused_subject`` the crop step also leaves each subject a volume for whole-brain
+    ventricle removal, with ``legacy_version`` legacy crops conflict with the crops of that version, with ``skips``
+    it writes those skip-list entries (before run() with ``has_existing_crops``), with ``malformed_sides`` a skip
+    list refused by its reader on these sides.
     ``extra_args`` defaults to --regions with ``_REGIONS``.
     """
     step = _CropStep(**crop_step)
@@ -170,6 +178,7 @@ def _run_stage(temp_dir, subjects, extra_args=None, **crop_step):
         _add_legacy_conflict(output_dir, derivatives, step.legacy_version)
     if step.has_existing_crops:
         add_crops(crops_dir, listed, step.crop_regions, (*step.kinds, *(("mask",) if step.has_masks else ())))
+        add_crop_marker(crops_dir)
         _add_skips(derivatives, crops_dir, step)
 
     def execute(command, *_args, **_kwargs):

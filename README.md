@@ -228,7 +228,7 @@ Pass `--masks canonical_25` (or another version) to override the default.
 | `--regions` | Restrict to specific sulcal regions (space-separated) |
 | `--skel-seed` | Skeleton seed for the 2 mm re-skeletonization. Without the option, the `skel_seed` key of `{output}/pipeline_loop_2mm.json` sets the seed. Pipeline config: `dataset.skel_seed`; null (the default) leaves the `pipeline_loop_2mm.json` value in effect. |
 | `--labelling_session` | Morphologist labelling session whose labelled graphs locate the ventricle for whole-brain removal (e.g. `0_auto`). Default: per subject, the first of `deepcnn_session_auto` and `default_session_auto` that holds a labelled graph. |
-| `--overwrite` | Regenerate crops even if crops for the requested mask version already exist; without it the run stops instead. Also removes legacy unversioned `crops/2mm/` crops when they conflict with versioned ones. |
+| `--overwrite` | Regenerate crops even if crops for the requested mask version already exist; without it the run keeps crops holding `crops_complete.marker` and regenerates crops without it, with a warning. Also removes legacy unversioned `crops/2mm/` crops when they conflict with versioned ones. |
 
 </details>
 
