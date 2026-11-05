@@ -50,6 +50,7 @@ from champollion_pipeline.models.embeddings_qc import (
     compute_crops_by_side,
     compute_excluded_subjects,
     compute_region_side,
+    fetch_embeddings_qc_rows,
     fetch_region_model_qc_rows,
     remove_subject_rows,
 )
@@ -68,10 +69,11 @@ from champollion_pipeline.models.version_options import (
 )
 from champollion_pipeline.process_setup import init_pipeline_process
 from champollion_pipeline.utils.lib import CORTICAL_TILES_VERSION
-from champollion_pipeline.utils.qc_report import log_input_qc_exclusions, write_qc_tsv
+from champollion_pipeline.utils.qc_report import log_qc_exclusions, read_qc_tsv, write_qc_tsv
 
 PROVENANCE_FILE_NAME = "provenance.json"
 INPUT_QC_FILENAME = "input_qc.tsv"
+OUTPUT_QC_FILENAME = "output_qc.tsv"
 FAILED_STATUS = 1
 
 logger = logging.getLogger(__name__)
@@ -323,7 +325,6 @@ class GenerateEmbeddings(ScriptBuilder):
             result = self._run_normal()
         finally:
             profiler.disable()
-            # Save profiling results
             stats = pstats.Stats(profiler)
             stats.sort_stats("cumulative")
             stats.dump_stats("embeddings_profile.prof")
@@ -343,10 +344,8 @@ class GenerateEmbeddings(ScriptBuilder):
         """Execute the embeddings pipeline script (normal mode)."""
         local_dir = os.getcwd()
 
-        # Save original CUDA_VISIBLE_DEVICES value for restoration later
         original_cuda_visible_devices = os.environ.get("CUDA_VISIBLE_DEVICES")
 
-        # Force CPU usage if requested
         if self.args.cpu:
             os.environ["CUDA_VISIBLE_DEVICES"] = ""
             logger.trace("CPU mode enabled: CUDA_VISIBLE_DEVICES set to empty string")
@@ -354,7 +353,6 @@ class GenerateEmbeddings(ScriptBuilder):
         try:
             return self._run_pipeline(local_dir)
         finally:
-            # Restore original CUDA_VISIBLE_DEVICES value
             if original_cuda_visible_devices is None:
                 os.environ.pop("CUDA_VISIBLE_DEVICES", None)
             else:
@@ -395,6 +393,7 @@ class GenerateEmbeddings(ScriptBuilder):
                 return input_status
             result = self._run_per_region(evaluate_script, crops_2mm_dir, output_base)
             self._remove_excluded_rows(output_base)
+            output_status = self._run_output_qc(output_base)
         finally:
             if tmpdir:
                 shutil.rmtree(tmpdir)
@@ -404,7 +403,7 @@ class GenerateEmbeddings(ScriptBuilder):
         if self.args.run_cka:
             self._run_cka_test(output_base)
 
-        return result or input_status
+        return result or output_status or input_status
 
     def _find_crop_dir(self, crops_2mm_dir: str, region_model_name: str) -> str:
         """Map a model region name back to its crop directory name.
@@ -434,18 +433,27 @@ class GenerateEmbeddings(ScriptBuilder):
         return region_dirs
 
     def _run_input_qc(self, crops_2mm_dir: str, output_base: str) -> int:
-        """Write <output_base>/input_qc.tsv, keep its qc 0 subjects for _remove_excluded_rows and return
-        0, PARTIAL_STATUS with a qc 0 row, or FAILED_STATUS with no qc 1 row."""
+        """Write <output_base>/input_qc.tsv, keep its qc 0 subjects; return the status of _report_qc_rows."""
         models_path = self.args.models_path
         regions = [resolve_region_name(path, models_path) for path in self._find_checked_region_dirs()]
         crops = {region: self._find_crop_dir(crops_2mm_dir, region) for region in regions}
         rows = fetch_region_model_qc_rows(crops_2mm_dir, compute_crops_by_side(crops))
-        qc_path = join(output_base, INPUT_QC_FILENAME)
-        write_qc_tsv(qc_path, rows)
         self._excluded_subjects = compute_excluded_subjects(rows)
-        n_excluded = log_input_qc_exclusions(rows, logger)
+        return self._report_qc_rows(rows, join(output_base, INPUT_QC_FILENAME), "input")
+
+    def _run_output_qc(self, output_base: str) -> int:
+        """Write <output_base>/output_qc.tsv over each region model; return the status of _report_qc_rows."""
+        models_path = self.args.models_path
+        models = {path: resolve_region_name(path, models_path) for path in find_region_model_dirs(models_path)}
+        rows = fetch_embeddings_qc_rows(output_base, models, read_qc_tsv(join(output_base, INPUT_QC_FILENAME)))
+        return self._report_qc_rows(rows, join(output_base, OUTPUT_QC_FILENAME), "output")
+
+    def _report_qc_rows(self, rows: list[dict[str, object]], qc_path: str, step: str) -> int:
+        """Write and log ``rows``; return 0, PARTIAL_STATUS with a qc 0 row, or FAILED_STATUS with no qc 1 row."""
+        write_qc_tsv(qc_path, rows)
+        n_excluded = log_qc_exclusions(rows, logger, step)
         if n_excluded == len(rows):
-            logger.fail(f"no subject passed the embeddings input QC, see {qc_path}")
+            logger.fail(f"no subject passed the embeddings {step} QC, see {qc_path}")
             return FAILED_STATUS
         return PARTIAL_STATUS if n_excluded else 0
 
