@@ -146,6 +146,13 @@ def logged_messages(caplog: pytest.LogCaptureFixture, logger_name: str, level: i
     return [record.getMessage() for record in caplog.records if record.name == logger_name and record.levelno == level]
 
 
+def assert_one_subject_error(errors: list[str], subject: str, reason: str) -> None:
+    """Check that ``errors`` holds exactly one message, naming ``subject`` and ``reason``."""
+    assert len(errors) == 1, f"expected one error message, got {errors}"
+    assert subject in errors[0], f"{subject!r} not in {errors[0]!r}"
+    assert reason in errors[0], f"{reason!r} not in {errors[0]!r}"
+
+
 def module_logger_problem(module: ModuleType) -> str | None:
     """Describe why ``module`` does not bind ``logger`` to its own named logger, or None."""
     if not hasattr(module, "logger"):

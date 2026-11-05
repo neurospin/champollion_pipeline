@@ -62,6 +62,18 @@ def _stub_stage2_output_qc(monkeypatch):
 
 
 @pytest.fixture(autouse=True)  # noqa: V103
+def _stub_stage4_input_qc(monkeypatch):
+    """Let a test that mocks evaluate.py reach it with no crop on disk.
+
+    GenerateEmbeddings._run_input_qc returns the input QC status: 0, 3 (partial) or 1 (no usable subject).
+    tests/test_generate_embeddings_input_qc.py overrides this fixture to run the real check.
+    """
+    module = sys.modules.get("champollion_pipeline.generate_embeddings")
+    if module is not None:
+        monkeypatch.setattr(module.GenerateEmbeddings, "_run_input_qc", MagicMock(return_value=0), raising=False)
+
+
+@pytest.fixture(autouse=True)  # noqa: V103
 def _stub_stage3_input_qc(monkeypatch):
     """Let a test of generate_champollion_config.py reach the end of run() with no complete crop on disk.
 

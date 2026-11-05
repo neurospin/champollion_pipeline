@@ -23,20 +23,18 @@ from pathlib import Path
 from champollion.metrics.cka_coherence import test_models_coherence_from_directory
 from champollion_utils.script_builder import ScriptBuilder
 
+from champollion_pipeline._stage_base import PARTIAL_STATUS
+from champollion_pipeline.derivatives_layout import DEFAULT_MASKS_VERSION as DEFAULT_MASKS_VERSION
 from champollion_pipeline.derivatives_layout import (
-    DEFAULT_MASKS_VERSION,
     compute_models_cache_dir,
     compute_region_embeddings_dir,
     compute_run_log_derivatives_dir,
     compute_run_log_path,
 )
-from champollion_pipeline.models.cache import (
-    MODEL_SET_FILE_NAME,
-    ensure_models_cache_dir,
-    read_model_set,
-    write_json_atomic,
-)
+from champollion_pipeline.models.cache import MODEL_SET_FILE_NAME as MODEL_SET_FILE_NAME
 from champollion_pipeline.models.cache import ModelSet as ModelSet
+from champollion_pipeline.models.cache import ensure_models_cache_dir, write_json_atomic
+from champollion_pipeline.models.cache import read_model_set as read_model_set
 from champollion_pipeline.models.cache import write_model_set as write_model_set
 from champollion_pipeline.models.checkpoint import (
     DEFAULT_CHECKPOINT_EPOCH,
@@ -47,16 +45,34 @@ from champollion_pipeline.models.checkpoint import (
     uses_best_weights_stand_in,
     weights_source,
 )
+from champollion_pipeline.models.embeddings_qc import (
+    EMBEDDINGS_FILENAME,
+    compute_crops_by_side,
+    compute_excluded_subjects,
+    compute_region_side,
+    fetch_region_model_qc_rows,
+    remove_subject_rows,
+)
 from champollion_pipeline.models.fetch import HuggingFaceStrategy as HuggingFaceStrategy
 from champollion_pipeline.models.fetch import InteractiveFallbackStrategy as InteractiveFallbackStrategy
 from champollion_pipeline.models.fetch import LocalPathStrategy as LocalPathStrategy
 from champollion_pipeline.models.fetch import ModelFetchStrategy as ModelFetchStrategy
 from champollion_pipeline.models.fetch import RemoteArchiveStrategy as RemoteArchiveStrategy
 from champollion_pipeline.models.fetch import fetch_model_set
+from champollion_pipeline.models.version_options import (
+    check_local_model_set,
+    check_version_mismatch,
+    find_marker_model_version,
+    resolve_masks_default,
+    resolve_model_version_alias,
+)
 from champollion_pipeline.process_setup import init_pipeline_process
 from champollion_pipeline.utils.lib import CORTICAL_TILES_VERSION
+from champollion_pipeline.utils.qc_report import log_input_qc_exclusions, write_qc_tsv
 
 PROVENANCE_FILE_NAME = "provenance.json"
+INPUT_QC_FILENAME = "input_qc.tsv"
+FAILED_STATUS = 1
 
 logger = logging.getLogger(__name__)
 
@@ -179,6 +195,7 @@ class GenerateEmbeddings(ScriptBuilder):
             )
         )
         self._models_source: dict | None = None
+        self._excluded_subjects: frozenset[str] = frozenset()
 
     def _make_regions_tmpdir(self, models_path: str) -> str:
         """Return a temp dir containing symlinks to only the requested region subdirs."""
@@ -227,88 +244,11 @@ class GenerateEmbeddings(ScriptBuilder):
     def parse_args(self, args: list[str] | None = None) -> argparse.Namespace:
         """Parse args, then resolve the deprecated --masks-version alias into model_version."""
         parsed = super().parse_args(args)
-        self._resolve_model_version_alias()
-        self._resolve_masks_default()
-        self._check_version_mismatch()
-        self._check_local_model_set()
+        resolve_model_version_alias(self.args, self.parser)
+        resolve_masks_default(self.args)
+        check_version_mismatch(self.args, self.parser)
+        check_local_model_set(self.args, self.parser)
         return parsed
-
-    def _resolve_model_version_alias(self) -> None:
-        """Copy --masks-version into model_version with a FutureWarning; exit 2 if the two flags differ."""
-        alias = self.args.masks_version
-        if alias is None:
-            return
-        model_version = self.args.model_version
-        if model_version is not None and model_version != alias:
-            self.parser.error(
-                f"--model-version {model_version!r} and --masks-version {alias!r} differ; --masks-version is a "
-                "deprecated alias of --model-version, pass only --model-version"
-            )
-        warnings.warn(
-            "--masks-version is deprecated; use --model-version instead "
-            "(same value, the Hugging Face model-set subfolder).",
-            FutureWarning,
-            stacklevel=2,
-        )
-        self.args.model_version = alias
-
-    def _resolve_masks_default(self) -> None:
-        """Fill --masks when it was not given: the model version if set, else DEFAULT_MASKS_VERSION."""
-        if self.args.masks is None:
-            model_version = self.args.model_version
-            self.args.masks = model_version if model_version is not None else DEFAULT_MASKS_VERSION
-
-    def _check_version_mismatch(self) -> None:
-        """Exit 2 when --masks and --model-version differ, unless --allow-version-mismatch (then warn)."""
-        model_version, masks = self.args.model_version, self.args.masks
-        if model_version is None or masks == model_version:
-            return
-        if not self.args.allow_version_mismatch:
-            self.parser.error(
-                f"--masks {masks!r} and --model-version {model_version!r} differ: --masks picks the input crops, "
-                "--model-version the model set; pass --allow-version-mismatch to run with both"
-            )
-        warnings.warn(
-            f"--masks {masks!r} and --model-version {model_version!r} differ; running anyway "
-            f"(--allow-version-mismatch): crops {masks!r}, models {model_version!r}",
-            UserWarning,
-            stacklevel=2,
-        )
-
-    def _check_local_model_set(self) -> None:
-        """Exit 2 when a local model set's model_set.json is invalid, or names other masks than --masks unless
-        --allow-version-mismatch (then warn). A local directory without a marker: warn that it cannot be checked.
-        Not a local directory: nothing."""
-        models_dir = self.args.models_path
-        if not os.path.isdir(models_dir):
-            return
-        if not os.path.isfile(join(models_dir, MODEL_SET_FILE_NAME)):
-            masks = self.args.masks
-            warnings.warn(
-                f"{join(models_dir, MODEL_SET_FILE_NAME)} not found: the local model set cannot be checked against "
-                f"--masks {masks!r}; running anyway with --masks {masks!r}",
-                UserWarning,
-                stacklevel=2,
-            )
-            return
-        try:
-            model_set = read_model_set(models_dir)
-        except ValueError as err:
-            self.parser.error(str(err))
-        path, marker_masks, masks = join(models_dir, MODEL_SET_FILE_NAME), model_set.masks, self.args.masks
-        if marker_masks == masks:
-            return
-        if not self.args.allow_version_mismatch:
-            self.parser.error(
-                f"{path} masks {marker_masks!r} and --masks {masks!r} differ: the local model set was trained on "
-                f"{marker_masks!r} crops; pass --masks {marker_masks!r}, or --allow-version-mismatch to run with both"
-            )
-        warnings.warn(
-            f"{path} masks {marker_masks!r} and --masks {masks!r} differ; running anyway (--allow-version-mismatch): "
-            f"crops {masks!r}, models trained on {marker_masks!r}",
-            UserWarning,
-            stacklevel=2,
-        )
 
     def fetch_models(self, models_path):
         """
@@ -333,24 +273,9 @@ class GenerateEmbeddings(ScriptBuilder):
         )
         return fetched
 
-    def _read_marker_model_version(self, fetched_models_path: str) -> str | None:
-        """The model_version of the fetched model set's model_set.json, or None when absent or unreadable."""
-        path = join(fetched_models_path, MODEL_SET_FILE_NAME)
-        if not os.path.isfile(path):
-            return None
-        try:
-            return read_model_set(fetched_models_path).model_version
-        except (ValueError, OSError) as err:
-            warnings.warn(
-                f"Could not read {path} for provenance.json ({err}); model_version falls back to --model-version",
-                UserWarning,
-                stacklevel=2,
-            )
-            return None
-
     def _build_provenance(self, fetched_models_path: str) -> dict:
         """masks, model_version, checkpoint_epoch, models_source and pipeline_commit of this run, in that order."""
-        model_version = self._read_marker_model_version(fetched_models_path)
+        model_version = find_marker_model_version(fetched_models_path)
         if model_version is None:
             model_version = getattr(self.args, "model_version", None)
         return {
@@ -465,7 +390,11 @@ class GenerateEmbeddings(ScriptBuilder):
             )
 
         try:
+            input_status = self._run_input_qc(crops_2mm_dir, output_base)
+            if input_status == FAILED_STATUS:
+                return input_status
             result = self._run_per_region(evaluate_script, crops_2mm_dir, output_base)
+            self._remove_excluded_rows(output_base)
         finally:
             if tmpdir:
                 shutil.rmtree(tmpdir)
@@ -475,7 +404,7 @@ class GenerateEmbeddings(ScriptBuilder):
         if self.args.run_cka:
             self._run_cka_test(output_base)
 
-        return result
+        return result or input_status
 
     def _find_crop_dir(self, crops_2mm_dir: str, region_model_name: str) -> str:
         """Map a model region name back to its crop directory name.
@@ -495,6 +424,41 @@ class GenerateEmbeddings(ScriptBuilder):
                     return dname
         return base
 
+    def _find_checked_region_dirs(self) -> list[str]:
+        """Region model dirs of the run; ValueError when there is none or when a region has no weights."""
+        models_path = self.args.models_path
+        region_dirs = find_region_model_dirs(models_path)
+        if not region_dirs:
+            raise ValueError(f"No region model directories (containing logs/) found under {models_path}")
+        check_region_weights(region_dirs, models_path, self.args.checkpoint_epoch)
+        return region_dirs
+
+    def _run_input_qc(self, crops_2mm_dir: str, output_base: str) -> int:
+        """Write <output_base>/input_qc.tsv, keep its qc 0 subjects for _remove_excluded_rows and return
+        0, PARTIAL_STATUS with a qc 0 row, or FAILED_STATUS with no qc 1 row."""
+        models_path = self.args.models_path
+        regions = [resolve_region_name(path, models_path) for path in self._find_checked_region_dirs()]
+        crops = {region: self._find_crop_dir(crops_2mm_dir, region) for region in regions}
+        rows = fetch_region_model_qc_rows(crops_2mm_dir, compute_crops_by_side(crops))
+        qc_path = join(output_base, INPUT_QC_FILENAME)
+        write_qc_tsv(qc_path, rows)
+        self._excluded_subjects = compute_excluded_subjects(rows)
+        n_excluded = log_input_qc_exclusions(rows, logger)
+        if n_excluded == len(rows):
+            logger.fail(f"no subject passed the embeddings input QC, see {qc_path}")
+            return FAILED_STATUS
+        return PARTIAL_STATUS if n_excluded else 0
+
+    def _remove_excluded_rows(self, output_base: str) -> None:
+        """Drop the qc 0 subjects from the full_embeddings.csv of each region model of the run, reused ones too."""
+        if not self._excluded_subjects:
+            return
+        models_path = self.args.models_path
+        for model_path in find_region_model_dirs(models_path):
+            path = join(output_base, resolve_region_name(model_path, models_path), EMBEDDINGS_FILENAME)
+            if exists(path):
+                remove_subject_rows(path, self._excluded_subjects)
+
     def _run_per_region(self, evaluate_script: str, crops_2mm_dir: str, output_base: str) -> int:
         """Invoke champollion/evaluate.py for each region in models_path.
 
@@ -503,11 +467,7 @@ class GenerateEmbeddings(ScriptBuilder):
         """
         models_path = self.args.models_path
         epoch = self.args.checkpoint_epoch
-        region_dirs = find_region_model_dirs(models_path)
-
-        if not region_dirs:
-            raise ValueError(f"No region model directories (containing logs/) found under {models_path}")
-        check_region_weights(region_dirs, models_path, epoch)
+        region_dirs = self._find_checked_region_dirs()
 
         n_regions = len(region_dirs)
         logger.trace(f"Generating embeddings for {n_regions} regions → {output_base}")
@@ -518,12 +478,12 @@ class GenerateEmbeddings(ScriptBuilder):
             region = resolve_region_name(model_path, models_path)
             # Machine-read by champollion_sulcal_mcp (FOLD_RE): one record per region directory.
             logger.trace(f"Fold {fold}/{n_regions}: {region}")
-            side = "L" if region.endswith("_left") else "R"
+            side = compute_region_side(region)
             crop_name = self._find_crop_dir(crops_2mm_dir, region)
             mask_dir = join(crops_2mm_dir, crop_name, "mask")
             skels_path = join(mask_dir, f"{side}skeleton.npy")
             subjects_path = join(mask_dir, f"{side}skeleton_subject.csv")
-            saving_path = join(output_base, region, "full_embeddings.csv")
+            saving_path = join(output_base, region, EMBEDDINGS_FILENAME)
 
             if exists(saving_path) and not getattr(self.args, "overwrite", False):
                 logger.trace(f"[SKIP] {region} — already exists (--overwrite to recompute)")

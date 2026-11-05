@@ -29,7 +29,12 @@ from champollion_pipeline.derivatives_layout import (
 from champollion_pipeline.process_setup import init_pipeline_process
 from champollion_pipeline.utils.cortical_tiles_config import INPUT_TYPES_DEFAULT
 from champollion_pipeline.utils.lib import DERIVATIVES_FOLDER, find_dataset_folder
-from champollion_pipeline.utils.qc_report import CROP_KIND_MASK, fetch_crop_qc_rows, write_qc_tsv
+from champollion_pipeline.utils.qc_report import (
+    CROP_KIND_MASK,
+    fetch_crop_qc_rows,
+    log_input_qc_exclusions,
+    write_qc_tsv,
+)
 
 logger = logging.getLogger(__name__)
 
@@ -48,17 +53,6 @@ def _list_region_folders(crop_path: str) -> list[str]:
     if not os.path.isdir(crop_path):
         return []
     return sorted(name for name in os.listdir(crop_path) if os.path.isdir(join(crop_path, name)))
-
-
-def _report_input_qc(rows: list[dict[str, object]], qc_path: str) -> int:
-    """Log one ERROR per qc 0 row and one FAIL when no row has qc 1; return the input QC status."""
-    excluded = [row for row in rows if row["qc"] == 0]
-    for row in excluded:
-        logger.error(f"input QC excluded {row['participant_id']}: {row['reason']}")
-    if len(excluded) == len(rows):
-        logger.fail(f"no subject passed the config input QC, see {qc_path}")
-        return FAILED_STATUS
-    return PARTIAL_STATUS if excluded else 0
 
 
 class GenerateChampollionConfig(ScriptBuilder):
@@ -176,7 +170,11 @@ class GenerateChampollionConfig(ScriptBuilder):
         crop_path = self.args.crop_path
         rows = fetch_crop_qc_rows(crop_path, _list_region_folders(crop_path), INPUT_QC_KINDS)
         write_qc_tsv(qc_path, rows)
-        return _report_input_qc(rows, qc_path)
+        n_excluded = log_input_qc_exclusions(rows, logger)
+        if n_excluded == len(rows):
+            logger.fail(f"no subject passed the config input QC, see {qc_path}")
+            return FAILED_STATUS
+        return PARTIAL_STATUS if n_excluded else 0
 
     def _validate_inputs(self):
         """Validate input paths."""

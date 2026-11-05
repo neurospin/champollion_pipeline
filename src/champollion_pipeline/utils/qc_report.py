@@ -11,6 +11,7 @@ and prune_failed_subjects --qc. Standard library only: no toolchain import.
 """
 
 import csv
+import logging
 import numbers
 import os
 import tempfile
@@ -321,6 +322,14 @@ def replace_missing_crop_reasons(
     """
     index = _index_skip_reasons(skips, is_bids)
     return [_replace_row_reasons(row, index) for row in rows]
+
+
+def log_input_qc_exclusions(rows: Iterable[Mapping[str, object]], stage_logger: logging.Logger) -> int:
+    """Log one ERROR per qc 0 row on stage_logger and return how many rows have qc 0."""
+    excluded = [row for row in rows if row[QC_COLUMN] == 0]
+    for row in excluded:
+        stage_logger.error(f"input QC excluded {row[ID_COLUMN]}: {row[REASON_COLUMN]}", stacklevel=2)
+    return len(excluded)
 
 
 def summarise_qc(records: Iterable[Mapping[str, object]]) -> dict[str, object]:

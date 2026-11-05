@@ -16,7 +16,7 @@ import pytest
 from champollion_pipeline.generate_champollion_config import GenerateChampollionConfig
 from champollion_pipeline.utils.lib import DERIVATIVES_FOLDER
 from champollion_pipeline.utils.qc_report import fetch_crop_qc_rows, read_qc_tsv
-from tests.log_assertions import FAIL
+from tests.log_assertions import FAIL, assert_one_subject_error
 from tests.stage2_layout import add_crops, crop_array, crop_csv
 from tests.test_generate_champollion_config_internals import fake_execute_command, make_crop
 
@@ -267,10 +267,8 @@ class TestExitPolicy:
     def test_one_error_record_per_qc0_row(self, partial_crops, pipeline_caplog):
         run = _run_stage(partial_crops)
 
-        errors = _messages_at(logging.ERROR, pipeline_caplog)
-        assert len(errors) == 1
-        assert _OTHER_SUBJECT in errors[0]
-        assert run.rows()[_OTHER_SUBJECT]["reason"] in errors[0]
+        reason = run.rows()[_OTHER_SUBJECT]["reason"]
+        assert_one_subject_error(_messages_at(logging.ERROR, pipeline_caplog), _OTHER_SUBJECT, reason)
 
     def test_no_error_record_on_a_complete_run(self, crops, pipeline_caplog):
         run = _run_stage(crops)
