@@ -40,10 +40,9 @@ from champollion_utils.update_check import check_for_updates
 from champollion_pipeline._stage_base import PARTIAL_STATUS, PipelineStage, StageResult
 from champollion_pipeline.config import ConfigLoader, DatasetConfig, PipelineConfig
 from champollion_pipeline.derivatives_layout import (
-    HEMISPHERES,
     compute_combined_embeddings_dir,
     compute_region_embeddings_dir,
-    compute_region_model_name,
+    compute_region_model_names,
     compute_snapshots_dir,
 )
 from champollion_pipeline.file_indexer import SubjectEligibilityChecker
@@ -283,7 +282,7 @@ class GenerateEmbeddingsStage(PipelineStage):
         if dataset.models_cache is not None:
             args.append(f"--models-cache={dataset.models_cache}")
         if dataset.regions:
-            args.extend(["--regions", *_compute_embeddings_region_names(dataset.regions)])
+            args.extend(["--regions", *compute_region_model_names(dataset.regions)])
         return args
 
     def create_script(self) -> ScriptBuilder:
@@ -322,12 +321,6 @@ def _compute_snapshots_output_dir(dataset: DatasetConfig) -> str:
     if dataset.datasets_root:
         return compute_snapshots_dir(dataset.datasets_root, dataset.masks_version)
     return ""
-
-
-def _compute_embeddings_region_names(regions: list[str]) -> list[str]:
-    """Return both hemispheres' model names for each distinct region, in input order. O(n)."""
-    distinct_regions = dict.fromkeys(regions)
-    return [compute_region_model_name(region, hemisphere) for region in distinct_regions for hemisphere in HEMISPHERES]
 
 
 class PutTogetherEmbeddingsStage(PipelineStage):
