@@ -26,6 +26,7 @@ import re
 import shutil
 import sys
 import tempfile
+from collections.abc import Callable
 from datetime import datetime
 from os.path import abspath, dirname, exists, isdir, join
 
@@ -61,6 +62,7 @@ logger = logging.getLogger(__name__)
 
 LABELLING_SESSION_DEFAULT = LABELLING_SESSION_CANDIDATES[0]
 WHOLE_BRAIN_SRC_FILENAME = "resampled_skeleton"
+WHOLE_BRAIN_OUT_FILENAME = "skeleton_generated_without_ventricle_"  # upstream default, now passed explicitly
 GRAPH_WILDCARD = "*"  # the only wildcard read in --path_to_graph
 # Whole-brain exclusion reasons; tuple order is the clause order in the warning.
 EXCLUDED_NO_GRAPH_FOLDER = "no_graph_folder"  # non-BIDS: --path_to_graph matches no folder
@@ -138,23 +140,33 @@ def transform_qc_rows(transforms_dir: str) -> list[dict[str, object]]:
     ]
 
 
-def list_fused_subjects(skeleton_src_dir: str, src_filename: str) -> dict[str, str]:
-    """Map each subject with a fused volume in <skeleton_src_dir>/F/ to its absolute path.
+def list_side_volumes(volumes_dir: str, filename: str, side: str = "F") -> dict[str, str]:
+    """Map each subject with a volume in <volumes_dir>/<side>/ to its absolute path.
 
-    The subject id is what follows ``F<src_filename>`` in the file name, with one
-    leading ``_`` stripped (cortical_tiles' own subject-id rule). Missing F/ gives {}.
+    The subject id is what follows ``<side><filename>`` in the file name, with one
+    leading ``_`` stripped (cortical_tiles' own subject-id rule). A missing folder gives {}.
     """
-    f_dir = join(skeleton_src_dir, "F")
-    if not isdir(f_dir):
+    side_dir = join(volumes_dir, side)
+    if not isdir(side_dir):
         return {}
-    pattern = re.compile(rf"^F{re.escape(src_filename)}(.*)\.nii\.gz$")
-    fused = {}
-    for name in sorted(os.listdir(f_dir)):
+    pattern = re.compile(rf"^{re.escape(side + filename)}(.*)\.nii\.gz$")
+    volumes = {}
+    for name in sorted(os.listdir(side_dir)):
         match = pattern.match(name)
         if match:
             subject = match.group(1)
-            fused[subject[1:] if subject.startswith("_") else subject] = abspath(join(f_dir, name))
-    return fused
+            volumes[subject[1:] if subject.startswith("_") else subject] = abspath(join(side_dir, name))
+    return volumes
+
+
+def call_whole_brain_step(name: str, step: Callable[..., None], **kwargs: object) -> bool:
+    """Call ``step``; a raise gives one ERROR record with its traceback and False, a return True."""
+    try:
+        step(**kwargs)
+    except Exception:
+        logger.exception(f"whole-brain {name} raised")
+        return False
+    return True
 
 
 def labelled_session_dir(morpho_dir: str, path_to_graph: str, subject: str, session: str, bids: bool) -> str:
@@ -552,8 +564,8 @@ class RunCorticalTiles(ScriptBuilder):
 
     def _write_labelling_qc(
         self, subjects: list[str], input_abs: str, output_abs: str, candidates: tuple[str, ...]
-    ) -> tuple[str, bool]:
-        """Write labelling_qc.tsv, one ERROR per failing subject; return its path and whether a subject passed."""
+    ) -> tuple[str, list[str]]:
+        """Write labelling_qc.tsv, one ERROR per failing subject; return its path and the subjects with qc 1."""
         rows = [
             fetch_labelling_qc_row(input_abs, self.args.path_to_graph, subject, candidates, self.args.bids)
             for subject in sorted(subjects)
@@ -563,7 +575,7 @@ class RunCorticalTiles(ScriptBuilder):
         for row in rows:
             if row["qc"] == "0":
                 logger.error(f"labelling QC excluded {row['participant_id']}: {row['reason']}")
-        return qc_path, any(row["qc"] == "1" for row in rows)
+        return qc_path, [row["participant_id"] for row in rows if row["qc"] == "1"]
 
     def _write_input_qc(self, input_abs: str, output_abs: str, sk_qc_abs: str) -> tuple[str, bool]:
         """Write input_qc.tsv, one record per qc 0 row; return its path and whether a subject passed."""
@@ -791,25 +803,34 @@ class RunCorticalTiles(ScriptBuilder):
         self._write_transform_qc(output_abs)  # TEMPORARY (DEF-CORTILES-BDRABCZUK-8A44DAD7F312)
         self._generate_mask_npys(output_abs)
 
-        # Whole-brain volume: fuse L+R skeletons, then strip the ventricle
-        # from the fused volume. Runs after a complete or partial crop (see the
-        # guard above), alongside the per-region crops above -- fuse first,
-        # since remove_ventricle(F)
-        # reads from the exact <skeleton_src_dir>/F/ tree
-        # add_left_and_right_volumes just wrote.
-        #
-        # src_dir must point at the actual L/R resampled skeletons that
-        # generate_sulcal_regions.py (the crop subprocess above) writes to
-        # {output}/cortical_tiles-{YEAR}/skeletons/{voxel_size}/{L,R}/ --
-        # NOT input_abs (the Morphologist graphs directory, which has no
-        # L/ or R/ subdirs and is read-only). morpho_dir stays input_abs:
-        # remove_ventricle needs it separately to locate the labelled
-        # graphs used to strip the ventricle.
+        status = self._run_whole_brain(input_abs, output_abs, result)
+        return self._apply_output_qc(output_abs, status, skips)
+
+    def _run_whole_brain(self, input_abs: str, output_abs: str, crop_status: int) -> int:
+        """Fuse the L+R skeletons, then strip the ventricle from the fused volume; return the stage status so far.
+
+        Runs after a complete or partial crop, alongside the per-region crops. Fusion comes first, since
+        remove_ventricle(F) reads from the exact <skeleton_src_dir>/F/ tree add_left_and_right_volumes just
+        wrote. Both steps always run; ``crop_status`` stands unless one of them failed.
+
+        src_dir must point at the actual L/R resampled skeletons that generate_sulcal_regions.py (the crop
+        subprocess) writes to {output}/cortical_tiles-{YEAR}/skeletons/{voxel_size}/{L,R}/ -- NOT input_abs
+        (the Morphologist graphs directory, which has no L/ or R/ subdirs and is read-only). morpho_dir stays
+        input_abs: remove_ventricle needs it separately to locate the labelled graphs used to strip the ventricle.
+        """
         requested_cfg = CorticalTilesConfigFactory.from_args(self.args)
         vox_str = f"{int(requested_cfg.out_voxel_size)}mm"
         skeleton_src_dir = join(output_abs, DERIVATIVES_FOLDER, "skeletons", vox_str)
 
-        add_left_and_right_volumes.add_left_and_right_volumes(
+        is_fused = self._fuse_whole_brain(skeleton_src_dir)
+        is_stripped = self._remove_ventricle_whole_brain(skeleton_src_dir, input_abs, output_abs)
+        return crop_status if is_fused and is_stripped else self._compute_fusion_failure_status(output_abs)
+
+    def _fuse_whole_brain(self, skeleton_src_dir: str) -> bool:
+        """Fuse the L and R skeletons; False when the call raises or a subject with both sides has no fused volume."""
+        is_done = call_whole_brain_step(
+            "fusion",
+            add_left_and_right_volumes.add_left_and_right_volumes,
             src_dir=skeleton_src_dir,
             parallel=True,
             # Its own -1 default breaks on the string-only revalidation in
@@ -818,11 +839,19 @@ class RunCorticalTiles(ScriptBuilder):
             # which lives under external/ and is not ours to fix.
             number_subjects="all",
         )
-        self._remove_ventricle_whole_brain(skeleton_src_dir, input_abs, output_abs)
+        left, right = (list_side_volumes(skeleton_src_dir, WHOLE_BRAIN_SRC_FILENAME, side) for side in GRAPH_SIDES)
+        fused = list_side_volumes(skeleton_src_dir, WHOLE_BRAIN_SRC_FILENAME)
+        lost = sorted((left.keys() & right.keys()) - fused.keys())
+        for subject in lost:
+            logger.error(f"whole-brain fusion left no volume for {subject}")
+        return is_done and not lost
 
-        return self._apply_output_qc(output_abs, result, skips)
+    def _compute_fusion_failure_status(self, output_abs: str) -> int:
+        """Status of a whole-brain failure: CROP_STATUS_PARTIAL when whole_brain/F holds a volume, else 1."""
+        whole_brain_dir = join(output_abs, DERIVATIVES_FOLDER, "whole_brain")
+        return CROP_STATUS_PARTIAL if list_side_volumes(whole_brain_dir, WHOLE_BRAIN_OUT_FILENAME) else 1
 
-    def _remove_ventricle_whole_brain(self, skeleton_src_dir: str, input_abs: str, output_abs: str) -> None:
+    def _remove_ventricle_whole_brain(self, skeleton_src_dir: str, input_abs: str, output_abs: str) -> bool:
         """Strip the ventricle from each fused volume, grouping subjects by labelling session.
 
         remove_ventricle takes one labelling session per call and enumerates
@@ -830,32 +859,37 @@ class RunCorticalTiles(ScriptBuilder):
         sessions (or some have none) each group gets a staged F/ of symlinks.
         Without --bids, a ``*`` in path_to_graph is resolved per subject, so
         groups are keyed by (session, graph path). Subjects that cannot be
-        resolved are left out with one warning; the crops are unaffected and
-        the output QC decides the exit status. labelling_qc.tsv is written first;
+        resolved are left out with one warning. labelling_qc.tsv is written first;
         with no qc 1 row, one warning names it and no volume is processed.
+        False when a call raises (later groups still run) or a qc 1 subject has
+        no whole_brain/F volume.
         """
         if self.args.labelling_session_explicit:
             candidates = (self.args.labelling_session,)
         else:
             candidates = LABELLING_SESSION_CANDIDATES
 
-        fused = list_fused_subjects(skeleton_src_dir, WHOLE_BRAIN_SRC_FILENAME)
+        fused = list_side_volumes(skeleton_src_dir, WHOLE_BRAIN_SRC_FILENAME)
         if not fused:
             logger.warning(f"No fused volume under {skeleton_src_dir}/F; whole-brain ventricle removal skipped.")
-            return
+            return True
 
-        qc_path, has_usable_subject = self._write_labelling_qc(list(fused), input_abs, output_abs, candidates)
+        qc_path, passed = self._write_labelling_qc(list(fused), input_abs, output_abs, candidates)
         groups, excluded = self._group_whole_brain_subjects(list(fused), input_abs, candidates)
         exclusions = exclusion_warning(excluded, self.args.path_to_graph, candidates) if excluded else ""
-        if not has_usable_subject:
+        if not passed:
             left_out = f"Whole-brain volume left out: no subject passed the labelling pre-check, see {qc_path}."
             logger.warning(f"{left_out} {exclusions}".rstrip())
-            return
+            return True
         if exclusions:
             logger.warning(exclusions)
 
-        def call(src_dir: str, session: str, graph_path: str) -> None:
-            remove_ventricle.remove_ventricle(
+        whole_brain_dir = join(output_abs, DERIVATIVES_FOLDER, "whole_brain")
+
+        def call(src_dir: str, session: str, graph_path: str) -> bool:
+            return call_whole_brain_step(
+                "ventricle removal",
+                remove_ventricle.remove_ventricle,
                 side="F",
                 src_dir=src_dir,
                 morpho_dir=input_abs,
@@ -865,23 +899,29 @@ class RunCorticalTiles(ScriptBuilder):
                 # default src_filename ("skeleton_generated_") -- pass it
                 # explicitly so remove_ventricle reads what was just fused.
                 src_filename=WHOLE_BRAIN_SRC_FILENAME,
+                output_filename=WHOLE_BRAIN_OUT_FILENAME,
                 parallel=True,
-                output_dir=join(output_abs, DERIVATIVES_FOLDER, "whole_brain"),
+                output_dir=whole_brain_dir,
                 transform_dir=join(output_abs, DERIVATIVES_FOLDER, "transforms"),
                 labelling_session=session,
                 bids=self.args.bids,
             )
 
+        is_done = True
         if len(groups) == 1 and not excluded:
-            call(skeleton_src_dir, *next(iter(groups)))
-            return
+            is_done = call(skeleton_src_dir, *next(iter(groups)))
+        else:
+            for session, graph_path in sorted(groups, key=lambda key: (candidates.index(key[0]), key[1])):
+                with tempfile.TemporaryDirectory(prefix="whole_brain_") as staged:
+                    os.makedirs(join(staged, "F"))
+                    for subject in groups[(session, graph_path)]:
+                        os.symlink(fused[subject], join(staged, "F", os.path.basename(fused[subject])))
+                    is_done = call(staged, session, graph_path) and is_done
 
-        for session, graph_path in sorted(groups, key=lambda key: (candidates.index(key[0]), key[1])):
-            with tempfile.TemporaryDirectory(prefix="whole_brain_") as staged:
-                os.makedirs(join(staged, "F"))
-                for subject in groups[(session, graph_path)]:
-                    os.symlink(fused[subject], join(staged, "F", os.path.basename(fused[subject])))
-                call(staged, session, graph_path)
+        lost = sorted(set(passed) - list_side_volumes(whole_brain_dir, WHOLE_BRAIN_OUT_FILENAME).keys())
+        for subject in lost:
+            logger.error(f"whole-brain ventricle removal left no volume for {subject}")
+        return is_done and not lost
 
     def _group_whole_brain_subjects(
         self, subjects: list[str], input_abs: str, candidates: tuple[str, ...]

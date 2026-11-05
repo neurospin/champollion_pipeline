@@ -3,12 +3,14 @@
 run() needs a subject holding one graph per hemisphere at <input>/<subject>/<path_to_graph>/<side>*.arg.
 """
 
+import inspect
 import json
 from pathlib import Path
 from unittest.mock import MagicMock, patch
 
 import numpy as np
 import pytest
+from cortical_tiles.brainvisa import remove_ventricle as remove_ventricle_module
 
 from champollion_pipeline.run_cortical_tiles import RunCorticalTiles
 
@@ -16,6 +18,9 @@ GRAPH_DIR = "graphs"
 SUBJECT = "subj01"
 TEMPLATE_CONFIG = Path(__file__).resolve().parent.parent / "pipeline_loop_2mm.json"
 CROP_STEMS = {"foldlabel": "label"}  # crop kinds whose files carry another stem than the kind name
+# Signature of the real cortical_tiles remove_ventricle(), captured before any
+# test patches it, so fakes can read its arguments however they are passed.
+REMOVE_VENTRICLE_SIGNATURE = inspect.signature(remove_ventricle_module.remove_ventricle)
 
 
 @pytest.fixture(autouse=True)  # noqa: V103
@@ -41,6 +46,20 @@ def add_graphs(input_dir, subject=SUBJECT, graph_dir=GRAPH_DIR, sides="LR"):
     folder.mkdir(parents=True, exist_ok=True)
     for side in sides:
         (folder / f"{side}{subject}.arg").touch()
+
+
+def write_whole_brain_volumes(*args, **kwargs):
+    """What the real remove_ventricle leaves on disk: an output volume per fused volume of its source directory."""
+    bound = REMOVE_VENTRICLE_SIGNATURE.bind(*args, **kwargs)
+    bound.apply_defaults()
+    params = bound.arguments
+    side = params["side"]
+    output_dir = Path(params["output_dir"]) / side
+    output_dir.mkdir(parents=True, exist_ok=True)
+    stem = f"{side}{params['src_filename']}"
+    for path in (Path(params["src_dir"]) / side).glob(f"{stem}*.nii.gz"):
+        subject = path.name[len(stem) : -len(".nii.gz")]
+        (output_dir / f"{side}{params['output_filename']}{subject}.nii.gz").touch()
 
 
 def crop_array(crops_dir, region, side, kind):

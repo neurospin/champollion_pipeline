@@ -26,7 +26,7 @@ from champollion_pipeline.utils.cortical_tiles_config import compute_versioned_c
 from champollion_pipeline.utils.lib import DERIVATIVES_FOLDER, LABELLING_SESSION_CANDIDATES
 from champollion_pipeline.utils.qc_report import read_qc_tsv
 from tests.log_assertions import FAIL
-from tests.stage2_layout import GRAPH_DIR, TEMPLATE_CONFIG, add_crops, add_graphs, crop_csv
+from tests.stage2_layout import GRAPH_DIR, TEMPLATE_CONFIG, add_crops, add_graphs, crop_csv, write_whole_brain_volumes
 
 _MODULE = "champollion_pipeline.run_cortical_tiles"
 _LOGGER_NAME = _MODULE
@@ -184,6 +184,10 @@ def _run_stage(temp_dir, subjects, extra_args=None, **crop_step):
     def note_report(*_args, **_kwargs):
         report_at_whole_brain.append((derivatives / _QC_FILE).exists())
 
+    def remove_volumes(*args, **kwargs):
+        note_report()
+        write_whole_brain_volumes(*args, **kwargs)
+
     def write_masks(_output_abs):
         if step.has_masks:
             add_crops(crops_dir, listed, step.crop_regions, ("mask",))
@@ -210,7 +214,7 @@ def _run_stage(temp_dir, subjects, extra_args=None, **crop_step):
         ) as fuse,
         patch(
             "champollion_pipeline.run_cortical_tiles.remove_ventricle.remove_ventricle",
-            side_effect=note_report,
+            side_effect=remove_volumes,
         ) as remove,
     ):
         result = script.run()
