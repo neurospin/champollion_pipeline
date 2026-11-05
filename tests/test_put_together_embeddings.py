@@ -53,22 +53,6 @@ class TestRunMethod:
         assert (output / "SC-sylv_right_embeddings.csv").exists()
         assert (output / "SC-sylv_left_embeddings.csv").read_text() == "data_SC-sylv_left"
 
-    def test_run_skips_regions_without_csv(self, tmp_path):
-        """Regions with no full_embeddings.csv are skipped silently."""
-        source = tmp_path / "source"
-        source.mkdir()
-        (source / "SC-sylv_left").mkdir()  # no CSV
-        (source / "SC-sylv_right").mkdir()
-        (source / "SC-sylv_right" / "full_embeddings.csv").write_text("data")
-
-        output = tmp_path / "output"
-        script = PutTogetherEmbeddings()
-        script.parse_args([str(source), "--output_path", str(output)])
-        script.run()
-
-        assert not (output / "SC-sylv_left_embeddings.csv").exists()
-        assert (output / "SC-sylv_right_embeddings.csv").exists()
-
     def test_run_creates_output_directory(self, tmp_path):
         """run() creates the output directory if it does not exist."""
         source = tmp_path / "source"

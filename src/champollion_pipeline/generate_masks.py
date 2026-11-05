@@ -26,42 +26,12 @@ from cortical_tiles.brainvisa.utils.sulcus import complete_sulci_name
 from joblib import Parallel, delayed
 from soma import aims
 
-from champollion_pipeline.derivatives_layout import compute_run_log_path
+from champollion_pipeline.derivatives_layout import DEFAULT_REGIONS, compute_run_log_path
 from champollion_pipeline.process_setup import detach_frozen_root_handlers
 
 logger = logging.getLogger(__name__)
 
-# Default regions — same 28 as generate_sulcal_regions.py
-_REGIONS_DEFAULT = [
-    "S.C.-sylv.",
-    "S.C.-S.Pe.C.",
-    "S.C.-S.Po.C.",
-    "S.Pe.C.",
-    "S.Po.C.",
-    "S.F.int.-F.C.M.ant.",
-    "S.F.inf.-BROCA-S.Pe.C.inf.",
-    "S.T.s.",
-    "Sc.Cal.-S.Li.",
-    "F.C.M.post.-S.p.C.",
-    "S.T.i.-S.O.T.lat.",
-    "OCCIPITAL",
-    "F.I.P.-F.I.P.Po.C.inf.",
-    "S.F.inter.-S.F.sup.",
-    "S.F.median-S.F.pol.tr.-S.F.sup.",
-    "S.Or.",
-    "S.Or.-S.Olf.",
-    "F.P.O.-S.Cu.-Sc.Cal.",
-    "S.s.P.-S.Pa.int.",
-    "S.T.s.br.",
-    "Lobule_parietal_sup.",
-    "S.F.marginal-S.F.inf.ant.",
-    "F.Coll.-S.Rh.",
-    "S.T.i.-S.T.s.-S.T.pol.",
-    "F.C.L.p.-subsc.-F.C.L.a.-INSULA.",
-    "S.F.int.-S.R.",
-    "S.Call.",
-    "S.Call.-S.s.P.-S.intraCing.",
-]
+_REGIONS_DEFAULT = list(DEFAULT_REGIONS)
 
 # Canonical return values for runner status results.
 # Always compare against these keys rather than raw strings.

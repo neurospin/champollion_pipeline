@@ -47,12 +47,14 @@ from champollion_pipeline.models.checkpoint import (
 )
 from champollion_pipeline.models.embeddings_qc import (
     EMBEDDINGS_FILENAME,
+    OUTPUT_QC_FILENAME,
     compute_crops_by_side,
     compute_excluded_subjects,
     compute_region_side,
     fetch_embeddings_qc_rows,
     fetch_region_model_qc_rows,
     remove_subject_rows,
+    write_region_widths,
 )
 from champollion_pipeline.models.fetch import HuggingFaceStrategy as HuggingFaceStrategy
 from champollion_pipeline.models.fetch import InteractiveFallbackStrategy as InteractiveFallbackStrategy
@@ -73,7 +75,6 @@ from champollion_pipeline.utils.qc_report import log_qc_exclusions, read_qc_tsv,
 
 PROVENANCE_FILE_NAME = "provenance.json"
 INPUT_QC_FILENAME = "input_qc.tsv"
-OUTPUT_QC_FILENAME = "output_qc.tsv"
 FAILED_STATUS = 1
 
 logger = logging.getLogger(__name__)
@@ -445,6 +446,7 @@ class GenerateEmbeddings(ScriptBuilder):
         """Write <output_base>/output_qc.tsv over each region model; return the status of _report_qc_rows."""
         models_path = self.args.models_path
         models = {path: resolve_region_name(path, models_path) for path in find_region_model_dirs(models_path)}
+        write_region_widths(output_base, models)
         rows = fetch_embeddings_qc_rows(output_base, models, read_qc_tsv(join(output_base, INPUT_QC_FILENAME)))
         return self._report_qc_rows(rows, join(output_base, OUTPUT_QC_FILENAME), "output")
 

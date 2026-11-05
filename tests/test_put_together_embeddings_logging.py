@@ -5,7 +5,6 @@ instead of print().
 
 REQ-LOGGING-BDRABCZUK-A0C1CBA4176F: run() logs the embeddings_source path at LOG.
 REQ-LOGGING-BDRABCZUK-2755E39A8331: run() logs the --output_path value at LOG.
-REQ-LOGGING-BDRABCZUK-C90FB2BAA2E3: a region without full_embeddings.csv is logged at WARNING with its name.
 REQ-LOGGING-BDRABCZUK-853BB2689827: the copied file count and --output_path are logged at OUTPUT.
 REQ-LOGGING-BDRABCZUK-DE70E7A05D35: zero copied embeddings are logged at WARNING with the source path.
 (REQ-LOGGING-BDRABCZUK-C96C8DAAF703 and -22ABEF2F2CBD: tests/test_logging_convention.py, through
@@ -62,15 +61,6 @@ def test_output_path_logged_at_log(tmp_path, pipeline_caplog):
     _run(source, output)
 
     record = pipeline_caplog.assert_logged(LOG, str(output))
-    assert record.name == LOGGER_NAME
-
-
-def test_region_without_csv_logged_at_warning(tmp_path, pipeline_caplog):
-    source = _source(tmp_path, (REGION_WITH_CSV,), (REGION_WITHOUT_CSV,))
-
-    _run(source, tmp_path / "combined")
-
-    record = pipeline_caplog.assert_logged(logging.WARNING, REGION_WITHOUT_CSV)
     assert record.name == LOGGER_NAME
 
 

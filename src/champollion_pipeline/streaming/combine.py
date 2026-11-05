@@ -13,8 +13,12 @@ from os.path import isdir
 import champollion_utils.logger  # noqa: F401 - installs Logger.trace/output
 
 from champollion_pipeline.config import DatasetConfig
-from champollion_pipeline.derivatives_layout import compute_combined_embeddings_dir, compute_region_embeddings_dir
-from champollion_pipeline.put_together_embeddings import PutTogetherEmbeddings
+from champollion_pipeline.derivatives_layout import (
+    compute_combined_embeddings_dir,
+    compute_region_embeddings_dir,
+    compute_region_model_names,
+)
+from champollion_pipeline.put_together_embeddings import PARTIAL_STATUS, PutTogetherEmbeddings
 from champollion_pipeline.streaming.settings import StreamingSettings
 
 logger = logging.getLogger(__name__)
@@ -33,9 +37,12 @@ def run_combine(settings: StreamingSettings, dataset: DatasetConfig) -> str:
         raise FileNotFoundError(f"Region embeddings source not found: {source}")
     logger.trace(f"Combine: embeddings source {source}, combined directory {combined}")
     script = PutTogetherEmbeddings()
-    script.parse_args([source, f"--output_path={combined}"])
+    args = [source, f"--output_path={combined}"]
+    if dataset.regions:
+        args.extend(["--regions", *compute_region_model_names(dataset.regions)])
+    script.parse_args(args)
     code = script.run()
-    if code != 0:
+    if code not in (0, PARTIAL_STATUS):
         raise RuntimeError(f"PutTogetherEmbeddings failed with return code {code} for combined directory {combined}")
     n = sum(1 for name in os.listdir(combined) if name.endswith(_COMBINED_SUFFIX)) if isdir(combined) else 0
     if n == 0:

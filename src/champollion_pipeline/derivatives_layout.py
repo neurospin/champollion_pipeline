@@ -8,6 +8,7 @@ from ``external/``. Used by stage 3 (writer) and training (reader) so the two
 sides cannot drift apart.
 """
 
+from collections.abc import Iterable
 from datetime import datetime
 from os.path import abspath, join
 
@@ -30,6 +31,37 @@ RUN_LOG_TIMESTAMP_FORMAT = "%Y%m%d-%H%M%S"
 CHAMPOLLION_RUN_LOG_STAGES: tuple[str, ...] = ("config", "embeddings", "combine", "snapshots", "training")
 # Every stage name accepted by compute_run_log_derivatives_dir.
 RUN_LOG_STAGES: tuple[str, ...] = ("morphologist", "cortical_tiles", *CHAMPOLLION_RUN_LOG_STAGES)
+# Default regions: same 28 as generate_sulcal_regions.py.
+DEFAULT_REGIONS: tuple[str, ...] = (
+    "S.C.-sylv.",
+    "S.C.-S.Pe.C.",
+    "S.C.-S.Po.C.",
+    "S.Pe.C.",
+    "S.Po.C.",
+    "S.F.int.-F.C.M.ant.",
+    "S.F.inf.-BROCA-S.Pe.C.inf.",
+    "S.T.s.",
+    "Sc.Cal.-S.Li.",
+    "F.C.M.post.-S.p.C.",
+    "S.T.i.-S.O.T.lat.",
+    "OCCIPITAL",
+    "F.I.P.-F.I.P.Po.C.inf.",
+    "S.F.inter.-S.F.sup.",
+    "S.F.median-S.F.pol.tr.-S.F.sup.",
+    "S.Or.",
+    "S.Or.-S.Olf.",
+    "F.P.O.-S.Cu.-Sc.Cal.",
+    "S.s.P.-S.Pa.int.",
+    "S.T.s.br.",
+    "Lobule_parietal_sup.",
+    "S.F.marginal-S.F.inf.ant.",
+    "F.Coll.-S.Rh.",
+    "S.T.i.-S.T.s.-S.T.pol.",
+    "F.C.L.p.-subsc.-F.C.L.a.-INSULA.",
+    "S.F.int.-S.R.",
+    "S.Call.",
+    "S.Call.-S.s.P.-S.intraCing.",
+)
 
 
 def compute_champollion_configs_root(dataset_parent: str, dataset: str) -> str:
@@ -144,6 +176,12 @@ def compute_region_model_name(region: str, hemisphere: str) -> str:
     if hemisphere not in HEMISPHERES:
         raise ValueError(f"hemisphere must be one of {HEMISPHERES}, got {hemisphere!r}")
     return f"{region.replace('.', '')}_{hemisphere}"
+
+
+def compute_region_model_names(regions: Iterable[str]) -> list[str]:
+    """Return both hemispheres' model names for each distinct region, in input order. O(n)."""
+    distinct_regions = dict.fromkeys(regions)
+    return [compute_region_model_name(region, hemisphere) for region in distinct_regions for hemisphere in HEMISPHERES]
 
 
 def compute_run_log_derivatives_dir(
