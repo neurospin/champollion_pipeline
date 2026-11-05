@@ -1,6 +1,7 @@
-"""Stage 4 QC of the embeddings: crop rows of a run's region models and rows of its embeddings CSV files."""
+"""QC of the embeddings, stages 4 and 5: crop rows of a run's region models and rows of its embeddings CSV files."""
 
 import csv
+import json
 import math
 import os
 import shutil
@@ -10,6 +11,7 @@ from os.path import dirname, exists, join
 
 import yaml
 
+from champollion_pipeline.models.cache import write_json_atomic
 from champollion_pipeline.utils.qc_report import (
     ID_COLUMN,
     QC_COLUMN,
@@ -33,6 +35,9 @@ REASON_WRONG_WIDTH = "wrong_width"
 REASON_NON_NUMERIC = "non_numeric"
 REASON_NON_FINITE = "non_finite"
 WHOLE_FILE_REASONS = (REASON_MISSING_EMBEDDINGS, REASON_UNREADABLE_EMBEDDINGS, REASON_UNKNOWN_WIDTH)
+OUTPUT_QC_FILENAME = "output_qc.tsv"
+WIDTH_SIDECAR_FILENAME = "embedding_width.json"
+WIDTH_SIDECAR_KEY = "width"
 
 
 def compute_region_side(region: str) -> str:
@@ -79,6 +84,12 @@ def compute_excluded_subjects(rows: Iterable[Mapping[str, object]]) -> frozenset
     return frozenset(row[ID_COLUMN] for row in rows if row[QC_COLUMN] == 0)
 
 
+def _compute_width(document: object, key: str) -> int | None:
+    """The positive integer under ``key`` of ``document``, else None: true and 3.5 are no width."""
+    value = document.get(key) if isinstance(document, dict) else None
+    return value if type(value) is int and value > 0 else None
+
+
 def read_model_width(model_path: str) -> int | None:
     """The positive integer backbone_output_size of the .hydra/config.yaml of a region model, else None."""
     try:
@@ -86,20 +97,48 @@ def read_model_width(model_path: str) -> int | None:
             config = yaml.safe_load(handle)
     except (OSError, ValueError, yaml.YAMLError):
         return None
-    if not isinstance(config, dict):
+    return _compute_width(config, MODEL_WIDTH_KEY)
+
+
+def write_region_widths(output_base: str, region_by_model: Mapping[str, str]) -> None:
+    """Write <output_base>/<region>/embedding_width.json from each region model; no usable config writes nothing."""
+    for model_path, region in region_by_model.items():
+        width = read_model_width(model_path)
+        if width is not None:
+            os.makedirs(join(output_base, region), exist_ok=True)
+            write_json_atomic(join(output_base, region, WIDTH_SIDECAR_FILENAME), {WIDTH_SIDECAR_KEY: width})
+
+
+def read_region_width(region_dir: str) -> int | None:
+    """The positive integer width of the embedding_width.json of ``region_dir``, else None."""
+    try:
+        with open(join(region_dir, WIDTH_SIDECAR_FILENAME), encoding="utf-8") as handle:
+            sidecar = json.load(handle)
+    except (OSError, ValueError):
         return None
-    value = config.get(MODEL_WIDTH_KEY)
-    return value if type(value) is int and value > 0 else None
+    return _compute_width(sidecar, WIDTH_SIDECAR_KEY)
 
 
-def _read_embeddings_rows(csv_path: str) -> list[tuple[str, list[str]]] | None:
-    """The (ID cell, cells after it) of each data row, blank lines left out; None when the file reads as no table."""
+def _read_embeddings_table(csv_path: str) -> list[list[str]] | None:
+    """The rows of the file, header first, blank lines left out; None when the file reads as no table."""
     try:
         with open(csv_path, encoding="utf-8", newline="") as handle:
             table = [row for row in csv.reader(handle) if row]
     except (OSError, ValueError, csv.Error):
         return None
-    if not table or EMBEDDINGS_ID_COLUMN not in table[0]:
+    return table if table and EMBEDDINGS_ID_COLUMN in table[0] else None
+
+
+def read_header_width(csv_path: str) -> int | None:
+    """The count of header cells after the ID cell of the embeddings CSV, None when it reads as no table."""
+    table = _read_embeddings_table(csv_path)
+    return None if table is None else len(table[0]) - table[0].index(EMBEDDINGS_ID_COLUMN) - 1
+
+
+def _read_embeddings_rows(csv_path: str) -> list[tuple[str, list[str]]] | None:
+    """The (ID cell, cells after it) of each data row, blank lines left out; None when the file reads as no table."""
+    table = _read_embeddings_table(csv_path)
+    if table is None:
         return None
     id_index = table[0].index(EMBEDDINGS_ID_COLUMN)
     rows = []
@@ -160,6 +199,15 @@ def fetch_embeddings_csv_reasons(
     return {subject: list(dict.fromkeys(reasons)) for subject, reasons in held.items() if reasons}
 
 
+def fetch_embeddings_ids(source: str, regions: Iterable[str]) -> set[str]:
+    """The non-empty IDs of the region files of ``regions``; a file that reads as no table gives none."""
+    subjects: set[str] = set()
+    for region in regions:
+        rows = _read_embeddings_rows(join(source, region, EMBEDDINGS_FILENAME))
+        subjects.update(subject for subject, _ in rows or [] if subject)
+    return subjects
+
+
 def fetch_embeddings_qc_rows(
     output_base: str, region_by_model: Mapping[str, str], input_rows: Iterable[Mapping[str, object]]
 ) -> list[dict[str, object]]:
@@ -168,10 +216,22 @@ def fetch_embeddings_qc_rows(
     ``region_by_model`` gives the region of each model folder. A reason of a whole file reaches every row.
     """
     expected = {row[ID_COLUMN] for row in input_rows if row[QC_COLUMN] == 1}
+    widths = [(region, read_model_width(model_path)) for model_path, region in region_by_model.items()]
+    return fetch_region_files_qc_rows(output_base, widths, expected)
+
+
+def fetch_region_files_qc_rows(
+    output_base: str, region_widths: Iterable[tuple[str, int | None]], expected_subjects: Iterable[str]
+) -> list[dict[str, object]]:
+    """One QC row per expected subject and per unexpected ID, sorted, over the (region, width) pairs.
+
+    A reason of a whole file reaches every row.
+    """
+    expected = set(expected_subjects)
     reasons: dict[str, dict[str, None]] = {subject: {} for subject in expected}
-    for model_path, region in region_by_model.items():
+    for region, width in region_widths:
         csv_path = join(output_base, region, EMBEDDINGS_FILENAME)
-        found = fetch_embeddings_csv_reasons(csv_path, region, expected, read_model_width(model_path))
+        found = fetch_embeddings_csv_reasons(csv_path, region, expected, width)
         for subject, subject_reasons in found.items():
             reasons.setdefault(subject, {}).update(dict.fromkeys(subject_reasons))
     whole_file = dict.fromkeys(

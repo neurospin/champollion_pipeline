@@ -112,6 +112,18 @@ def _stub_stage3_output_qc(monkeypatch):
 
 
 @pytest.fixture(autouse=True)  # noqa: V103
+def _stub_stage5_input_qc(monkeypatch):
+    """Stub the stage 5 input QC: the copy tests of put_together_embeddings write region files that are not embeddings.
+
+    PutTogetherEmbeddings._run_input_qc returns the input QC status.
+    tests/test_put_together_embeddings_input_qc.py overrides this fixture to run the real check.
+    """
+    module = sys.modules.get("champollion_pipeline.put_together_embeddings")
+    if module is not None:
+        monkeypatch.setattr(module.PutTogetherEmbeddings, "_run_input_qc", MagicMock(return_value=0), raising=False)
+
+
+@pytest.fixture(autouse=True)  # noqa: V103
 def restore_logging_and_excepthooks():
     """Restore the root logger handlers and level and the exception hooks after each test.
 

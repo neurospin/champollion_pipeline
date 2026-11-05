@@ -345,7 +345,10 @@ class PutTogetherEmbeddingsStage(PipelineStage):
             if dataset.datasets_root
             else (dataset.cortical_tiles_output or self.config.outputs_path)
         )
-        return [_compute_region_embeddings_source(dataset), f"--output_path={output_path}"]
+        args = [_compute_region_embeddings_source(dataset), f"--output_path={output_path}"]
+        if dataset.regions:
+            args.extend(["--regions", *compute_region_model_names(dataset.regions)])
+        return args
 
     def create_script(self) -> ScriptBuilder:
         from champollion_pipeline.put_together_embeddings import PutTogetherEmbeddings

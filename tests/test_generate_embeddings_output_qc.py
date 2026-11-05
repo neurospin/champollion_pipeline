@@ -6,6 +6,7 @@ region models. Synthetic fixtures only; evaluate.py is faked.
 The width of a row comes from the .hydra/config.yaml of its region model, so these tables are _WIDTH wide, not 32.
 """
 
+import json
 import logging
 from collections import Counter
 from dataclasses import dataclass, field
@@ -336,6 +337,34 @@ class TestWidthSource:
         run = _finish(tmp_path, _Stage(configs={_REGION: text}))
 
         assert run.reasons() == {_SUBJECT: _only("unknown_width"), _OTHER_SUBJECT: _only("unknown_width")}
+
+
+def _sidecar(run, region):
+    """The JSON object of the embedding_width.json of ``region``."""
+    return json.loads((run.output_base / region / "embedding_width.json").read_text(encoding="utf-8"))
+
+
+class TestWidthSidecar:
+    """The width each region leaves for the stage 5 input QC, beside output_qc.tsv."""
+
+    def test_each_region_gets_the_width_of_its_config(self, tmp_path):
+        stage = _Stage(tables={_REGION: _complete(width=4)}, configs={_REGION: _config(4)})
+
+        run = _finish(tmp_path, stage)
+
+        assert _sidecar(run, _REGION) == {"width": 4}
+        assert _sidecar(run, _OTHER_REGION) == {"width": _WIDTH}
+
+    def test_reused_file_gets_its_width(self, tmp_path):
+        run = _finish(tmp_path, _Stage(reused={_REGION: _complete()}))
+
+        assert _sidecar(run, _REGION) == {"width": _WIDTH}
+
+    def test_regions_option_leaves_the_other_regions_out(self, tmp_path):
+        run = _finish(tmp_path, _Stage(extra_args=("--regions", _REGION)))
+
+        assert _sidecar(run, _REGION) == {"width": _WIDTH}
+        assert not (run.output_base / _OTHER_REGION / "embedding_width.json").exists()
 
 
 class TestSeveralReasons:

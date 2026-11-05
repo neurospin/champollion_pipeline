@@ -1,6 +1,6 @@
 #!/usr/bin/env python3
 """
-Script to collect per-region full_embeddings.csv files into a single output folder.
+Script to check per-region full_embeddings.csv files and collect them into a single output folder.
 """
 
 import logging
@@ -11,8 +11,24 @@ from os.path import exists, join
 
 from champollion_utils.script_builder import ScriptBuilder
 
-from champollion_pipeline.derivatives_layout import compute_run_log_path
+from champollion_pipeline.derivatives_layout import DEFAULT_REGIONS, compute_region_model_names, compute_run_log_path
+from champollion_pipeline.models.embeddings_qc import (
+    EMBEDDINGS_FILENAME,
+    OUTPUT_QC_FILENAME,
+    WIDTH_SIDECAR_FILENAME,
+    compute_excluded_subjects,
+    fetch_embeddings_ids,
+    fetch_region_files_qc_rows,
+    read_header_width,
+    read_region_width,
+    remove_subject_rows,
+)
 from champollion_pipeline.process_setup import init_pipeline_process
+from champollion_pipeline.utils.qc_report import ID_COLUMN, QC_COLUMN, log_qc_exclusions, read_qc_tsv, write_qc_tsv
+
+INPUT_QC_FILENAME = "input_qc.tsv"
+FAILED_STATUS = 1
+PARTIAL_STATUS = 3  # value of _stage_base.PARTIAL_STATUS, not imported: that module chain imports torch
 
 logger = logging.getLogger(__name__)
 
@@ -37,8 +53,20 @@ class PutTogetherEmbeddings(ScriptBuilder):
                     "Per-region embeddings directory produced by generate_embeddings, by default "
                     "<datasets_root>/derivatives/champollion_V1/<masks>/region_embeddings."
                 ),
-            ).add_required_argument("--output_path", "Folder where collected embeddings will be written.")
+            )
+            .add_required_argument("--output_path", "Folder where collected embeddings will be written.")
+            .add_argument(
+                "--regions",
+                type=str,
+                nargs="+",
+                default=None,
+                help=(
+                    "Region model names to check and collect (e.g. SC-sylv_left SC-sylv_right). "
+                    "By default the 28 default regions in both hemispheres are checked."
+                ),
+            )
         )
+        self._excluded_subjects: frozenset[str] = frozenset()
 
     def default_log_path(self) -> str:
         """Run-log path of a bare --log: <output_path>/.log/combine_<stamp>.log."""
@@ -48,8 +76,8 @@ class PutTogetherEmbeddings(ScriptBuilder):
             datetime.now().astimezone(),
         )
 
-    def run(self):
-        """Copy {region}/full_embeddings.csv → {output_path}/{region}_embeddings.csv for all regions."""
+    def run(self) -> int:
+        """Check the region files, then copy {region}/full_embeddings.csv to {output_path}/{region}_embeddings.csv."""
         source = self.args.embeddings_source
         output_path = self.args.output_path
 
@@ -58,23 +86,60 @@ class PutTogetherEmbeddings(ScriptBuilder):
 
         os.makedirs(output_path, exist_ok=True)
 
-        copied = 0
-        for region in sorted(os.listdir(source)):
-            region_dir = join(source, region)
-            if not os.path.isdir(region_dir):
-                continue
-            src_csv = join(region_dir, "full_embeddings.csv")
-            if not exists(src_csv):
-                logger.warning(f"[skip] {region}: no full_embeddings.csv")
-                continue
-            dst_csv = join(output_path, f"{region}_embeddings.csv")
-            shutil.copyfile(src_csv, dst_csv)
-            copied += 1
+        status = self._run_input_qc(source, output_path)
+        copied = 0 if status == FAILED_STATUS else self._copy_embeddings(source, output_path)
 
         logger.output(f"{copied} embeddings copied to {output_path}")
         if copied == 0:
             logger.warning(f"no embeddings found in {source}")
-        return 0
+        return status
+
+    def _run_input_qc(self, source: str, output_path: str) -> int:
+        """Write <output_path>/input_qc.tsv, keep its qc 0 subjects; return the status of _report_qc_rows."""
+        regions = list(dict.fromkeys(self.args.regions or compute_region_model_names(DEFAULT_REGIONS)))
+        widths = [(region, self._fetch_region_width(source, region)) for region in regions]
+        rows = fetch_region_files_qc_rows(source, widths, self._fetch_expected_subjects(source, regions))
+        self._excluded_subjects = compute_excluded_subjects(rows)
+        return self._report_qc_rows(rows, join(output_path, INPUT_QC_FILENAME), "input")
+
+    def _fetch_region_width(self, source: str, region: str) -> int | None:
+        """The width of the sidecar of ``region``, else one WARNING and the width of its header."""
+        width = read_region_width(join(source, region))
+        if width is not None:
+            return width
+        logger.warning(f"no usable {WIDTH_SIDECAR_FILENAME} for {region}: width taken from its header")
+        return read_header_width(join(source, region, EMBEDDINGS_FILENAME))
+
+    def _fetch_expected_subjects(self, source: str, regions: list[str]) -> set[str]:
+        """The qc 1 subjects of the output_qc.tsv of stage 4, else the IDs of the region files."""
+        report = join(source, OUTPUT_QC_FILENAME)
+        if exists(report):
+            return {row[ID_COLUMN] for row in read_qc_tsv(report) if row[QC_COLUMN] == 1}
+        return fetch_embeddings_ids(source, regions)
+
+    def _report_qc_rows(self, rows: list[dict[str, object]], qc_path: str, step: str) -> int:
+        """Write and log ``rows``; return 0, PARTIAL_STATUS with a qc 0 row, or FAILED_STATUS with no qc 1 row."""
+        write_qc_tsv(qc_path, rows)
+        n_excluded = log_qc_exclusions(rows, logger, step)
+        if n_excluded == len(rows):
+            logger.fail(f"no subject passed the embeddings {step} QC, see {qc_path}")
+            return FAILED_STATUS
+        return PARTIAL_STATUS if n_excluded else 0
+
+    def _copy_embeddings(self, source: str, output_path: str) -> int:
+        """Copy the region files of ``source``, the --regions ones when given, less the qc 0 rows; return the count."""
+        named = self.args.regions
+        copied = 0
+        for region in sorted(os.listdir(source)):
+            src_csv = join(source, region, EMBEDDINGS_FILENAME)
+            if not exists(src_csv) or (named and region not in named):
+                continue
+            dst_csv = join(output_path, f"{region}_embeddings.csv")
+            shutil.copyfile(src_csv, dst_csv)
+            if self._excluded_subjects:
+                remove_subject_rows(dst_csv, self._excluded_subjects)
+            copied += 1
+        return copied
 
 
 def main():
