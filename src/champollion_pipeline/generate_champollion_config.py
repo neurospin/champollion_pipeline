@@ -27,7 +27,9 @@ from champollion_pipeline.derivatives_layout import (
     compute_run_log_path,
 )
 from champollion_pipeline.process_setup import init_pipeline_process
+from champollion_pipeline.utils.cortical_tiles_config import INPUT_TYPES_DEFAULT
 from champollion_pipeline.utils.lib import DERIVATIVES_FOLDER, find_dataset_folder
+from champollion_pipeline.utils.qc_report import CROP_KIND_MASK, fetch_crop_qc_rows, write_qc_tsv
 
 logger = logging.getLogger(__name__)
 
@@ -35,6 +37,28 @@ logger = logging.getLogger(__name__)
 _SCRIPT_DIR = dirname(abspath(__file__))
 _DEFAULT_CHAMPOLLION_LOC = abspath(join(_SCRIPT_DIR, "..", "..", "external", "champollion_V1"))
 _LOCALIZATION_TEMPLATE = "# @package _global_\ndataset_folder: {dataset_folder}\n"
+INPUT_QC_FILENAME = "input_qc.tsv"
+INPUT_QC_KINDS = (*INPUT_TYPES_DEFAULT, CROP_KIND_MASK)
+FAILED_STATUS = 1
+PARTIAL_STATUS = 3  # value of _stage_base.PARTIAL_STATUS, not imported: that module chain imports torch
+
+
+def _list_region_folders(crop_path: str) -> list[str]:
+    """Names of the directories directly under crop_path, sorted; [] when crop_path is not a directory."""
+    if not os.path.isdir(crop_path):
+        return []
+    return sorted(name for name in os.listdir(crop_path) if os.path.isdir(join(crop_path, name)))
+
+
+def _report_input_qc(rows: list[dict[str, object]], qc_path: str) -> int:
+    """Log one ERROR per qc 0 row and one FAIL when no row has qc 1; return the input QC status."""
+    excluded = [row for row in rows if row["qc"] == 0]
+    for row in excluded:
+        logger.error(f"input QC excluded {row['participant_id']}: {row['reason']}")
+    if len(excluded) == len(rows):
+        logger.fail(f"no subject passed the config input QC, see {qc_path}")
+        return FAILED_STATUS
+    return PARTIAL_STATUS if excluded else 0
 
 
 class GenerateChampollionConfig(ScriptBuilder):
@@ -146,6 +170,14 @@ class GenerateChampollionConfig(ScriptBuilder):
         if skipped:
             logger.warning(f"Skipped {len(skipped)} sulci (no .minf or .npy found): {skipped}")
 
+    def _run_input_qc(self, configs_root: str) -> int:
+        """Write input_qc.tsv into configs_root; return 0, PARTIAL_STATUS or FAILED_STATUS."""
+        qc_path = join(configs_root, INPUT_QC_FILENAME)
+        crop_path = self.args.crop_path
+        rows = fetch_crop_qc_rows(crop_path, _list_region_folders(crop_path), INPUT_QC_KINDS)
+        write_qc_tsv(qc_path, rows)
+        return _report_input_qc(rows, qc_path)
+
     def _validate_inputs(self):
         """Validate input paths."""
         if not exists(self.args.crop_path):
@@ -203,6 +235,10 @@ class GenerateChampollionConfig(ScriptBuilder):
         # Region YAMLs land at {configs_root}/dataset/{dataset}/ to match Hydra config-group layout.
         dataset_loc = join(configs_root, "dataset", self.args.dataset)
 
+        input_status = self._run_input_qc(configs_root)
+        if input_status == FAILED_STATUS:
+            return input_status
+
         # Create dataset directory if it doesn't exist
         if not exists(dataset_loc):
             self.execute_command(["mkdir", "-p", dataset_loc], shell=False)
@@ -235,7 +271,6 @@ class GenerateChampollionConfig(ScriptBuilder):
         with open(reference_yaml_dest) as f:
             ref = f.read()
         self._create_dataset_configs(self.args.crop_path, dataset_loc, ref)
-        result = 0
 
         # Write the dataset_localization YAML for the requested environment.
         localization_name = f"{self.args.localization}.yaml"
@@ -259,7 +294,7 @@ class GenerateChampollionConfig(ScriptBuilder):
                 f"(only used for regions not found in {configs_root}); consider deleting them."
             )
 
-        return result
+        return input_status
 
 
 def main():

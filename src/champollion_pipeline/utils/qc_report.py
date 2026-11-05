@@ -15,6 +15,7 @@ import numbers
 import os
 import tempfile
 from collections.abc import Iterable, Mapping, Sequence
+from typing import Protocol
 
 ID_COLUMN = "participant_id"
 QC_COLUMN = "qc"
@@ -22,12 +23,23 @@ REASON_COLUMN = "reason"
 CHECK_COLUMN = "check"
 REASON_SEPARATOR = ";"
 REASON_MISSING_CROP = "missing_crop"
+REASON_SKIPPED = "skipped"
 CROP_KIND_MASK = "mask"
 CROP_SIDES = ("L", "R")
 CROP_MASK_FOLDER = "mask"  # <crops_dir>/<region>/mask, the cortical_tiles cropping type
 CROP_FILE_STEMS = {"foldlabel": "label"}  # kinds whose files carry another stem than the kind name
 CROP_SUBJECT_COLUMN = "Subject"
 _RESERVED = (ID_COLUMN, QC_COLUMN, REASON_COLUMN)
+_MESSAGE_SPACES = str.maketrans(dict.fromkeys(("\n", "\r", "\t", REASON_SEPARATOR), " "))
+
+
+class SkipRecord(Protocol):
+    """One skip-list entry of a side, as a cortical_tiles SkipEntry gives it."""
+
+    subject: str
+    step: str
+    exc_type: str
+    message: str
 
 
 def _qc_value(value: object) -> str | None:
@@ -190,7 +202,7 @@ def read_crop_subjects(path: str, is_bids: bool = False) -> set[str]:
             cells = [line.get(CROP_SUBJECT_COLUMN) for line in csv.DictReader(handle)]
     except (OSError, ValueError, csv.Error):
         return set()
-    return {cell.partition("_")[0] if is_bids else cell for cell in cells if cell}
+    return {compute_participant_id(cell, is_bids) for cell in cells if cell}
 
 
 def _list_crop_steps(
@@ -246,6 +258,69 @@ def fetch_crop_qc_rows(  # noqa: PLR0913 - keyword-only sides, stage 2 positiona
             }
         )
     return rows
+
+
+def compute_participant_id(key: str, is_bids: bool) -> str:
+    """Participant_id of a subject key: with ``is_bids`` the text before the first underscore, else the whole key."""
+    return key.partition("_")[0] if is_bids else key
+
+
+def compute_skip_reason(side: str, entry: SkipRecord) -> str:
+    """Reason skipped:<side>:<step>:<exc_type>:<message> of a skip-list entry of ``side``.
+
+    A line break, tab or reason separator of the message becomes a space, so the reason stays one field of a cell.
+    The message comes last and keeps its colons: ``split(":", 4)`` gives the fields back.
+    """
+    message = entry.message.translate(_MESSAGE_SPACES)
+    return f"{REASON_SKIPPED}:{side}:{entry.step}:{entry.exc_type}:{message}"
+
+
+def _is_missing_crop_of(reason: str, side: str) -> bool:
+    """True for a missing_crop:<kind>:<side>:<region> reason of ``side``."""
+    fields = reason.split(":", 3)
+    return len(fields) == 4 and fields[0] == REASON_MISSING_CROP and fields[2] == side
+
+
+def _index_skip_reasons(
+    skips: Mapping[str, Iterable[SkipRecord]], is_bids: bool
+) -> dict[tuple[str, str], dict[str, None]]:
+    """Distinct skip reasons by (participant_id, side), in file order: the dict keys."""
+    index: dict[tuple[str, str], dict[str, None]] = {}
+    for side, entries in skips.items():
+        for entry in entries:
+            key = (compute_participant_id(entry.subject, is_bids), side)
+            index.setdefault(key, {})[compute_skip_reason(side, entry)] = None
+    return index
+
+
+def _replace_row_reasons(
+    row: Mapping[str, object], index: Mapping[tuple[str, str], Mapping[str, None]]
+) -> dict[str, object]:
+    """A copy of ``row``: on each side with both, its skip reasons replace its missing_crop reasons."""
+    cell = row.get(REASON_COLUMN)
+    kept = str(cell).split(REASON_SEPARATOR) if cell else []
+    added: list[str] = []
+    for side in CROP_SIDES:
+        side_reasons = index.get((str(row[ID_COLUMN]), side))
+        if side_reasons and any(_is_missing_crop_of(reason, side) for reason in kept):
+            kept = [reason for reason in kept if not _is_missing_crop_of(reason, side)]
+            added.extend(side_reasons)
+    if not added:
+        return dict(row)
+    return {**row, REASON_COLUMN: REASON_SEPARATOR.join([*kept, *added])}
+
+
+def replace_missing_crop_reasons(
+    rows: Iterable[Mapping[str, object]], skips: Mapping[str, Iterable[SkipRecord]], is_bids: bool = False
+) -> list[dict[str, object]]:
+    """New rows with the skip-list cause of a subject in place of its missing_crop reasons, side by side.
+
+    ``skips`` maps a side to its entries in file order. A side with no entry of the subject, or no missing_crop
+    reason in the row, stays as it is; qc, participant_id and row order never change. The cell holds the kept
+    reasons, then the skip reasons, L before R. Pure: the caller reads the skip lists.
+    """
+    index = _index_skip_reasons(skips, is_bids)
+    return [_replace_row_reasons(row, index) for row in rows]
 
 
 def summarise_qc(records: Iterable[Mapping[str, object]]) -> dict[str, object]:

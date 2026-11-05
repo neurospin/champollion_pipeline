@@ -32,6 +32,7 @@ from os.path import abspath, dirname, exists, isdir, join
 import numpy as np
 from champollion_utils.script_builder import ScriptBuilder
 from cortical_tiles.brainvisa import add_left_and_right_volumes, remove_ventricle
+from cortical_tiles.brainvisa.utils.skip_list import SKIP_LIST_FILENAME, SKIP_SIDES, SkipEntry, load_skip_entries
 from joblib import cpu_count
 from soma import aims
 
@@ -40,6 +41,7 @@ from champollion_pipeline.generate_labelling_qc import REASON_NO_SESSION_DIR, fe
 from champollion_pipeline.generate_masks import _REGIONS_DEFAULT
 from champollion_pipeline.process_setup import init_pipeline_process
 from champollion_pipeline.utils.cortical_tiles_config import (
+    INPUT_TYPES_DEFAULT,
     CorticalTilesConfigFactory,
     compute_versioned_crops_dir,
     versioned_crops_exist,
@@ -50,6 +52,7 @@ from champollion_pipeline.utils.qc_report import (
     REASON_SEPARATOR,
     fetch_crop_qc_rows,
     read_qc_tsv,
+    replace_missing_crop_reasons,
     write_qc_tsv,
 )
 from champollion_pipeline.utils.subject_name import subject_name_problem
@@ -66,7 +69,6 @@ EXCLUDED_NO_LABELLED_GRAPH = "no_labelled_graph"  # graph folder found, no candi
 EXCLUSION_REASONS = (EXCLUDED_NO_GRAPH_FOLDER, EXCLUDED_SEVERAL_GRAPH_FOLDERS, EXCLUDED_NO_LABELLED_GRAPH)
 LABELLING_QC_FILENAME = "labelling_qc.tsv"
 LABELLING_QC_EXTRA_COLUMNS = ("labelled_L", "labelled_R")  # with write_qc_tsv: generate_labelling_qc.QC_COLUMNS
-INPUT_TYPES_DEFAULT = ("skeleton", "foldlabel")
 # TEMPORARY (DEF-CORTILES-BDRABCZUK-8A44DAD7F312): the prefix-ID guard below (and its flag, check and test file)
 # goes once cortical_tiles stops globbing {subject}*/ in generate_ICBM2009c_transforms.py.
 PREFIX_PAIRS_SHOWN = 5  # prefix pairs named in the refusal or warning
@@ -592,7 +594,29 @@ class RunCorticalTiles(ScriptBuilder):
         has_distbottom = self.args.with_distbottom and CROP_KIND_SKELETON in input_types
         return [*input_types, *([CROP_KIND_DISTBOTTOM] if has_distbottom else []), CROP_KIND_MASK]
 
-    def _write_output_qc(self, output_abs: str) -> tuple[str, bool]:
+    def _read_skip_lists(self, output_abs: str) -> dict[str, list[SkipEntry]]:
+        """Entries of the skip list of each side; a list its reader refuses gives one ERROR and no entry."""
+        derivatives = join(output_abs, DERIVATIVES_FOLDER)
+        skips: dict[str, list[SkipEntry]] = {}
+        for side in SKIP_SIDES:
+            try:
+                skips[side] = load_skip_entries(derivatives, side)
+            except ValueError as error:
+                path = join(derivatives, SKIP_LIST_FILENAME.format(side=side))
+                logger.error(f"skip list of side {side} not read, {path}: {error}")
+                skips[side] = []
+        return skips
+
+    def _log_skip_summary(self, skips: dict[str, list[SkipEntry]]) -> None:
+        """Log one ERROR record per side and step holding an entry, naming its sorted skipped subjects once each."""
+        for side, entries in skips.items():
+            subjects_per_step: dict[str, set[str]] = {}
+            for entry in entries:
+                subjects_per_step.setdefault(entry.step, set()).add(entry.subject)
+            for step, subjects in subjects_per_step.items():
+                logger.error(f"side {side} step {step} skipped subjects: {', '.join(sorted(subjects))}")
+
+    def _write_output_qc(self, output_abs: str, skips: dict[str, list[SkipEntry]]) -> tuple[str, bool]:
         """Write output_qc.tsv, one record per qc 0 row; return its path and whether a subject passed."""
         derivatives = join(output_abs, DERIVATIVES_FOLDER)
         requested_cfg = CorticalTilesConfigFactory.from_args(self.args)
@@ -600,7 +624,8 @@ class RunCorticalTiles(ScriptBuilder):
         input_records = read_qc_tsv(join(derivatives, INPUT_QC_FILENAME))
         subjects = [str(record["participant_id"]) for record in input_records if record["qc"] == 1]
         regions = self.args.regions or _REGIONS_DEFAULT
-        rows = fetch_crop_qc_rows(crops_dir, regions, self._list_crop_kinds(), subjects, self.args.bids)
+        crop_rows = fetch_crop_qc_rows(crops_dir, regions, self._list_crop_kinds(), subjects, self.args.bids)
+        rows = replace_missing_crop_reasons(crop_rows, skips, self.args.bids)
         qc_path = join(derivatives, OUTPUT_QC_FILENAME)
         write_qc_tsv(qc_path, rows)
         for row in rows:
@@ -608,9 +633,9 @@ class RunCorticalTiles(ScriptBuilder):
                 logger.error(f"output QC excluded {row['participant_id']}: {row['reason']}")
         return qc_path, any(row["qc"] == 1 for row in rows)
 
-    def _apply_output_qc(self, output_abs: str, status: int) -> int:
+    def _apply_output_qc(self, output_abs: str, status: int, skips: dict[str, list[SkipEntry]]) -> int:
         """Run the output QC: 1 with a FAIL record when no subject passed it, else ``status``."""
-        qc_path, has_complete_subject = self._write_output_qc(output_abs)
+        qc_path, has_complete_subject = self._write_output_qc(output_abs, skips)
         if not has_complete_subject:
             logger.fail(f"no subject passed the output QC, see {qc_path}")
             return 1
@@ -698,7 +723,7 @@ class RunCorticalTiles(ScriptBuilder):
         config_file_path: str = join(output_abs, "pipeline_loop_2mm.json")
 
         if not self._preflight_check(output_abs, config_file_path):
-            return self._apply_output_qc(output_abs, 0)
+            return self._apply_output_qc(output_abs, 0, self._read_skip_lists(output_abs))
 
         # Copy pipeline config template into the output (derivatives) directory.
         # generate_sulcal_regions.py reads it from {path_dataset}/pipeline_loop_2mm.json,
@@ -759,6 +784,10 @@ class RunCorticalTiles(ScriptBuilder):
         if result not in (0, CROP_STATUS_PARTIAL):
             return result
 
+        skips = self._read_skip_lists(output_abs)
+        if result == CROP_STATUS_PARTIAL:
+            self._log_skip_summary(skips)
+
         self._write_transform_qc(output_abs)  # TEMPORARY (DEF-CORTILES-BDRABCZUK-8A44DAD7F312)
         self._generate_mask_npys(output_abs)
 
@@ -791,7 +820,7 @@ class RunCorticalTiles(ScriptBuilder):
         )
         self._remove_ventricle_whole_brain(skeleton_src_dir, input_abs, output_abs)
 
-        return self._apply_output_qc(output_abs, result)
+        return self._apply_output_qc(output_abs, result, skips)
 
     def _remove_ventricle_whole_brain(self, skeleton_src_dir: str, input_abs: str, output_abs: str) -> None:
         """Strip the ventricle from each fused volume, grouping subjects by labelling session.
