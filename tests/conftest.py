@@ -88,6 +88,19 @@ def _stub_stage3_input_qc(monkeypatch):
 
 
 @pytest.fixture(autouse=True)  # noqa: V103
+def _stub_stage3_output_qc(monkeypatch):
+    """Let a test of generate_champollion_config.py reach the end of run() with no usable config on disk.
+
+    No report on disk, status 0. raising=False: the name joins the class with the output QC.
+    tests/test_generate_champollion_config_output_qc.py overrides this fixture to run the real check.
+    """
+    module = sys.modules.get("champollion_pipeline.generate_champollion_config")
+    if module is not None:
+        stub = MagicMock(return_value=0)
+        monkeypatch.setattr(module.GenerateChampollionConfig, "_run_output_qc", stub, raising=False)
+
+
+@pytest.fixture(autouse=True)  # noqa: V103
 def restore_logging_and_excepthooks():
     """Restore the root logger handlers and level and the exception hooks after each test.
 

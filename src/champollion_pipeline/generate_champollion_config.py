@@ -15,9 +15,10 @@ import json
 import logging
 import os
 from datetime import datetime
-from os.path import abspath, dirname, exists, join
+from os.path import abspath, dirname, exists, isfile, join
 
 import numpy as np
+import yaml
 from champollion_utils.script_builder import ScriptBuilder
 
 from champollion_pipeline.derivatives_layout import (
@@ -31,9 +32,11 @@ from champollion_pipeline.utils.cortical_tiles_config import INPUT_TYPES_DEFAULT
 from champollion_pipeline.utils.lib import DERIVATIVES_FOLDER, find_dataset_folder
 from champollion_pipeline.utils.qc_report import (
     CROP_KIND_MASK,
+    REASON_SEPARATOR,
     fetch_crop_qc_rows,
     log_input_qc_exclusions,
     write_qc_tsv,
+    write_run_qc_tsv,
 )
 
 logger = logging.getLogger(__name__)
@@ -46,6 +49,24 @@ INPUT_QC_FILENAME = "input_qc.tsv"
 INPUT_QC_KINDS = (*INPUT_TYPES_DEFAULT, CROP_KIND_MASK)
 FAILED_STATUS = 1
 PARTIAL_STATUS = 3  # value of _stage_base.PARTIAL_STATUS, not imported: that module chain imports torch
+OUTPUT_QC_FILENAME = "output_qc.tsv"
+DATASET_FOLDER_KEY = "dataset_folder"
+DATASET_FOLDER_TOKEN = "${dataset_folder}"
+CONFIG_SIDES = ("left", "right")
+CONFIG_PATH_KEYS = (
+    "numpy_all",
+    "subjects_all",
+    "foldlabel_all",
+    "subjects_foldlabel_all",
+    "train_val_csv_file",
+    "cutin_mask_path",
+)
+CONFIG_REQUIRED_KEYS = ("dataset_name", *CONFIG_PATH_KEYS, "input_size")
+REASON_MISSING_CONFIG = "missing_config"
+REASON_UNPARSABLE_CONFIG = "unparsable_config"
+REASON_MISSING_DATASET_FOLDER = "missing_dataset_folder"
+REASON_MISSING_KEY_STEM = "missing_key:"
+REASON_MISSING_PATH_STEM = "missing_path:"
 
 
 def _list_region_folders(crop_path: str) -> list[str]:
@@ -53,6 +74,70 @@ def _list_region_folders(crop_path: str) -> list[str]:
     if not os.path.isdir(crop_path):
         return []
     return sorted(name for name in os.listdir(crop_path) if os.path.isdir(join(crop_path, name)))
+
+
+def _read_yaml_mapping(path: str) -> dict | None:
+    """Mapping held by the YAML file at path; None when it cannot be read or holds no mapping."""
+    try:
+        with open(path, encoding="utf-8") as f:
+            document = yaml.safe_load(f)
+    except (OSError, ValueError, yaml.YAMLError):  # ValueError holds UnicodeDecodeError
+        return None
+    return document if isinstance(document, dict) else None
+
+
+def _read_dataset_folder(localization_path: str) -> str | None:
+    """Value of dataset_folder in the localization YAML at localization_path; None when it yields none."""
+    mapping = _read_yaml_mapping(localization_path)
+    return (mapping.get(DATASET_FOLDER_KEY) or None) if mapping else None
+
+
+def _compute_mapping_reasons(mapping: dict, dataset_folder: str | None) -> list[str]:
+    """Output QC reasons of a parsed region YAML; with no dataset_folder, its paths are not judged."""
+    reasons = [f"{REASON_MISSING_KEY_STEM}{key}" for key in CONFIG_REQUIRED_KEYS if mapping.get(key) in (None, "")]
+    if dataset_folder is None:
+        return reasons
+    for key in CONFIG_PATH_KEYS:
+        value = mapping.get(key)
+        if value in (None, ""):
+            continue
+        if not isfile(str(value).replace(DATASET_FOLDER_TOKEN, dataset_folder)):
+            reasons.append(f"{REASON_MISSING_PATH_STEM}{key}")
+    return reasons
+
+
+def _compute_config_reasons(config_path: str, dataset_folder: str | None) -> list[str]:
+    """Output QC reasons of the region YAML at config_path."""
+    reasons = [REASON_MISSING_DATASET_FOLDER] if dataset_folder is None else []
+    if not isfile(config_path):
+        return [*reasons, REASON_MISSING_CONFIG]
+    mapping = _read_yaml_mapping(config_path)
+    if mapping is None:
+        return [*reasons, REASON_UNPARSABLE_CONFIG]
+    return [*reasons, *_compute_mapping_reasons(mapping, dataset_folder)]
+
+
+def _fetch_output_qc_rows(crop_path: str, dataset_loc: str, localization_path: str) -> list[dict[str, object]]:
+    """One output QC row per region folder of crop_path and per side, check = region YAML file name."""
+    dataset_folder = _read_dataset_folder(localization_path)
+    rows: list[dict[str, object]] = []
+    for region in _list_region_folders(crop_path):
+        for side in CONFIG_SIDES:
+            name = f"{compute_region_model_name(region, side)}.yaml"
+            reasons = _compute_config_reasons(join(dataset_loc, name), dataset_folder)
+            rows.append({"check": name, "qc": 0 if reasons else 1, "reason": REASON_SEPARATOR.join(reasons)})
+    return rows
+
+
+def _report_output_qc(rows: list[dict[str, object]], qc_path: str) -> int:
+    """Log one ERROR per qc 0 row and one FAIL when no config is usable; return the status."""
+    lost = [row for row in rows if row["qc"] == 0]
+    for row in lost:
+        logger.error(f"output QC invalid config {row['check']}: {row['reason']}")
+    if rows and len(lost) == len(rows):
+        logger.fail(f"no generated config is usable, see {qc_path}")
+        return FAILED_STATUS
+    return PARTIAL_STATUS if lost else 0
 
 
 class GenerateChampollionConfig(ScriptBuilder):
@@ -176,6 +261,13 @@ class GenerateChampollionConfig(ScriptBuilder):
             return FAILED_STATUS
         return PARTIAL_STATUS if n_excluded else 0
 
+    def _run_output_qc(self, configs_root: str, dataset_loc: str, localization_path: str) -> int:
+        """Write output_qc.tsv into configs_root; return 0, PARTIAL_STATUS or FAILED_STATUS."""
+        qc_path = join(configs_root, OUTPUT_QC_FILENAME)
+        rows = _fetch_output_qc_rows(self.args.crop_path, dataset_loc, localization_path)
+        write_run_qc_tsv(qc_path, rows)
+        return _report_output_qc(rows, qc_path)
+
     def _validate_inputs(self):
         """Validate input paths."""
         if not exists(self.args.crop_path):
@@ -274,14 +366,13 @@ class GenerateChampollionConfig(ScriptBuilder):
         localization_name = f"{self.args.localization}.yaml"
 
         if self.args.external_config:
-            external_yaml = abspath(self.args.external_config)
-            if os.path.isdir(external_yaml):
-                external_yaml = join(external_yaml, "dataset_localization", localization_name)
-            self._write_localization_yaml(external_yaml, dataset_folder)
+            localization_path = abspath(self.args.external_config)
+            if os.path.isdir(localization_path):
+                localization_path = join(localization_path, "dataset_localization", localization_name)
         else:
             # Default: follow configs_root (--output if given, else derivatives default).
-            default_yaml = join(configs_root, "dataset_localization", localization_name)
-            self._write_localization_yaml(default_yaml, dataset_folder)
+            localization_path = join(configs_root, "dataset_localization", localization_name)
+        self._write_localization_yaml(localization_path, dataset_folder)
 
         # Warn if stale in-checkout dataset configs exist; they are now only a fallback
         # for regions absent from configs_root, but their presence is worth flagging as clutter.
@@ -292,7 +383,8 @@ class GenerateChampollionConfig(ScriptBuilder):
                 f"(only used for regions not found in {configs_root}); consider deleting them."
             )
 
-        return input_status
+        output_status = self._run_output_qc(configs_root, dataset_loc, localization_path)
+        return output_status or input_status  # input_status is 0 or 3 here: 1 and 3 of the output QC win
 
 
 def main():
