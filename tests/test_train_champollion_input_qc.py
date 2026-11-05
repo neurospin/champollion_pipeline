@@ -22,7 +22,7 @@ from tests.stage2_layout import add_crops, crop_array, crop_csv
 from tests.test_train_champollion import _build_model_dir, make_script
 
 _LOGGER_NAME = "champollion_pipeline.train_champollion"
-_REFERENCE_CONFIG = Path(__file__).resolve().parent.parent / "reference.yaml"
+_REFERENCE_CONFIG = Path(__file__).resolve().parents[1] / "src/champollion_pipeline/resources/reference.yaml"
 _QC_FILE = "input_qc.tsv"
 _DATASET = "TEST01"
 _CROP = "S.C.-sylv."
