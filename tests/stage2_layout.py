@@ -16,7 +16,7 @@ from champollion_pipeline.run_cortical_tiles import RunCorticalTiles
 
 GRAPH_DIR = "graphs"
 SUBJECT = "subj01"
-TEMPLATE_CONFIG = Path(__file__).resolve().parent.parent / "pipeline_loop_2mm.json"
+TEMPLATE_CONFIG = Path(__file__).resolve().parents[1] / "src/champollion_pipeline/resources/pipeline_loop_2mm.json"
 CROP_STEMS = {"foldlabel": "label"}  # crop kinds whose files carry another stem than the kind name
 # Signature of the real cortical_tiles remove_ventricle(), captured before any
 # test patches it, so fakes can read its arguments however they are passed.

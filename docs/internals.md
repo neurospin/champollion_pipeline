@@ -26,6 +26,6 @@ All `src/` scripts subclass `ScriptBuilder` from `champollion_utils.script_build
 
 - `src/champollion_pipeline/utils/lib.py` — `DERIVATIVES_FOLDER`, `find_dataset_folder`
 - `reference_data/` — pre-trained UMAP models (`.pkl`) and 2D reference coords (`.npy`); no subject identifiers
-- `sulci_regions_champollion_V1.json` — 28 sulcal region names used throughout
+- `src/champollion_pipeline/resources/sulci_regions_champollion_V1.json` — 28 sulcal region names used throughout
 
 See {doc}`workflow` for the end-to-end data flow.

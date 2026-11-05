@@ -3,8 +3,9 @@
 Tests for REQ-PATH-01 — external/ path resolution.
 
 Every script under ``src/champollion_pipeline/`` must reach the ``external/``
-directory (and the repo-root ``reference.yaml``) by ascending *two* levels
-from its own directory: ``src/champollion_pipeline/`` -> ``src/`` -> repo root.
+directory by ascending *two* levels from its own directory:
+``src/champollion_pipeline/`` -> ``src/`` -> repo root. ``reference.yaml`` sits
+in the package, under ``resources/``.
 
 Each test below pins down one of the five affected call sites.
 """
@@ -42,12 +43,12 @@ class TestExternalPathResolution:
 
         assert Path(_DEFAULT_CHAMPOLLION_LOC) == EXTERNAL_DIR / "champollion_V1"
 
-    def test_reference_yaml_source_is_repo_root_reference_yaml(self):
-        """generate_champollion_config copies reference.yaml from the repo root, not from src/."""
+    def test_reference_yaml_source_is_packaged_resource(self):
+        """generate_champollion_config's own directory holds reference.yaml under resources/."""
 
-        # Verify that ascending two levels from _SCRIPT_DIR reaches the repo root.
-        actual = Path(gcc.dirname(gcc.dirname(gcc._SCRIPT_DIR))) / "reference.yaml"
-        assert actual == REPO_ROOT / "reference.yaml"
+        actual = Path(gcc._SCRIPT_DIR) / "resources" / "reference.yaml"
+        assert actual == PACKAGE_DIR / "resources" / "reference.yaml"
+        assert actual.is_file()
 
     def test_contrastive_dir_points_at_repo_root_external(self):
         """train_champollion._CONTRASTIVE_DIR -> <root>/external/champollion_V1/contrastive."""

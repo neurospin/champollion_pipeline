@@ -43,6 +43,9 @@ champollion-labelling-qc = "champollion_pipeline.generate_labelling_qc:main"
 where = ["src"]
 exclude = ["compare_sulcal*"]
 
+[tool.setuptools.package-data]
+champollion_pipeline = ["resources/*.json", "resources/*.yaml"]
+
 [tool.pytest.ini_options]
 testpaths = ["tests"]
 markers = [

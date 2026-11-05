@@ -335,7 +335,7 @@ class GenerateChampollionConfig(ScriptBuilder):
 
         # Always copy reference.yaml from template so re-runs regenerate cleanly
         reference_yaml_dest = join(dataset_loc, "reference.yaml")
-        reference_yaml_src = join(dirname(dirname(_SCRIPT_DIR)), "reference.yaml")
+        reference_yaml_src = join(_SCRIPT_DIR, "resources", "reference.yaml")
         self.execute_command(["cp", reference_yaml_src, dataset_loc], shell=False)
 
         my_lines = []

@@ -92,9 +92,9 @@ def test_cortical_tiles_path_literals_resolve_to_existing_directories(module_pat
 def test_bundled_json_path_literals_resolve_to_existing_files(module_path):
     """``__file__``-relative literals naming a .json file must exist on disk.
 
-    ``pipeline_loop_2mm.json`` and ``sulci_regions_champollion_V1.json`` ship at
-    the repository root; a module under ``src/champollion_pipeline/`` has to
-    ascend two levels to reach them, not one.
+    ``pipeline_loop_2mm.json`` and ``sulci_regions_champollion_V1.json`` ship in
+    ``src/champollion_pipeline/resources/``, beside the modules that read them,
+    not at the repository root.
     """
     broken = []
     for lineno, expression, constants in _join_calls(module_path):

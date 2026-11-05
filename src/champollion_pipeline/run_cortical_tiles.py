@@ -716,6 +716,9 @@ class RunCorticalTiles(ScriptBuilder):
             config = json.load(f)
         config["graphs_dir"] = input_abs
         config["output_dir"] = join(abspath(self.args.output), DERIVATIVES_FOLDER)
+        config["brain_regions_json"] = abspath(
+            join(dirname(__file__), "resources", "sulci_regions_champollion_V1.json")
+        )
         config["path_to_graph"] = self.args.path_to_graph
         config["path_to_skeleton_with_hull"] = self.args.path_sk_with_hull
         config["masks_version"] = self.args.masks if self.args.masks else "canonical_25"
@@ -758,7 +761,7 @@ class RunCorticalTiles(ScriptBuilder):
         # and we pass output as -d so the config is never inside the subjects directory
         # (which would cause generate_skeletons.py to list it as a subject).
         if not self.validate_paths([config_file_path]):
-            source_config = abspath(join(dirname(__file__), "..", "..", "pipeline_loop_2mm.json"))
+            source_config = abspath(join(dirname(__file__), "resources", "pipeline_loop_2mm.json"))
             self.execute_command(["cp", source_config, config_file_path], shell=False)
 
         self._write_crop_config(config_file_path, input_abs, sk_qc_abs)
