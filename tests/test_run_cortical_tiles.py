@@ -3,7 +3,6 @@
 Unit tests for run_cortical_tiles.py
 """
 
-import inspect
 import json
 import logging
 import re
@@ -15,7 +14,6 @@ from unittest.mock import MagicMock, patch
 
 import numpy as np
 import pytest
-from cortical_tiles.brainvisa import remove_ventricle as remove_ventricle_module
 from hypothesis import assume, given, settings
 from hypothesis import strategies as st
 
@@ -23,15 +21,13 @@ from champollion_pipeline.run_cortical_tiles import RunCorticalTiles, main
 from champollion_pipeline.utils.lib import DERIVATIVES_FOLDER
 from tests.log_assertions import LOG
 from tests.stage2_layout import (  # noqa: F401
+    REMOVE_VENTRICLE_SIGNATURE,
     _stub_whole_brain_functions,  # noqa: V103 - autouse fixture
     add_graphs,
     run_on_config,
     stage_dirs,
+    write_whole_brain_volumes,
 )
-
-# Signature of the real cortical_tiles remove_ventricle(), captured before any
-# test patches it, so fakes can read its arguments however they are passed.
-_REMOVE_VENTRICLE_SIGNATURE = inspect.signature(remove_ventricle_module.remove_ventricle)
 
 _GRAPH_SUBPATH = "graphs/path"
 _FIXTURE_SUBJECT = "subj01"
@@ -91,7 +87,8 @@ class _RemoveVentricleRecorder:
         self.path_to_graph_by_subject = {}
 
     def __call__(self, *args, **kwargs):
-        bound = _REMOVE_VENTRICLE_SIGNATURE.bind(*args, **kwargs)
+        write_whole_brain_volumes(*args, **kwargs)
+        bound = REMOVE_VENTRICLE_SIGNATURE.bind(*args, **kwargs)
         bound.apply_defaults()
         params = bound.arguments
         side = params["side"]
@@ -1043,7 +1040,10 @@ class TestCropFailureStopsDownstreamSteps:
             patch(
                 "champollion_pipeline.run_cortical_tiles.add_left_and_right_volumes.add_left_and_right_volumes"
             ) as mock_add,
-            patch("champollion_pipeline.run_cortical_tiles.remove_ventricle.remove_ventricle") as mock_remove,
+            patch(
+                "champollion_pipeline.run_cortical_tiles.remove_ventricle.remove_ventricle",
+                side_effect=write_whole_brain_volumes,
+            ) as mock_remove,
         ):
             result = script.run()
 
