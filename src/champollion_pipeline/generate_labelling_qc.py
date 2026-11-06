@@ -26,6 +26,7 @@ from champollion_pipeline.utils.lib import (
     ExplicitLabellingSession,
     labelling_session_candidates,
 )
+from champollion_pipeline.utils.subject_folders import list_morphologist_subjects
 
 logger = logging.getLogger(__name__)
 
@@ -56,8 +57,8 @@ GRAPH_DIR_AMBIGUOUS = object()
 
 
 def fetch_subject_names(subjects_dir: str) -> list:
-    """Return sorted names of every subdirectory of subjects_dir (files ignored)."""
-    return sorted(name for name in os.listdir(subjects_dir) if os.path.isdir(os.path.join(subjects_dir, name)))
+    """Return the subject folders of subjects_dir in ascending order, by the shared subject-folder rule."""
+    return list_morphologist_subjects(subjects_dir)
 
 
 def find_graph_dir(subject_dir: str, path_to_graph: str, is_bids: bool):
