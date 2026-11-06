@@ -1,19 +1,23 @@
 """Reading of one input path as T1 files, Morphologist outputs, neither or both.
 
-Pure classification: what the pipeline does with the result is decided elsewhere. Detection and the T1 listing share
-one lazy walk and one set of predicates, so the two cannot drift.
+Pure classification: what the pipeline does with the result is decided elsewhere. Detection, the T1 listing and the
+search for the Morphologist subjects folder share one lazy walk and one set of predicates, so they cannot drift.
 """
 
+import fnmatch
 import logging
 import os
-from collections.abc import Callable, Iterator
+from collections.abc import Callable, Collection, Iterator
 from dataclasses import dataclass
 from enum import Enum
+from itertools import chain
+
+from champollion_pipeline.derivatives_layout import DERIVATIVES_DIRNAME, MORPHOLOGIST_DERIVATIVES_FOLDER
+from champollion_pipeline.utils.subject_folders import SESSION_FOLDERS
 
 T1_SUFFIXES: tuple[str, ...] = (".nii.gz", ".nii")
 NON_T1_FOLDERS: frozenset[str] = frozenset({"derivatives", "qc", "t1mri"})
 
-_DERIVATIVES_FOLDER = "derivatives"
 _GRAPH_FOLDER = "t1mri"
 _GRAPH_SUFFIX = ".arg"
 _BIDS_PREFIX = "sub-"
@@ -22,6 +26,18 @@ _BIDS_T1_ENDING = "_T1w"
 _Parts = tuple[str, ...]
 
 logger = logging.getLogger(__name__)
+
+
+class AmbiguousSubjectsFolders(ValueError):
+    """Morphologist graphs of one input path sit in two or more distinct subjects folders."""
+
+    def __init__(self, path: str, candidates: tuple[str, ...]) -> None:
+        super().__init__(path, candidates)
+        self.path = path
+        self.candidates = candidates
+
+    def __str__(self) -> str:
+        return f"{self.path} holds several subjects folders: {', '.join(self.candidates)}"
 
 
 class InputKind(Enum):
@@ -76,7 +92,7 @@ def _typed_entry(entry: os.DirEntry) -> _Entry | None:
 
 def _walk_rank(entry: _Entry) -> tuple[bool, str]:
     """Return the sort key of ``entry``: a folder named derivatives first, then plain name order."""
-    return (not (entry.is_folder and entry.name == _DERIVATIVES_FOLDER), entry.name)
+    return (not (entry.is_folder and entry.name == DERIVATIVES_DIRNAME), entry.name)
 
 
 def _read_folder(folder: str) -> list[_Entry]:
@@ -171,3 +187,64 @@ def find_t1_files(directory: str) -> list[str]:
     return sorted(
         os.path.join(*parts, name) for parts, name in _walk(directory, _can_hold_t1) if _is_t1_name(parts, name)
     )
+
+
+def _is_session(name: str) -> bool:
+    """Return whether a folder ``name`` is a session folder."""
+    return fnmatch.fnmatchcase(name, SESSION_FOLDERS)
+
+
+def _leads_to_own_t1mri(parts: _Parts) -> bool:
+    """Return whether a folder at ``parts`` is on the way to the input's own ``t1mri`` or ``ses-*/t1mri`` folder."""
+    below_session = parts[1:] if _is_session(parts[0]) else parts
+    return not below_session or below_session[0] == _GRAPH_FOLDER
+
+
+def _subjects_folder(parts: _Parts) -> _Parts | None:
+    """Return the subjects folder of a graph in the folder at ``parts``, None when the input itself is the subject."""
+    level = parts.index(_GRAPH_FOLDER) - 1
+    if level >= 0 and _is_session(parts[level]):
+        level -= 1
+    return parts[:level] if level >= 0 else None
+
+
+def _at_or_below(parts: _Parts, folders: Collection[_Parts]) -> bool:
+    """Return whether the folder at ``parts`` is one of ``folders`` or sits below one of them."""
+    return any(parts[:end] in folders for end in range(1, len(parts) + 1))
+
+
+def resolve_subjects_dir(path: str) -> str | None:
+    """Return the folder whose children are the subject directories of ``path``, or None when there is none.
+
+    A graph in the input's own ``t1mri`` or ``ses-*/t1mri`` folder makes the input a subject, so that check runs first,
+    whatever sits beside it. Then the walk leaves each subjects folder at its first graph; a subjects folder below
+    another is no candidate. Candidates are names on disk, so a link and its target are two of them.
+
+    Raises:
+        AmbiguousSubjectsFolders: the graphs sit in two or more candidates.
+    """
+    if not os.path.isdir(path):
+        return None
+    found: set[_Parts] = set()
+
+    def wanted(parts: _Parts) -> bool:
+        return not _at_or_below(parts, found)
+
+    for parts, name in chain(_walk(path, _leads_to_own_t1mri), _walk(path, wanted)):
+        if not _is_graph(parts, name):
+            continue
+        folder = _subjects_folder(parts)
+        if folder is None:
+            return None
+        if not folder:
+            return path
+        found.add(folder)
+    candidates = sorted(os.path.join(path, *folder) for folder in found if not _at_or_below(folder[:-1], found))
+    if len(candidates) > 1:
+        raise AmbiguousSubjectsFolders(path, tuple(candidates))
+    return candidates[0] if candidates else None
+
+
+def stage1_subjects_dir(output_root: str) -> str:
+    """Return where stage 1 writes the subject directories below ``output_root``."""
+    return os.path.join(output_root, DERIVATIVES_DIRNAME, MORPHOLOGIST_DERIVATIVES_FOLDER)
