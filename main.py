@@ -25,7 +25,6 @@ Usage:
 import argparse
 import logging
 import os
-import re
 import sys
 from collections.abc import Iterator
 from contextlib import AbstractContextManager, contextmanager, nullcontext
@@ -164,18 +163,9 @@ class RunCorticalTilesStage(PipelineStage):
         return d if d and os.path.exists(d) else None
 
     def required_file_patterns(self) -> list[str]:
-        side = "R"
         g = self.config.dataset.path_to_graph
         s = self.config.dataset.path_sk_with_hull
-        if self.config.dataset.bids:
-            # scan_id.path_prefix already includes the session directory;
-            # strip the leading ses-XXX/ segment so patterns are session-relative.
-            g = re.sub(r"^ses-[^/]*/+", "", g)
-            s = re.sub(r"^ses-[^/]*/+", "", s)
-        return [
-            f"{g}/{side}*.arg",
-            f"{s}/{side}*.nii.gz",
-        ]
+        return [f"{g}/L*.arg", f"{g}/R*.arg", f"{s}/R*.nii.gz"]
 
     def output_dir(self) -> str | None:
         d = self.config.dataset.cortical_tiles_output
@@ -505,7 +495,7 @@ class PipelineOrchestrator:
             bids=self.config.dataset.bids,
             path_to_graph=self.config.dataset.path_to_graph,
         )
-        checker.check(save_index_to=index_path).log_summary()
+        checker.check_subject_patterns(save_index_to=index_path).log_summary()
 
     def _run_stage(self, stage_name: str, completed_stages: list[str], partial_stages: list[str]) -> bool:
         """Check, validate, report and execute one registered stage; True on success."""
