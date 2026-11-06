@@ -35,6 +35,22 @@ for _soma_mod in [
 ]:
     sys.modules.setdefault(_soma_mod, MagicMock())
 
+# Hypothesis profile for the filesystem-bound property tests: a loaded machine
+# must not turn timing into failures (DeadlineExceeded, FlakyFailure, too_slow).
+# Skipped when hypothesis is not installed.
+try:
+    from hypothesis import HealthCheck
+    from hypothesis import settings as _hyp_settings
+
+    _hyp_settings.register_profile(
+        "champollion_load_proof",
+        deadline=None,
+        suppress_health_check=[HealthCheck.too_slow],
+    )
+    _hyp_settings.load_profile("champollion_load_proof")
+except ImportError:  # pragma: no cover
+    pass
+
 
 @pytest.fixture
 def temp_dir():
