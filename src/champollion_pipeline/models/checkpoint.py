@@ -13,9 +13,10 @@ from pathlib import Path
 
 import torch
 
+from champollion_pipeline.models.defaults import DEFAULT_CHECKPOINT_EPOCH as DEFAULT_CHECKPOINT_EPOCH
+
 _CONVERTED_CKPT_NAME = "best_model.ckpt"
 _WEIGHTS_FILE_NAME = "best_model_weights.pt"
-DEFAULT_CHECKPOINT_EPOCH = 80
 _EPOCH_CKPT_PATTERN = r"epoch={epoch}-step=(?P<step>\d+)\.ckpt"
 _VERSION_DIR_PATTERN = re.compile(r"version_(?P<index>\d+)")
 _MIRROR_PREFIX = "champollion_eval_"
