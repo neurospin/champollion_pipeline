@@ -110,7 +110,7 @@ def _run_stage(crops_dir, *extra_args, output=None):
     report_at_first_config = []
 
     def execute(command, shell=False):
-        if command[0] == "cp":
+        if command[0] == "mkdir":  # creates the folder of the first config, so it comes before any config write
             report_at_first_config.append((configs_root / _QC_FILE).is_file())
         return fake_execute_command(command, shell)
 

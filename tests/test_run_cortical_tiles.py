@@ -436,9 +436,9 @@ class TestConfigLocationInvariants:
     """Tests that config is always written to output dir, never to input dir."""
 
     def test_config_copied_to_output_not_input(self, temp_dir):
-        """pipeline_loop_2mm.json is copied to output dir, never to input dir."""
+        """pipeline_loop_2mm.json is copied to output dir, never to input dir, in Python: `cp` keeps read-only."""
         input_dir, output_dir = stage_dirs(temp_dir)
-        # No pre-existing config: forces the cp branch
+        # No pre-existing config: forces the copy branch
 
         script = RunCorticalTiles()
         script.parse_args(
@@ -452,19 +452,12 @@ class TestConfigLocationInvariants:
             ]
         )
 
-        # First validate_paths call (input/output) returns True;
-        # second call (config file check) returns False → triggers cp branch.
-        with (
-            patch.object(script, "validate_paths", side_effect=[True, False]),
-            patch.object(script, "execute_command", return_value=0) as mock_exec,
-        ):
+        with patch.object(script, "execute_command", return_value=0) as mock_exec:
             script.run()
 
-            cp_cmd = mock_exec.call_args_list[0][0][0]
-            assert cp_cmd[0] == "cp"
-            expected = str(output_dir.resolve() / "pipeline_loop_2mm.json")
-            assert cp_cmd[-1] == expected
-            assert str(input_dir.resolve()) not in cp_cmd[-1]
+        assert [call.args[0] for call in mock_exec.call_args_list if call.args[0][0] == "cp"] == []
+        assert (output_dir / "pipeline_loop_2mm.json").is_file()
+        assert not (input_dir / "pipeline_loop_2mm.json").exists()
 
     def test_d_arg_points_to_output_not_input(self, temp_dir):
         """-d in the generate_sulcal_regions command is output dir, not input dir."""

@@ -11,7 +11,6 @@ equivalents).
 
 import logging
 import os
-import shutil
 from pathlib import Path
 
 import numpy as np
@@ -38,11 +37,9 @@ def make_script(argv):
 
 
 def fake_execute_command(cmd, shell=False):
-    """In-process stand-in for the `mkdir -p` / `cp` shell-outs in run()."""
+    """In-process stand-in for the `mkdir -p` shell-out in run()."""
     if cmd[0] == "mkdir":
         os.makedirs(cmd[-1], exist_ok=True)
-    elif cmd[0] == "cp":
-        shutil.copy(cmd[1], cmd[2])
     return 0
 
 

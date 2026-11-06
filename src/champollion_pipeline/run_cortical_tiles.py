@@ -57,6 +57,7 @@ from champollion_pipeline.utils.qc_report import (
     replace_missing_crop_reasons,
     write_qc_tsv,
 )
+from champollion_pipeline.utils.resource_copy import grants_no_write, replace_with_writable_copy
 from champollion_pipeline.utils.subject_name import subject_name_problem
 from champollion_pipeline.utils.transform_qc import transform_qc_rows
 
@@ -760,9 +761,9 @@ class RunCorticalTiles(ScriptBuilder):
         # generate_sulcal_regions.py reads it from {path_dataset}/pipeline_loop_2mm.json,
         # and we pass output as -d so the config is never inside the subjects directory
         # (which would cause generate_skeletons.py to list it as a subject).
-        if not self.validate_paths([config_file_path]):
+        if not self.validate_paths([config_file_path]) or grants_no_write(config_file_path):
             source_config = abspath(join(dirname(__file__), "resources", "pipeline_loop_2mm.json"))
-            self.execute_command(["cp", source_config, config_file_path], shell=False)
+            replace_with_writable_copy(source_config, config_file_path)
 
         self._write_crop_config(config_file_path, input_abs, sk_qc_abs)
 

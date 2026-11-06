@@ -38,6 +38,7 @@ from champollion_pipeline.utils.qc_report import (
     write_qc_tsv,
     write_run_qc_tsv,
 )
+from champollion_pipeline.utils.resource_copy import replace_with_writable_copy
 
 logger = logging.getLogger(__name__)
 
@@ -336,7 +337,7 @@ class GenerateChampollionConfig(ScriptBuilder):
         # Always copy reference.yaml from template so re-runs regenerate cleanly
         reference_yaml_dest = join(dataset_loc, "reference.yaml")
         reference_yaml_src = join(_SCRIPT_DIR, "resources", "reference.yaml")
-        self.execute_command(["cp", reference_yaml_src, dataset_loc], shell=False)
+        replace_with_writable_copy(reference_yaml_src, reference_yaml_dest)
 
         my_lines = []
         with open(reference_yaml_dest) as f:
