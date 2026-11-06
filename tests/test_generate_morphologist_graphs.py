@@ -140,7 +140,7 @@ class TestGetInputFiles:
 
         files = script._get_input_files()
         assert len(files) == 2
-        assert all(f.endswith((".nii.gz", ".nii", ".gz")) for f in files)
+        assert all(f.endswith((".nii.gz", ".nii")) for f in files)
 
     def test_get_input_files_with_nii(self, temp_dir):
         """Test getting input files with .nii extension."""
@@ -167,7 +167,8 @@ class TestGetInputFiles:
         (Path(temp_dir) / "ignore.json").touch()
 
         files = script._get_input_files()
-        assert len(files) == 3
+        assert len(files) == 2
+        assert "test3.gz" not in files
         assert "ignore.txt" not in files
         assert "ignore.json" not in files
 
@@ -501,7 +502,7 @@ class TestInputQcFile:
     """The input QC file, one row per participant_id."""
 
     def test_one_row_per_participant_id(self, qc_dirs):
-        """REQ-NTUI-BDRABCZUK-A474A941FE23, REQ-NTUI-BDRABCZUK-2A3110BE30EA: without --bids, name minus extension."""
+        """REQ-NTUI-BDRABCZUK-A474A941FE23, REQ-NTUI-BDRABCZUK-ED91DC3E1027: without --bids, name minus extension."""
         input_dir, output_dir = qc_dirs
         _write_nifti(input_dir / "sub-a.nii.gz")
         _write_nifti(input_dir / "sub-b.nii")
@@ -520,7 +521,7 @@ class TestInputQcFile:
         assert seen_at_call == [True], "input_qc.tsv must exist before morphologist-cli runs"
         header = qc_path.read_text(encoding="utf-8").splitlines()[0].split("\t")
         assert header[:2] == ["participant_id", "qc"] and header[-1] == "reason"
-        assert _qc_by_id(output_dir) == {"sub-a": (1, ""), "sub-b": (1, ""), "sub-c": (1, "")}
+        assert _qc_by_id(output_dir) == {"sub-a": (1, ""), "sub-b": (1, "")}
 
     def test_bids_participant_id_is_subject_entity(self, qc_dirs):
         """REQ-NTUI-BDRABCZUK-5F5D65A6F044: with --bids, sub-<label>, plus _ses-<session> when that entity follows.
@@ -637,7 +638,7 @@ class TestInputQcReasons:
         assert _qc_by_id(output_dir) == {"sub-01_ses-1": (1, ""), "sub-02_ses-1": (0, "duplicate_subject")}
 
     def test_no_bids_subject(self, qc_dirs):
-        """REQ-NTUI-BDRABCZUK-68925CFAE769: with --bids, a name not starting with sub-<label> then _ or ."""
+        """REQ-NTUI-BDRABCZUK-5B97BBC29725: with --bids, a name not starting with sub-<label> then _ or ."""
         input_dir, output_dir = qc_dirs
         _write_nifti(input_dir / "sub-01_T1w.nii.gz")
         _write_nifti(input_dir / "T1w.nii.gz")

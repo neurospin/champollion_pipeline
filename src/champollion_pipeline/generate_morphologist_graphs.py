@@ -5,8 +5,8 @@ Script to generate graphs with morphologist from the user's raw data.
 
 import logging
 from datetime import datetime
-from os import getcwd, listdir
-from os.path import basename, isfile, join, splitext
+from os import getcwd
+from os.path import basename, join
 
 from champollion_utils.script_builder import ScriptBuilder
 
@@ -17,11 +17,10 @@ from champollion_pipeline.derivatives_layout import (
     compute_run_log_path,
 )
 from champollion_pipeline.process_setup import init_pipeline_process
+from champollion_pipeline.utils.input_kind import T1_SUFFIXES, find_t1_files
 from champollion_pipeline.utils.nifti_check import check_nifti_input
 from champollion_pipeline.utils.qc_report import write_qc_tsv
 
-# Raw data extensions accepted as stage 1 input; also the suffixes stripped to get a participant_id
-INPUT_EXTENSIONS = (".nii.gz", ".nii", ".gz")
 INPUT_QC_FILENAME = "input_qc.tsv"
 DUPLICATE_SUBJECT = "duplicate_subject"
 NO_BIDS_SUBJECT = "no_bids_subject"
@@ -30,8 +29,8 @@ logger = logging.getLogger(__name__)
 
 
 def _participant_id(name: str) -> str:
-    """Return ``name`` without its first matching INPUT_EXTENSIONS suffix; the whole name if that leaves nothing."""
-    for suffix in INPUT_EXTENSIONS:
+    """Return ``name`` without its first matching T1_SUFFIXES suffix; the whole name if that leaves nothing."""
+    for suffix in T1_SUFFIXES:
         if name.endswith(suffix):
             return name[: -len(suffix)] or name
     return name
@@ -88,17 +87,11 @@ class GenerateMorphologistGraphs(ScriptBuilder):
         )
 
     def _get_input_files(self):
-        """Get list of valid input files."""
-        input_files = [
-            f.strip('"').strip("'")
-            for f in listdir(self.args.input)
-            if isfile(join(self.args.input, f)) and splitext(basename(f))[1] in INPUT_EXTENSIONS
-        ]
-
-        return input_files
+        """Return the T1 files of the input directory, as paths relative to it."""
+        return find_t1_files(self.args.input)
 
     def _input_key(self, name: str) -> tuple[str, bool]:
-        """Return (participant_id, is_no_bids) of one input file name."""
+        """Return (participant_id, is_no_bids) of one input file name, folders excluded."""
         if not self.args.bids:
             return _participant_id(name), False
         participant_id = _bids_participant_id(name)
@@ -107,11 +100,11 @@ class GenerateMorphologistGraphs(ScriptBuilder):
         return participant_id, False
 
     def _run_input_qc(self, input_files):
-        """Check each input file, write input_qc.tsv, log each exclusion, and return the kept file names."""
+        """Check each input file, write input_qc.tsv, log each exclusion, and return the kept relative paths."""
         by_subject = {}
         no_bids = set()
         for name in input_files:
-            subject, is_no_bids = self._input_key(name)
+            subject, is_no_bids = self._input_key(basename(name))
             by_subject.setdefault(subject, []).append(name)
             if is_no_bids:
                 no_bids.add(subject)
