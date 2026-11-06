@@ -59,6 +59,7 @@ from champollion_pipeline.utils.qc_report import (
 )
 from champollion_pipeline.utils.resource_copy import grants_no_write, replace_with_writable_copy
 from champollion_pipeline.utils.skeleton_qc import compute_skeleton_reasons, save_config_skel_qc, save_crop_qc
+from champollion_pipeline.utils.subject_folders import list_morphologist_subjects
 from champollion_pipeline.utils.subject_name import subject_name_problem
 from champollion_pipeline.utils.transform_qc import transform_qc_rows
 
@@ -207,10 +208,8 @@ def fetch_labelling_qc_row(
 
 
 def list_input_subjects(input_dir: str) -> list[str]:
-    """Sorted non-dot subdirectory names of ``input_dir``; none for a non-directory."""
-    if not isdir(input_dir):
-        return []
-    return sorted(e.name for e in os.scandir(input_dir) if e.is_dir() and not e.name.startswith("."))
+    """Sorted subject folder names of ``input_dir``, by the shared rule; none for a non-directory."""
+    return list_morphologist_subjects(input_dir)
 
 
 def fetch_sk_qc_ids(path: str) -> dict[str, int]:
@@ -288,7 +287,7 @@ def fetch_input_qc_rows(  # noqa: PLR0913 - path_sk_with_hull optional, five-arg
 
 # TEMPORARY (DEF-CORTILES-BDRABCZUK-9C7D2B9265BC)
 def find_dotted_ids(input_dir: str) -> list[str]:
-    """Sorted input subject IDs (non-dot subdirectory names) that contain a dot; none for a non-directory."""
+    """Sorted input subject IDs (the list_input_subjects names) that contain a dot; none for a non-directory."""
     return [name for name in list_input_subjects(input_dir) if "." in name]
 
 
@@ -296,7 +295,7 @@ def find_dotted_ids(input_dir: str) -> list[str]:
 def find_prefix_id_pairs(input_dir: str) -> list[tuple[str, str]]:
     """Every (shorter, longer) pair of input subject IDs where one strictly prefixes the other, sorted.
 
-    Subject IDs are the non-dot subdirectory names of ``input_dir``, as cortical_tiles lists them
+    Subject IDs are the list_input_subjects names of ``input_dir``, as cortical_tiles lists them
     (with or without --bids). An input that is not a directory gives no pair.
     """
     names = list_input_subjects(input_dir)
