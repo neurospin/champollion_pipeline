@@ -1,16 +1,19 @@
 """Per-scan eligibility checks over a B-tree index of a subjects directory.
 
 The streaming arrival barrier polls ``SubjectEligibilityChecker`` through
-``list_scans``, ``scan_has_pattern`` and ``refresh``; the sequential pre-stage
-report uses ``check``. Patterns and paths come from the user's configuration,
-so they are checked, never trusted.
+``list_scans``, ``scan_has_pattern`` and ``refresh``, with patterns relative to
+the scan folder; the sequential pre-stage report uses ``check_subject_patterns``,
+with patterns relative to the subject folder. Patterns and paths come from the
+user's configuration, so they are checked, never trusted.
 """
 
 from __future__ import annotations
 
+import glob
 import json
 import logging
 import os
+from collections.abc import Callable
 from dataclasses import dataclass, field
 from fnmatch import fnmatchcase
 from os.path import join, splitext
@@ -27,6 +30,8 @@ BIDS_SUBJECT_PREFIX = "sub-"
 # Morphologist's per-subject T1 folder; must equal the middle segment of ScanId.path_prefix.
 T1MRI_DIR = "t1mri"
 WILDCARD_CHARS = "*?["
+# The only wildcard of a subject-relative pattern, as in run_cortical_tiles.resolve_graph_paths.
+SUBJECT_PATTERN_WILDCARD = "*"
 # Upper bound of a range query: every key starting with a literal sorts below literal + this.
 _KEY_MAX_SUFFIX = "\U0010ffff"
 
@@ -69,9 +74,11 @@ class SubjectEligibilityReport:
 class SubjectEligibilityChecker:
     """Index ``subjects_dir`` and check the required patterns of each scan.
 
-    A scan is one Morphologist acquisition folder ``<subject>/t1mri/<acquisition>``; patterns are
-    relative to it. ``path_to_graph`` only records the dataset's graph sub-path for the caller and
-    is read by no method. Not thread-safe: use one instance per polling thread.
+    A scan is one Morphologist acquisition folder ``<subject>/t1mri/<acquisition>``. Patterns are
+    relative to it for ``scan_has_pattern`` and ``check``, and to the subject folder for
+    ``scan_has_subject_pattern`` and ``check_subject_patterns``. ``path_to_graph`` only records the
+    dataset's graph sub-path for the caller and is read by no method. Not thread-safe: use one
+    instance per polling thread.
     """
 
     def __init__(  # noqa: PLR0913 - mirrors the options main.py forwards
@@ -134,7 +141,9 @@ class SubjectEligibilityChecker:
             if not self.include_hidden:
                 dirs[:] = [d for d in dirs if not _is_hidden(d)]
                 files = [f for f in files if not _is_hidden(f)]
-            for fname in files:
+            # The BTree's shape follows insertion order; top-down os.walk descends in the order of dirs.
+            dirs.sort()
+            for fname in sorted(files):
                 path = join(root, fname)
                 try:
                     stat = os.stat(path)
@@ -149,11 +158,38 @@ class SubjectEligibilityChecker:
         self._tree = tree
 
     def check(self, save_index_to: str | None = None) -> SubjectEligibilityReport:
+        """Judge each scan on patterns relative to the scan folder."""
+        return self._sort_scans(self.scan_has_pattern, save_index_to)
+
+    def scan_has_subject_pattern(self, scan_id: ScanId, pattern: str) -> bool:
+        """Return True when a file inside the folder of ``scan_id`` matches ``<subject>/<pattern>``.
+
+        Reads the file system as input_qc.tsv does, so the two views agree: ``*`` is the only
+        wildcard and stays inside one path segment, and symbolic links are followed.
+        """
+        _check_relative(pattern)
+        escaped = SUBJECT_PATTERN_WILDCARD.join(glob.escape(part) for part in pattern.split(SUBJECT_PATTERN_WILDCARD))
+        full = join(glob.escape(join(self.subjects_dir, scan_id.subject)), escaped)
+        scan_dir = os.path.normpath(join(self.subjects_dir, scan_id.path_prefix)) + os.sep
+        return any(
+            os.path.normpath(path).startswith(scan_dir) and os.path.isfile(path)
+            for path in sorted(glob.glob(full, include_hidden=self.include_hidden))
+        )
+
+    def check_subject_patterns(  # noqa: V105 - used by main.py
+        self, save_index_to: str | None = None
+    ) -> SubjectEligibilityReport:
+        """Judge each scan on patterns relative to the subject folder."""
+        return self._sort_scans(self.scan_has_subject_pattern, save_index_to)
+
+    def _sort_scans(
+        self, has_pattern: Callable[[ScanId, str], bool], save_index_to: str | None
+    ) -> SubjectEligibilityReport:
         """Re-index, then sort each listed scan into eligible or ineligible."""
         self.refresh()
         report = SubjectEligibilityReport(stage_name=self.stage_name, input_dir=self.subjects_dir)
         for scan in self.list_scans():
-            missing = [p for p in self.required_patterns if not self.scan_has_pattern(scan, p)]
+            missing = [p for p in self.required_patterns if not has_pattern(scan, p)]
             if missing:
                 report.ineligible[scan] = missing
             else:
