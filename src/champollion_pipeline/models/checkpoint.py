@@ -143,14 +143,15 @@ def evaluation_model_dir(model_path: str, epoch: int) -> Iterator[str]:
 
 
 def weights_source(model_path: str, epoch: int) -> str | None:
-    """Return the user-dir weights file evaluate.py ends up using, or None."""
+    """Return the region's weights file: its epoch-N checkpoint, else logs/best_model_weights.pt, else the first .ckpt
+    of version_0/checkpoints/ in sorted() order; None when it has none."""
     epoch_ckpt = find_epoch_checkpoint(model_path, epoch)
     if epoch_ckpt is not None:
         return str(epoch_ckpt)
     pt_path = join(model_path, "logs", _WEIGHTS_FILE_NAME)
     if exists(pt_path):
         return pt_path
-    ckpts = glob.glob(model_path + "/logs/lightning_logs/version_0/checkpoints/*.ckpt")
+    ckpts = sorted(glob.glob(model_path + "/logs/lightning_logs/version_0/checkpoints/*.ckpt"))
     return ckpts[0] if ckpts else None
 
 
