@@ -118,7 +118,16 @@ print(json.dumps({"module": generate_champollion_config.__file__}))
 STAGE2_PROBE = (
     PROBE_PREAMBLE
     + """
+import numpy
+
 from champollion_pipeline import run_cortical_tiles
+
+
+class Volume(numpy.ndarray):
+    np = property(numpy.asarray)
+
+
+run_cortical_tiles.aims.read = MagicMock(return_value=numpy.ones(1, dtype=numpy.int16).view(Volume))
 
 
 def run_until_stage2(command, **_kwargs):

@@ -5,7 +5,7 @@ path_to_graph and path_sk_with_hull are relative to the subject folder, the chec
 folder, so <subject>/t1mri/<acquisition> came out doubled in front of each pattern.
 
 REQ-PRECHECK-BDRABCZUK-3760929352FB: a graph is missing exactly when absent from the scan's own folder.
-REQ-PRECHECK-BDRABCZUK-9FCA0E3552A8: the R skeleton is missing exactly when absent from the scan's own folder.
+REQ-PRECHECK-BDRABCZUK-05899543409B: a skeleton is missing exactly when absent from the scan's own folder.
 REQ-PRECHECK-BDRABCZUK-853A20036CEC: on a one-scan subject whose path_to_graph lies inside the scan folder, the
 pre-check and input_qc.tsv agree on missing graphs.
 REQ-PRECHECK-BDRABCZUK-E5BA26B20CC8: ineligible scans come in ScanId order, however the file system lists folders.
@@ -88,6 +88,10 @@ def _add_graphs(scan_dir: Path, subject: str, sides: str = "LR") -> None:
 def _add_skeletons(scan_dir: Path, subject: str, sides: str = "LR") -> None:
     for side in sides:
         _touch(scan_dir / SKELETON_SUBPATH / f"{side}skeleton_{subject}.nii.gz")
+
+
+def _skeleton_pattern(side: str) -> str:
+    return f"{SKELETON_PATH}/{side}skeleton*.nii.gz"
 
 
 def _add_complete_scan(subjects: Path, subject: str, acquisition: str = ACQUISITION) -> None:
@@ -243,7 +247,7 @@ def test_literal_path_names_one_acquisition(subjects, run_pre_check):
 
     result = run_pre_check()
 
-    expected = {f"{GRAPH_PATH}/{side}*.arg" for side in "LR"} | {f"{SKELETON_PATH}/R*.nii.gz"}
+    expected = {f"{GRAPH_PATH}/{side}*.arg" for side in "LR"} | {_skeleton_pattern(side) for side in "LR"}
     assert result.missing == {COMPLETE_SUBJECT: expected}
     assert result.counts == (1, 2)
 
@@ -311,7 +315,7 @@ def test_graph_outside_scan_folder_is_missing(subjects, run_pre_check):
     assert result.missing == {OTHER_SUBJECT: {f"{outside_path}/{side}*.arg" for side in "LR"}}
 
 
-# ====================== REQ-PRECHECK-BDRABCZUK-9FCA0E3552A8: skeleton ======================
+# ====================== REQ-PRECHECK-BDRABCZUK-05899543409B: skeleton ======================
 
 
 @pytest.mark.parametrize(
@@ -331,17 +335,31 @@ def test_present_skeleton_is_not_missing(subjects, run_pre_check, path_to_graph,
     assert result.missing == {OTHER_SUBJECT: {f"{path_to_graph}/{side}*.arg" for side in "LR"}}
 
 
-def test_absent_skeleton_is_missing(subjects, run_pre_check):
-    """A scan lacking its R skeleton is reported for it alone; the L skeleton does not stand in for it."""
+@pytest.mark.parametrize(("absent", "present"), [("L", "R"), ("R", "L")])
+def test_absent_skeleton_is_missing(subjects, run_pre_check, absent, present):
+    """A scan lacking a skeleton is reported for it alone; the other hemisphere's does not stand in for it."""
+    _add_complete_scan(subjects, COMPLETE_SUBJECT)
+    scan_dir = _scan_dir(subjects, OTHER_SUBJECT)
+    _add_graphs(scan_dir, OTHER_SUBJECT)
+    _add_skeletons(scan_dir, OTHER_SUBJECT, sides=present)
+
+    result = run_pre_check()
+
+    assert result.missing == {OTHER_SUBJECT: {_skeleton_pattern(absent)}}
+    assert result.counts == (1, 2)
+
+
+def test_other_volume_is_not_a_skeleton(subjects, run_pre_check):
+    """Morphologist writes other R*.nii.gz volumes beside the skeleton: none of them stands in for it."""
     _add_complete_scan(subjects, COMPLETE_SUBJECT)
     scan_dir = _scan_dir(subjects, OTHER_SUBJECT)
     _add_graphs(scan_dir, OTHER_SUBJECT)
     _add_skeletons(scan_dir, OTHER_SUBJECT, sides="L")
+    _touch(scan_dir / SKELETON_SUBPATH / f"Rroots_{OTHER_SUBJECT}.nii.gz")
 
     result = run_pre_check()
 
-    assert result.missing == {OTHER_SUBJECT: {f"{SKELETON_PATH}/R*.nii.gz"}}
-    assert result.counts == (1, 2)
+    assert result.missing == {OTHER_SUBJECT: {_skeleton_pattern("R")}}
 
 
 # ====================== REQ-PRECHECK-BDRABCZUK-853A20036CEC: the two views ======================
@@ -437,7 +455,7 @@ def test_ineligible_scans_keep_their_order(subjects, run_pre_check, listing):
 
     assert result.details == (
         f"{OTHER_SUBJECT} missing {GRAPH_PATH}/L*.arg, {GRAPH_PATH}/R*.arg; "
-        f"{third_subject} missing {SKELETON_PATH}/R*.nii.gz"
+        f"{third_subject} missing {_skeleton_pattern('L')}, {_skeleton_pattern('R')}"
     )
 
 

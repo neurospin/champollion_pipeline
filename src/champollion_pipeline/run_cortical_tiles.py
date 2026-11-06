@@ -58,6 +58,7 @@ from champollion_pipeline.utils.qc_report import (
     write_qc_tsv,
 )
 from champollion_pipeline.utils.resource_copy import grants_no_write, replace_with_writable_copy
+from champollion_pipeline.utils.skeleton_qc import compute_skeleton_reasons, save_config_skel_qc, save_crop_qc
 from champollion_pipeline.utils.subject_name import subject_name_problem
 from champollion_pipeline.utils.transform_qc import transform_qc_rows
 
@@ -245,12 +246,22 @@ def compute_sk_qc_reason(subject: str, sk_qc: dict[str, int] | None, is_refused:
     return REASON_EXCLUDED_BY_SK_QC if sk_qc[subject] == 0 else None
 
 
-def fetch_input_qc_rows(
-    input_abs: str, path_to_graph: str, sk_qc: dict[str, int] | None, is_refused: bool, is_input_only: bool
+def compute_end_status(status: int, crop_qc_abs: str) -> int:
+    """``status``, or CROP_STATUS_PARTIAL when a skeleton reason excluded a subject from a run that would return 0."""
+    return CROP_STATUS_PARTIAL if crop_qc_abs and status == 0 else status
+
+
+def fetch_input_qc_rows(  # noqa: PLR0913 - path_sk_with_hull optional, five-argument calls kept
+    input_abs: str,
+    path_to_graph: str,
+    sk_qc: dict[str, int] | None,
+    is_refused: bool,
+    is_input_only: bool,
+    path_sk_with_hull: str | None = None,
 ) -> list[dict[str, object]]:
     """input_qc.tsv rows: one per input subject folder, then, unless ``is_input_only``, the file ids with no folder.
 
-    A subject's reasons come in a fixed order: missing_graph_L, missing_graph_R, the --sk_qc_path file reason.
+    Reasons in order: missing_graph_L, missing_graph_R, L then R skeleton (with path_sk_with_hull), the file reason.
     """
     subjects = list_input_subjects(input_abs)
     rows: list[dict[str, object]] = []
@@ -260,6 +271,9 @@ def fetch_input_qc_rows(
             for side in GRAPH_SIDES
             if not has_hemisphere_graph(input_abs, path_to_graph, subject, side)
         ]
+        if path_sk_with_hull is not None:
+            folders = resolve_graph_paths(input_abs, path_sk_with_hull, subject)
+            reasons += compute_skeleton_reasons(join(input_abs, subject), folders, aims.read)
         sk_qc_reason = compute_sk_qc_reason(subject, sk_qc, is_refused)
         if sk_qc_reason:
             reasons.append(sk_qc_reason)
@@ -566,8 +580,8 @@ class RunCorticalTiles(ScriptBuilder):
                 logger.error(f"labelling QC excluded {row['participant_id']}: {row['reason']}")
         return qc_path, [row["participant_id"] for row in rows if row["qc"] == "1"]
 
-    def _write_input_qc(self, input_abs: str, output_abs: str, sk_qc_abs: str) -> tuple[str, bool]:
-        """Write input_qc.tsv, one record per qc 0 row; return its path and whether a subject passed."""
+    def _write_input_qc(self, input_abs: str, output_abs: str, sk_qc_abs: str) -> tuple[str, bool, str]:
+        """Write input_qc.tsv, one record per qc 0 row, and crop_qc.tsv; return path, a subject passed, crop_qc path."""
         sk_qc = None
         is_refused = False
         if sk_qc_abs:
@@ -576,14 +590,17 @@ class RunCorticalTiles(ScriptBuilder):
             except (OSError, ValueError, csv.Error) as error:
                 logger.error(f"--sk_qc_path file {self.args.sk_qc_path} refused: {error}")
                 is_refused = True
-        rows = fetch_input_qc_rows(input_abs, self.args.path_to_graph, sk_qc, is_refused, self.args.sk_qc_input_only)
+        args = self.args
+        rows = fetch_input_qc_rows(
+            input_abs, args.path_to_graph, sk_qc, is_refused, args.sk_qc_input_only, args.path_sk_with_hull
+        )
         qc_path = join(output_abs, DERIVATIVES_FOLDER, INPUT_QC_FILENAME)
         write_qc_tsv(qc_path, rows)
         for row in rows:
             if row["qc"] == 0:
                 log = logger.warning if row["reason"] == REASON_EXCLUDED_BY_SK_QC else logger.error
                 log(f"input QC excluded {row['participant_id']}: {row['reason']}")
-        return qc_path, any(row["qc"] == 1 for row in rows)
+        return qc_path, any(row["qc"] == 1 for row in rows), save_crop_qc(join(output_abs, DERIVATIVES_FOLDER), rows)
 
     def _list_input_types(self) -> list[str]:
         """Input types of this run: --input-types, else INPUT_TYPES_DEFAULT."""
@@ -747,7 +764,7 @@ class RunCorticalTiles(ScriptBuilder):
         if not self._check_subject_ids(input_abs, output_abs):
             return 1
 
-        qc_path, has_usable_subject = self._write_input_qc(input_abs, output_abs, sk_qc_abs)
+        qc_path, has_usable_subject, crop_qc_abs = self._write_input_qc(input_abs, output_abs, sk_qc_abs)
         if not has_usable_subject:
             logger.fail(f"no subject passed the input QC, see {qc_path}")
             return 1
@@ -755,7 +772,9 @@ class RunCorticalTiles(ScriptBuilder):
         config_file_path: str = join(output_abs, "pipeline_loop_2mm.json")
 
         if not self._preflight_check(output_abs, config_file_path):
-            return self._apply_output_qc(output_abs, 0, self._read_skip_lists(output_abs))
+            save_config_skel_qc(config_file_path, crop_qc_abs)
+            status = self._apply_output_qc(output_abs, 0, self._read_skip_lists(output_abs))
+            return compute_end_status(status, crop_qc_abs)
 
         # Copy pipeline config template into the output (derivatives) directory.
         # generate_sulcal_regions.py reads it from {path_dataset}/pipeline_loop_2mm.json,
@@ -765,7 +784,8 @@ class RunCorticalTiles(ScriptBuilder):
             source_config = abspath(join(dirname(__file__), "resources", "pipeline_loop_2mm.json"))
             replace_with_writable_copy(source_config, config_file_path)
 
-        self._write_crop_config(config_file_path, input_abs, sk_qc_abs)
+        crop_sk_qc = crop_qc_abs or sk_qc_abs
+        self._write_crop_config(config_file_path, input_abs, crop_sk_qc)
 
         # Prepare njobs
         if self.args.njobs is None:
@@ -792,7 +812,7 @@ class RunCorticalTiles(ScriptBuilder):
         # The script runs from its own directory (subprocess cwd)
         script_dir = dirname(script_path)
 
-        cmd = self._build_crop_command(script_path, sk_qc_abs)
+        cmd = self._build_crop_command(script_path, crop_sk_qc)
 
         with suppress(FileNotFoundError):  # not exists(): tests mock it
             os.remove(self._compute_crop_marker_path(output_abs))
@@ -810,7 +830,7 @@ class RunCorticalTiles(ScriptBuilder):
         self._generate_mask_npys(output_abs)
 
         status = self._run_whole_brain(input_abs, output_abs, result)
-        return self._apply_output_qc(output_abs, status, skips, has_crop_step=True)
+        return compute_end_status(self._apply_output_qc(output_abs, status, skips, has_crop_step=True), crop_qc_abs)
 
     def _run_whole_brain(self, input_abs: str, output_abs: str, crop_status: int) -> int:
         """Fuse the L+R skeletons, then strip the ventricle from the fused volume; return the stage status so far.
