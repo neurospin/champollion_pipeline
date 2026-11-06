@@ -5,6 +5,7 @@ run() needs a subject holding one graph per hemisphere at <input>/<subject>/<pat
 
 import inspect
 import json
+from dataclasses import dataclass
 from pathlib import Path
 from unittest.mock import MagicMock, patch
 
@@ -13,8 +14,11 @@ import pytest
 from cortical_tiles.brainvisa import remove_ventricle as remove_ventricle_module
 
 from champollion_pipeline.run_cortical_tiles import RunCorticalTiles
+from champollion_pipeline.utils.qc_report import read_qc_tsv
+from tests.stage2_skeletons import SIDES, SKELETON_FILE
 
 GRAPH_DIR = "graphs"
+SKELETON_DIR = "skeleton"
 SUBJECT = "subj01"
 TEMPLATE_CONFIG = Path(__file__).resolve().parents[1] / "src/champollion_pipeline/resources/pipeline_loop_2mm.json"
 CROP_STEMS = {"foldlabel": "label"}  # crop kinds whose files carry another stem than the kind name
@@ -22,6 +26,38 @@ CROP_STEMS = {"foldlabel": "label"}  # crop kinds whose files carry another stem
 # test patches it, so fakes can read its arguments however they are passed.
 REMOVE_VENTRICLE_SIGNATURE = inspect.signature(remove_ventricle_module.remove_ventricle)
 CROP_MARKER = "crops_complete.marker"
+QC_OPTION = "--sk_qc_path"
+
+
+@dataclass
+class StageRun:
+    """What run() did with the crop subprocess mocked."""
+
+    status: int
+    crop_commands: list[list[str]]
+    rows: dict[str, dict]
+    crop_qc_path: Path
+    config: dict
+
+    @property
+    def crop_calls(self) -> int:
+        return len(self.crop_commands)
+
+    def crop_qc_rows(self) -> list[tuple[str, int]]:
+        assert self.crop_qc_path.is_file(), f"{self.crop_qc_path} was not written"
+        return [(row["participant_id"], row["qc"]) for row in read_qc_tsv(self.crop_qc_path)]
+
+    def crop_qc_option(self) -> Path:
+        """The --sk_qc_path value of the one crop command."""
+        (command,) = self.crop_commands
+        assert QC_OPTION in command, command
+        return Path(command[command.index(QC_OPTION) + 1])
+
+    def qc(self, subject: str) -> int:
+        return self.rows[subject]["qc"]
+
+    def reason(self, subject: str) -> str:
+        return self.rows[subject]["reason"] or ""
 
 
 @pytest.fixture(autouse=True)  # noqa: V103
@@ -47,6 +83,14 @@ def add_graphs(input_dir, subject=SUBJECT, graph_dir=GRAPH_DIR, sides="LR"):
     folder.mkdir(parents=True, exist_ok=True)
     for side in sides:
         (folder / f"{side}{subject}.arg").touch()
+
+
+def add_skeletons(input_dir, subject=SUBJECT, skeleton_dir=SKELETON_DIR):
+    """Lay both skeletons of ``subject`` in ``skeleton_dir``, for a run the conftest stub does not reach."""
+    folder = Path(input_dir) / subject / skeleton_dir
+    folder.mkdir(parents=True, exist_ok=True)
+    for side in SIDES:
+        (folder / SKELETON_FILE.format(side=side, subject=subject)).touch()
 
 
 def write_whole_brain_volumes(*args, **kwargs):
@@ -98,9 +142,10 @@ def add_crop_marker(crops_dir):
 
 
 def stage_dirs(root, graph_dir=GRAPH_DIR):
-    """Create <root>/input, holding one subject with both graphs in ``graph_dir``, and <root>/output."""
+    """Create <root>/output and <root>/input, holding one subject: skeletons, and graphs in ``graph_dir``."""
     input_dir, output_dir = Path(root) / "input", Path(root) / "output"
     add_graphs(input_dir, graph_dir=graph_dir)
+    add_skeletons(input_dir)
     output_dir.mkdir()
     return input_dir, output_dir
 
@@ -119,7 +164,15 @@ def parsed_script(input_dir, output_dir, *extra_args):
     """A RunCorticalTiles parsed on the two paths, the graph and skeleton options and ``extra_args``."""
     script = RunCorticalTiles()
     script.parse_args(
-        [str(input_dir), str(output_dir), "--path_to_graph", GRAPH_DIR, "--path_sk_with_hull", "skeleton", *extra_args]
+        [
+            str(input_dir),
+            str(output_dir),
+            "--path_to_graph",
+            GRAPH_DIR,
+            "--path_sk_with_hull",
+            SKELETON_DIR,
+            *extra_args,
+        ]
     )
     return script
 

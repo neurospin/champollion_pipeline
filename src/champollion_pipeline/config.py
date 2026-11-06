@@ -46,7 +46,7 @@ class DatasetConfig:
     # Processing parameters
     njobs: int = 22
     path_to_graph: str = "t1mri/default_acquisition/default_analysis/folds/3.3/base"
-    path_sk_with_hull: str = "t1mri/default_acquisition/default_analysis/segmentation/mesh"
+    path_sk_with_hull: str = "t1mri/default_acquisition/default_analysis/segmentation"
     sk_qc_path: str = ""
     masks_version: str = DEFAULT_MASKS_VERSION
     skel_seed: int | None = None  # None: the skel_seed in <derivatives>/pipeline_loop_2mm.json

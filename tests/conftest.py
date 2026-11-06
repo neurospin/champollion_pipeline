@@ -9,11 +9,13 @@ import shutil
 import sys
 import tempfile
 import threading
-from unittest.mock import MagicMock
+from pathlib import Path
+from unittest.mock import MagicMock, patch
 
 import pytest
 
 from tests.log_assertions import PipelineLogCapture
+from tests.stage2_skeletons import SIDES, SKELETON_FILE, skeleton_volume
 
 # Keep src/ on path for non-package scripts (compare tools, file_indexer, etc.)
 sys.path.insert(0, os.path.abspath(os.path.join(os.path.dirname(__file__), "../src")))
@@ -59,6 +61,30 @@ def _stub_stage2_output_qc(monkeypatch):
     module = sys.modules.get("champollion_pipeline.run_cortical_tiles")
     if module is not None:
         monkeypatch.setattr(module.RunCorticalTiles, "_write_output_qc", MagicMock(return_value=("", True)))
+
+
+@pytest.fixture(autouse=True)  # noqa: V103
+def _stub_stage2_skeletons(monkeypatch):
+    """Let a test of stage 2 that is not about skeletons pass the skeleton check of the input QC.
+
+    Lays both skeletons of each input subject before the input QC runs, and gives aims.read a usable volume meanwhile.
+    tests/test_run_cortical_tiles_input_qc_skeleton.py overrides this fixture to run the real check.
+    """
+    module = sys.modules.get("champollion_pipeline.run_cortical_tiles")
+    if module is None:
+        return
+    write_input_qc = module.RunCorticalTiles._write_input_qc
+
+    def write_input_qc_on_skeletons(script, input_abs, *args, **kwargs):
+        for subject in module.list_input_subjects(input_abs):
+            folder = Path(input_abs, subject, script.args.path_sk_with_hull.replace("*", "acquisition"))
+            folder.mkdir(parents=True, exist_ok=True)
+            for side in SIDES:
+                (folder / SKELETON_FILE.format(side=side, subject=subject)).touch()
+        with patch.object(module.aims, "read", return_value=skeleton_volume()):
+            return write_input_qc(script, input_abs, *args, **kwargs)
+
+    monkeypatch.setattr(module.RunCorticalTiles, "_write_input_qc", write_input_qc_on_skeletons)
 
 
 @pytest.fixture(autouse=True)  # noqa: V103

@@ -47,6 +47,7 @@ from champollion_pipeline.derivatives_layout import (
 from champollion_pipeline.file_indexer import SubjectEligibilityChecker
 from champollion_pipeline.process_setup import init_pipeline_process
 from champollion_pipeline.streaming import StreamingSettings
+from champollion_pipeline.utils.skeleton_qc import SKELETON_SIDES, compute_skeleton_pattern
 
 logger = logging.getLogger("champollion_pipeline.main")
 
@@ -165,7 +166,7 @@ class RunCorticalTilesStage(PipelineStage):
     def required_file_patterns(self) -> list[str]:
         g = self.config.dataset.path_to_graph
         s = self.config.dataset.path_sk_with_hull
-        return [f"{g}/L*.arg", f"{g}/R*.arg", f"{s}/R*.nii.gz"]
+        return [f"{g}/L*.arg", f"{g}/R*.arg", *(f"{s}/{compute_skeleton_pattern(side)}" for side in SKELETON_SIDES)]
 
     def output_dir(self) -> str | None:
         d = self.config.dataset.cortical_tiles_output

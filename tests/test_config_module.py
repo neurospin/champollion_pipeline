@@ -86,7 +86,7 @@ dataset:
   embeddings_path: ''
   njobs: 22
   path_to_graph: t1mri/default_acquisition/default_analysis/folds/3.3/base
-  path_sk_with_hull: t1mri/default_acquisition/default_analysis/segmentation/mesh
+  path_sk_with_hull: t1mri/default_acquisition/default_analysis/segmentation
   sk_qc_path: ''
   masks_version: canonical_25
   skel_seed: null
