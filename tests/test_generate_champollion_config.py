@@ -9,6 +9,14 @@ from unittest.mock import mock_open, patch
 import pytest
 
 from champollion_pipeline.generate_champollion_config import GenerateChampollionConfig, main
+from tests.test_generate_champollion_config_internals import fake_execute_command
+
+
+@pytest.fixture  # noqa: V103
+def stubbed_reference_copy():
+    """Stand in for the copy of reference.yaml, for the tests that mock open() around the absent /parent."""
+    with patch("champollion_pipeline.generate_champollion_config.replace_with_writable_copy") as stub:
+        yield stub
 
 
 class TestGenerateChampollionConfigInit:
@@ -150,6 +158,7 @@ class TestWriteLocalizationYaml:
 class TestRunMethod:
     """Test the run method."""
 
+    @pytest.mark.usefixtures("stubbed_reference_copy")
     def test_run_validates_inputs(self, temp_dir):
         """Test that run calls _validate_inputs."""
         script = GenerateChampollionConfig()
@@ -166,6 +175,7 @@ class TestRunMethod:
             script.run()
             mock_validate.assert_called_once()
 
+    @pytest.mark.usefixtures("stubbed_reference_copy")
     def test_run_creates_dataset_directory(self, temp_dir):
         """Test that run creates dataset directory if it doesn't exist."""
         script = GenerateChampollionConfig()
@@ -185,22 +195,24 @@ class TestRunMethod:
             assert len(mkdir_calls) > 0
 
     def test_run_copies_reference_yaml(self, temp_dir):
-        """Test that run always copies reference.yaml."""
+        """Test that run always copies reference.yaml, by Python: `cp` keeps a read-only mode."""
+        crops = Path(temp_dir) / "crops"
+        crops.mkdir()
+        configs_root = Path(temp_dir) / "configs"
         script = GenerateChampollionConfig()
-        script.parse_args([temp_dir, "--dataset", "test_dataset"])
+        script.parse_args([str(crops), "--dataset", "test_dataset", "--output", str(configs_root)])
 
         with (
-            patch("champollion_pipeline.generate_champollion_config.exists", return_value=True),
-            patch.object(script, "execute_command", return_value=0) as mock_exec,
+            patch.object(script, "execute_command", side_effect=fake_execute_command) as mock_exec,
             patch.object(script, "_write_localization_yaml"),
-            patch("champollion_pipeline.generate_champollion_config.find_dataset_folder", return_value="/parent"),
-            patch("builtins.open", mock_open(read_data="data: TESTXX")),
+            patch("champollion_pipeline.generate_champollion_config.find_dataset_folder", return_value=temp_dir),
         ):
             script.run()
 
-            cp_calls = [c for c in mock_exec.call_args_list if "cp" in str(c)]
-            assert len(cp_calls) > 0
+        assert [call.args[0] for call in mock_exec.call_args_list if call.args[0][0] == "cp"] == []
+        assert (configs_root / "dataset" / "test_dataset" / "reference.yaml").is_file()
 
+    @pytest.mark.usefixtures("stubbed_reference_copy")
     def test_run_updates_reference_yaml(self, temp_dir):
         """Test that run updates TESTXX in reference.yaml."""
         script = GenerateChampollionConfig()
@@ -227,6 +239,7 @@ class TestRunMethod:
                     assert "canonical_25" in written_content
                     assert "TESTXX" not in written_content
 
+    @pytest.mark.usefixtures("stubbed_reference_copy")
     def test_run_calls_write_localization_yaml(self, temp_dir):
         """Test that run calls _write_localization_yaml once."""
         script = GenerateChampollionConfig()
@@ -242,6 +255,7 @@ class TestRunMethod:
             script.run()
             mock_write.assert_called_once()
 
+    @pytest.mark.usefixtures("stubbed_reference_copy")
     def test_run_passes_localization_name_to_yaml_path(self, temp_dir):
         """Test that the localization name drives which YAML file is written."""
         script = GenerateChampollionConfig()
@@ -258,6 +272,7 @@ class TestRunMethod:
             dest_path = mock_write.call_args[0][0]
             assert "jean-zay.yaml" in dest_path
 
+    @pytest.mark.usefixtures("stubbed_reference_copy")
     def test_run_returns_zero(self, temp_dir):
         """Test that run returns 0 on success."""
         script = GenerateChampollionConfig()
@@ -300,6 +315,7 @@ class TestMainFunction:
 class TestGenerateChampollionConfigIntegration:
     """Integration tests for GenerateChampollionConfig."""
 
+    @pytest.mark.usefixtures("stubbed_reference_copy")
     def test_full_workflow(self, temp_dir):
         """Test complete workflow."""
         script = GenerateChampollionConfig()
