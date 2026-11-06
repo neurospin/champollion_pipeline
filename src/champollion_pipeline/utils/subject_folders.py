@@ -22,8 +22,11 @@ def has_t1mri_folder(folder: str | os.PathLike) -> bool:
 
 
 def is_non_subject(path: str | os.PathLike) -> bool:
-    """Tell whether the folder at path is a dot-folder or a qc folder that holds no t1mri folder."""
-    name = os.path.basename(os.fspath(path))
+    """Tell whether the folder at path is a dot-folder or a qc folder that holds no t1mri folder.
+
+    A trailing separator changes nothing: the path is normalised before its last component is taken.
+    """
+    name = os.path.basename(os.path.normpath(os.fspath(path)))
     return name.startswith(".") or (name == QC_FOLDER and not has_t1mri_folder(path))
 
 
