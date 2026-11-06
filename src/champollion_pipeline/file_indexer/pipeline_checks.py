@@ -21,6 +21,8 @@ from os.path import join, splitext
 import champollion_utils.logger  # noqa: F401 - installs the OUTPUT level helpers
 from champollion_utils.logger import OUTPUT
 
+from champollion_pipeline.utils.subject_folders import list_morphologist_subjects
+
 from .btree import BTree
 from .scan_id import ScanId
 
@@ -108,12 +110,15 @@ class SubjectEligibilityChecker:
         self._warned_subjects: set[str] = set()
 
     def list_scans(self) -> list[ScanId]:
-        """Return the scans found under ``subjects_dir``, sorted."""
+        """Return the scans of the subject folders under ``subjects_dir``, sorted.
+
+        The subjects come from ``list_morphologist_subjects``; an OSError from listing them reaches the caller.
+        """
         if not os.path.isdir(self.subjects_dir):
             logger.warning("Subjects directory not found or not a directory: %s", self.subjects_dir)
             return []
         scans: list[ScanId] = []
-        for subject in self._visible_dirs(self.subjects_dir):
+        for subject in list_morphologist_subjects(self.subjects_dir):
             if self.bids and not subject.startswith(BIDS_SUBJECT_PREFIX):
                 continue
             acquisitions = self._acquisitions(subject)
