@@ -8,6 +8,7 @@ import os.path as osp
 import champollion_utils.logger  # noqa: F401 - installs Logger.trace/output/fail (LOG 22, OUTPUT 25, FAIL 45)
 
 from champollion_pipeline.snapshot_types import brainvisa_imports
+from champollion_pipeline.utils.subject_folders import list_morphologist_subjects
 
 logger = logging.getLogger(__name__)
 
@@ -183,10 +184,10 @@ def _detect_hemi(graph_path):
 
 
 def list_sulcal_subjects(morphologist_dir, subject=None):
-    """Return ``[subject]`` when given, else the sorted subdirectory names of ``morphologist_dir``."""
+    """Return ``[subject]`` when given, else the names ``list_morphologist_subjects`` gives for ``morphologist_dir``."""
     if subject:
         return [subject]
-    return sorted(name for name in os.listdir(morphologist_dir) if osp.isdir(osp.join(morphologist_dir, name)))
+    return list_morphologist_subjects(morphologist_dir)
 
 
 def find_sulcal_graphs_by_hemi(morphologist_dir, subject, acquisition=None):
