@@ -404,7 +404,7 @@ class GenerateEmbeddings(ScriptBuilder):
             base = base[:-6]
 
         if exists(crops_2mm_dir):
-            for dname in os.listdir(crops_2mm_dir):
+            for dname in sorted(os.listdir(crops_2mm_dir)):
                 if os.path.isdir(join(crops_2mm_dir, dname)) and dname.replace(".", "") == base:
                     return dname
         return base
