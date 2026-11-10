@@ -236,6 +236,22 @@ class TestRun:
         assert f"TEST01/derivatives/{DERIVATIVES_FOLDER}/crops/canonical_25/2mm" in ref
         assert "TESTXX/crops/2mm" not in ref
 
+    def test_reference_yaml_has_no_distbottom_or_extremity_keys(self, crop_tree, temp_dir):
+        out = Path(temp_dir) / "configs"
+        self._run([str(crop_tree), "--dataset", "TEST01", "--output", str(out)])
+        ref = (out / "dataset" / "TEST01" / "reference.yaml").read_text()
+        keys = {line.split(":", 1)[0] for line in ref.splitlines() if ":" in line and not line.startswith(("#", " "))}
+        banned = {
+            "distbottom_dir",
+            "distbottom_all",
+            "subjects_distbottom_all",
+            "extremity_dir",
+            "extremity_all",
+            "subjects_extremity_all",
+        }
+        assert keys.isdisjoint(banned)
+        assert {"dataset_name", "numpy_all", "subjects_all", "foldlabel_all", "crop_file_suffix"} <= keys
+
     def test_masks_version_override_is_used(self, crop_tree, temp_dir):
         out = Path(temp_dir) / "configs"
         self._run(
