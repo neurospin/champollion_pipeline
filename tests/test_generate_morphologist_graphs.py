@@ -3,6 +3,7 @@
 Unit tests for generate_morphologist_graphs.py
 """
 
+import csv
 import gzip
 import logging
 import math
@@ -379,7 +380,7 @@ class TestCommandFlags:
 
 
 class TestBidsFormat:
-    """REQ-BIDS-03: --bids selects the morphologist-cli --if/--of formats."""
+    """REQ-BIDS-BDRABCZUK-579916807967: the morphologist-cli --if/--of formats, with and without --bids."""
 
     @staticmethod
     def _run_and_get_cmd(temp_dir, extra_args):
@@ -398,11 +399,11 @@ class TestBidsFormat:
         return mock_exec.call_args[0][0]
 
     def test_bids_flag_sets_bids_input_and_output_formats(self, temp_dir):
-        """With --bids, both --if and --of are morphologist-bids-2.0."""
+        """With --bids, both --if and --of are morphologist-auto-nonoverlap-1.0: morphologist-bids-2.0 has no t1mri."""
         cmd = self._run_and_get_cmd(temp_dir, ["--bids"])
-        assert cmd[cmd.index("--if") + 1] == "morphologist-bids-2.0"
-        assert cmd[cmd.index("--of") + 1] == "morphologist-bids-2.0"
-        assert "morphologist-auto-nonoverlap-1.0" not in cmd
+        assert cmd[cmd.index("--if") + 1] == "morphologist-auto-nonoverlap-1.0"
+        assert cmd[cmd.index("--of") + 1] == "morphologist-auto-nonoverlap-1.0"
+        assert "morphologist-bids-2.0" not in cmd
 
     def test_no_bids_flag_keeps_nonoverlap_formats(self, temp_dir):
         """Regression guard: without --bids, both --if and --of stay morphologist-auto-nonoverlap-1.0."""
@@ -474,6 +475,18 @@ def _qc_by_id(output_dir):
     return {r["participant_id"]: (r["qc"], r["reason"]) for r in read_qc_tsv(_input_qc_path(output_dir))}
 
 
+def _qc_by_scan(output_dir):
+    """Read a --bids input QC file back as {(participant_id, acquisition): (qc, reason)}.
+
+    Not read_qc_tsv: one participant may hold several rows, one per scan.
+    """
+    with _input_qc_path(output_dir).open(encoding="utf-8", newline="") as handle:
+        rows = list(csv.DictReader(handle, delimiter="\t"))
+    by_scan = {(row["participant_id"], row.get("acquisition")): (int(row["qc"]), row["reason"]) for row in rows}
+    assert len(by_scan) == len(rows), "two rows of one scan"
+    return by_scan
+
+
 @pytest.fixture
 def qc_dirs(tmp_path):
     """Return (input_dir, output_dir), both existing."""
@@ -502,7 +515,7 @@ class TestInputQcFile:
     """The input QC file, one row per participant_id."""
 
     def test_one_row_per_participant_id(self, qc_dirs):
-        """REQ-NTUI-BDRABCZUK-A474A941FE23, REQ-NTUI-BDRABCZUK-ED91DC3E1027: without --bids, name minus extension."""
+        """REQ-NTUI-BDRABCZUK-3E8C38AF995E, REQ-NTUI-BDRABCZUK-ED91DC3E1027: without --bids, name minus extension."""
         input_dir, output_dir = qc_dirs
         _write_nifti(input_dir / "sub-a.nii.gz")
         _write_nifti(input_dir / "sub-b.nii")
@@ -524,9 +537,9 @@ class TestInputQcFile:
         assert _qc_by_id(output_dir) == {"sub-a": (1, ""), "sub-b": (1, "")}
 
     def test_bids_participant_id_is_subject_entity(self, qc_dirs):
-        """REQ-NTUI-BDRABCZUK-5F5D65A6F044: with --bids, sub-<label>, plus _ses-<session> when that entity follows.
+        """REQ-NTUI-BDRABCZUK-4D7E056586B4: with --bids, sub-<label> alone.
 
-        Two sessions of one subject are two participant_ids, both kept.
+        Two sessions of one subject: one participant_id, two rows, both kept (REQ-INPUTKIND-BDRABCZUK-541C32F20DBD).
         """
         input_dir, output_dir = qc_dirs
         _write_nifti(input_dir / "sub-01_ses-1_T1w.nii.gz")
@@ -535,12 +548,12 @@ class TestInputQcFile:
         _write_nifti(input_dir / "sub-7.nii.gz")
         _write_nifti(input_dir / "sub-8_ses-pre.nii")
         _run_stage(input_dir, output_dir, extra_args=["--bids"])
-        assert _qc_by_id(output_dir) == {
-            "sub-01_ses-1": (1, ""),
-            "sub-01_ses-2": (1, ""),
-            "sub-ABC12": (1, ""),
-            "sub-7": (1, ""),
-            "sub-8_ses-pre": (1, ""),
+        assert _qc_by_scan(output_dir) == {
+            ("sub-01", "ses-1"): (1, ""),
+            ("sub-01", "ses-2"): (1, ""),
+            ("sub-ABC12", "acq-mprage"): (1, ""),
+            ("sub-7", "default_acquisition"): (1, ""),
+            ("sub-8", "ses-pre"): (1, ""),
         }
 
 
@@ -629,13 +642,20 @@ class TestInputQcReasons:
         assert _qc_by_id(output_dir) == {"good": (1, ""), "twice": (0, "duplicate_subject")}
 
     def test_bids_duplicate_subject(self, qc_dirs):
-        """REQ-NTUI-BDRABCZUK-6B48AF1E3A51 with REQ-NTUI-BDRABCZUK-5F5D65A6F044: two runs of one sub+ses."""
+        """REQ-INPUTKIND-BDRABCZUK-185D602AA38D: one scan folder twice is a duplicate, two runs of a session are not."""
         input_dir, output_dir = qc_dirs
-        _write_nifti(input_dir / "sub-01_ses-1_T1w.nii.gz")
+        (input_dir / "a").mkdir()
+        (input_dir / "b").mkdir()
+        _write_nifti(input_dir / "a" / "sub-01_ses-1_T1w.nii.gz")
+        _write_nifti(input_dir / "b" / "sub-01_ses-1_T1w.nii.gz")
         _write_nifti(input_dir / "sub-02_ses-1_run-1_T1w.nii.gz")
         _write_nifti(input_dir / "sub-02_ses-1_run-2_T1w.nii.gz")
         _run_stage(input_dir, output_dir, extra_args=["--bids"])
-        assert _qc_by_id(output_dir) == {"sub-01_ses-1": (1, ""), "sub-02_ses-1": (0, "duplicate_subject")}
+        assert _qc_by_scan(output_dir) == {
+            ("sub-01", "ses-1"): (0, "duplicate_subject"),
+            ("sub-02", "ses-1_run-1"): (1, ""),
+            ("sub-02", "ses-1_run-2"): (1, ""),
+        }
 
     def test_no_bids_subject(self, qc_dirs):
         """REQ-NTUI-BDRABCZUK-5B97BBC29725: with --bids, a name not starting with sub-<label> then _ or ."""
@@ -659,7 +679,7 @@ class TestInputQcGating:
     """What the stage does with the QC verdicts (user decision 2026-11-04: fail only if nothing usable)."""
 
     def test_only_qc1_files_in_command(self, qc_dirs):
-        """REQ-NTUI-BDRABCZUK-31C5B86C78D0."""
+        """REQ-NTUI-BDRABCZUK-7752385F171B."""
         input_dir, output_dir = qc_dirs
         _write_nifti(input_dir / "good1.nii.gz")
         _write_nifti(input_dir / "good2.nii")
@@ -691,7 +711,7 @@ class TestInputQcGating:
         assert result == 1
 
     def test_bids_command_passes_qc1_file_names(self, qc_dirs):
-        """REQ-NTUI-BDRABCZUK-31C5B86C78D0 under --bids: qc 1 file names only; a no_bids_subject file is left out."""
+        """REQ-NTUI-BDRABCZUK-7752385F171B under --bids: qc 1 file names only; a no_bids_subject file is left out."""
         input_dir, output_dir = qc_dirs
         _write_nifti(input_dir / "sub-01_ses-1_T1w.nii.gz")
         _write_nifti(input_dir / "sub-01_ses-2_T1w.nii.gz")

@@ -4,9 +4,8 @@ Regression tests for the morphologist-cli command built by
 generate_morphologist_graphs.py (REQ-MORPHO-01).
 
 Guards the explicit `--if morphologist-auto-nonoverlap-1.0` input-format
-flag: without it, morphologist-cli auto-detects BIDS when input filenames
-carry BIDS entities (_acq-, _run-, ...) and silently overrides the input
-format to morphologist-bids-2.0.
+flag: without it, morphologist-cli falls back to its own default input
+format, morphologist-bids-2.0, whatever the input filenames.
 
 Uses AST source-parsing instead of runtime import to avoid the
 champollion_utils dependency in the test environment.
@@ -23,6 +22,25 @@ PROJECT_ROOT = Path(__file__).resolve().parents[1]
 SOURCE_FILE = PROJECT_ROOT / "src" / "champollion_pipeline" / "generate_morphologist_graphs.py"
 
 FORMAT = "morphologist-auto-nonoverlap-1.0"
+BIDS_FORMAT = "morphologist-bids-2.0"
+
+
+def _run_methods() -> list[ast.FunctionDef]:
+    """Return each `run` method of a class of generate_morphologist_graphs.py."""
+    tree = ast.parse(SOURCE_FILE.read_text(encoding="utf-8"))
+    return [
+        item
+        for node in ast.walk(tree)
+        if isinstance(node, ast.ClassDef)
+        for item in node.body
+        if isinstance(item, ast.FunctionDef) and item.name == "run"
+    ]
+
+
+def _default_text(value: ast.expr) -> str | None:
+    """Return the text of a string constant, or of the `orelse` branch of `A if cond else "text"`, else None."""
+    branch = value.orelse if isinstance(value, ast.IfExp) else value
+    return branch.value if isinstance(branch, ast.Constant) and isinstance(branch.value, str) else None
 
 
 def _parse_cmd_literal() -> list[str]:
@@ -30,48 +48,25 @@ def _parse_cmd_literal() -> list[str]:
 
     Walks the AST of generate_morphologist_graphs.py, finds the assignment
     ``cmd = [...]`` inside the ``run`` method body, and extracts the constant
-    string nodes. A `Name` element referencing a same-scope `x = A if cond
-    else B` assignment (e.g. `io_format`, REQ-BIDS-03's --bids branch) is
-    resolved to its default (`orelse`) branch's constant, i.e. the no-flag
-    case this regression guard cares about. Other non-string nodes (e.g.
-    starred unpacks, f-strings) are skipped.
+    string nodes. A `Name` element referencing a same-scope string constant,
+    or the `orelse` branch of a same-scope `x = A if cond else B`, is resolved
+    to that text. Other non-string nodes (e.g. starred unpacks, f-strings) are
+    skipped.
     """
-    source = SOURCE_FILE.read_text(encoding="utf-8")
-    tree = ast.parse(source)
-
-    for node in ast.walk(tree):
-        if not isinstance(node, ast.ClassDef):
-            continue
-        for item in node.body:
-            if not (isinstance(item, ast.FunctionDef) and item.name == "run"):
+    for run in _run_methods():
+        assignments = [stmt for stmt in run.body if isinstance(stmt, ast.Assign) and len(stmt.targets) == 1]
+        named = [stmt for stmt in assignments if isinstance(stmt.targets[0], ast.Name)]
+        texts = {stmt.targets[0].id: _default_text(stmt.value) for stmt in named}
+        for stmt in named:
+            if stmt.targets[0].id != "cmd" or not isinstance(stmt.value, ast.List):
                 continue
-            name_defaults: dict[str, str] = {}
-            for stmt in item.body:
-                if (
-                    isinstance(stmt, ast.Assign)
-                    and len(stmt.targets) == 1
-                    and isinstance(stmt.targets[0], ast.Name)
-                    and isinstance(stmt.value, ast.IfExp)
-                    and isinstance(stmt.value.orelse, ast.Constant)
-                    and isinstance(stmt.value.orelse.value, str)
-                ):
-                    name_defaults[stmt.targets[0].id] = stmt.value.orelse.value
-
-            for stmt in item.body:
-                if not isinstance(stmt, ast.Assign):
-                    continue
-                targets = stmt.targets
-                if not (len(targets) == 1 and isinstance(targets[0], ast.Name) and targets[0].id == "cmd"):
-                    continue
-                if not isinstance(stmt.value, ast.List):
-                    continue
-                result = []
-                for elt in stmt.value.elts:
-                    if isinstance(elt, ast.Constant) and isinstance(elt.value, str):
-                        result.append(elt.value)
-                    elif isinstance(elt, ast.Name) and elt.id in name_defaults:
-                        result.append(name_defaults[elt.id])
-                return result
+            result = []
+            for elt in stmt.value.elts:
+                if isinstance(elt, ast.Constant) and isinstance(elt.value, str):
+                    result.append(elt.value)
+                elif isinstance(elt, ast.Name) and texts.get(elt.id):
+                    result.append(texts[elt.id])
+            return result
     return []
 
 
@@ -90,11 +85,13 @@ class TestMorphologistInputFormatFlag:
         assert cmd.index("--if") < cmd.index("--of")
 
     def test_both_format_flags_use_auto_nonoverlap(self):
-        """--if and --of are both set to morphologist-auto-nonoverlap-1.0."""
+        """REQ-BIDS-BDRABCZUK-579916807967: --if and --of are this format, and run() names no other, --bids included."""
         cmd = _parse_cmd_literal()
         assert "--if" in cmd and "--of" in cmd
         assert cmd[cmd.index("--if") + 1] == FORMAT
         assert cmd[cmd.index("--of") + 1] == FORMAT
+        constants = [node.value for run in _run_methods() for node in ast.walk(run) if isinstance(node, ast.Constant)]
+        assert BIDS_FORMAT not in constants
 
     def test_input_format_flag_follows_double_dash_separator(self):
         """--if sits after --, marking it a morphologist param, not a CLI flag."""

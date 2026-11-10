@@ -8,6 +8,8 @@ qc, reason.
 Every NTUI QC step writes its report through write_qc_tsv and reads one back
 through read_qc_tsv. The file stays readable by cortical_tiles --sk_qc_path
 and prune_failed_subjects --qc. Standard library only: no toolchain import.
+A per-subject file whose rows carry an acquisition column (stage 1 --bids, one
+row per scan) may hold one participant_id several times; read_qc_tsv refuses it.
 """
 
 import csv
@@ -22,6 +24,7 @@ ID_COLUMN = "participant_id"
 QC_COLUMN = "qc"
 REASON_COLUMN = "reason"
 CHECK_COLUMN = "check"
+ACQUISITION_COLUMN = "acquisition"  # stage 1 --bids extra column: one row per scan
 REASON_SEPARATOR = ";"
 REASON_MISSING_CROP = "missing_crop"
 REASON_SKIPPED = "skipped"
@@ -70,15 +73,21 @@ def _check_extra_columns(extra_columns: Sequence[str]) -> None:
         seen.add(name)
 
 
-def _row_cells(index: int, row: Mapping[str, object], seen_ids: set[str]) -> dict[str, object]:
-    """Validate row ``index`` and return it with participant_id and qc as written text."""
+def _row_cells(
+    index: int, row: Mapping[str, object], seen_keys: set[tuple[str, ...]], key_columns: Sequence[str]
+) -> dict[str, object]:
+    """Validate row ``index`` and return it with participant_id and qc as written text.
+
+    A row repeats an earlier one when its participant_id and its ``key_columns`` cells, as written, are equal.
+    """
     subject = row.get(ID_COLUMN)
     if subject is None or str(subject) == "":
         raise ValueError(f"row {index}: missing participant_id")
     subject = str(subject)
-    if subject in seen_ids:
+    key = (subject, *(_cell(row.get(name)) for name in key_columns))
+    if key in seen_keys:
         raise ValueError(f"row {index} ({subject}): participant_id repeats an earlier row")
-    seen_ids.add(subject)
+    seen_keys.add(key)
     if QC_COLUMN not in row:
         raise ValueError(f"row {index} ({subject}): missing qc")
     qc = _qc_value(row[QC_COLUMN])
@@ -96,12 +105,14 @@ def write_qc_tsv(
 
     Every row is validated before the file system is touched; an invalid row
     raises ValueError naming its index and participant_id, and leaves any
-    existing file at ``path`` unchanged.
+    existing file at ``path`` unchanged. A participant_id may repeat only when ACQUISITION_COLUMN is an extra
+    column and the acquisition cells differ (one row per scan).
     """
     extra_columns = tuple(extra_columns)
     _check_extra_columns(extra_columns)
-    seen_ids: set[str] = set()
-    checked = [_row_cells(i, row, seen_ids) for i, row in enumerate(rows)]
+    key_columns = (ACQUISITION_COLUMN,) if ACQUISITION_COLUMN in extra_columns else ()
+    seen_keys: set[tuple[str, ...]] = set()
+    checked = [_row_cells(i, row, seen_keys, key_columns) for i, row in enumerate(rows)]
 
     header = [ID_COLUMN, QC_COLUMN, *extra_columns, REASON_COLUMN]
     _write_atomic(
