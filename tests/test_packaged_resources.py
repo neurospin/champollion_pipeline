@@ -47,10 +47,11 @@ RESOURCES_DIR = PACKAGE_DIR / "resources"
 REGION_TABLE = "sulci_regions_champollion_V1.json"
 REFERENCE_YAML = "reference.yaml"
 TEMPLATE = "pipeline_loop_2mm.json"
-# SHA-256 of each repository-root file at commit d35966d, the last commit before the move.
+# SHA-256 of each packaged resource: the repository-root file at commit d35966d, the last commit before the move,
+# except reference.yaml, whose six distbottom and extremity keys were then dropped (epic NODISTB).
 RESOURCE_DIGESTS = {
     REGION_TABLE: "82585e8e531a1e11c9ee6a480444d1689444100686e8dfaf602487fafabf8500",
-    REFERENCE_YAML: "13afb301ec3945bebdb1e823e275a0788406307315593d75a84bc32662fdb372",
+    REFERENCE_YAML: "a22fee84bcbd6e5adf08ae2c40c0580132c9302833eb92c26f1dfced8c1733ec",
     TEMPLATE: "8cae3fab6a62e21abd0db13baed5920c85a8f52f64ae180ed1df6c55c33a20c1",
 }
 DATASET = "TEST01"
