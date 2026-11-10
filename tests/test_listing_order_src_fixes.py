@@ -13,7 +13,7 @@ glob and pathlib, and stay valid whichever listing call the code uses.
 import contextlib
 import glob
 import os
-from collections.abc import Callable, Iterator
+from collections.abc import Iterator
 from pathlib import Path
 from unittest.mock import MagicMock, patch
 
@@ -21,26 +21,13 @@ import pytest
 
 from champollion_pipeline import generate_masks as gm
 from champollion_pipeline.models.checkpoint import find_epoch_checkpoint, find_region_model_dirs, weights_source
+from tests.listing_order_helpers import Order
+from tests.listing_order_helpers import ascending as _ascending
+from tests.listing_order_helpers import descending as _descending
+from tests.listing_order_helpers import rotated as _rotated
 
 EPOCH = 80
 VOXEL_SIZES = (2.0, 2.0, 2.0)
-
-Order = Callable[[list[str]], list[str]]
-
-
-def _ascending(names: list[str]) -> list[str]:
-    return sorted(names)
-
-
-def _descending(names: list[str]) -> list[str]:
-    return sorted(names, reverse=True)
-
-
-def _rotated(names: list[str]) -> list[str]:
-    """Sorted names with the first one moved to the end: neither ascending nor descending."""
-    ordered = sorted(names)
-    return ordered[1:] + ordered[:1]
-
 
 unsorted_orders = pytest.mark.parametrize("order", [_descending, _rotated], ids=["descending", "rotated"])
 every_order = pytest.mark.parametrize(

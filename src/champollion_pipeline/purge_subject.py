@@ -82,16 +82,16 @@ class PurgeSubject(ScriptBuilder):
         """Return the per-subject .nii.gz files inside Rcrops/, Rlabels/, etc."""
         subject = self.args.subject
         files = []
-        for region_dir in Path(crops_2mm).iterdir():
+        for region_dir in sorted(Path(crops_2mm).iterdir()):
             if not region_dir.is_dir():
                 continue
             mask_dir = region_dir / "mask"
             if not mask_dir.exists():
                 continue
-            for subdir in mask_dir.iterdir():
+            for subdir in sorted(mask_dir.iterdir()):
                 if not subdir.is_dir():
                     continue
-                for f in subdir.iterdir():
+                for f in sorted(subdir.iterdir()):
                     stem = f.name
                     for ext in (".nii.gz", ".nii", ".gz", ".minf"):
                         if stem.endswith(ext):
@@ -113,7 +113,7 @@ class PurgeSubject(ScriptBuilder):
 
     def _array_csvs(self, crops_2mm):
         """Yield (region dir, subject CSV, paired .npy) for every aggregated array with a subject CSV."""
-        for region_dir in Path(crops_2mm).iterdir():
+        for region_dir in sorted(Path(crops_2mm).iterdir()):
             if not region_dir.is_dir():
                 continue
             for mask_dir in [region_dir / "mask", region_dir]:

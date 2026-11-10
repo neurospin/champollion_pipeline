@@ -11,6 +11,7 @@ Warnings (WARNING):
 REQ-LOGGING-BDRABCZUK-0D249EB46387: CKA command with a non-zero exit code -> pair label and exit code.
 REQ-LOGGING-BDRABCZUK-64FBF9C84148: nested-mode region without embeddings file -> region and file path.
 REQ-LOGGING-BDRABCZUK-852F8E7D2E2F: flat-mode CSV files without match in --path_b -> their count.
+REQ-READORDER-BDRABCZUK-B12E4B654CC3: CSV dropped by a model-ID tie -> dropped and kept file paths.
 Results (OUTPUT):
 REQ-LOGGING-BDRABCZUK-7956F44CCAE1: directory-mode completion -> processed and total counts, --output_dir.
 Static:
@@ -153,6 +154,41 @@ class TestWarnings:
         unmatched = [m for m in _messages(cka_caplog, logging.WARNING) if re.search(r"\b2\b", m)]
         captured = [(record.levelname, record.getMessage()) for record in cka_caplog.records]
         assert len(unmatched) == 1, f"expected one WARNING record with the unmatched count 2; captured: {captured}"
+
+
+TIE_MODEL_ID = "name07-58-00--111"
+
+
+class TestModelIdTieWarning:
+    """REQ-READORDER-BDRABCZUK-B12E4B654CC3: one WARNING per CSV dropped by a model-ID tie (call site C8).
+
+    No basename is shared between the two directories, so the flat-mode model-ID fallback runs. The
+    WARNING is emitted before the --region filter, so it is the same with and without --region.
+    """
+
+    @pytest.mark.parametrize("region", [None, "SC_left"], ids=["no_region", "region"])
+    @pytest.mark.parametrize("tied_side", ["a", "b"])
+    def test_tie_logs_one_warning_per_dropped_csv(self, cka_caplog, tmp_path, tied_side, region):
+        single_side = "b" if tied_side == "a" else "a"
+        # Three CSVs of one directory share the model ID: the sorted-first is kept, the other two are dropped.
+        tied = [
+            _touch(tmp_path / tied_side / f"SC_left_{stem}_{TIE_MODEL_ID}_embeddings.csv")
+            for stem in ("run1", "run2", "run3")
+        ]
+        _touch(tmp_path / single_side / f"SC_left_single_{TIE_MODEL_ID}_embeddings.csv")
+        argv = ["--path_a", str(tmp_path / "a"), "--path_b", str(tmp_path / "b"), "--output_dir", str(tmp_path / "o")]
+        if region:
+            argv += ["--region", region]
+        script = _make_script(argv)
+
+        assert script.run() == 0
+
+        kept, dropped = str(tied[0]), [str(path) for path in tied[1:]]
+        tie_warnings = [m for m in _messages(cka_caplog, logging.WARNING) if TIE_MODEL_ID in m]
+        captured = [(record.levelname, record.getMessage()) for record in cka_caplog.records]
+        assert len(tie_warnings) == len(dropped), f"expected one tie WARNING per dropped CSV; captured: {captured}"
+        for path in dropped:
+            _assert_one(cka_caplog, logging.WARNING, kept, path)
 
 
 # --------------------------------------------------------------------------- #

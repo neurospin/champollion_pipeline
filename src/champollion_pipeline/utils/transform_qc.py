@@ -24,8 +24,8 @@ def transform_qc_rows(transforms_dir: str) -> list[dict[str, object]]:
             continue
         prefix = side + TRANSFORM_STEM
         groups: dict[bytes, list[str]] = {}
-        with os.scandir(side_dir) as entries:
-            for entry in entries:
+        with os.scandir(side_dir) as listing:
+            for entry in sorted(listing, key=lambda item: item.name):
                 name = entry.name
                 if not (entry.is_file() and name.startswith(prefix) and name.endswith(".trm")):
                     continue
