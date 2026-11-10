@@ -199,7 +199,7 @@ class GenerateChampollionConfig(ScriptBuilder):
         .npy is preferred: its axis order matches what the DataLoader receives at
         runtime. .minf uses anatomical conventions that may differ (e.g. X/Y swapped).
         """
-        for suffix in (f"{side}skeleton.npy", f"{side}label.npy", f"{side}distbottom.npy"):
+        for suffix in (f"{side}skeleton.npy", f"{side}label.npy"):
             npy_path = join(crop_dir, "mask", suffix)
             if exists(npy_path):
                 shape = np.load(npy_path, mmap_mode="r").shape
