@@ -140,7 +140,7 @@ class RunCKA(ScriptBuilder):
         subdirs_a = [d for d in os.listdir(path_a) if isdir(join(path_a, d))]
         # Enter nested mode only when path_a has subdirs but no direct CSVs.
         # A lone models_cache subdir alongside CSVs should not trigger nested mode.
-        csvs_a_list = glob(join(path_a, "*.csv"))
+        csvs_a_list = sorted(glob(join(path_a, "*.csv")))
 
         if subdirs_a and not csvs_a_list:
             # --- Nested mode: path/{region}/{subpath} ---
@@ -163,7 +163,7 @@ class RunCKA(ScriptBuilder):
                 pairs.append((region, file_a, file_b))
         else:
             # --- Flat mode: CSVs directly in each directory ---
-            csvs_b_list = glob(join(path_b, "*.csv"))
+            csvs_b_list = sorted(glob(join(path_b, "*.csv")))
             csvs_a = {basename(p): p for p in csvs_a_list}
             csvs_b = {basename(p): p for p in csvs_b_list}
             common = sorted(set(csvs_a) & set(csvs_b))
@@ -187,8 +187,23 @@ class RunCKA(ScriptBuilder):
                     m = _mid_re.search(basename(path))
                     return m.group(0) if m else None
 
-                id_to_a = {_mid(p): p for p in csvs_a_list if _mid(p)}
-                id_to_b = {_mid(p): p for p in csvs_b_list if _mid(p)}
+                def _first_per_model_id(paths):
+                    """First of paths per model ID: on sorted paths, a tie keeps the sorted-first CSV."""
+                    first = {}
+                    for path in paths:
+                        model_id = _mid(path)
+                        if not model_id:
+                            continue
+                        kept = first.setdefault(model_id, path)
+                        if kept != path:
+                            logger.warning(
+                                f"Model ID {model_id} is shared by {kept} and {path}: pairing {kept}, "
+                                "the first in sorted order"
+                            )
+                    return first
+
+                id_to_a = _first_per_model_id(csvs_a_list)
+                id_to_b = _first_per_model_id(csvs_b_list)
                 common_ids = sorted(set(id_to_a) & set(id_to_b))
                 if self.args.region:
                     common_ids = [

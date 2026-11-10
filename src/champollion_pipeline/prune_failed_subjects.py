@@ -241,8 +241,9 @@ class PruneFailedSubjects(ScriptBuilder):
     def _delete_subject_files(self, derivatives_dir: str, to_remove: set[str]) -> int:
         """Delete (or list under --dry-run) the in-scope files of to_remove; return their count (P3/P4)."""
         deleted = 0
-        for root, _dirs, files in os.walk(derivatives_dir):
-            for fname in files:
+        for root, dirs, files in os.walk(derivatives_dir):
+            dirs.sort()
+            for fname in sorted(files):
                 rel = PurePath(root, fname).relative_to(derivatives_dir)
                 if _in_masks_scope(rel, self.args.masks) and _file_belongs_to(rel, to_remove):
                     fpath = join(root, fname)
