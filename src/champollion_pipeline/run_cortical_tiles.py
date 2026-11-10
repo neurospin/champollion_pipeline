@@ -34,7 +34,13 @@ from os.path import abspath, dirname, exists, isdir, join
 import numpy as np
 from champollion_utils.script_builder import ScriptBuilder
 from cortical_tiles.brainvisa import add_left_and_right_volumes, remove_ventricle
-from cortical_tiles.brainvisa.utils.skip_list import SKIP_LIST_FILENAME, SKIP_SIDES, SkipEntry, load_skip_entries
+from cortical_tiles.brainvisa.utils.skip_list import (
+    SKIP_LIST_FILENAME,
+    SKIP_SIDES,
+    SkipEntry,
+    load_skip_entries,
+    session_key,
+)
 from joblib import cpu_count
 from soma import aims
 
@@ -138,14 +144,11 @@ def call_whole_brain_step(name: str, step: Callable[..., None], **kwargs: object
 def labelled_session_dir(morpho_dir: str, path_to_graph: str, subject: str, session: str, bids: bool) -> str:
     """Directory holding a subject's labelled graphs for one session.
 
-    Mirrors cortical_tiles' RemoveVentricleFromVolume.get_labelled_graph: with BIDS
-    names, the subject id splits into the subject folder and the keys that replace
-    ``*`` in path_to_graph.
+    ``path_to_graph`` is a resolved graph path (no ``*``); with BIDS names the
+    folder is the subject part of the id, as in cortical_tiles' get_labelled_graph.
     """
-    if bids:
-        parts = subject.split("_")
-        return join(morpho_dir, parts[0], path_to_graph.replace("*", "_".join(parts[1:])), session)
-    return join(morpho_dir, subject, path_to_graph, session)
+    folder = subject.partition("_")[0] if bids else subject
+    return join(morpho_dir, folder, path_to_graph, session)
 
 
 def resolve_labelling_session(
@@ -159,7 +162,7 @@ def resolve_labelling_session(
 
 
 def resolve_graph_paths(morpho_dir: str, path_to_graph: str, subject: str) -> list[str]:
-    """Folders under ``<morpho_dir>/<subject>`` that path_to_graph matches (non-BIDS).
+    """Folders under ``<morpho_dir>/<subject>`` that path_to_graph matches.
 
     ``*`` is the only wildcard (other glob characters are literal); each match is
     returned relative to the subject folder. A subject id that is not a plain
@@ -180,22 +183,30 @@ def resolve_graph_paths(morpho_dir: str, path_to_graph: str, subject: str) -> li
     return sorted(rels)
 
 
+def resolve_bids_graph_paths(morpho_dir: str, path_to_graph: str, volume_id: str) -> list[str]:
+    """Folders of resolve_graph_paths for the subject of a BIDS volume id whose session_key is that id.
+
+    The subject is the id text before the first ``_``; cortical_tiles' session_key reads each folder
+    path relative to the subject folder, so a root path holding ses/acq/run text does not count.
+    """
+    subject = volume_id.partition("_")[0]
+    rels = resolve_graph_paths(morpho_dir, path_to_graph, subject)
+    return [rel for rel in rels if session_key(subject, rel, True) == volume_id]
+
+
 def fetch_labelling_qc_row(
     morpho_dir: str, path_to_graph: str, subject: str, candidates: tuple[str, ...], bids: bool
 ) -> dict[str, str]:
     """labelling_qc.tsv row of a fused subject, at the graphs whole-brain ventricle removal reads.
 
-    With BIDS names the fused id splits into the subject folder and the keys that replace ``*``,
-    as in cortical_tiles' get_labelled_graph. Without them ``*`` must match exactly one folder;
-    none or several gives what generate_labelling_qc computes there, which never expands it.
+    ``*`` must match exactly one folder: with BIDS names, the one folder of the subject part of
+    the id whose session_key is the fused id. None or several gives qc 0 no_session_dir.
     """
-    if bids:
-        folder, _, keys = subject.partition("_")
-        row = fetch_subject_row(morpho_dir, folder, path_to_graph.replace(GRAPH_WILDCARD, keys), candidates, False)
-        return {**row, "participant_id": subject}
-    graph_paths = resolve_graph_paths(morpho_dir, path_to_graph, subject)
+    folder = subject.partition("_")[0] if bids else subject
+    resolve = resolve_bids_graph_paths if bids else resolve_graph_paths
+    graph_paths = resolve(morpho_dir, path_to_graph, subject)
     if len(graph_paths) == 1:
-        return fetch_subject_row(morpho_dir, subject, graph_paths[0], candidates, False)
+        return {**fetch_subject_row(morpho_dir, folder, graph_paths[0], candidates, False), "participant_id": subject}
     return {
         "participant_id": subject,
         "qc": "0",
@@ -936,10 +947,8 @@ class RunCorticalTiles(ScriptBuilder):
         groups: dict[tuple[str, str], list[str]] = {}
         excluded: dict[str, list[str]] = {}
         for subject in subjects:
-            if self.args.bids:
-                graph_paths = [self.args.path_to_graph]
-            else:
-                graph_paths = resolve_graph_paths(input_abs, self.args.path_to_graph, subject)
+            resolve = resolve_bids_graph_paths if self.args.bids else resolve_graph_paths
+            graph_paths = resolve(input_abs, self.args.path_to_graph, subject)
             if not graph_paths:
                 excluded.setdefault(EXCLUDED_NO_GRAPH_FOLDER, []).append(subject)
                 continue

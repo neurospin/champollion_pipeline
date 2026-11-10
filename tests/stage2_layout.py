@@ -49,6 +49,15 @@ def add_graphs(input_dir, subject=SUBJECT, graph_dir=GRAPH_DIR, sides="LR"):
         (folder / f"{side}{subject}.arg").touch()
 
 
+def add_labelled_sessions(input_dir, subject, graph_dir, sessions):
+    """Lay the labelled graphs of ``subject`` at <graph_dir>/<session>/<side><subject>_<session>.arg, per session."""
+    for session in sessions:
+        session_dir = Path(input_dir) / subject / graph_dir / session
+        session_dir.mkdir(parents=True)
+        for side in ("L", "R"):
+            (session_dir / f"{side}{subject}_{session}.arg").touch()
+
+
 def write_whole_brain_volumes(*args, **kwargs):
     """What the real remove_ventricle leaves on disk: an output volume per fused volume of its source directory."""
     bound = REMOVE_VENTRICLE_SIGNATURE.bind(*args, **kwargs)

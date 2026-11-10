@@ -182,7 +182,7 @@ def test_cli_receives_files_in_reader_order(dirs):
     [
         pytest.param(BIDS_T1, (), {"sub-01_ses-V1_T1w": (1, "")}, id="bids_tree_default_format"),
         pytest.param("s01/t1.nii", (), {"t1": (1, "")}, id="plain_folder"),
-        pytest.param(BIDS_T1, ("--bids",), {"sub-01_ses-V1": (1, "")}, id="bids_entities"),
+        pytest.param(BIDS_T1, ("--bids",), {"sub-01": (1, "")}, id="bids_entities"),
         pytest.param("sub-01/v1.2/sub-01_T1w.nii.gz", ("--bids",), {"sub-01": (1, "")}, id="folder_with_a_dot"),
         pytest.param("sub-01/anat/scan.nii.gz", ("--bids",), {"scan": (0, "no_bids_subject")}, id="no_bids_file_name"),
     ],
@@ -220,7 +220,7 @@ def test_same_file_name_in_two_folders_is_a_duplicate(dirs, relative_paths, extr
 
 
 def test_nested_file_with_qc_0_stays_out_of_cli(dirs):
-    """REQ-INPUTKIND-BDRABCZUK-D19B8B260EDB: the unreadable file drops, the readable one reaches morphologist-cli."""
+    """REQ-INPUTKIND-BDRABCZUK-BD6B9FD94909: the unreadable file drops, the readable one reaches morphologist-cli."""
     input_dir, output_dir = dirs
     readable = "sub-01/anat/sub-01_T1w.nii.gz"
     unreadable = "sub-02/anat/sub-02_T1w.nii.gz"
@@ -230,3 +230,20 @@ def test_nested_file_with_qc_0_stays_out_of_cli(dirs):
     assert _qc_by_id(output_dir)["sub-02_T1w"] == (0, "unreadable_header")
     mock_exec.assert_called_once()
     assert mock_exec.call_args.args[0][1:3] == [readable, str(output_dir)]
+
+
+def test_bids_nested_bad_session_leaves_good_session_in_cli(dirs):
+    """REQ-INPUTKIND-BDRABCZUK-BD6B9FD94909, REQ-NTUI-BDRABCZUK-7752385F171B: the qc of the file's own row counts.
+
+    sub-01 has a qc 0 row (its bad session), yet the good session of sub-01 still reaches morphologist-cli.
+    """
+    input_dir, output_dir = dirs
+    bad = "sub-01/ses-V1/anat/sub-01_ses-V1_T1w.nii.gz"
+    good = "sub-01/ses-V2/anat/sub-01_ses-V2_T1w.nii.gz"
+    _add_nifti(input_dir, bad, content=b"this is not a NIfTI image")
+    _add_nifti(input_dir, good)
+    _, mock_exec = _run_stage(input_dir, output_dir, extra_args=("--bids",))
+    mock_exec.assert_called_once()
+    command = mock_exec.call_args.args[0]
+    assert good in command
+    assert bad not in command

@@ -24,6 +24,7 @@ from tests.stage2_layout import (  # noqa: F401
     REMOVE_VENTRICLE_SIGNATURE,
     _stub_whole_brain_functions,  # noqa: V103 - autouse fixture
     add_graphs,
+    add_labelled_sessions,
     run_on_config,
     stage_dirs,
     write_whole_brain_volumes,
@@ -57,11 +58,7 @@ def _make_subject(input_dir, output_dir, subject, sessions):
     fused F resampled skeletons are written under the skeleton directory.
     """
     add_graphs(input_dir, subject, _GRAPH_SUBPATH)
-    for session in sessions:
-        session_dir = Path(input_dir) / subject / _GRAPH_SUBPATH / session
-        session_dir.mkdir(parents=True)
-        for side in ("L", "R"):
-            (session_dir / f"{side}{subject}_{session}.arg").touch()
+    add_labelled_sessions(input_dir, subject, _GRAPH_SUBPATH, sessions)
     _make_skeletons(output_dir, subject)
 
 
