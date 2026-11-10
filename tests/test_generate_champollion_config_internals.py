@@ -69,10 +69,17 @@ class TestGetCropSize:
         script = make_script([temp_dir, "--dataset", "TEST01"])
         assert script._get_crop_size(os.path.join(temp_dir, "S.Or."), "L") == (2, 3, 4)
 
-    def test_falls_back_to_distbottom_npy(self, temp_dir):
+    def test_distbottom_npy_alone_is_not_read_for_shape(self, temp_dir):
         make_crop(temp_dir, "S.Or.", shape=(1, 5, 5, 5), suffix="distbottom.npy")
         script = make_script([temp_dir, "--dataset", "TEST01"])
-        assert script._get_crop_size(os.path.join(temp_dir, "S.Or."), "L") == (5, 5, 5)
+        assert script._get_crop_size(os.path.join(temp_dir, "S.Or."), "L") is None
+
+    def test_distbottom_npy_is_skipped_for_the_minf(self, temp_dir):
+        make_crop(temp_dir, "S.Or.", shape=(1, 5, 5, 5), suffix="distbottom.npy")
+        mask_dir = Path(temp_dir) / "S.Or." / "mask"
+        (mask_dir / "Lmask_cropped.nii.gz.minf").write_text("attributes = {'sizeX': 21, 'sizeY': 22, 'sizeZ': 23}")
+        script = make_script([temp_dir, "--dataset", "TEST01"])
+        assert script._get_crop_size(os.path.join(temp_dir, "S.Or."), "L") == (21, 22, 23)
 
     def test_skeleton_npy_takes_precedence_over_label_npy(self, temp_dir):
         make_crop(temp_dir, "S.Or.", shape=(1, 1, 1, 1), suffix="skeleton.npy")
