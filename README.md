@@ -576,6 +576,7 @@ champollion_pipeline/
 │       ├── generate_morphologist_graphs.py
 │       ├── run_cortical_tiles.py
 │       ├── derivatives_layout.py
+│       ├── path_inference.py        # Infers the dataset root and Morphologist graph folder from the input path
 │       ├── generate_champollion_config.py
 │       ├── generate_embeddings.py
 │       ├── put_together_embeddings.py
