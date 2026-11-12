@@ -47,6 +47,7 @@ from champollion_pipeline.derivatives_layout import (
 from champollion_pipeline.file_indexer import SubjectEligibilityChecker
 from champollion_pipeline.process_setup import init_pipeline_process
 from champollion_pipeline.streaming import StreamingSettings
+from champollion_pipeline.utils.input_kind import stage1_subjects_dir
 from champollion_pipeline.utils.skeleton_qc import SKELETON_SIDES, compute_skeleton_pattern
 
 logger = logging.getLogger("champollion_pipeline.main")
@@ -88,17 +89,27 @@ class GenerateMorphologistGraphsStage(PipelineStage):
     failure_message = "Morphologist failed"
 
     def validate(self) -> bool:
-        """Validate that input data exists."""
-        input_path = Path(self.config.dataset.input_path)
+        """Validate the input data, the output root and the subjects folder override against what stage 1 writes."""
+        dataset = self.config.dataset
+        input_path = Path(dataset.input_path)
         if not input_path.exists():
             self.logger.error(f"Input path does not exist: {input_path}")
+            return False
+        if not dataset.datasets_root:
+            self.logger.error("dataset.datasets_root, the Morphologist output root, is empty")
+            return False
+        written = stage1_subjects_dir(dataset.datasets_root)
+        if dataset.morphologist_graphs and os.path.abspath(dataset.morphologist_graphs) != os.path.abspath(written):
+            self.logger.error(
+                f"dataset.morphologist_graphs {dataset.morphologist_graphs} is not where stage 1 writes: {written}"
+            )
             return False
         return True
 
     def build_args(self) -> list[str]:
         args = [
             str(self.config.dataset.input_path),
-            str(self.config.dataset.morphologist_graphs),
+            str(self.config.dataset.datasets_root),
         ]
         if self.config.dataset.bids:
             args.append("--bids")
@@ -120,16 +131,16 @@ class RunCorticalTilesStage(PipelineStage):
     failure_message = "Failed"
 
     def validate(self) -> bool:
-        """Validate that Morphologist graphs exist."""
-        graphs_path = Path(self.config.dataset.morphologist_graphs)
-        if not graphs_path.exists():
-            self.logger.error(f"Morphologist graphs path does not exist: {graphs_path}")
+        """Validate that the Morphologist subjects folder exists."""
+        subjects_dir = _compute_morphologist_subjects_dir(self.config.dataset)
+        if not subjects_dir or not os.path.isdir(subjects_dir):
+            self.logger.error(f"Morphologist subjects folder does not exist: {subjects_dir!r}")
             return False
         return True
 
     def build_args(self) -> list[str]:
         args = [
-            str(self.config.dataset.morphologist_graphs),
+            _compute_morphologist_subjects_dir(self.config.dataset),
             str(self.config.dataset.cortical_tiles_output),
             f"--path_to_graph={self.config.dataset.path_to_graph}",
             f"--path_sk_with_hull={self.config.dataset.path_sk_with_hull}",
@@ -160,8 +171,8 @@ class RunCorticalTilesStage(PipelineStage):
         return RunCorticalTiles()
 
     def subject_input_dir(self) -> str | None:
-        d = self.config.dataset.morphologist_graphs
-        return d if d and os.path.exists(d) else None
+        d = _compute_morphologist_subjects_dir(self.config.dataset)
+        return d if d and os.path.isdir(d) else None
 
     def required_file_patterns(self) -> list[str]:
         g = self.config.dataset.path_to_graph
@@ -314,6 +325,19 @@ def _compute_snapshots_output_dir(dataset: DatasetConfig) -> str:
     return ""
 
 
+def _compute_morphologist_subjects_dir(dataset: DatasetConfig) -> str:
+    """Return the Morphologist subjects folder read by stage 2, its pre-check, stage 6 and the streaming mode.
+
+    An explicit morphologist_graphs wins; otherwise the folder stage 1 writes under datasets_root;
+    otherwise "". Pure, no I/O, O(1).
+    """
+    if dataset.morphologist_graphs:
+        return dataset.morphologist_graphs
+    if dataset.datasets_root:
+        return stage1_subjects_dir(dataset.datasets_root)
+    return ""
+
+
 class PutTogetherEmbeddingsStage(PipelineStage):
     """Stage for combining embeddings."""
 
@@ -373,8 +397,9 @@ class GenerateSnapshotsStage(PipelineStage):
             args.append(f"--embeddings_dir={combined_dir}")
         elif dataset.embeddings_path:
             args.append(f"--embeddings_dir={dataset.embeddings_path}")
-        if self.config.dataset.morphologist_graphs:
-            args.append(f"--morphologist_dir={self.config.dataset.morphologist_graphs}")
+        morphologist_dir = _compute_morphologist_subjects_dir(dataset)
+        if morphologist_dir:
+            args.append(f"--morphologist_dir={morphologist_dir}")
         if self.config.dataset.crops_path:
             args.append(f"--cortical_tiles_dir={self.config.dataset.crops_path}")
         if self.config.dataset.reference_data_path:
@@ -708,7 +733,7 @@ def _build_streaming_settings(
 ) -> StreamingSettings:
     """StreamingSettings of this run from the overridden configuration."""
     return StreamingSettings(
-        subjects_dir=config.dataset.input_path or config.dataset.morphologist_graphs,
+        subjects_dir=_compute_morphologist_subjects_dir(config.dataset),
         output_dir=config.outputs_path,
         log_dir=_compute_streaming_log_dir(config, run_log_path),
         n_workers=config.n_workers,

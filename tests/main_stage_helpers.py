@@ -97,3 +97,33 @@ def embeddings_stage_argv(main_module, config, stage_name, logger_name):
         config,
         logger_name,
     )
+
+
+def stub_main_setup(module, monkeypatch):
+    """Stub the update check and the process setup of a loaded main module and of ScriptBuilder; return module."""
+    monkeypatch.setattr(module, "check_for_updates", lambda: None)
+    monkeypatch.setattr(module, "init_pipeline_process", lambda: logging.getLogger())
+    monkeypatch.setattr("champollion_utils.script_builder.init_process", lambda *a, **k: logging.getLogger())
+    monkeypatch.setattr("champollion_utils.script_builder.check_for_updates", lambda *a, **k: None)
+    return module
+
+
+def record_logged_before_run(caplog, level, prefix):
+    """(run, seen): run() appends to seen whether a caplog record at level starting with prefix was logged."""
+    seen: list[bool] = []
+
+    def run(*_args, **_kwargs) -> int:
+        seen.append(
+            any(record.levelno == level and record.getMessage().startswith(prefix) for record in caplog.records)
+        )
+        return 0
+
+    return run, seen
+
+
+def enter_work_dir(monkeypatch, tmp_path):
+    """Create tmp_path/cwd, make it the working directory for the test, and return it."""
+    cwd = tmp_path / "cwd"
+    cwd.mkdir()
+    monkeypatch.chdir(cwd)
+    return cwd

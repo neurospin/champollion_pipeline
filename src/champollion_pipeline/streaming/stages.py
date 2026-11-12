@@ -171,7 +171,7 @@ def run_morphologist_for_scan(raw_scan: str, settings: StreamingSettings, datase
     name = os.path.basename(raw_scan)
     with tempfile.TemporaryDirectory(prefix="champollion_raw_") as input_dir:
         os.symlink(os.path.abspath(raw_scan), os.path.join(input_dir, name))
-        argv = [input_dir, dataset.morphologist_graphs] + (["--bids"] if dataset.bids else [])
+        argv = [input_dir, dataset.datasets_root] + (["--bids"] if dataset.bids else [])
         logger.trace(f"Morphologist: raw scan {name}")
         script = GenerateMorphologistGraphs()
         script.parse_args(argv)

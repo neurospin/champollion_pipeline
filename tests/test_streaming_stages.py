@@ -587,10 +587,12 @@ def test_morphologist_input_holds_only_scan_link(morphologist, settings, dataset
 
 @pytest.mark.parametrize("bids", [True, False])
 def test_morphologist_arguments(morphologist, settings, dataset, raw_scan, bids: bool) -> None:
+    """REQ-STREAMING-BDRABCZUK-123A1BA79D97: the output argument is the Morphologist output root, datasets_root."""
     dataset.bids = bids
+    dataset.datasets_root = str(raw_scan.parent.parent / "dataset_root")  # noqa: V101
     stages.run_morphologist_for_scan(str(raw_scan), settings, dataset)
     assert morphologist.argv is not None
-    expected = [morphologist.argv[0], dataset.morphologist_graphs] + (["--bids"] if bids else [])
+    expected = [morphologist.argv[0], dataset.datasets_root] + (["--bids"] if bids else [])
     assert morphologist.argv == expected
     assert morphologist.argv[0] != str(raw_scan.parent)
 
