@@ -22,6 +22,7 @@ _GRAPH_FOLDER = "t1mri"
 _GRAPH_SUFFIX = ".arg"
 _BIDS_PREFIX = "sub-"
 _BIDS_T1_ENDING = "_T1w"
+_SOURCEDATA_FOLDER = "sourcedata"
 
 _Parts = tuple[str, ...]
 
@@ -187,6 +188,24 @@ def find_t1_files(directory: str) -> list[str]:
     return sorted(
         os.path.join(*parts, name) for parts, name in _walk(directory, _can_hold_t1) if _is_t1_name(parts, name)
     )
+
+
+def sourcedata_t1_files(input_dir: str) -> list[str]:
+    """Return the T1 files of ``input_dir`` that sit below a folder named sourcedata, as a sorted list.
+
+    Only the path relative to ``input_dir``, as find_t1_files returns it, is judged: a folder of the
+    input's own path named sourcedata does not count, nor does the file name itself.
+
+    Args:
+        input_dir: Folder to search.
+
+    Returns:
+        The T1 files of find_t1_files whose relative folder parts hold a folder named exactly
+        sourcedata, in find_t1_files order (sorted); an empty list when ``input_dir`` is missing.
+
+    Complexity: O(files below input_dir).
+    """
+    return [path for path in find_t1_files(input_dir) if _SOURCEDATA_FOLDER in path.split(os.sep)[:-1]]
 
 
 def _is_session(name: str) -> bool:
