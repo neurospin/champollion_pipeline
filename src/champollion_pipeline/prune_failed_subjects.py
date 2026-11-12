@@ -5,13 +5,14 @@ Remove cortical_tiles outputs for subjects that failed QC.
 Scans the cortical_tiles derivatives directory, reads a QC TSV/CSV file, and
 deletes all files belonging to subjects with qc==0 or absent from the QC file.
 This brings the output directory to the same state as if --sk_qc_path had been
-passed to run_cortical_tiles.py from the start.
+passed to run_cortical_tiles.py from the start. With an acquisition column
+(stage 1 --bids input_qc.tsv) the QC rows are matched per scan crop id.
 """
 
 import logging
 import os
 import re
-from collections.abc import Collection
+from collections.abc import Collection, Mapping
 from dataclasses import dataclass
 from datetime import datetime
 from os.path import exists, isdir, join
@@ -22,9 +23,11 @@ import pandas as pd
 from champollion_utils.script_builder import ScriptBuilder
 
 from champollion_pipeline.derivatives_layout import DEFAULT_MASKS_VERSION, compute_run_log_path
+from champollion_pipeline.file_indexer.scan_id import ScanId
 from champollion_pipeline.process_setup import init_pipeline_process
 from champollion_pipeline.utils.cortical_tiles_config import CROPS_DIRNAME, compute_versioned_crops_dir
 from champollion_pipeline.utils.lib import DERIVATIVES_FOLDER
+from champollion_pipeline.utils.qc_report import ACQUISITION_COLUMN, ID_COLUMN, QC_COLUMN
 from champollion_pipeline.utils.subject_name import subject_name_problem
 
 logger = logging.getLogger(__name__)
@@ -34,16 +37,30 @@ CROP_SIDES = ("L", "R")
 SUBJECT_CSV_SUFFIX = "_subject.csv"
 
 
-def _file_belongs_to(rel_path: PurePath, subjects: Collection[str]) -> bool:
-    """True when a subject ID is a whole directory of rel_path or a whole '_'/'.' token of its name.
+def _is_token_of(subject: str, text: str) -> bool:
+    """True when subject occurs in text bounded on each side by '_', '.' or a text boundary."""
+    return re.search(r"(?<![^_.])" + re.escape(subject) + r"(?![^_.])", text) is not None
 
-    '-' is not a delimiter, so sub-10 never matches sub-1.
+
+def _matches(name: str, dirs: Collection[str], subject: str) -> bool:
+    """True when subject is one of dirs or a whole '_'/'.' token of name."""
+    return subject in dirs or _is_token_of(subject, name)
+
+
+def _file_belongs_to(
+    rel_path: PurePath, subjects: Collection[str], shadowing: Mapping[str, Collection[str]] | None = None
+) -> bool:
+    """True when a subject ID is a whole directory of rel_path or a whole '_'/'.' token of its name, unshadowed.
+
+    '-' is not a delimiter, so sub-10 never matches sub-1. A subject does not count when one of its
+    shadowing[subject] IDs (kept IDs holding it as a token) also matches rel_path.
     """
+    shields = shadowing or {}
     dirs = set(rel_path.parent.parts)
     for subject in subjects:
-        if subject in dirs:
-            return True
-        if re.search(r"(?<![^_.])" + re.escape(subject) + r"(?![^_.])", rel_path.name):
+        if _matches(rel_path.name, dirs, subject) and not any(
+            _matches(rel_path.name, dirs, kept) for kept in shields.get(subject, ())
+        ):
             return True
     return False
 
@@ -65,6 +82,51 @@ def _crop_ids(side_dir: Path) -> set[str]:
         for f in side_dir.iterdir()
         if f.is_file() and f.name.endswith(CROP_SUFFIX) and len(f.name) > len(CROP_SUFFIX)
     }
+
+
+def _kept_rows_mask(qc_table: pd.DataFrame) -> pd.Series:
+    """Per row, True when its qc is not 0 (pd.to_numeric with errors="coerce").
+
+    0 and 0.0 fail; 1, an empty or a non-numeric cell pass, as _read_passing_subjects (qc != 0).
+    """
+    return pd.to_numeric(qc_table[QC_COLUMN], errors="coerce") != 0
+
+
+def _row_crop_ids(rows: pd.DataFrame) -> set[str]:
+    """Crop ids str(ScanId(participant_id, acquisition, bids=True)) of rows. O(rows)."""
+    return {
+        str(ScanId(subject, acquisition, bids=True))
+        for subject, acquisition in zip(rows[ID_COLUMN], rows[ACQUISITION_COLUMN], strict=True)
+    }
+
+
+def compute_kept_crop_ids(qc_table: pd.DataFrame) -> set[str]:
+    """Crop ids str(ScanId(participant_id, acquisition, bids=True)) of the rows whose qc is not 0. O(rows)."""
+    return _row_crop_ids(qc_table[_kept_rows_mask(qc_table)])
+
+
+def compute_conflicting_crop_ids(qc_table: pd.DataFrame) -> list[str]:
+    """Sorted crop ids that are the crop id of a row whose qc is 0 and of a row whose qc is not 0.
+
+    Two qc 0 rows of one crop id are no conflict. Same qc rule as compute_kept_crop_ids.
+    """
+    is_kept = _kept_rows_mask(qc_table)
+    return sorted(_row_crop_ids(qc_table[~is_kept]) & _row_crop_ids(qc_table[is_kept]))
+
+
+def compute_shadowing_ids(pruned: Collection[str], kept: Collection[str]) -> dict[str, tuple[str, ...]]:
+    """Per pruned ID, the sorted kept IDs holding it as a whole '_'/'.' token; IDs with none are left out.
+
+    sub-006 pruned and sub-006_ses-V1 kept give {"sub-006": ("sub-006_ses-V1",)}. O(len(pruned) * len(kept)).
+    """
+    shadowing: dict[str, tuple[str, ...]] = {}
+    for subject in sorted(pruned):
+        holders = tuple(
+            sorted(candidate for candidate in kept if candidate != subject and _is_token_of(subject, candidate))
+        )
+        if holders:
+            shadowing[subject] = holders
+    return shadowing
 
 
 @dataclass(frozen=True)
@@ -182,7 +244,9 @@ class PruneFailedSubjects(ScriptBuilder):
                 "--qc",
                 "Path to QC TSV/CSV file with 'participant_id' and 'qc' columns "
                 "(same format as --sk_qc_path in run_cortical_tiles.py). "
-                "Subjects with qc==0 or absent from this file will be removed.",
+                "Subjects with qc==0 or absent from this file will be removed. "
+                "With an 'acquisition' column (stage 1 --bids input_qc.tsv) each row stands for the crop id of its "
+                "scan and only crop ids of rows with qc==0 or of no row are removed.",
             )
             .add_flag("--dry-run", "Print files that would be deleted without deleting them.")
             .add_optional_argument(
@@ -211,6 +275,32 @@ class PruneFailedSubjects(ScriptBuilder):
         passing = qc_file[qc_file["qc"] != 0]["participant_id"].tolist()
         return set(passing)
 
+    def _read_acquisition_table(self, qc_path: str) -> pd.DataFrame | None:
+        """The QC file as exact strings when its header has the acquisition column, else None."""
+        sep = "\t" if qc_path.endswith(".tsv") else ","
+        qc_table = pd.read_csv(qc_path, sep=sep, dtype=str, keep_default_na=False)
+        if ACQUISITION_COLUMN not in qc_table.columns:
+            return None
+        return qc_table
+
+    def _select_subjects(self, all_subjects: set[str]) -> tuple[set[str], dict[str, tuple[str, ...]]]:
+        """(to_remove, shadowing): by crop id with an acquisition column, else by participant_id with no shadowing.
+
+        Raises ValueError, before any listing or deletion, when an acquisition QC file has conflicting rows.
+        """
+        qc_table = self._read_acquisition_table(self.args.qc)
+        if qc_table is None:
+            return all_subjects - self._read_passing_subjects(self.args.qc), {}
+        conflicting = compute_conflicting_crop_ids(qc_table)
+        if conflicting:
+            raise ValueError(
+                f"Refusing to prune: --qc {self.args.qc} maps each of these crop ids to a row with qc 0 "
+                f"and a row with a qc value other than 0: {conflicting}"
+            )
+        kept = compute_kept_crop_ids(qc_table)
+        to_remove = all_subjects - kept
+        return to_remove, compute_shadowing_ids(to_remove, kept)
+
     def default_log_path(self) -> str:
         """Run-log path of a bare --log: <output>/.log/prune_failed_subjects_<stamp>.log (<output> = derivatives)."""
         return compute_run_log_path(self.args.output, self.script_name, datetime.now().astimezone())
@@ -238,14 +328,16 @@ class PruneFailedSubjects(ScriptBuilder):
             raise ValueError(message)
         return crops_dir
 
-    def _delete_subject_files(self, derivatives_dir: str, to_remove: set[str]) -> int:
+    def _delete_subject_files(
+        self, derivatives_dir: str, to_remove: set[str], shadowing: Mapping[str, Collection[str]]
+    ) -> int:
         """Delete (or list under --dry-run) the in-scope files of to_remove; return their count (P3/P4)."""
         deleted = 0
         for root, dirs, files in os.walk(derivatives_dir):
             dirs.sort()
             for fname in sorted(files):
                 rel = PurePath(root, fname).relative_to(derivatives_dir)
-                if _in_masks_scope(rel, self.args.masks) and _file_belongs_to(rel, to_remove):
+                if _in_masks_scope(rel, self.args.masks) and _file_belongs_to(rel, to_remove, shadowing):
                     fpath = join(root, fname)
                     if self.args.dry_run:
                         logger.output(f"[dry-run] Would delete: {fpath}")
@@ -261,8 +353,7 @@ class PruneFailedSubjects(ScriptBuilder):
         crops_dir = self._resolve_crops_dir(derivatives_dir)
 
         all_subjects = self._discover_subjects(crops_dir)
-        passing_subjects = self._read_passing_subjects(self.args.qc)
-        to_remove = all_subjects - passing_subjects
+        to_remove, shadowing = self._select_subjects(all_subjects)
 
         if not to_remove:
             logger.output(f"All {len(all_subjects)} subjects pass QC. Nothing to prune.")
@@ -274,7 +365,7 @@ class PruneFailedSubjects(ScriptBuilder):
         if not self._check_aggregates(problems):
             return 1
 
-        deleted = self._delete_subject_files(derivatives_dir, to_remove)
+        deleted = self._delete_subject_files(derivatives_dir, to_remove, shadowing)
         aggregates_ok = self._prune_aggregates(plans)
 
         action = "Would delete" if self.args.dry_run else "Deleted"
