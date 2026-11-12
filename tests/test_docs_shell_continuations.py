@@ -1,5 +1,4 @@
 #!/usr/bin/env python3
-# -*- coding: utf-8 -*-
 """Documentation guard: shell examples stay copy-pasteable.
 
 Requirement pinned here: DEF-DOCS-BDRABCZUK-8F5506B8A366 - in a fenced shell block of README.md or
