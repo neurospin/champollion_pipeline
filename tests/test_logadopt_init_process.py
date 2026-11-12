@@ -166,7 +166,7 @@ def test_main_py_stage_exception_logged_at_fail_with_traceback(tmp_path):
             log_to_console: true
             dataset:
               input_path: {input_dir}
-              morphologist_graphs: {tmp_path / "graphs"}
+              datasets_root: {tmp_path / "root"}
             stages:
               generate_morphologist_graphs: true
               run_cortical_tiles: false
