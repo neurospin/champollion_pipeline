@@ -95,8 +95,11 @@ def find_white_mesh(graph_path):
         graph_path: Path to .arg sulcal graph file
 
     Returns:
-        Path to the white mesh file, or None if not found or when the graph
-        file name has no leading side letter.
+        Path to the white mesh file that comes first in sorted() order, or
+        None if not found or when the graph file name has no leading side
+        letter.
+
+    Complexity: O(n log n) in the number of white mesh files of the side.
     """
     letter = osp.basename(graph_path)[:1]
     if letter not in SIDE_BY_LETTER:
@@ -124,7 +127,7 @@ def find_white_mesh(graph_path):
 
     pattern = osp.join(mesh_dir, f"*{letter}white.gii")
 
-    matches = glob.glob(pattern)
+    matches = sorted(glob.glob(pattern))
     return matches[0] if matches else None
 
 
