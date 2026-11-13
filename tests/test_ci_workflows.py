@@ -57,3 +57,26 @@ def test_pinned_pixi_satisfies_requires_pixi(workflow: str, pinned: str) -> None
     assert _version(pinned) >= _required_minimum(), (
         f"{workflow} pins pixi {pinned}, below requires-pixi minimum in pixi.toml"
     )
+
+
+def _submodule_checkouts() -> list[tuple[str, dict]]:
+    found = []
+    for workflow in WORKFLOWS:
+        document = yaml.safe_load(workflow.read_text(encoding="utf-8"))
+        for job in (document.get("jobs") or {}).values():
+            for step in job.get("steps") or []:
+                if str(step.get("uses", "")).startswith("actions/checkout"):
+                    options = step.get("with") or {}
+                    if options.get("submodules"):
+                        found.append((workflow.name, options))
+    return found
+
+
+def test_ci_checkout_with_submodules_exists() -> None:
+    assert any(name == "ci.yml" for name, _ in _submodule_checkouts())
+
+
+@pytest.mark.parametrize("workflow,options", [c for c in _submodule_checkouts() if c[0] == "ci.yml"])
+def test_ci_checkout_fetches_full_history(workflow: str, options: dict) -> None:
+    # The champollion_V1 pin test runs `git merge-base --is-ancestor`, which needs history.
+    assert options.get("fetch-depth") == 0, f"{workflow} checkout with submodules lacks fetch-depth: 0"
