@@ -109,7 +109,7 @@ class GenerateMorphologistGraphsStage(PipelineStage):
         ]
         if self.config.dataset.bids:
             args.append("--bids")
-        if getattr(self.config, "parallel", False):
+        if self.config.parallel:
             args.append("--parallel")
         return args
 
