@@ -48,10 +48,18 @@ from champollion_pipeline.derivatives_layout import (
 from champollion_pipeline.file_indexer import SubjectEligibilityChecker
 from champollion_pipeline.process_setup import init_pipeline_process
 from champollion_pipeline.streaming import StreamingSettings
-from champollion_pipeline.utils.input_kind import stage1_subjects_dir
+from champollion_pipeline.utils.input_kind import (
+    InputKind,
+    detect_input_kind,
+    resolve_subjects_dir,
+    stage1_subjects_dir,
+)
 from champollion_pipeline.utils.skeleton_qc import SKELETON_SIDES, compute_skeleton_pattern
 
 logger = logging.getLogger("champollion_pipeline.main")
+
+# Stage 1, skipped when the input already holds Morphologist outputs
+_MORPHOLOGIST_STAGE = "generate_morphologist_graphs"
 
 SCRIPT_NAME = "champollion_pipeline"
 SCRIPT_DESCRIPTION = "Champollion Pipeline Orchestrator"
@@ -720,6 +728,49 @@ def _run_streaming_mode(config: PipelineConfig, args: argparse.Namespace, *, run
     )
 
 
+def _apply_input_kind(config: PipelineConfig) -> InputKind | None:
+    """Fill, in place, the fields the kind of config.dataset.input_path fixes.
+
+    Returns the detected kind, or None when input_path is empty (nothing detected, nothing changed).
+    NEITHER and BOTH change nothing here.
+    """
+    input_path = config.dataset.input_path
+    if not input_path:
+        return None
+    kind = detect_input_kind(input_path)
+    if kind is InputKind.T1:
+        _apply_t1_input(config.dataset)
+    elif kind is InputKind.MORPHOLOGIST:
+        _apply_morphologist_input(config)
+    return kind
+
+
+def _apply_t1_input(dataset: DatasetConfig) -> None:
+    """Stage 1 output root of a T1 input: the absolute input_path, when datasets_root is not set."""
+    if not dataset.datasets_root:
+        dataset.datasets_root = os.path.abspath(dataset.input_path)
+
+
+def _apply_morphologist_input(config: PipelineConfig) -> None:
+    """Subjects folder of a Morphologist input, when morphologist_graphs is not set, then the stage 1 skip.
+
+    AmbiguousSubjectsFolders from resolve_subjects_dir propagates unchanged.
+    """
+    dataset = config.dataset
+    if not dataset.morphologist_graphs:
+        folder = resolve_subjects_dir(dataset.input_path)
+        if folder is not None:
+            dataset.morphologist_graphs = os.path.abspath(folder)
+    _skip_morphologist_stage(config)
+
+
+def _skip_morphologist_stage(config: PipelineConfig) -> None:
+    """Disable stage 1 and log it once at INFO; a stage 1 already disabled stays silent."""
+    if config.stages.get(_MORPHOLOGIST_STAGE):
+        config.stages[_MORPHOLOGIST_STAGE] = False
+        logger.info(f"Stage {_MORPHOLOGIST_STAGE} skipped: {config.dataset.input_path} holds Morphologist outputs")
+
+
 class ChampollionPipeline(ScriptBuilder):
     """main.py as a ScriptBuilder script: the shared run log, profiling and process setup."""
 
@@ -775,6 +826,7 @@ class ChampollionPipeline(ScriptBuilder):
         _start_config_profiling(config, args)
         if config.mode == "streaming":
             return _run_streaming_mode(config, args, run_log_path=self._run_log_path)
+        _apply_input_kind(config)
         return PipelineOrchestrator(config).run()
 
 

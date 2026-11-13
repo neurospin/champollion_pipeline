@@ -36,6 +36,7 @@ from tests.log_assertions import OUTPUT
 from tests.main_stage_helpers import (
     capture_stage_argv,
     enter_work_dir,
+    fake_script,
     load_main_module,
     option_values,
     record_logged_before_run,
@@ -252,24 +253,8 @@ def test_one_config_chains_stage1_into_stage2(main_module, monkeypatch, tmp_path
     monkeypatch.setattr(main_module, "create_default_config", lambda: config)
     argv: dict[str, list[str]] = {}
 
-    def fake_script(name: str, on_run=None) -> MagicMock:
-        script_cls = MagicMock()
-        script = script_cls.return_value
-
-        def parse_args(args):
-            argv[name] = list(args)
-
-        def run(*_args, **_kwargs) -> int:
-            if on_run is not None:
-                on_run(argv[name])
-            return 0
-
-        script.parse_args.side_effect = parse_args  # noqa: V101
-        script.run.side_effect = run  # noqa: V101
-        return script_cls
-
-    morphologist = fake_script("morphologist", on_run=lambda args: _write_stage1_tree(args[1]))
-    tiles = fake_script("tiles")
+    morphologist = fake_script(argv, "morphologist", on_run=lambda args: _write_stage1_tree(args[1]))
+    tiles = fake_script(argv, "tiles")
     with patch(MORPHOLOGIST_SCRIPT, morphologist), patch(TILES_SCRIPT, tiles):
         _run_main(main_module, monkeypatch, "--stages", "generate_morphologist_graphs", "run_cortical_tiles")
 
