@@ -1,6 +1,6 @@
 """Champollion pipeline — end-to-end sulcal embedding pipeline."""
 
-__version__ = "0.2.34"
+__version__ = "0.2.35"
 
 # Each script has optional dependencies (brainvisa, torch…) that may
 # not be installed in every pixi environment. Guard each import so the package
