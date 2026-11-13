@@ -37,6 +37,7 @@ from champollion_utils.script_builder import ScriptBuilder
 from champollion_utils.update_check import check_for_updates
 
 from champollion_pipeline._stage_base import PARTIAL_STATUS, PipelineStage, StageResult
+from champollion_pipeline.cli_options import add_config_arguments, apply_config_arguments
 from champollion_pipeline.config import ConfigLoader, DatasetConfig, PipelineConfig
 from champollion_pipeline.derivatives_layout import (
     compute_combined_embeddings_dir,
@@ -71,11 +72,6 @@ Examples:
   # Generate template config
   python main.py --generate-config my_config.yaml
         """
-_LOG_HELP = (
-    "Write a run log per stage: DIR/<stage>_<YYYYmmdd-HHMMSS>.log; bare --log: each stage's default log path "
-    "(its derivatives .log folder) plus this run's own log at ./.log/champollion_pipeline_<YYYYmmdd-HHMMSS>.log. "
-    "Overrides the config file's log."
-)
 
 
 # ====================== Pipeline Stage Strategy Pattern ======================
@@ -602,63 +598,23 @@ def create_default_config() -> PipelineConfig:
         outputs_path=str(root_path / "outputs"),
         champollion_v1_path=str(root_path / "external" / "champollion_V1"),
     )
-    config.dataset.datasets_root = str(Path(config.data_path) / config.dataset.name)
+    config.dataset.datasets_root = _compute_default_datasets_root(config)
     return config
+
+
+def _compute_default_datasets_root(config: PipelineConfig) -> str:
+    """The datasets_root of a default config: <data_path>/<dataset name>."""
+    return str(Path(config.data_path) / config.dataset.name)
+
+
+def _should_rederive_datasets_root(args: argparse.Namespace) -> bool:
+    """True when the command line moves the default dataset folder without naming its root."""
+    return args.datasets_root is None and (args.data_path is not None or args.dataset_name is not None)
 
 
 def parse_arguments() -> argparse.Namespace:
     """Parse command line arguments."""
     return ChampollionPipeline().parse_args()
-
-
-def _apply_stage_overrides(config: PipelineConfig, args: argparse.Namespace) -> None:
-    """Apply --stages and --enable-all-stages."""
-    if args.stages:
-        # Disable all stages, then enable specified ones
-        for stage in config.stages:
-            config.stages[stage] = False
-        for stage in args.stages:
-            config.stages[stage] = True
-
-    if args.enable_all_stages:
-        for stage in config.stages:
-            config.stages[stage] = True
-
-
-def _apply_dataset_path_overrides(config: PipelineConfig, args: argparse.Namespace, *, from_default: bool) -> None:
-    """Apply --dataset-name (re-deriving the default config's datasets_root) and --models-path."""
-    if args.dataset_name:
-        config.dataset.name = args.dataset_name
-        if from_default:
-            # Default config only: re-derive the root for the new name (REQ-DEFROOT-03).
-            # A --config YAML datasets_root is never rewritten (REQ-DEFROOT-04).
-            config.dataset.datasets_root = str(Path(config.data_path) / config.dataset.name)
-
-    if args.models_path:
-        config.models_path = args.models_path
-
-
-def _apply_runtime_overrides(config: PipelineConfig, args: argparse.Namespace) -> None:
-    """Apply --verbose, --bids, --allow-prefix-ids, --mode, --n-workers, --worker-timeout and --log."""
-    if args.verbose:
-        config.verbose = True
-        config.log_level = "DEBUG"
-
-    if args.bids:
-        config.dataset.bids = True
-    if args.allow_prefix_ids:
-        config.dataset.allow_prefix_ids = True
-
-    if args.mode:
-        config.mode = args.mode
-    if args.n_workers is not None:
-        config.n_workers = args.n_workers
-    if args.worker_timeout is not None:
-        config.worker_timeout = args.worker_timeout
-    if args.log is not None:
-        config.log = args.log
-    if args.profile is not None:
-        config.profile_dir = args.profile
 
 
 def _profiling_session() -> ModuleType | None:
@@ -690,9 +646,13 @@ def _apply_cli_overrides(config: PipelineConfig, args: argparse.Namespace, *, fr
     REQ-DEFROOT dataset-root re-derivation that must only fire for the
     default config (REQ-DEFROOT-03/04).
     """
-    _apply_stage_overrides(config, args)
-    _apply_dataset_path_overrides(config, args, from_default=from_default)
-    _apply_runtime_overrides(config, args)
+    apply_config_arguments(config, args)
+    if args.enable_all_stages:
+        config.stages = dict.fromkeys(config.stages, True)
+    if from_default and _should_rederive_datasets_root(args):
+        # Default config only: re-derive the root for the new folder (REQ-DEFROOT-03); a --config YAML
+        # datasets_root is never rewritten (REQ-DEFROOT-04), and an explicit --datasets-root wins.
+        config.dataset.datasets_root = _compute_default_datasets_root(config)
 
 
 def _save_config_template(args: argparse.Namespace) -> int:
@@ -775,94 +735,25 @@ class ChampollionPipeline(ScriptBuilder):
             description=self.description,
             formatter_class=argparse.RawDescriptionHelpFormatter,
             epilog=_HELP_EPILOG,
+            allow_abbrev=False,
         )
 
     def _add_log_option(self) -> None:
         """Add nothing: main.py's --log takes a DIR (or none), and _add_pipeline_options adds it in place."""
 
     def _add_pipeline_options(self) -> None:
-        """Add the orchestrator options."""
+        """Add the orchestrator options, then one option per config field from the registry."""
         self.parser.add_argument("--config", type=str, help="Path to configuration YAML file")
-
-        self.parser.add_argument(
-            "--stages",
-            nargs="+",
-            choices=list(PipelineOrchestrator.STAGE_REGISTRY.keys()),
-            help="Specific stages to run (overrides config)",
-        )
-
         self.parser.add_argument("--enable-all-stages", action="store_true", help="Enable all pipeline stages")
-
-        self.parser.add_argument("--dataset-name", type=str, help="Dataset name (overrides config)")
-
-        self.parser.add_argument("--models-path", type=str, help="Path to models directory (overrides config)")
-
-        self.parser.add_argument("--verbose", action="store_true", help="Enable verbose output")
-
         self.parser.add_argument(
             "--generate-config", type=str, metavar="OUTPUT_PATH", help="Generate a template configuration file and exit"
-        )
-
-        self.parser.add_argument(
-            "--bids",
-            action="store_true",
-            help=(
-                "Input database follows BIDS layout "
-                "(subjects/sub-*/ses-*/...). "
-                "Activates BIDS-aware scan enumeration in eligibility checks "
-                "and passes --bids to cortical_tiles."
-            ),
-        )
-
-        self.parser.add_argument(
-            "--allow-prefix-ids",
-            action="store_true",
-            help=(
-                "TEMPORARY: let cortical_tiles run when a subject ID is a strict prefix "
-                "of another (e.g. sub-1 and sub-10); its transforms may then be wrong."
-            ),
-        )
-
-        self.parser.add_argument(
-            "--mode",
-            choices=["sequential", "streaming"],
-            default=None,
-            help=(
-                "Execution mode: 'sequential' (default, stage-centric batch) or "
-                "'streaming' (scan-centric parallel, one worker per scan). "
-                "Streaming mode requires dataset.embeddings_only: true in the --config YAML."
-            ),
-        )
-        self.parser.add_argument(
-            "--n-workers",
-            type=int,
-            default=None,
-            metavar="N",
-            help="Number of parallel scan workers (streaming mode only). Defaults to os.cpu_count().",
-        )
-        self.parser.add_argument(
-            "--worker-timeout",
-            type=int,
-            default=None,
-            metavar="SECONDS",
-            help=(
-                "Timeout in seconds of the whole producer-worker run of one scan; "
-                "a longer run ends FAILED (default: 7200)."
-            ),
-        )
-        self.parser.add_argument(
-            "--log",
-            nargs="?",
-            const="",
-            default=None,
-            metavar="DIR",
-            help=_LOG_HELP,
         )
         self.parser.add_argument(
             "--dry-run",
             action="store_true",
             help="Enumerate scans and report without processing (streaming mode only).",
         )
+        add_config_arguments(self.parser)
 
     def _resolve_log_path(self) -> str | None:
         """main.py's own run log: only with a bare --log, stored for the streaming log_dir. args.log is left as is."""
