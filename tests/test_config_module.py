@@ -9,11 +9,14 @@ The golden YAML texts below were written by ConfigLoader.save_to_yaml of
 main.py at commit cc8d67c (hand-built dict, before the move), plus one
 'log: null' line after log_to_console (PipelineConfig.log, REQ-RUNLOG-BDRABCZUK-4C2F09533A2D),
 one 'profile_dir: null' line after log (PipelineConfig.profile_dir, REQ-PROFILING-BDRABCZUK-101290CAC6F3;
-user decision 2026-11-02: written even while None) and one dataset 'labelling_session' line
+user decision 2026-11-02: written even while None), one 'parallel' line after verbose
+(PipelineConfig.parallel, REQ-INPUTKIND-BDRABCZUK-9AD1D6F6E0B7; user decision 2026-11-13: the custom
+case keeps the default false) and one dataset 'labelling_session' line
 after skel_seed (REQ-WHOLEBRAIN-BDRABCZUK-3DBF0C9F422F) and one dataset 'allow_prefix_ids' line
 after bids (REQ-CORTILES-BDRABCZUK-A20F9F75095C, TEMPORARY: DEF-CORTILES-BDRABCZUK-8A44DAD7F312);
 the serialiser must reproduce them
-byte for byte (REQ-REFACTOR-BDRABCZUK-20D84DC86928, superseding -B65FECA525EF, -679F9A49A534 and -2636D42F82B1)
+byte for byte (REQ-REFACTOR-BDRABCZUK-B5835A3C130E, superseding -20D84DC86928, -B65FECA525EF, -679F9A49A534
+and -2636D42F82B1)
 so existing config files stay compatible.
 dataset.hf_token is set in the custom case and must stay absent.
 
@@ -33,7 +36,8 @@ MAIN_PY = Path(__file__).resolve().parent.parent / "main.py"
 CONFIG_MODULE = "champollion_pipeline.config"
 CONFIG_NAMES = ("DatasetConfig", "PipelineConfig", "ConfigLoader")
 
-# Golden save_to_yaml output at cc8d67c (+ log, profile_dir, labelling_session, allow_prefix_ids lines; see docstring)
+# Golden save_to_yaml output at cc8d67c (+ log, profile_dir, parallel, labelling_session, allow_prefix_ids lines;
+# see docstring)
 # for PipelineConfig() with root_path="/opt/champollion".
 GOLDEN_DEFAULT_YAML = """\
 root_path: /opt/champollion
@@ -65,6 +69,7 @@ n_workers: 0
 worker_timeout: 7200
 stop_on_error: true
 verbose: false
+parallel: false
 log_level: INFO
 log_dir: ''
 log_to_file: true
@@ -117,7 +122,7 @@ dataset:
   champollion_data_root: null
 """
 
-# Golden save_to_yaml output at cc8d67c (+ log, profile_dir, labelling_session, allow_prefix_ids lines)
+# Golden save_to_yaml output at cc8d67c (+ log, profile_dir, parallel, labelling_session, allow_prefix_ids lines)
 # for _custom_config().
 GOLDEN_CUSTOM_YAML = """\
 root_path: /opt/champollion
@@ -136,6 +141,7 @@ n_workers: 7
 worker_timeout: 99
 stop_on_error: false
 verbose: true
+parallel: false
 log_level: DEBUG
 log_dir: /logs
 log_to_file: false
@@ -313,7 +319,7 @@ def test_main_reexports_config_objects(config_module, main_module):
     ids=["default", "custom"],
 )
 def test_save_to_yaml_matches_golden_bytes(config_module, tmp_path, build, expected):
-    """REQ-REFACTOR-BDRABCZUK-20D84DC86928: save_to_yaml writes the golden bytes (cc8d67c plus new keys)."""
+    """REQ-REFACTOR-BDRABCZUK-B5835A3C130E: save_to_yaml writes the golden bytes (cc8d67c plus new keys)."""
     output = tmp_path / "saved.yaml"
     config_module.ConfigLoader.save_to_yaml(build(config_module), str(output))
     assert output.read_bytes() == expected.encode("utf-8"), "save_to_yaml output differs from the cc8d67c golden YAML"

@@ -133,6 +133,8 @@ class PipelineConfig:
     worker_timeout: int = 7200  # seconds per worker
     stop_on_error: bool = True  # noqa: V107 - YAML config field
     verbose: bool = False
+    # Stage 1 soma-workflow scheduling (--swf); unrelated to mode (sequential|streaming)
+    parallel: bool = False
 
     # Logging
     log_level: str = "INFO"  # noqa: V107 - YAML config field
