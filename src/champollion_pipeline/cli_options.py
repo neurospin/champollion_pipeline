@@ -28,6 +28,31 @@ _FLAGS_KEPT_FROM_PARSER = ("--log", "--profile")
 
 _DECIMAL_INTEGER = re.compile(r"[+-]?[0-9]+")
 
+# Help texts of the options main.py wrote by hand before the registry, kept word for word.
+_LOG_HELP = (
+    "Write a run log per stage: DIR/<stage>_<YYYYmmdd-HHMMSS>.log; bare --log: each stage's default log path "
+    "(its derivatives .log folder) plus this run's own log at ./.log/champollion_pipeline_<YYYYmmdd-HHMMSS>.log. "
+    "Overrides the config file's log."
+)
+_BIDS_HELP = (
+    "Input database follows BIDS layout "
+    "(subjects/sub-*/ses-*/...). "
+    "Activates BIDS-aware scan enumeration in eligibility checks "
+    "and passes --bids to cortical_tiles."
+)
+_ALLOW_PREFIX_IDS_HELP = (
+    "TEMPORARY: let cortical_tiles run when a subject ID is a strict prefix "
+    "of another (e.g. sub-1 and sub-10); its transforms may then be wrong."
+)
+_MODE_HELP = (
+    "Execution mode: 'sequential' (default, stage-centric batch) or "
+    "'streaming' (scan-centric parallel, one worker per scan). "
+    "Streaming mode requires dataset.embeddings_only: true in the --config YAML."
+)
+_WORKER_TIMEOUT_HELP = (
+    "Timeout in seconds of the whole producer-worker run of one scan; a longer run ends FAILED (default: 7200)."
+)
+
 
 class ArgumentKind(Enum):
     """Value kind of a config field, which fixes the add_argument options of its argument."""
@@ -81,12 +106,23 @@ _KIND_OPTIONS = {
     ArgumentKind.STAGE_SET: {"nargs": "+", "choices": list(PipelineConfig().stages)},
 }
 
-# Options of single fields, added to those of their kind. The levels are attributes of the logging module, which
-# main.py reads: the champollion_utils level names are not, so they stay out.
+# Options of single fields; they win over those of their kind. The levels are attributes of the logging module,
+# which main.py reads: the champollion_utils level names are not, so they stay out.
 _FIELD_OPTIONS = {
-    "mode": {"choices": ("sequential", "streaming")},
+    "stages": {"help": "Specific stages to run (overrides config)"},
+    "name": {"help": "Dataset name (overrides config)"},
+    "models_path": {"help": "Path to models directory (overrides config)"},
+    "verbose": {"help": "Enable verbose output"},
+    "bids": {"help": _BIDS_HELP},
+    "allow_prefix_ids": {"help": _ALLOW_PREFIX_IDS_HELP},
+    "mode": {"choices": ("sequential", "streaming"), "help": _MODE_HELP},
+    "n_workers": {
+        "metavar": "N",
+        "help": "Number of parallel scan workers (streaming mode only). Defaults to os.cpu_count().",
+    },
+    "worker_timeout": {"metavar": "SECONDS", "help": _WORKER_TIMEOUT_HELP},
     "log_level": {"choices": ("DEBUG", "INFO", "WARNING", "ERROR", "CRITICAL")},
-    "log": {"nargs": "?", "const": ""},
+    "log": {"nargs": "?", "const": "", "metavar": "DIR", "help": _LOG_HELP},
 }
 
 
@@ -134,14 +170,12 @@ def add_config_arguments(parser: argparse.ArgumentParser) -> None:
         if row.flag in _FLAGS_KEPT_FROM_PARSER and row.flag in parser._option_string_actions:
             continue
         section = "dataset" if row.is_dataset_field else "pipeline"
-        parser.add_argument(
-            row.flag,
-            dest=row.dest,
-            default=None,
-            help=f"Config field {section}.{row.field_name}",
+        options = {
+            "help": f"Config field {section}.{row.field_name}",
             **_KIND_OPTIONS[row.kind],
             **_FIELD_OPTIONS.get(row.field_name, {}),
-        )
+        }
+        parser.add_argument(row.flag, dest=row.dest, default=None, **options)
 
 
 def apply_config_arguments(config: PipelineConfig, args: argparse.Namespace) -> None:

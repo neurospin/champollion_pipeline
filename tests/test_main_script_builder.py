@@ -24,6 +24,7 @@ from typing import ClassVar
 import pytest
 from champollion_utils.script_builder import ScriptBuilder
 
+from champollion_pipeline.cli_options import CONFIG_ARGUMENTS
 from champollion_pipeline.put_together_embeddings import PutTogetherEmbeddings
 
 MAIN_PY = Path(__file__).resolve().parent.parent / "main.py"
@@ -273,11 +274,24 @@ def _help_text(harness, monkeypatch, capsys) -> str:
     return capsys.readouterr().out
 
 
-def _comparable_help(text: str) -> str:
-    """Help text without the usage lines, the --log and --allow-prefix-ids entries, "profiling" and trailing blanks.
+_CONFIG_FLAGS = frozenset(row.flag for row in CONFIG_ARGUMENTS)
 
-    --allow-prefix-ids is TEMPORARY (DEF-CORTILES-BDRABCZUK-8A44DAD7F312); REQ-REFACTOR-BDRABCZUK-23313B4B70B5
-    leaves its entry out of the cbe51d7 comparison and REQ-CORTILES-BDRABCZUK-937E3705E661 requires it listed.
+
+def _is_left_out_entry(line: str) -> bool:
+    """True for the first line of the --log, --allow-prefix-ids or a CONFIG_ARGUMENTS flag entry."""
+    if line.startswith(("  --log", "  --allow-prefix-ids")):
+        return True
+    if not line.startswith("  --"):
+        return False
+    return line.split()[0].rstrip(",") in _CONFIG_FLAGS
+
+
+def _comparable_help(text: str) -> str:
+    """Help text without the usage lines, the left-out entries, "profiling" and trailing blanks.
+
+    REQ-REFACTOR-BDRABCZUK-C331AEBDCF17 leaves out the --log and --allow-prefix-ids entries and the entry of each
+    CONFIG_ARGUMENTS flag. --allow-prefix-ids is TEMPORARY (DEF-CORTILES-BDRABCZUK-8A44DAD7F312) and
+    REQ-CORTILES-BDRABCZUK-937E3705E661 requires it listed.
     """
     lines = text.splitlines()
     first_blank = lines.index("")
@@ -291,7 +305,7 @@ def _comparable_help(text: str) -> str:
             if line == "":
                 skipping = None
             continue
-        if line.startswith(("  --log", "  --allow-prefix-ids")):
+        if _is_left_out_entry(line):
             skipping = "entry"
             continue
         if skipping == "entry":
@@ -408,7 +422,14 @@ def test_main_returns_orchestrator_exit_code(harness, exit_code):
 # --- Command line and help ------------------------------------------------------------------------------
 
 
-# REQ-REFACTOR-BDRABCZUK-52348F7590DE
+def _config_dests_not_given(argv: list[str]) -> set[str]:
+    """The CONFIG_ARGUMENTS dests whose flag argv does not give (as FLAG, FLAG=VALUE or --no-FLAG)."""
+    given = {token.split("=", 1)[0] for token in argv if token.startswith("--")}
+    given |= {"--" + flag.removeprefix("--no-") for flag in given if flag.startswith("--no-")}
+    return {row.dest for row in CONFIG_ARGUMENTS if row.flag not in given}
+
+
+# REQ-REFACTOR-BDRABCZUK-52348F7590DE, head REQ-REFACTOR-BDRABCZUK-E0A17DF0B0CA
 @pytest.mark.parametrize(
     ("argv", "expected"), GOLDEN_COMMAND_LINES, ids=[" ".join(a) or "<none>" for a, _ in GOLDEN_COMMAND_LINES]
 )
@@ -420,7 +441,8 @@ def test_golden_command_line_parses_as_at_cbe51d7(monkeypatch, argv, expected):
         return
     assert not isinstance(result, SystemExit), f"{argv} exited with status {result.code}"
     values = vars(result)
-    assert {key: values.get(key, "<missing>") for key in expected} == expected
+    compared = {key: value for key, value in expected.items() if key not in _config_dests_not_given(argv)}
+    assert {key: values.get(key, "<missing>") for key in compared} == compared
 
 
 # REQ-REFACTOR-BDRABCZUK-97F9D32446CC
@@ -429,7 +451,7 @@ def test_help_usage_names_champollion_pipeline(harness, monkeypatch, capsys):
     assert text.startswith(f"usage: {SCRIPT_NAME} "), text.splitlines()[0]
 
 
-# REQ-REFACTOR-BDRABCZUK-230A54CA2187, head REQ-REFACTOR-BDRABCZUK-23313B4B70B5
+# REQ-REFACTOR-BDRABCZUK-230A54CA2187, head REQ-REFACTOR-BDRABCZUK-C331AEBDCF17
 def test_help_text_unchanged_since_cbe51d7(harness, monkeypatch, capsys):
     text = _help_text(harness, monkeypatch, capsys)
     assert _comparable_help(text) == _comparable_help(CBE51D7_HELP)
