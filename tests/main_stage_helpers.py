@@ -127,3 +127,21 @@ def enter_work_dir(monkeypatch, tmp_path):
     cwd.mkdir()
     monkeypatch.chdir(cwd)
     return cwd
+
+
+def fake_script(argv, name, on_run=None):
+    """Script class mock recording the argv of ``name`` in ``argv``; ``on_run`` gets that argv when it runs."""
+    script_cls = MagicMock()
+    script = script_cls.return_value
+
+    def parse_args(args) -> None:
+        argv[name] = list(args)
+
+    def run(*_args, **_kwargs) -> int:
+        if on_run is not None:
+            on_run(argv[name])
+        return 0
+
+    script.parse_args.side_effect = parse_args  # noqa: V101
+    script.run.side_effect = run  # noqa: V101
+    return script_cls
