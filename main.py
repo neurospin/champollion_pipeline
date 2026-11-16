@@ -812,9 +812,20 @@ class ChampollionPipeline(ScriptBuilder):
         return self._run_log_path
 
     def build(self) -> "ChampollionPipeline":
-        """Check for updates through main.py's own import, then parse the arguments."""
-        check_for_updates()
+        """Parse the arguments, then check for updates once, never with --generate-config."""
         self.parse_args()
+        if not self.args.generate_config:
+            check_for_updates()
+        return self
+
+    def print_args(self) -> "ChampollionPipeline":
+        """Log the parsed arguments at debug level only: the console shows no raw argument dict."""
+        shown = {
+            key: value
+            for key, value in vars(self.args).items()
+            if not (key in ("log", "profile", "profile_mode") and value is None)
+        }
+        logger.debug("%s arguments: %s", self.script_name, shown)
         return self
 
     def run(self) -> int:
