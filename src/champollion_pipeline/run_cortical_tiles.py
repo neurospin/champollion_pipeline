@@ -98,8 +98,6 @@ REASON_NO_SUBJECT_FOLDER = "no_subject_folder"
 REASON_INVALID_SK_QC = "invalid_sk_qc_file"
 OUTPUT_QC_FILENAME = "output_qc.tsv"
 CROP_MARKER_FILENAME = "crops_complete.marker"
-CROP_KIND_DISTBOTTOM = "distbottom"
-CROP_KIND_SKELETON = "skeleton"
 CROP_STATUS_PARTIAL = 3  # generate_sulcal_regions.py: some subjects skipped, at least one left
 
 
@@ -419,17 +417,6 @@ class RunCorticalTiles(ScriptBuilder):
                 "transform of the other. Temporary: removed once cortical_tiles fixes its {subject}*/ glob.",
             )
         )
-        _distbottom_group = self.parser.add_mutually_exclusive_group()
-        _distbottom_group.add_argument(
-            "--with-distbottom",
-            action="store_true",
-            help="Generate distbottom crops (off by default; unused by champollion_V1).",
-        )
-        _distbottom_group.add_argument(
-            "--skip-distbottom",
-            action="store_true",
-            help="Deprecated: distbottom is skipped by default. Kept for backward compatibility.",
-        )
         self.parser.set_defaults(labelling_session_explicit=False)
 
     # TEMPORARY (DEF-CORTILES-BDRABCZUK-8A44DAD7F312, -9C7D2B9265BC)
@@ -617,10 +604,8 @@ class RunCorticalTiles(ScriptBuilder):
         return list(self.args.input_types or INPUT_TYPES_DEFAULT)
 
     def _list_crop_kinds(self) -> list[str]:
-        """Crop kinds the output QC checks: the input types, distbottom on request with skeleton, then mask."""
-        input_types = self._list_input_types()
-        has_distbottom = self.args.with_distbottom and CROP_KIND_SKELETON in input_types
-        return [*input_types, *([CROP_KIND_DISTBOTTOM] if has_distbottom else []), CROP_KIND_MASK]
+        """Crop kinds the output QC checks: the input types, then mask."""
+        return [*self._list_input_types(), CROP_KIND_MASK]
 
     def _read_skip_lists(self, output_abs: str) -> dict[str, list[SkipEntry]]:
         """Entries of the skip list of each side; a list its reader refuses gives one ERROR and no entry."""
@@ -753,7 +738,7 @@ class RunCorticalTiles(ScriptBuilder):
         config["skel_qc_path"] = sk_qc_abs
         if self.args.bids:
             config["bids"] = True
-        config["skip_distbottom"] = not self.args.with_distbottom
+        config.pop("skip_distbottom", None)
         with open(config_file_path, "w") as f:
             json.dump(config, f, indent=3)
 

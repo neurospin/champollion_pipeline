@@ -68,11 +68,7 @@ Each per-subject NIfTI is resampled from native Morphologist space to **ICBM2009
 Applies the mask bounding box computed in Step 1 to extract the region of interest from each resampled volume.
 Output: `{output_dir}/crops/2mm/{region}/mask/{side}{input_type}_cropped.nii.gz` per subject.
 
-#### Step 6 — (Optional) Distance-to-bottom (`generate_distbottom_crops`)
-
-Generates a distance-transform map from the fold bottom. Skipped by default (`skip_distbottom: true` written by `run_cortical_tiles.py`); pass `--with-distbottom` to generate it. Unused by champollion_V1.
-
-#### Step 7 — Aggregate to NumPy
+#### Step 6 — Aggregate to NumPy
 
 After all subjects are cropped, a final pass collects every per-subject NIfTI into:
 
@@ -97,7 +93,6 @@ Key fields resolved at runtime:
 | `path_to_skeleton_with_hull` | Sub-path to the skeleton-with-hull NIfTI |
 | `masks_version` | Which canonical mask set to use (`canonical_25` by default) |
 | `skel_qc_path` | Path to QC TSV; empty string = no filtering |
-| `skip_distbottom` | Boolean; `run_cortical_tiles.py` writes `true` unless `--with-distbottom` is passed (template value is overridden). |
 
 ---
 
