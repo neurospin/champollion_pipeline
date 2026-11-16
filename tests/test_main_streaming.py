@@ -442,6 +442,7 @@ def test_streaming_models_path_with_hf(streaming_main, monkeypatch):
 def test_sequential_pre_check_summary_logged(main_module, monkeypatch, tmp_path, pipeline_caplog):
     config = _tmp_config(main_module, tmp_path)
     Path(config.dataset.morphologist_graphs).mkdir(parents=True)
+    config.dataset.input_path = ""  # noqa: V101 - nothing to route: the test is about stage 2's pre-check
     monkeypatch.setattr(main_module, "create_default_config", lambda: config)
     seen_before_run: list[bool] = []
 

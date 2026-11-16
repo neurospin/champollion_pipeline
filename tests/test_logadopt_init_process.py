@@ -158,6 +158,7 @@ def test_main_py_stage_exception_logged_at_fail_with_traceback(tmp_path):
     """REQ-LOGADOPT-05: an Exception raised inside a stage is logged at FAIL, naming the stage, with its traceback."""
     input_dir = tmp_path / "subjects"
     input_dir.mkdir()
+    (input_dir / "sub-01.nii.gz").write_bytes(b"synthetic")  # a T1 input: stage 1 runs and raises
     config = tmp_path / "one_stage.yaml"
     config.write_text(
         textwrap.dedent(

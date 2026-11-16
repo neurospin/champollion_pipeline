@@ -38,6 +38,9 @@ REQ_NO_ABBREV = "REQ-INPUTKIND-BDRABCZUK-A622708CCB4D: main.py refuses an abbrev
 STREAMING = "streaming"
 ROW_IDS = [row.flag for row in CONFIG_ARGUMENTS]
 STAGE_PICKED = "run_cortical_tiles"
+# input_kind cases need an input holding the chosen kind: KIND_INPUT holds a T1 file and one Morphologist graph.
+KIND_INPUT = "kind-input"
+KIND_INPUT_GRAPHS = Path("derivatives/morphologist-6.0/sub-01/t1mri/default_acquisition/default_analysis/folds/3.1")
 
 
 @dataclasses.dataclass
@@ -46,6 +49,16 @@ class RunRecord:
 
     configs: list = dataclasses.field(default_factory=list)
     streaming_calls: list = dataclasses.field(default_factory=list)
+
+
+def _write_input_folders(root: Path) -> None:
+    """The input folders the input_path and input_kind cases name: T1 inputs, and KIND_INPUT holding both kinds."""
+    for name in ("cli-input_path", "yaml-input_path", KIND_INPUT):
+        (root / name).mkdir()
+        (root / name / "sub-01.nii.gz").write_bytes(b"synthetic")
+    graphs = root / KIND_INPUT / KIND_INPUT_GRAPHS
+    graphs.mkdir(parents=True)
+    (graphs / "Lsub-01.arg").write_text("synthetic")
 
 
 def _stub_main_side_effects(monkeypatch, tmp_path, record: RunRecord) -> None:
@@ -65,6 +78,7 @@ def _stub_main_side_effects(monkeypatch, tmp_path, record: RunRecord) -> None:
         return 0
 
     monkeypatch.chdir(tmp_path)
+    _write_input_folders(tmp_path)
     monkeypatch.setattr(MAIN, "check_for_updates", lambda: None)
     monkeypatch.setattr(MAIN, "init_pipeline_process", lambda: None)
     monkeypatch.setattr(MAIN, "start_profiling", lambda *a, **k: None)
@@ -108,15 +122,26 @@ def _yaml_field_value(written: dict, row: ConfigArgument):
     return written["dataset"][row.field_name] if row.is_dataset_field else written[row.field_name]
 
 
-def _argument_case(row: ConfigArgument, current) -> tuple[list[str], object]:
-    """Command-line arguments setting the row's field to a value other than current, and that value."""
-    kind = row.kind
+def _named_field_case(row: ConfigArgument, current) -> tuple[list[str], object] | None:
+    """Arguments and value for a field whose values are a fixed set of words, or None for any other field."""
     if row.field_name == "mode":
         target = STREAMING if current != STREAMING else "sequential"
         return [row.flag, target], target
     if row.field_name == "log_level":
         target = "ERROR" if current != "ERROR" else "WARNING"
         return [row.flag, target], target
+    if row.field_name == "input_kind":
+        target = "t1" if current != "t1" else "morphologist"
+        return [row.flag, target, "--input-path", KIND_INPUT], target
+    return None
+
+
+def _argument_case(row: ConfigArgument, current) -> tuple[list[str], object]:
+    """Command-line arguments setting the row's field to a value other than current, and that value."""
+    named = _named_field_case(row, current)
+    if named is not None:
+        return named
+    kind = row.kind
     if kind is ArgumentKind.FLAG:
         target = not current
         return [row.flag if target else "--no-" + row.flag.removeprefix("--")], target
@@ -142,6 +167,8 @@ def _yaml_value(field_name: str, kind: ArgumentKind | None, default):
         return STREAMING
     if field_name == "log_level":
         return "WARNING"
+    if field_name == "input_kind":
+        return "morphologist"
     if kind is ArgumentKind.FLAG:
         return not default
     if kind is ArgumentKind.INTEGER:
@@ -169,6 +196,8 @@ def _write_yaml(path: Path, field_name: str, is_dataset_field: bool, value) -> s
     section[field_name] = value
     if field_name == "mode" and value == STREAMING:
         config_dict["dataset"]["embeddings_only"] = True  # the streaming guard needs it
+    if field_name == "input_kind":
+        config_dict["dataset"]["input_path"] = KIND_INPUT  # the chosen kind must be there
     path.write_text(yaml.safe_dump(config_dict, sort_keys=False))
     return str(path)
 

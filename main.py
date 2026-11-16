@@ -47,14 +47,15 @@ from champollion_pipeline.derivatives_layout import (
 )
 from champollion_pipeline.file_indexer import SubjectEligibilityChecker
 from champollion_pipeline.file_indexer.pipeline_checks import build_output_report
+from champollion_pipeline.input_kind_choice import (
+    InputChoiceError,
+    check_input_kind_value,
+    choose_input_kind,
+    choose_subjects_folder,
+)
 from champollion_pipeline.process_setup import init_pipeline_process
 from champollion_pipeline.streaming import StreamingSettings
-from champollion_pipeline.utils.input_kind import (
-    InputKind,
-    detect_input_kind,
-    resolve_subjects_dir,
-    stage1_subjects_dir,
-)
+from champollion_pipeline.utils.input_kind import InputKind, stage1_subjects_dir
 from champollion_pipeline.utils.skeleton_qc import SKELETON_SIDES, compute_skeleton_pattern
 
 logger = logging.getLogger("champollion_pipeline.main")
@@ -680,6 +681,7 @@ def _save_config_template(args: argparse.Namespace) -> int:
     """Write the default configuration, with the command-line overrides, to --generate-config."""
     config = create_default_config()
     _apply_cli_overrides(config, args, from_default=True)
+    check_input_kind_value(config.dataset)
     ConfigLoader.save_to_yaml(config, args.generate_config)
     logger.output(f"✅ Configuration template generated: {args.generate_config}")
     return 0
@@ -742,15 +744,12 @@ def _run_streaming_mode(config: PipelineConfig, args: argparse.Namespace, *, run
 
 
 def _apply_input_kind(config: PipelineConfig) -> InputKind | None:
-    """Fill, in place, the fields the kind of config.dataset.input_path fixes.
+    """Fill, in place, the fields the chosen kind of config.dataset.input_path fixes; return that kind.
 
-    Returns the detected kind, or None when input_path is empty (nothing detected, nothing changed).
-    NEITHER and BOTH change nothing here.
+    choose_input_kind decides the kind (None: input_path and input_kind empty, nothing changed); its
+    InputChoiceError propagates.
     """
-    input_path = config.dataset.input_path
-    if not input_path:
-        return None
-    kind = detect_input_kind(input_path)
+    kind = choose_input_kind(config.dataset)
     if kind is InputKind.T1:
         _apply_t1_input(config.dataset)
     elif kind is InputKind.MORPHOLOGIST:
@@ -767,11 +766,11 @@ def _apply_t1_input(dataset: DatasetConfig) -> None:
 def _apply_morphologist_input(config: PipelineConfig) -> None:
     """Subjects folder of a Morphologist input, when morphologist_graphs is not set, then the stage 1 skip.
 
-    AmbiguousSubjectsFolders from resolve_subjects_dir propagates unchanged.
+    choose_subjects_folder asks or stops on several subjects folders; its InputChoiceError propagates.
     """
     dataset = config.dataset
     if not dataset.morphologist_graphs:
-        folder = resolve_subjects_dir(dataset.input_path)
+        folder = choose_subjects_folder(dataset)
         if folder is not None:
             dataset.morphologist_graphs = os.path.abspath(folder)
     _skip_morphologist_stage(config)
@@ -842,11 +841,20 @@ class ChampollionPipeline(ScriptBuilder):
         return self
 
     def run(self) -> int:
-        args = self.args
+        """Run the pipeline; an InputChoiceError ends it with one ERROR record and exit status 1."""
+        try:
+            return self._run_pipeline(self.args)
+        except InputChoiceError as error:
+            logger.error(str(error))
+            return 1
+
+    def _run_pipeline(self, args: argparse.Namespace) -> int:
+        """The --generate-config template, or the configured run in streaming or batch mode."""
         if args.generate_config:
             return _save_config_template(args)
         config = _load_config(args)
         _apply_cli_overrides(config, args, from_default=not args.config)
+        check_input_kind_value(config.dataset)
         _start_config_profiling(config, args)
         if config.mode == "streaming":
             return _run_streaming_mode(config, args, run_log_path=self._run_log_path)
