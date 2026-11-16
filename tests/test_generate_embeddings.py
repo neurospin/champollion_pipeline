@@ -555,9 +555,9 @@ class TestRegionsFilter:
         (tmp_path / "SC-sylv_left").mkdir()
 
         script = GenerateEmbeddings()
-        script.args = script.parse_args([str(tmp_path), "/d", "--regions", "SC-sylv_left", "nonexistent_region"])
+        script.args = script.parse_args([str(tmp_path), "/d", "--regions", "SC-sylv_left", "no_a", "no_b"])
 
-        with pytest.raises(FileNotFoundError, match="nonexistent_region"):
+        with pytest.raises(FileNotFoundError, match=rf"Model folder.*: no_a, no_b .*searched: {tmp_path}"):
             script._make_regions_tmpdir(str(tmp_path))
 
     def test_run_pipeline_uses_tmpdir_when_regions_set(self, tmp_path):
