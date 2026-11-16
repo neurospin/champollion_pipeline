@@ -37,7 +37,13 @@ from champollion_utils.script_builder import ScriptBuilder
 from champollion_utils.update_check import check_for_updates
 
 from champollion_pipeline._stage_base import PARTIAL_STATUS, PipelineStage, StageResult
-from champollion_pipeline.cli_options import add_config_arguments, apply_config_arguments
+from champollion_pipeline.cli_options import (
+    ArgumentConflictError,
+    add_config_arguments,
+    add_path_arguments,
+    apply_config_arguments,
+    fold_path_arguments,
+)
 from champollion_pipeline.config import ConfigLoader, DatasetConfig, PipelineConfig
 from champollion_pipeline.derivatives_layout import (
     compute_combined_embeddings_dir,
@@ -62,6 +68,8 @@ logger = logging.getLogger("champollion_pipeline.main")
 
 # Stage 1, skipped when the input already holds Morphologist outputs
 _MORPHOLOGIST_STAGE = "generate_morphologist_graphs"
+# Exit status of a command-line usage error, as argparse uses.
+_USAGE_ERROR_STATUS = 2
 
 SCRIPT_NAME = "champollion_pipeline"
 SCRIPT_DESCRIPTION = "Champollion Pipeline Orchestrator"
@@ -670,6 +678,7 @@ def _apply_cli_overrides(config: PipelineConfig, args: argparse.Namespace, *, fr
     REQ-DEFROOT dataset-root re-derivation that must only fire for the
     default config (REQ-DEFROOT-03/04).
     """
+    fold_path_arguments(args)
     apply_config_arguments(config, args)
     if args.enable_all_stages:
         config.stages = dict.fromkeys(config.stages, True)
@@ -819,6 +828,7 @@ class ChampollionPipeline(ScriptBuilder):
             help="Enumerate scans and report without processing (streaming mode only).",
         )
         add_config_arguments(self.parser)
+        add_path_arguments(self.parser)
 
     def _resolve_log_path(self) -> str | None:
         """main.py's own run log: only with a bare --log, stored for the streaming log_dir. args.log is left as is."""
@@ -843,12 +853,15 @@ class ChampollionPipeline(ScriptBuilder):
         return self
 
     def run(self) -> int:
-        """Run the pipeline; an InputChoiceError ends it with one ERROR record and exit status 1."""
+        """Run the pipeline; InputChoiceError (status 1) or ArgumentConflictError (2) ends it with one ERROR record."""
         try:
             return self._run_pipeline(self.args)
         except InputChoiceError as error:
             logger.error(str(error))
             return 1
+        except ArgumentConflictError as error:
+            logger.error(str(error))
+            return _USAGE_ERROR_STATUS
 
     def _run_pipeline(self, args: argparse.Namespace) -> int:
         """The --generate-config template, or the configured run in streaming or batch mode."""

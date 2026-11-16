@@ -278,8 +278,8 @@ _CONFIG_FLAGS = frozenset(row.flag for row in CONFIG_ARGUMENTS)
 
 
 def _is_left_out_entry(line: str) -> bool:
-    """True for the first line of the --log, --allow-prefix-ids or a CONFIG_ARGUMENTS flag entry."""
-    if line.startswith(("  --log", "  --allow-prefix-ids")):
+    """True for the first line of the --log, --allow-prefix-ids, --output-path or a CONFIG_ARGUMENTS flag entry."""
+    if line.startswith(("  --log", "  --allow-prefix-ids", "  --output-path")):
         return True
     if not line.startswith("  --"):
         return False
@@ -287,18 +287,18 @@ def _is_left_out_entry(line: str) -> bool:
 
 
 def _comparable_help(text: str) -> str:
-    """Help text without the usage lines, the left-out entries, "profiling" and trailing blanks.
+    """Help text without the usage lines, the left-out entries, the "positional arguments" and "profiling" groups.
 
-    REQ-REFACTOR-BDRABCZUK-C331AEBDCF17 leaves out the --log and --allow-prefix-ids entries and the entry of each
-    CONFIG_ARGUMENTS flag. --allow-prefix-ids is TEMPORARY (DEF-CORTILES-BDRABCZUK-8A44DAD7F312) and
-    REQ-CORTILES-BDRABCZUK-937E3705E661 requires it listed.
+    REQ-REFACTOR-BDRABCZUK-EB93D016860C leaves out the positional arguments section (INPUT, OUTPUT), the --log,
+    --allow-prefix-ids and --output-path entries and the entry of each CONFIG_ARGUMENTS flag. --allow-prefix-ids is
+    TEMPORARY (DEF-CORTILES-BDRABCZUK-8A44DAD7F312) and REQ-CORTILES-BDRABCZUK-937E3705E661 requires it listed.
     """
     lines = text.splitlines()
     first_blank = lines.index("")
     kept: list[str] = []
     skipping = None
     for line in lines[first_blank + 1 :]:
-        if line == "profiling:":
+        if line in ("positional arguments:", "profiling:"):
             skipping = "group"
             continue
         if skipping == "group":
@@ -451,7 +451,7 @@ def test_help_usage_names_champollion_pipeline(harness, monkeypatch, capsys):
     assert text.startswith(f"usage: {SCRIPT_NAME} "), text.splitlines()[0]
 
 
-# REQ-REFACTOR-BDRABCZUK-230A54CA2187, head REQ-REFACTOR-BDRABCZUK-C331AEBDCF17
+# REQ-REFACTOR-BDRABCZUK-230A54CA2187, head REQ-REFACTOR-BDRABCZUK-EB93D016860C
 def test_help_text_unchanged_since_cbe51d7(harness, monkeypatch, capsys):
     text = _help_text(harness, monkeypatch, capsys)
     assert _comparable_help(text) == _comparable_help(CBE51D7_HELP)
