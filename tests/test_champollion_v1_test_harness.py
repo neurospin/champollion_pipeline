@@ -85,8 +85,10 @@ def _tasks_visible_in(config: dict, env: str) -> dict:
 
 
 def _pytest_argv(command: str) -> list[str]:
-    """Return the argv after the ``pytest`` executable in a task command."""
+    """Return the argv after the first ``pytest`` executable of a task command (first ``&&`` segment)."""
     tokens = shlex.split(command)
+    if "&&" in tokens:
+        tokens = tokens[: tokens.index("&&")]
     for i, token in enumerate(tokens):
         if token == "pytest" or token.endswith("/pytest"):
             return tokens[i + 1 :]
@@ -119,6 +121,8 @@ def _positional_paths(argv: list[str]) -> list[str]:
         "--rootdir",
         "-p",
         "--basetemp",
+        "-n",
+        "--dist",
     }
     paths, skip = [], False
     for token in argv:
@@ -203,6 +207,20 @@ class TestPipelineTestTaskScope:
         argv = _pytest_argv(_task_command(pixi_config["tasks"]["test"]))
         paths = [p.rstrip("/") for p in _positional_paths(argv)]
         assert paths == ["tests"], f"pixi task 'test' must collect only tests/; got positional args {paths!r}"
+
+    def test_test_task_runs_non_serial_under_xdist_then_serial_pass(self, pixi_config):
+        command = _task_command(pixi_config["tasks"]["test"])
+        first, second = (shlex.split(part) for part in command.split("&&"))
+        assert "-n" in first and _option_values(first, "-m") == ["not serial"]
+        assert "-n" not in second and _option_values(second, "-m") == ["serial"]
+
+    def test_test_cov_appends_coverage_on_the_serial_pass(self, pixi_config):
+        task = pixi_config["tasks"]["test-cov"]
+        first, second = (shlex.split(part) for part in _task_command(task).split("&&"))
+        assert "-n" in first and _option_values(first, "-m") == ["not serial"]
+        assert _option_values(second, "-m") == ["serial"] and "--cov-append" in second
+        assert "--cov-append" not in first
+        assert _positional_paths(_pytest_argv(_task_command(task))) == ["tests/"]
 
     def test_pytest_testpaths_is_tests_only(self):
         with PYPROJECT_TOML.open("rb") as handle:
