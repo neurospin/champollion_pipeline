@@ -261,11 +261,11 @@ format = "ruff format src/ tests/ main.py scripts/"
 dead-code = "vulture src/ tests/"
 audit = "pip-audit"
 
-test = "pytest tests/ -v"
+test = "pytest tests/ -v -n auto --dist loadscope -m 'not serial' && pytest tests/ -v -m serial"
 test-unit = "pytest tests/ -v -m unit"
 test-integration = "pytest tests/ -v -m integration"
 test-smoke = "pytest tests/ -v -m smoke"
-test-cov = { cmd = "pytest tests/ -v --cov=src --cov-report=html --cov-report=term", env = { COVERAGE_FILE = "$PIXI_PROJECT_ROOT/.coverage-pipeline" } }
+test-cov = { cmd = "pytest tests/ -v -n auto --dist loadscope -m 'not serial' --cov=src --cov-report= && pytest tests/ -v -m serial --cov=src --cov-append --cov-report=html --cov-report=term", env = { COVERAGE_FILE = "$PIXI_PROJECT_ROOT/.coverage-pipeline" } }
 test-parallel = "pytest tests/ -v -n auto --dist loadscope -m 'not serial' && pytest tests/ -v -m serial"
 test-fast = "pytest tests/ -v -x --tb=short"
 test-verbose = "pytest tests/ -vv"
