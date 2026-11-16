@@ -5,6 +5,9 @@ Config argument registry: one optional main.py argument per PipelineConfig and D
 CONFIG_ARGUMENTS is derived from dataclasses.fields, so a new field gets its argument without an edit here, and a
 field of an unknown type stops the import. Every argument defaults to None, which means "not given": a parse changes
 only the fields it names.
+
+PATH_ALIASES adds the other forms of two fields: main.py <input> <output> and --output-path. fold_path_arguments
+writes the one value of each field back to its registry dest, or stops when its forms resolve to different paths.
 """
 
 import argparse
@@ -14,6 +17,7 @@ import types
 import typing
 from dataclasses import dataclass
 from enum import Enum
+from pathlib import Path
 
 from champollion_pipeline.config import DatasetConfig, PipelineConfig
 
@@ -52,6 +56,10 @@ _MODE_HELP = (
 _WORKER_TIMEOUT_HELP = (
     "Timeout in seconds of the whole producer-worker run of one scan; a longer run ends FAILED (default: 7200)."
 )
+
+
+class ArgumentConflictError(ValueError):
+    """Two forms of one config field resolve to different paths; a usage error, str(error) is the ERROR message."""
 
 
 class ArgumentKind(Enum):
@@ -194,3 +202,64 @@ def apply_config_arguments(config: PipelineConfig, args: argparse.Namespace) -> 
         setattr(owner, row.field_name, value)
     if getattr(args, "verbose", None) is True and getattr(args, "log_level", None) is None:
         config.log_level = "DEBUG"
+
+
+@dataclass(frozen=True)
+class PathAlias:
+    """A config field that more than one main.py argument sets: each form as (name in messages, args dest).
+
+    field_name is also the field's registry dest (it is not in _DEST_OVERRIDES).
+    """
+
+    field_name: str
+    forms: tuple[tuple[str, str], ...]
+
+
+# The forms of each field; the value kept is the first given form's.
+PATH_ALIASES = (
+    PathAlias("input_path", (("INPUT", "input_positional"), ("--input-path", "input_path"))),
+    PathAlias(
+        "datasets_root",
+        (("OUTPUT", "output_positional"), ("--output-path", "output_path"), ("--datasets-root", "datasets_root")),
+    ),
+)
+
+
+def add_path_arguments(parser: argparse.ArgumentParser) -> None:  # noqa: V103 - used by main.py
+    """Add the INPUT and OUTPUT positionals and --output-path, all optional, all default None, all in --help."""
+    parser.add_argument(
+        "input_positional", nargs="?", default=None, metavar="INPUT", help="Input to process (same as --input-path)"
+    )
+    parser.add_argument(
+        "output_positional",
+        nargs="?",
+        default=None,
+        metavar="OUTPUT",
+        help="Dataset root holding derivatives/ (same as --output-path)",
+    )
+    parser.add_argument(
+        "--output-path", dest="output_path", default=None, metavar="DIR", help="Config field dataset.datasets_root"
+    )
+
+
+def _same_path_value(first: str, other: str) -> bool:
+    """True when two forms name the same path: equal pathlib Path.resolve() (symlinks followed, from the cwd)."""
+    return Path(first).resolve() == Path(other).resolve()
+
+
+def fold_path_arguments(args: argparse.Namespace) -> None:  # noqa: V103 - used by main.py
+    """Set, in args, each PATH_ALIASES field's registry dest to the value its given forms agree on.
+
+    A field none of whose forms is given is left alone; the value kept is the first given form's, as given. Raises
+    ArgumentConflictError naming every given form and its value when two of them resolve to different paths.
+    """
+    for alias in PATH_ALIASES:
+        given = [(name, getattr(args, dest, None)) for name, dest in alias.forms]
+        given = [(name, value) for name, value in given if value is not None]
+        if not given:
+            continue
+        value = given[0][1]
+        if not all(_same_path_value(value, other) for _, other in given[1:]):
+            forms = ", ".join(f"{name} {other!r}" for name, other in given)
+            raise ArgumentConflictError(f"dataset.{alias.field_name} given as different paths: {forms}; give one path")
+        setattr(args, alias.field_name, value)
