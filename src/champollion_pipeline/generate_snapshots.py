@@ -34,7 +34,9 @@ from champollion_pipeline.snapshot_types.input_qc import (
 from champollion_pipeline.snapshot_types.output_qc import OUTPUT_QC_FILENAME, SnapshotsOutputQC
 from champollion_pipeline.snapshot_types.sulcal import (
     _detect_hemi,
+    compute_session_graphs,
     find_first_kept_subject_graphs,
+    find_subject_dir,
     find_sulcal_graphs,
     find_white_mesh,
     generate_sulcal_graph_snapshot,
@@ -52,6 +54,11 @@ from champollion_pipeline.snapshot_types.umap import (
     discover_umap_pairs,
     generate_umap_snapshot,
     list_embedding_csvs,
+)
+from champollion_pipeline.utils.lib import (
+    LABELLING_SESSION_CANDIDATES,
+    ExplicitLabellingSession,
+    labelling_session_candidates,
 )
 from champollion_pipeline.utils.qc_report import read_qc_tsv, write_run_qc_tsv
 
@@ -132,6 +139,17 @@ class GenerateSnapshots(ScriptBuilder):
             .add_optional_argument(
                 "--acquisition",
                 "Acquisition folder name to use (e.g. wk30, wk40). Required when a subject has multiple segmentations.",
+            )
+            .add_argument(
+                "--labelling_session",
+                action=ExplicitLabellingSession,
+                default=None,
+                help=(
+                    "Labelling session folder whose sulcal graph is rendered (e.g. deepcnn_session_auto). "
+                    "When omitted, each hemisphere uses the first of "
+                    f"{', '.join(LABELLING_SESSION_CANDIDATES)} that holds one of its graphs. "
+                    "A hemisphere with no graph in that folder keeps all its graphs."
+                ),
             )
             .add_optional_argument("--embeddings_dir", "Path to embeddings output directory")
             .add_optional_argument("--cortical_tiles_dir", "Path to cortical tiles crops directory")
@@ -268,20 +286,22 @@ class GenerateSnapshots(ScriptBuilder):
 
         total = sum(len(v) for v in by_hemi.values())
         logger.trace(f"Found {total} sulcal graph(s)")
+        sessions = labelling_session_candidates(self.args)
+        acq_tag = f"_{acquisition}" if acquisition else ""
 
-        for hemi, hemi_graphs in by_hemi.items():
+        for hemi, found_graphs in by_hemi.items():
+            hemi_graphs = compute_session_graphs(found_graphs, sessions)
             if not hemi_graphs:
                 continue
+            out = osp.join(self.args.output_dir, f"sulcal_graph{acq_tag}_{hemi}.png")
+            self._output_qc.expect(out)
             if len(hemi_graphs) > 1:
-                self._report_ambiguous_hemisphere(hemi, hemi_graphs, morphologist_dir, subject)
+                self._report_ambiguous_hemisphere(hemi, hemi_graphs)
                 continue
             graph_path = hemi_graphs[0]
             white_mesh = find_white_mesh(graph_path)
             if white_mesh:
                 logger.trace(f"White mesh: {white_mesh}")
-            acq_tag = f"_{acquisition}" if acquisition else ""
-            out = osp.join(self.args.output_dir, f"sulcal_graph{acq_tag}_{hemi}.png")
-            self._output_qc.expect(out)
             try:
                 snap = generate_sulcal_graph_snapshot(
                     graph_path,
@@ -296,10 +316,10 @@ class GenerateSnapshots(ScriptBuilder):
 
         return snapshots
 
-    def _report_ambiguous_hemisphere(self, hemi, hemi_graphs, morphologist_dir, subject):
-        """Log one ERROR naming the graphs of a hemisphere that has several of them (no snapshot)."""
-        subject_dir = osp.join(morphologist_dir, subject) if subject else morphologist_dir
-        acqs = list_acquisitions(subject_dir)
+    def _report_ambiguous_hemisphere(self, hemi, hemi_graphs):
+        """Log one ERROR naming a hemisphere's graphs and the rendered subject's acquisitions (no snapshot)."""
+        subject_dir = find_subject_dir(sorted(hemi_graphs)[0])
+        acqs = list_acquisitions(subject_dir) if subject_dir else []
         acq_list = ", ".join(acqs) if acqs else "unknown"
         logger.error(
             f"{len(hemi_graphs)} {hemi} graphs found "

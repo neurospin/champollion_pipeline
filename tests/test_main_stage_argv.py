@@ -279,3 +279,22 @@ class TestSnapshotsChampollionDataRootArgv:
         argv = _captured_argv(main_module, "GenerateSnapshotsStage", "GenerateSnapshots", config)
         namespace = _parse_with_real_parser(GenerateSnapshots, argv)
         assert namespace.champollion_data_root == "/data/champollion_root", f"argv was {argv!r}"
+
+
+@pytest.mark.unit
+class TestSnapshotsLabellingSessionArgv:
+    """dataset.labelling_session reaches generate_snapshots as --labelling_session only when it is set."""
+
+    def test_non_empty_labelling_session_forwarded(self, main_module):
+        """REQ-SNAPSULC-BDRABCZUK-152484836413: a non-empty setting S gives --labelling_session=S."""
+        config = _base_config(main_module)
+        config.dataset.labelling_session = "deepcnn_session_auto"
+        argv = _captured_argv(main_module, "GenerateSnapshotsStage", "GenerateSnapshots", config)
+        assert "--labelling_session=deepcnn_session_auto" in argv, f"argv was {argv!r}"
+
+    def test_empty_labelling_session_not_forwarded(self, main_module):
+        """REQ-SNAPSULC-BDRABCZUK-5519EC9678DB: the empty setting gives no --labelling_session option."""
+        config = _base_config(main_module)
+        config.dataset.labelling_session = ""
+        argv = _captured_argv(main_module, "GenerateSnapshotsStage", "GenerateSnapshots", config)
+        assert not [arg for arg in argv if arg.startswith("--labelling_session")], f"argv was {argv!r}"

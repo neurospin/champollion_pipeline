@@ -411,6 +411,8 @@ class GenerateSnapshotsStage(PipelineStage):
             args.append(f"--reference_data_dir={self.config.dataset.reference_data_path}")
         if self.config.dataset.champollion_data_root:
             args.append(f"--champollion_data_root={self.config.dataset.champollion_data_root}")
+        if dataset.labelling_session:
+            args.append(f"--labelling_session={dataset.labelling_session}")
         return args
 
     def create_script(self) -> ScriptBuilder:
