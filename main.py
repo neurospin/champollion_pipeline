@@ -425,6 +425,11 @@ class GenerateSnapshotsStage(PipelineStage):
             args.append(f"--cortical_tiles_dir={self.config.dataset.crops_path}")
         if self.config.dataset.reference_data_path:
             args.append(f"--reference_data_dir={self.config.dataset.reference_data_path}")
+        else:
+            self.logger.warning(
+                "UMAP snapshots skipped: no reference data; set --reference-data-path to render them "
+                "(sulcal graph and cortical tiles snapshots still run)"
+            )
         if self.config.dataset.champollion_data_root:
             args.append(f"--champollion_data_root={self.config.dataset.champollion_data_root}")
         if dataset.labelling_session:
