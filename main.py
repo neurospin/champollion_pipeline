@@ -283,9 +283,12 @@ class GenerateEmbeddingsStage(PipelineStage):
     def build_args(self) -> list[str]:
         dataset = self.config.dataset
         models_path = _compute_models_source(self.config)
-        args = [models_path, dataset.datasets_root, f"--masks={dataset.masks_version}"]
-        if dataset.hf_enabled:
-            args.append(f"--model-version={dataset.masks_version}")
+        args = [
+            models_path,
+            dataset.datasets_root,
+            f"--masks={dataset.masks_version}",
+            f"--model-version={dataset.masks_version}",
+        ]
 
         region_embeddings_dir = _compute_region_embeddings_source(dataset)
         if region_embeddings_dir:
