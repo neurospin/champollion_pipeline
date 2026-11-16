@@ -125,16 +125,6 @@ class TestRunCorticalTilesArguments:
         )
         assert args.input_types == ["skeleton", "foldlabel", "extremities"]
 
-    def test_skip_distbottom_default_false(self):
-        """Test that --skip-distbottom defaults to False."""
-        args = parsed_script("/input", "/output").args
-        assert args.skip_distbottom is False
-
-    def test_skip_distbottom_can_be_set(self):
-        """Test that --skip-distbottom can be set to True."""
-        args = parsed_script("/input", "/output", "--skip-distbottom").args
-        assert args.skip_distbottom is True
-
     def test_bids_default_false(self):
         """--bids is an opt-in flag on RunCorticalTiles's parser, defaulting to False (REQ-BIDS-01/-02)."""
         args = parsed_script("/input", "/output").args

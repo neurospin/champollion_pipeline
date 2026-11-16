@@ -3,14 +3,11 @@
 Stage-2 defaults for run_cortical_tiles.py (TASK-129).
 
 champollion_V1 (commit 770a5b74) no longer reads extremities or distbottom
-crops, so stage 2 must not generate them unless explicitly asked to:
+crops, so stage 2 must not generate them unless explicitly asked to
+(distbottom options: tests/test_run_cortical_tiles_no_distbottom.py):
 
 - REQ-TILESDEF-01: without --input-types, forward exactly skeleton and foldlabel.
-- REQ-TILESDEF-02: without --with-distbottom, write skip_distbottom = true.
-- REQ-TILESDEF-03: with --with-distbottom, write skip_distbottom = false.
 """
-
-import json
 
 import pytest
 
@@ -62,24 +59,3 @@ class TestDefaultInputTypes:
         )
         values = _values_after_option(cmd, "-y")
         assert values == ["skeleton", "foldlabel", "extremities"]
-
-
-class TestDistbottomDefault:
-    """REQ-TILESDEF-02."""
-
-    def test_default_sets_skip_distbottom_true(self, tmp_path):
-        """Without --with-distbottom, the written pipeline JSON has skip_distbottom = true."""
-        input_dir, output_dir, config_path = stage_dirs_on_template(tmp_path)
-        assert json.loads(config_path.read_text())["skip_distbottom"] is False  # template default
-        _run(input_dir, output_dir)
-        assert json.loads(config_path.read_text())["skip_distbottom"] is True
-
-
-class TestDistbottomOptIn:
-    """REQ-TILESDEF-03."""
-
-    def test_with_distbottom_sets_skip_distbottom_false(self, tmp_path):
-        """--with-distbottom writes skip_distbottom = false, even over a pre-existing true."""
-        input_dir, output_dir, config_path = stage_dirs_on_template(tmp_path, {"skip_distbottom": True})
-        _run(input_dir, output_dir, ["--with-distbottom"])
-        assert json.loads(config_path.read_text())["skip_distbottom"] is False

@@ -41,7 +41,6 @@ RESOLVED_CONFIG = {
     "no_mask": False,
     "threshold": 0,
     "dilation": 5,
-    "skip_distbottom": False,
 }
 
 

@@ -323,20 +323,8 @@ class TestCheckedKinds:
         assert row["qc"] == 0
         assert f"missing_crop:mask:L:{_REGIONS[0]}" in row["reason"]
 
-    def test_with_distbottom_needs_the_distbottom_files(self, temp_dir):
-        args = ["--regions", *_REGIONS, "--with-distbottom"]
-
-        row = _run_stage(temp_dir, {_SUBJECT: "LR"}, args).rows()[_SUBJECT]
-
-        assert f"missing_crop:distbottom:L:{_REGIONS[0]}" in row["reason"]
-
     def test_default_run_needs_no_distbottom_files(self, temp_dir):
         assert _run_stage(temp_dir, {_SUBJECT: "LR"}).rows()[_SUBJECT]["reason"] == ""
-
-    def test_with_distbottom_without_skeleton_needs_no_distbottom_files(self, temp_dir):
-        args = ["--regions", *_REGIONS, "--input-types", "foldlabel", "--with-distbottom"]
-
-        assert _run_stage(temp_dir, {_SUBJECT: "LR"}, args, kinds=("foldlabel",)).rows()[_SUBJECT]["qc"] == 1
 
 
 class TestCheckedRegions:

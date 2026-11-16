@@ -261,41 +261,7 @@ class TestBuildCommand:
 
 
 class TestSkipDistbottom:
-    """Test skip_distbottom modifying pipeline_loop_2mm.json."""
-
-    def test_skip_distbottom_modifies_config(self, temp_dir):
-        """Test that --skip-distbottom sets skip_distbottom in pipeline JSON."""
-        input_dir, output_dir = stage_dirs(temp_dir)
-
-        # Read back config and check skip_distbottom was set
-        updated_config = run_on_config(
-            input_dir, output_dir, {"graphs_dir": "", "other_key": "value"}, "--skip-distbottom"
-        )
-        assert updated_config.get("skip_distbottom") is True
-
-    def test_no_distbottom_flag_sets_skip_distbottom_true(self, temp_dir):
-        """Without a distbottom flag, skip_distbottom defaults to true (REQ-TILESDEF-02)."""
-        input_dir, output_dir = stage_dirs(temp_dir)
-
-        updated_config = run_on_config(input_dir, output_dir, {"graphs_dir": "", "other_key": "value"})
-        assert updated_config.get("skip_distbottom") is True
-
-    def test_both_distbottom_flags_are_mutually_exclusive(self):
-        """Passing both --with-distbottom and --skip-distbottom raises SystemExit."""
-        script = RunCorticalTiles()
-        with pytest.raises(SystemExit):
-            script.parse_args(
-                [
-                    "/input",
-                    "/output",
-                    "--path_to_graph",
-                    "graphs",
-                    "--path_sk_with_hull",
-                    "skeleton",
-                    "--with-distbottom",
-                    "--skip-distbottom",
-                ]
-            )
+    """Test the rewrite of pipeline_loop_2mm.json (distbottom flags: test_run_cortical_tiles_no_distbottom.py)."""
 
     def test_graphs_dir_set_to_input(self, temp_dir):
         """Test that graphs_dir in config is set to input path."""
@@ -316,14 +282,6 @@ class TestSkipDistbottom:
         expected = str(output_dir.resolve() / DERIVATIVES_FOLDER)
         assert updated["output_dir"] == expected
 
-    def test_existing_skip_distbottom_preserved_when_flag_not_passed(self, temp_dir):
-        """Existing skip_distbottom=True in config persists when flag is not passed."""
-        input_dir, output_dir = stage_dirs(temp_dir)
-
-        updated = run_on_config(input_dir, output_dir, {"graphs_dir": "", "output_dir": "", "skip_distbottom": True})
-        # Key is preserved from original config
-        assert updated.get("skip_distbottom") is True
-
     def test_config_with_null_values_overwritten_correctly(self, temp_dir):
         """JSON null (None) for graphs_dir/output_dir is overwritten with correct paths."""
 
@@ -339,8 +297,7 @@ class TestBidsConfig:
 
     generate_one_sulcal_region.py reads params['bids'] to drive BIDS-aware
     skeleton/crop generation; run() must write it when --bids is given and
-    leave the existing value untouched otherwise (same shape as
-    skip_distbottom).
+    leave the existing value untouched otherwise.
     """
 
     def _run(self, temp_dir, config_data, extra_args=None):
@@ -985,8 +942,10 @@ class TestWholeBrainGeneration:
         mock_gen_npys.assert_called_once()
 
     def test_whole_brain_step_runs_regardless_of_crop_only_args(self, temp_dir):
-        """Crop-only args (e.g. --skip-distbottom) don't gate or alter the whole-brain step."""
-        _, _, _, _, _, mock_add, mock_remove = self._run(temp_dir, extra_args=["--skip-distbottom"])
+        """Crop-only args (e.g. --input-types) don't gate or alter the whole-brain step."""
+        _, _, _, _, _, mock_add, mock_remove = self._run(
+            temp_dir, extra_args=["--input-types", "skeleton", "foldlabel"]
+        )
 
         mock_add.assert_called_once()
         mock_remove.assert_called_once()

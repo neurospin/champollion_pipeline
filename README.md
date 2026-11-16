@@ -239,8 +239,6 @@ Pass `--masks canonical_25` (or another version) to override the default.
 | `--njobs` | Number of CPU cores (default: auto) |
 | `--region-file` | Accepted but currently has no effect (dead code upstream) — do not rely on it. |
 | `--input-types` | Input types to generate (e.g. `skeleton foldlabel extremities`). Default: `skeleton foldlabel` — extremities only when listed explicitly. |
-| `--with-distbottom` | Generate distbottom crops (off by default; not read by champollion_V1). |
-| `--skip-distbottom` | Deprecated — distbottom is already skipped by default. Cannot be combined with `--with-distbottom`. |
 | `--masks` | Mask version tag |
 | `--regions` | Restrict to specific sulcal regions (space-separated) |
 | `--skel-seed` | Skeleton seed for the 2 mm re-skeletonization. Without the option, the `skel_seed` key of `{output}/pipeline_loop_2mm.json` sets the seed. Pipeline config: `dataset.skel_seed`; null (the default) leaves the `pipeline_loop_2mm.json` value in effect. |
