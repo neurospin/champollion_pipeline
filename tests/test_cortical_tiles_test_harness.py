@@ -23,11 +23,15 @@ Coverage configuration (TASK-130):
   REQ-CTILESTEST-25 plus the three extremities modules and three modules
   with no live importer; keep-or-delete pending in TASK-131); the
   distbottom modules are not omitted.
-- REQ-CTDEADCODE-3 (supersedes REQ-CTILESTEST-139, TASK-131) — that file's
+- REQ-CTDEADCODE-3 (superseded below; supersedes REQ-CTILESTEST-139, TASK-131) — that file's
   ``[run] omit`` equals the REQ-CTILESTEST-139 omit set minus the nine
   modules deleted from cortical_tiles by REQ-CTDEADCODE-1 (user decision
   2026-10-06: delete everything but what's inside brainvisa/utils); the
   seven kept brainvisa/utils modules stay omitted.
+- REQ-CTDEADCODE-BC0A3FC429FC (supersedes REQ-CTDEADCODE-3) — that file's
+  ``[run] omit`` is exactly the seven kept brainvisa/utils modules and the
+  three modules with no live importer; the extremities and distbottom modules
+  are deleted from cortical_tiles and appear in no omit line.
 - REQ-CTILESTEST-26 — superseded by REQ-COVISO-03 (TASK-125): the shared
   pipeline-root ``.coverage`` is replaced by per-task data files; location,
   naming and gitignore are tested in ``tests/test_coverage_data_file_isolation.py``.
@@ -74,8 +78,7 @@ DELETED_MODULES = (
     "brainvisa/generate_sparse_dataset.py",
     "utils/split_train_test.py",
 )
-# REQ-CTDEADCODE-3 Omit set: REQ-CTILESTEST-139's 22 minus DELETED_MODULES
-# (paths inside the cortical_tiles package).
+# REQ-CTDEADCODE-BC0A3FC429FC omit set (paths inside the cortical_tiles package).
 DEAD_MODULES = (
     # Kept by the TASK-131 user decision (everything inside brainvisa/utils).
     "brainvisa/utils/generate_spam_graph.py",
@@ -85,22 +88,12 @@ DEAD_MODULES = (
     "brainvisa/utils/write_distance_map.py",
     "brainvisa/utils/generate_spam_sulcal_region.py",
     "brainvisa/utils/suppress_files_from_csv.py",
-    # Added by REQ-CTILESTEST-139 (TASK-137): extremities, dead for
-    # champollion_V1 since champollion_V1 commit 770a5b74.
-    "brainvisa/generate_extremities.py",
-    "brainvisa/mask_resampled_extremities.py",
-    "brainvisa/utils/skeleton_extremities.py",
     # Added by REQ-CTILESTEST-139 (TASK-137): no live importer.
     "utils/pytorchtools.py",
     "preprocessing/generate_numpy_array.py",
     "utils/save_results.py",
 )
 DEAD_MODULE_OMITS = tuple(f"*/cortical_tiles/{module}" for module in DEAD_MODULES)
-# REQ-CTILESTEST-139: still reachable, so explicitly NOT omitted.
-LIVE_DISTBOTTOM_MODULES = (
-    "brainvisa/generate_distbottom_crops.py",
-    "brainvisa/utils/distbottom.py",
-)
 
 
 @pytest.fixture(scope="module")
@@ -296,12 +289,6 @@ class TestCorticalTilesCoverageOmits:
 
     def test_cov_config_omits_exactly_the_dead_modules(self, pixi_config):
         omits = _list_setting(_cortical_tiles_cov_run_section(pixi_config).get("omit", ""))
-        omitted_distbottom = [
-            omit for omit in omits if any(omit.endswith(module) for module in LIVE_DISTBOTTOM_MODULES)
-        ]
-        assert not omitted_distbottom, (
-            f"distbottom modules must stay measured (REQ-CTILESTEST-139); omitted: {omitted_distbottom!r}"
-        )
         omitted_deleted = [omit for omit in omits if any(omit.endswith(module) for module in DELETED_MODULES)]
         assert not omitted_deleted, (
             f"modules deleted from cortical_tiles (REQ-CTDEADCODE-1) must leave the omit list "

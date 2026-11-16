@@ -556,3 +556,43 @@ def test_log_dir_writes_stage_run_log_in_dir(combine_stage):
     assert len(logs) == 1, f"expected one run log in {log_dir}, found {logs}"
     assert re.fullmatch(r"put_together_embeddings_\d{8}-\d{6}\.log", logs[0].name), logs[0].name
     assert STAGE_MARKER in logs[0].read_text()
+
+
+# --- Console quiet: no raw argument dict, update banner after parsing -------------------------------
+
+
+# DEF-CONSOLEQ-BDRABCZUK-43110686358A
+def test_console_shows_no_raw_argument_dict(harness, capsys):
+    harness.stub_orchestrator()
+    assert harness.run() == 0
+    out = capsys.readouterr().out
+    assert "arguments:" not in out
+    assert "'enable_all_stages'" not in out
+
+
+# DEF-CONSOLEQ-BDRABCZUK-43110686358A
+def test_arguments_logged_at_debug_level(harness, monkeypatch):
+    harness.stub_orchestrator()
+    records: list[logging.LogRecord] = []
+
+    class _Collect(logging.Handler):
+        def emit(self, record):
+            records.append(record)
+
+    main_logger = harness.module.logger
+    monkeypatch.setattr(main_logger, "disabled", False)
+    monkeypatch.setattr(main_logger, "level", logging.DEBUG)
+    handler = _Collect(level=logging.DEBUG)
+    main_logger.addHandler(handler)
+    try:
+        assert harness.run() == 0
+    finally:
+        main_logger.removeHandler(handler)
+    debug = [r for r in records if r.levelno == logging.DEBUG and "enable_all_stages" in r.getMessage()]
+    assert debug, [r.getMessage() for r in records]
+
+
+# DEF-CONSOLEQ-BDRABCZUK-43110686358A
+def test_generate_config_skips_update_check(harness, tmp_path):
+    assert harness.run("--generate-config", str(tmp_path / "out.yaml")) == 0
+    assert "check_for_updates" not in harness.calls, harness.calls
