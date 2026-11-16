@@ -48,7 +48,8 @@ REGION_TABLE = "sulci_regions_champollion_V1.json"
 REFERENCE_YAML = "reference.yaml"
 TEMPLATE = "pipeline_loop_2mm.json"
 # SHA-256 of each packaged resource: the repository-root file at commit d35966d, the last commit before the move,
-# except reference.yaml, whose six distbottom and extremity keys were then dropped (epic NODISTB).
+# except reference.yaml, whose six distbottom and extremities keys commit c6bf8c31 dropped (epic NODISTB): its digest
+# is the current file, pinned by REQ-LAYOUT-BDRABCZUK-E39834C1AE4D, which supersedes REQ-LAYOUT-BDRABCZUK-6E194496B465.
 RESOURCE_DIGESTS = {
     REGION_TABLE: "82585e8e531a1e11c9ee6a480444d1689444100686e8dfaf602487fafabf8500",
     REFERENCE_YAML: "a22fee84bcbd6e5adf08ae2c40c0580132c9302833eb92c26f1dfced8c1733ec",
