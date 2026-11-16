@@ -373,10 +373,8 @@ class RunCorticalTiles(ScriptBuilder):
                 "--input-types",
                 nargs="+",
                 default=None,
-                help=(
-                    "Input types to generate (e.g. skeleton foldlabel extremities). "
-                    "Default: skeleton foldlabel (extremities only on request)."
-                ),
+                choices=INPUT_TYPES_DEFAULT,
+                help="Input types to generate, among skeleton and foldlabel. Default: skeleton foldlabel.",
             )
             .add_argument(
                 "--regions",
