@@ -184,6 +184,9 @@ def test_morphologist_input_stage6_reads_resolved_subjects_folder(main_module, m
     root, subjects = _morphologist_dataset(tmp_path)
     config = _config(main_module, tmp_path, _relative(root), datasets_root=str(root) if root_given else "")
     config.dataset.snapshots_path = str(tmp_path / "snapshots")  # noqa: V101
+    # A config-less run infers embeddings_path, which stage 6 validates: give it an existing folder.
+    config.dataset.embeddings_path = str(tmp_path / "embeddings")  # noqa: V101
+    (tmp_path / "embeddings").mkdir()
     argv = _run_stages(main_module, monkeypatch, config, STAGE6)
     assert STAGE6 in argv, "stage 6 did not run on a Morphologist input"
     assert option_values(argv[STAGE6], "--morphologist_dir") == [str(subjects)]
