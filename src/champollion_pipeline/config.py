@@ -38,6 +38,8 @@ class DatasetConfig:
 
     # Paths
     input_path: str = ""  # noqa: V107 - YAML config field
+    # None: detect the kind; "t1" or "morphologist" answers the input kind question in advance (replay keeps it)
+    input_kind: str | None = None
     morphologist_graphs: str = ""  # noqa: V107 - YAML config field
     cortical_tiles_output: str = ""  # noqa: V107 - YAML config field
     crops_path: str = ""

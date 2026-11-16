@@ -584,6 +584,7 @@ champollion_pipeline/
 │       ├── prune_failed_subjects.py
 │       ├── purge_subject.py
 │       ├── profile_report.py        # Aggregates a --profile run dir into report.json (pixi run profile-report)
+│       ├── input_kind_choice.py     # Asks or stops on an ambiguous main.py input (--input-kind)
 │       ├── process_setup.py
 │       ├── cli_options.py           # Registry of main.py arguments, one per config field
 │       ├── _stage_base.py           # Template base class of main.py's pipeline stages

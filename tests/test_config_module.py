@@ -13,7 +13,8 @@ user decision 2026-11-02: written even while None), one 'parallel' line after ve
 (PipelineConfig.parallel, REQ-INPUTKIND-BDRABCZUK-9AD1D6F6E0B7; user decision 2026-11-13: the custom
 case keeps the default false) and one dataset 'labelling_session' line
 after skel_seed (REQ-WHOLEBRAIN-BDRABCZUK-3DBF0C9F422F) and one dataset 'allow_prefix_ids' line
-after bids (REQ-CORTILES-BDRABCZUK-A20F9F75095C, TEMPORARY: DEF-CORTILES-BDRABCZUK-8A44DAD7F312);
+after bids (REQ-CORTILES-BDRABCZUK-A20F9F75095C, TEMPORARY: DEF-CORTILES-BDRABCZUK-8A44DAD7F312)
+and one dataset 'input_kind' line after input_path (TASK-INPUTKIND-BDRABCZUK-5ECD06E2023D);
 the serialiser must reproduce them
 byte for byte (REQ-REFACTOR-BDRABCZUK-B5835A3C130E, superseding -20D84DC86928, -B65FECA525EF, -679F9A49A534
 and -2636D42F82B1)
@@ -36,8 +37,8 @@ MAIN_PY = Path(__file__).resolve().parent.parent / "main.py"
 CONFIG_MODULE = "champollion_pipeline.config"
 CONFIG_NAMES = ("DatasetConfig", "PipelineConfig", "ConfigLoader")
 
-# Golden save_to_yaml output at cc8d67c (+ log, profile_dir, parallel, labelling_session, allow_prefix_ids lines;
-# see docstring)
+# Golden save_to_yaml output at cc8d67c (+ log, profile_dir, parallel, labelling_session, allow_prefix_ids,
+# input_kind lines; see docstring)
 # for PipelineConfig() with root_path="/opt/champollion".
 GOLDEN_DEFAULT_YAML = """\
 root_path: /opt/champollion
@@ -85,6 +86,7 @@ dataset:
   labels:
   - Sex
   input_path: ''
+  input_kind: null
   morphologist_graphs: ''
   cortical_tiles_output: ''
   crops_path: ''
@@ -122,7 +124,8 @@ dataset:
   champollion_data_root: null
 """
 
-# Golden save_to_yaml output at cc8d67c (+ log, profile_dir, parallel, labelling_session, allow_prefix_ids lines)
+# Golden save_to_yaml output at cc8d67c (+ log, profile_dir, parallel, labelling_session, allow_prefix_ids,
+# input_kind lines)
 # for _custom_config().
 GOLDEN_CUSTOM_YAML = """\
 root_path: /opt/champollion
@@ -158,6 +161,7 @@ dataset:
   labels:
   - Age
   input_path: /in
+  input_kind: morphologist
   morphologist_graphs: /graphs
   cortical_tiles_output: /tiles
   crops_path: /crops
@@ -230,6 +234,7 @@ _CUSTOM_DATASET_VALUES = {
     "datasets": ["a", "b"],
     "labels": ["Age"],
     "input_path": "/in",
+    "input_kind": "morphologist",
     "morphologist_graphs": "/graphs",
     "cortical_tiles_output": "/tiles",
     "crops_path": "/crops",
