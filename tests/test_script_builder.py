@@ -3,6 +3,7 @@
 Unit tests for the ScriptBuilder base class.
 """
 
+import logging
 import sys
 from pathlib import Path
 from unittest.mock import MagicMock, patch
@@ -314,15 +315,17 @@ class TestScriptBuilderExecuteCommand:
             result = script.execute_command(cmd, shell=False)
             assert result == 1
 
-    @patch("builtins.print")
-    def test_execute_command_prints_command(self, mock_print):
-        """Test that execute_command prints the command."""
+    def test_execute_command_prints_command(self, caplog):
+        """Test that execute_command logs the command it runs."""
         script = ConcreteScriptBuilder()
         cmd = ["echo", "test"]
-        with patch("champollion_utils.script_builder.run") as mock_run:
-            mock_run.return_value = MagicMock(returncode=0)
+        with (
+            patch("champollion_utils.script_builder.run", return_value=MagicMock(returncode=0)),
+            caplog.at_level(logging.DEBUG, logger="champollion_utils.script_builder"),
+        ):
             script.execute_command(cmd, shell=False)
-            assert mock_print.called
+        messages = [r.getMessage() for r in caplog.records if r.name == "champollion_utils.script_builder"]
+        assert any("Running command" in m and "echo test" in m for m in messages)
 
 
 class TestScriptBuilderMain:

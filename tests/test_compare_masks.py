@@ -8,6 +8,7 @@ ever decoded.
 """
 
 import json
+import logging
 from pathlib import Path
 
 import numpy as np
@@ -97,18 +98,25 @@ def mask_sets(tmp_path, monkeypatch):
     return dir_a, dir_b
 
 
-class TestMain:
-    def test_missing_set_a_exits(self, tmp_path, capsys):
-        (tmp_path / "b").mkdir()
-        rc = compare_masks.main(["--set_a", str(tmp_path / "nope"), "--set_b", str(tmp_path / "b")])
-        assert rc == 1
-        assert str(tmp_path / "nope") in capsys.readouterr().out
+def _error_messages(caplog, logger_name):
+    """Messages of the ERROR records the named logger emitted."""
+    return [r.getMessage() for r in caplog.records if r.name == logger_name and r.levelno >= logging.ERROR]
 
-    def test_missing_set_b_exits(self, tmp_path, capsys):
-        (tmp_path / "a").mkdir()
-        rc = compare_masks.main(["--set_a", str(tmp_path / "a"), "--set_b", str(tmp_path / "nope")])
+
+class TestMain:
+    def test_missing_set_a_exits(self, tmp_path, caplog):
+        (tmp_path / "b").mkdir()
+        with caplog.at_level(logging.ERROR, logger="champollion_utils.script_builder"):
+            rc = compare_masks.main(["--set_a", str(tmp_path / "nope"), "--set_b", str(tmp_path / "b")])
         assert rc == 1
-        assert str(tmp_path / "nope") in capsys.readouterr().out
+        assert any(str(tmp_path / "nope") in m for m in _error_messages(caplog, "champollion_utils.script_builder"))
+
+    def test_missing_set_b_exits(self, tmp_path, caplog):
+        (tmp_path / "a").mkdir()
+        with caplog.at_level(logging.ERROR, logger="champollion_utils.script_builder"):
+            rc = compare_masks.main(["--set_a", str(tmp_path / "a"), "--set_b", str(tmp_path / "nope")])
+        assert rc == 1
+        assert any(str(tmp_path / "nope") in m for m in _error_messages(caplog, "champollion_utils.script_builder"))
 
     def test_wasserstein_report(self, mask_sets, tmp_path):
         dir_a, dir_b = mask_sets
