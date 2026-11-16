@@ -40,7 +40,7 @@ pytestmark = pytest.mark.unit  # noqa: V107
 _REPO_ROOT = Path(__file__).resolve().parent.parent
 _PACKAGE_DIR = _REPO_ROOT / "src" / "champollion_pipeline"
 _RELEASE_TAG = re.compile(r"^v(?P<version>\d+\.\d+\.\d+)$")
-_MINIMUM_UTILS = Version("0.4.2")
+_MINIMUM_UTILS = Version("0.4.3")
 _GENERATE_SULCAL_REGIONS = (
     _REPO_ROOT / "external" / "cortical_tiles" / "cortical_tiles" / "brainvisa" / "generate_sulcal_regions.py"
 )
@@ -200,7 +200,7 @@ def _utils_dependency() -> Requirement:
     return utils[0]
 
 
-def test_pyproject_champollion_utils_pins_release_tag_0_4_2_or_later():
+def test_pyproject_champollion_utils_pins_release_tag_0_4_3_or_later():
     """REQ-PYTHONIC-BDRABCZUK-4D443088B18B."""
     url = _utils_dependency().url
     assert url is not None and url.startswith("git+"), f"{url!r} is not a PEP 508 git direct reference"
