@@ -19,10 +19,8 @@ Defect turns ineligible.
 import importlib.util
 import json
 import logging
-import os
 import re
-from collections.abc import Iterator
-from contextlib import contextmanager, nullcontext
+from contextlib import nullcontext
 from dataclasses import dataclass
 from pathlib import Path
 from unittest.mock import patch
@@ -34,6 +32,7 @@ from champollion_pipeline.run_cortical_tiles import (
     REASON_SEPARATOR,
     fetch_input_qc_rows,
 )
+from tests.listing_helpers import file_system_listing_reversed
 from tests.log_assertions import OUTPUT
 
 pytestmark = pytest.mark.unit  # noqa: V107
@@ -104,41 +103,6 @@ def _parse_ineligible(details: str) -> dict[str, set[str]]:
     """Read "<scan> missing <pattern>, <pattern>; <scan> missing <pattern>"."""
     scans = (entry.split(" missing ", 1) for entry in details.split("; "))
     return {scan: set(patterns.split(", ")) for scan, patterns in scans}
-
-
-class _ReversedListing:
-    """An os.scandir() result giving its entries last to first."""
-
-    def __init__(self, entries: list) -> None:
-        self._entries = iter(reversed(entries))
-
-    def __iter__(self) -> "_ReversedListing":
-        return self
-
-    def __next__(self) -> os.DirEntry:
-        return next(self._entries)
-
-    def __enter__(self) -> "_ReversedListing":
-        return self
-
-    def __exit__(self, *_exc_info: object) -> None:
-        return None
-
-    def close(self) -> None:
-        """Nothing to release: the real listing is already closed."""
-
-
-@contextmanager
-def _file_system_listing_reversed() -> Iterator[None]:
-    """Make the file system list each folder in reverse; os.walk and glob both read it through os.scandir."""
-    real_scandir = os.scandir
-
-    def reversed_scandir(*args, **kwargs) -> _ReversedListing:
-        with real_scandir(*args, **kwargs) as listing:
-            return _ReversedListing(list(listing))
-
-    with patch("os.scandir", reversed_scandir):
-        yield
 
 
 @pytest.fixture
@@ -438,7 +402,7 @@ def test_pre_check_agrees_with_input_qc(subjects, run_pre_check, lay_out_graphs)
     "listing",
     [
         pytest.param(nullcontext, id="listing-as-is"),
-        pytest.param(_file_system_listing_reversed, id="listing-reversed"),
+        pytest.param(file_system_listing_reversed, id="listing-reversed"),
     ],
 )
 def test_ineligible_scans_keep_their_order(subjects, run_pre_check, listing):
@@ -472,7 +436,7 @@ def test_index_bytes_keep_their_order(subjects, tmp_path, run_pre_check):
 
     run_pre_check()
     as_listed = index_file.read_bytes()
-    with _file_system_listing_reversed():
+    with file_system_listing_reversed():
         run_pre_check()
 
     assert index_file.read_bytes() == as_listed

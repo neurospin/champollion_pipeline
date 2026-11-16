@@ -46,6 +46,7 @@ from champollion_pipeline.derivatives_layout import (
     compute_snapshots_dir,
 )
 from champollion_pipeline.file_indexer import SubjectEligibilityChecker
+from champollion_pipeline.file_indexer.pipeline_checks import build_output_report
 from champollion_pipeline.process_setup import init_pipeline_process
 from champollion_pipeline.streaming import StreamingSettings
 from champollion_pipeline.utils.input_kind import (
@@ -527,6 +528,17 @@ class PipelineOrchestrator:
         )
         checker.check_subject_patterns(save_index_to=index_path).log_summary()
 
+    def _report_post_stage(self, stage_name: str, stage: PipelineStage) -> None:
+        """Index the folder the stage wrote and log its output report; never fails the stage (NTUI)."""
+        output_dir = stage.output_dir()
+        if not output_dir or not os.path.isdir(output_dir):
+            return
+        try:
+            report = build_output_report(output_dir, stage_name, save_index_to=self._index_path("post", stage_name))
+            report.log_summary()
+        except Exception as e:
+            self.logger.warning(f"Output report after stage '{stage_name}' failed, stage kept as completed: {e}")
+
     def _run_stage(self, stage_name: str, completed_stages: list[str], partial_stages: list[str]) -> bool:
         """Check, validate, report and execute one registered stage; True on success."""
         if not self._check_dependencies(stage_name, completed_stages):
@@ -541,6 +553,7 @@ class PipelineOrchestrator:
         if result.partial:
             partial_stages.append(stage_name)
         if result.success:
+            self._report_post_stage(stage_name, stage)
             return True
         if self.config.stop_on_error:
             self.logger.error("Stopping pipeline due to stage failure")

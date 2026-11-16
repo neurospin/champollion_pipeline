@@ -8,13 +8,18 @@ polls it through the public API (list_scans, scan_has_pattern, refresh), and
 the sequential pre-stage report uses check(). Paths and patterns come from the
 user's configuration, so they are checked, never trusted.
 
+build_output_report indexes a stage's output directory after the stage and
+counts its files by extension (TASK-STREAMING-BDRABCZUK-EC9C2CF191D9).
+
 Synthetic folders only (tmp_path); no real subject data.
 """
 
 import json
 import logging
+import os
 import re
 from pathlib import Path
+from unittest.mock import patch
 
 import pytest
 from champollion_utils.logger import OUTPUT
@@ -22,10 +27,13 @@ from champollion_utils.logger import OUTPUT
 from champollion_pipeline import file_indexer
 from champollion_pipeline.file_indexer.btree import BTree
 from champollion_pipeline.file_indexer.pipeline_checks import (
+    OutputIndexReport,
     SubjectEligibilityChecker,
     SubjectEligibilityReport,
+    build_output_report,
 )
 from champollion_pipeline.file_indexer.scan_id import ScanId
+from tests.listing_helpers import file_system_listing_reversed
 
 pytestmark = pytest.mark.unit  # noqa: V107
 
@@ -511,3 +519,138 @@ def test_constructor_rejects_string_patterns(tmp_path):
 def test_package_exports_checker():
     """REQ-STREAMING-BDRABCZUK-B3E8FAD249FC: file_indexer exports SubjectEligibilityChecker."""
     assert file_indexer.SubjectEligibilityChecker is SubjectEligibilityChecker
+
+
+# ---------------------------------------------------------------------------
+# Post-stage output report (TASK-STREAMING-BDRABCZUK-EC9C2CF191D9)
+# ---------------------------------------------------------------------------
+
+STAGE = "run_cortical_tiles"
+# BTree(t=64) holds 127 keys in its root: more files than that split it, and only then can its shape show the order.
+SPLITTING_FILE_COUNT = 200
+
+
+def _output_tree(root: Path, relative_paths: list[str]) -> Path:
+    for relative in relative_paths:
+        _touch(root / relative)
+    return root
+
+
+def test_output_report_counts_files_at_any_depth(tmp_path):
+    """REQ-STREAMING-BDRABCZUK-95380AA3E1D1.
+
+    Total_files counts the files at every depth; the report carries stage_name and output_dir.
+    """
+    out = _output_tree(
+        tmp_path / "out",
+        ["top.json", "crops/2mm/S.C.-sylv./mask/Rskeleton.nii.gz", "crops/2mm/list.csv", "deep/a/b/c/d.txt"],
+    )
+
+    report = build_output_report(str(out), STAGE)
+
+    assert isinstance(report, OutputIndexReport)
+    assert report.stage_name == STAGE
+    assert report.output_dir == str(out)
+    assert report.total_files == 4
+
+
+def test_output_report_leaves_out_hidden_entries(tmp_path):
+    """REQ-STREAMING-BDRABCZUK-95380AA3E1D1.
+
+    A file named with a leading dot, or below a folder named so, is not counted.
+    """
+    out = _output_tree(
+        tmp_path / "out",
+        ["kept.csv", "sub/kept.nii.gz", ".hidden", ".git/objects/ab", "sub/.cache/x.csv", "sub/.dotfile.csv"],
+    )
+
+    report = build_output_report(str(out), STAGE)
+
+    assert report.total_files == 2
+
+
+def test_output_report_by_ext_counts_splitext_extensions(tmp_path):
+    """REQ-STREAMING-BDRABCZUK-AEDB5C5AED9E.
+
+    By_ext maps each os.path.splitext extension of the counted files to its count, '' for none.
+    """
+    out = _output_tree(
+        tmp_path / "out",
+        ["a.arg", "x/b.arg", "c.nii.gz", "y/z/d.nii.gz", "README", "e.csv", ".hidden.csv"],
+    )
+
+    report = build_output_report(str(out), STAGE)
+
+    assert report.by_ext == {".arg": 2, ".gz": 2, "": 1, ".csv": 1}
+
+
+def test_output_report_saves_index_json_in_new_folder(tmp_path):
+    """REQ-STREAMING-BDRABCZUK-2DE1DE90D4E9.
+
+    Save_index_to receives BTree.to_dict() JSON, one key per counted file, relative with '/' separators.
+    """
+    out = _output_tree(tmp_path / "out", ["a.csv", "crops/2mm/b.nii.gz", "crops/.tmp/c.csv"])
+    index_path = tmp_path / "new" / "deeper" / "index_post.json"
+
+    build_output_report(str(out), STAGE, save_index_to=str(index_path))
+
+    tree = BTree.from_dict(json.loads(index_path.read_text()))
+    assert sorted(key for key, _ in tree) == ["a.csv", "crops/2mm/b.nii.gz"]
+    assert len(tree) == 2
+
+
+def test_output_report_index_bytes_keep_their_order(tmp_path):
+    """REQ-STREAMING-BDRABCZUK-5111DF5AB8DB: the same tree listed the other way round gives the same index bytes."""
+    out = _output_tree(
+        tmp_path / "out",
+        [f"region_{number % 7}/file_{number:03d}.csv" for number in range(SPLITTING_FILE_COUNT)],
+    )
+    index_path = tmp_path / "index_post.json"
+
+    build_output_report(str(out), STAGE, save_index_to=str(index_path))
+    as_listed = index_path.read_bytes()
+    with file_system_listing_reversed():
+        build_output_report(str(out), STAGE, save_index_to=str(index_path))
+
+    assert index_path.read_bytes() == as_listed
+
+
+def test_output_report_log_summary_output_record(caplog):
+    """REQ-STREAMING-BDRABCZUK-7CFFE07AD899.
+
+    One OUTPUT record: 'Post-check <stage>:', output_dir, total_files, <ext>=<count>, (no ext) for ''.
+    """
+    report = OutputIndexReport(
+        stage_name=STAGE, output_dir="/data/tiles", total_files=7, by_ext={".arg": 2, ".gz": 4, "": 1}
+    )
+    caplog.set_level(logging.DEBUG)
+
+    report.log_summary()
+
+    outputs = _records(caplog, OUTPUT)
+    assert len(outputs) == 1
+    message = outputs[0].getMessage()
+    assert message.startswith(f"Post-check {STAGE}:")
+    assert "/data/tiles" in message
+    assert re.search(r"\b7\b", message), "total file count missing"
+    for entry in (".arg=2", ".gz=4", "(no ext)=1"):
+        assert entry in message, f"{entry!r} missing from {message!r}"
+
+
+def test_output_report_skips_file_failing_stat(tmp_path):
+    """REQ-STREAMING-BDRABCZUK-B0B49D811212.
+
+    A file whose os.stat raises OSError is left out of total_files, without raising.
+    """
+    out = _output_tree(tmp_path / "out", ["kept.csv", "sub/vanished.nii.gz", "sub/kept.nii.gz"])
+    real_stat = os.stat
+
+    def flaky_stat(path, *args, **kwargs):
+        if os.path.basename(os.fspath(path)) == "vanished.nii.gz":
+            raise FileNotFoundError(path)
+        return real_stat(path, *args, **kwargs)
+
+    with patch("os.stat", flaky_stat):
+        report = build_output_report(str(out), STAGE)
+
+    assert report.total_files == 2

@@ -3,8 +3,10 @@
 The streaming arrival barrier polls ``SubjectEligibilityChecker`` through
 ``list_scans``, ``scan_has_pattern`` and ``refresh``, with patterns relative to
 the scan folder; the sequential pre-stage report uses ``check_subject_patterns``,
-with patterns relative to the subject folder. Patterns and paths come from the
-user's configuration, so they are checked, never trusted.
+with patterns relative to the subject folder. After a sequential stage,
+``build_output_report`` indexes the stage's output directory and counts its files
+by extension. Patterns and paths come from the user's configuration, so they are
+checked, never trusted.
 """
 
 from __future__ import annotations
@@ -13,6 +15,7 @@ import glob
 import json
 import logging
 import os
+from collections import Counter
 from collections.abc import Callable
 from dataclasses import dataclass, field
 from fnmatch import fnmatchcase
@@ -36,6 +39,8 @@ WILDCARD_CHARS = "*?["
 SUBJECT_PATTERN_WILDCARD = "*"
 # Upper bound of a range query: every key starting with a literal sorts below literal + this.
 _KEY_MAX_SUFFIX = "\U0010ffff"
+# Shown for the empty extension in the post-stage summary.
+NO_EXT_LABEL = "(no ext)"
 
 
 def _check_relative(pattern: str) -> None:
@@ -46,6 +51,38 @@ def _check_relative(pattern: str) -> None:
 
 def _is_hidden(name: str) -> bool:
     return name.startswith(".")
+
+
+def _fetch_file_index(root: str, btree_order: int, include_hidden: bool = False) -> BTree:
+    """Index the files under root: key = POSIX path relative to root, inserted in code-point walk order."""
+    tree = BTree(t=btree_order)
+    for folder, dirs, files in os.walk(root):
+        # The BTree's shape follows insertion order; top-down os.walk descends in the order of dirs.
+        dirs[:] = sorted(d for d in dirs if include_hidden or not _is_hidden(d))
+        for fname in sorted(files):
+            if not include_hidden and _is_hidden(fname):
+                continue
+            path = join(folder, fname)
+            try:
+                stat = os.stat(path)
+            except OSError:
+                logger.debug("Cannot stat %s; left out of the index", path, exc_info=True)
+                continue
+            key = os.path.relpath(path, root).replace(os.sep, "/")
+            tree.insert(
+                key, {"type": "file", "size": stat.st_size, "modified": stat.st_mtime, "ext": splitext(fname)[1]}
+            )
+    return tree
+
+
+def _save_index_json(tree: BTree, path: str) -> None:
+    """Write tree as BTree.to_dict() JSON, atomically, creating the parent folders."""
+    os.makedirs(os.path.dirname(os.path.abspath(path)), exist_ok=True)
+    tmp_path = f"{path}.tmp"
+    with open(tmp_path, "w") as f:
+        json.dump(tree.to_dict(), f, indent=2)
+    os.replace(tmp_path, path)
+    logger.log(OUTPUT, "Index saved to %s", path)
 
 
 @dataclass
@@ -141,26 +178,7 @@ class SubjectEligibilityChecker:
 
     def refresh(self) -> None:
         """Rebuild the index from the files present under ``subjects_dir``."""
-        tree = BTree(t=self.btree_order)
-        for root, dirs, files in os.walk(self.subjects_dir):
-            if not self.include_hidden:
-                dirs[:] = [d for d in dirs if not _is_hidden(d)]
-                files = [f for f in files if not _is_hidden(f)]
-            # The BTree's shape follows insertion order; top-down os.walk descends in the order of dirs.
-            dirs.sort()
-            for fname in sorted(files):
-                path = join(root, fname)
-                try:
-                    stat = os.stat(path)
-                except OSError:
-                    logger.debug("Cannot stat %s; left out of the index", path, exc_info=True)
-                    continue
-                key = os.path.relpath(path, self.subjects_dir).replace(os.sep, "/")
-                tree.insert(
-                    key,
-                    {"type": "file", "size": stat.st_size, "modified": stat.st_mtime, "ext": splitext(fname)[1]},
-                )
-        self._tree = tree
+        self._tree = _fetch_file_index(self.subjects_dir, self.btree_order, self.include_hidden)
 
     def check(self, save_index_to: str | None = None) -> SubjectEligibilityReport:
         """Judge each scan on patterns relative to the scan folder."""
@@ -244,9 +262,45 @@ class SubjectEligibilityChecker:
 
     def _save_index(self, path: str) -> None:
         """Write the index as BTree.to_dict() JSON, atomically."""
-        os.makedirs(os.path.dirname(os.path.abspath(path)), exist_ok=True)
-        tmp_path = f"{path}.tmp"
-        with open(tmp_path, "w") as f:
-            json.dump(self._index().to_dict(), f, indent=2)
-        os.replace(tmp_path, path)
-        logger.log(OUTPUT, "Index saved to %s", path)
+        _save_index_json(self._index(), path)
+
+
+@dataclass
+class OutputIndexReport:
+    """Summary of the files a pipeline stage left in its output directory."""
+
+    stage_name: str
+    output_dir: str
+    total_files: int
+    by_ext: dict[str, int] = field(default_factory=dict)
+
+    def log_summary(self) -> None:
+        """Log the post-stage summary record: file total, then one <extension>=<count> entry per by_ext item."""
+        entries = ", ".join(f"{ext or NO_EXT_LABEL}={count}" for ext, count in self.by_ext.items())
+        logger.log(
+            OUTPUT,
+            "Post-check %s: %d files in %s%s",
+            self.stage_name,
+            self.total_files,
+            self.output_dir,
+            f" ({entries})" if entries else "",
+        )
+
+
+def build_output_report(
+    output_dir: str,
+    stage_name: str,
+    save_index_to: str | None = None,
+    btree_order: int = 64,
+) -> OutputIndexReport:
+    """Index ``output_dir`` and count its files by extension; save the index to ``save_index_to`` when given.
+
+    Dot-named files and folders are left out, as is a file ``os.stat`` cannot read. O(files).
+    """
+    tree = _fetch_file_index(output_dir, btree_order)
+    if save_index_to is not None:
+        _save_index_json(tree, save_index_to)
+    counts = Counter(value["ext"] for _, value in tree)
+    return OutputIndexReport(
+        stage_name=stage_name, output_dir=output_dir, total_files=len(tree), by_ext=dict(sorted(counts.items()))
+    )
