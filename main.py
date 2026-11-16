@@ -18,6 +18,9 @@ Usage:
     # Run specific stages only
     python main.py --stages generate_embeddings put_together_embeddings
 
+    # Config-less run: infer every path from the input, run stages 1-6 (T1 files) or 2-6 (Morphologist outputs)
+    python main.py /data/my_dataset
+
     # Run with overrides
     python main.py --dataset-name test_data --verbose
 """
@@ -59,6 +62,7 @@ from champollion_pipeline.input_kind_choice import (
     choose_input_kind,
     choose_subjects_folder,
 )
+from champollion_pipeline.path_inference import AmbiguousGraphFolders, DatasetRootNotInferable, infer_paths
 from champollion_pipeline.process_setup import init_pipeline_process
 from champollion_pipeline.streaming import StreamingSettings
 from champollion_pipeline.utils.input_kind import InputKind, stage1_subjects_dir
@@ -797,6 +801,28 @@ def _skip_morphologist_stage(config: PipelineConfig) -> None:
         logger.info(f"Stage {_MORPHOLOGIST_STAGE} skipped: {config.dataset.input_path} holds Morphologist outputs")
 
 
+def _prepare_configless_input_run(config: PipelineConfig, args: argparse.Namespace) -> None:
+    """No --config, an input path: root only from OUTPUT/--output-path/--datasets-root or inference; all stages."""
+    if args.datasets_root is None:
+        config.dataset.datasets_root = DatasetConfig().datasets_root
+    if args.outputs_path is None:
+        config.outputs_path = PipelineConfig().outputs_path
+    if args.stages is None:
+        config.stages = dict.fromkeys(config.stages, True)
+
+
+def _infer_configless_paths(config: PipelineConfig, kind: InputKind, args: argparse.Namespace) -> PipelineConfig:
+    """Config-less run: unset paths inferred, dataset named after its root; no stop here, one WARNING at most."""
+    try:
+        config = infer_paths(config, config.dataset.input_path, kind)
+    except (DatasetRootNotInferable, AmbiguousGraphFolders) as error:
+        logger.warning(f"Paths not inferred: {error}")
+    root = config.dataset.datasets_root
+    if args.dataset_name is None and root:
+        config.dataset.name = Path(os.path.abspath(root)).name
+    return config
+
+
 class ChampollionPipeline(ScriptBuilder):
     """main.py as a ScriptBuilder script: the shared run log, profiling and process setup."""
 
@@ -876,7 +902,12 @@ class ChampollionPipeline(ScriptBuilder):
         _start_config_profiling(config, args)
         if config.mode == "streaming":
             return _run_streaming_mode(config, args, run_log_path=self._run_log_path)
-        _apply_input_kind(config)
+        configless_input = not args.config and bool(config.dataset.input_path)
+        if configless_input:
+            _prepare_configless_input_run(config, args)
+        kind = _apply_input_kind(config)
+        if configless_input:
+            config = _infer_configless_paths(config, kind, args)
         return PipelineOrchestrator(config).run()
 
 

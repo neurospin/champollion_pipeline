@@ -194,7 +194,10 @@ def test_pre_check_on_stage1_subjects_folder(main_module, monkeypatch, tmp_path,
     run_tiles, seen_before_run = record_logged_before_run(pipeline_caplog, OUTPUT, PRE_CHECK_PREFIX)
 
     with patch("champollion_pipeline.run_cortical_tiles.RunCorticalTiles.run", side_effect=run_tiles):
-        _run_main(main_module, monkeypatch, "--stages", "run_cortical_tiles")
+        # --datasets-root keeps the root: a config-less run with an input path would infer it from the input.
+        _run_main(
+            main_module, monkeypatch, "--stages", "run_cortical_tiles", "--datasets-root", config.dataset.datasets_root
+        )
 
     assert seen_before_run == [True], f"no OUTPUT record starting with {PRE_CHECK_PREFIX!r} before the stage script ran"
 
