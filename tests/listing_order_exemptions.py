@@ -1,4 +1,3 @@
-# ruff: noqa: E501
 """Exemptions from the listing-order rule of the pipeline (TASK-READORDER-BDRABCZUK-EFCBDE20C624).
 
 tests/test_listing_order_rule.py fails on a glob, iglob, rglob, listdir, scandir, walk or iterdir
@@ -24,11 +23,6 @@ EXEMPTIONS: dict[tuple[str, str, str], str] = {
         "check_submodule",
         "abs_path.iterdir()",
     ): "read through any(): a presence check (LISTING_PRESENCE_CHECKS)",
-    (
-        "src/champollion_pipeline/file_indexer/pipeline_checks.py",
-        "SubjectEligibilityChecker.refresh",
-        "os.walk(self.subjects_dir)",
-    ): "walk sorted in its loop: hidden names are filtered out first, then dirs.sort() and sorted(files); the rule cannot follow the filtering reassignment of files",
     (
         "src/champollion_pipeline/generate_embeddings.py",
         "GenerateEmbeddings._patch_config_paths",
