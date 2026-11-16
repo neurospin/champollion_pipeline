@@ -14,6 +14,7 @@ from unittest.mock import MagicMock, patch
 
 import pytest
 
+from tests import pypi_dependency_check
 from tests.log_assertions import PipelineLogCapture
 from tests.stage2_skeletons import SIDES, SKELETON_FILE, skeleton_volume
 
@@ -50,6 +51,19 @@ try:
     _hyp_settings.load_profile("champollion_load_proof")
 except ImportError:  # pragma: no cover
     pass
+
+
+def pytest_sessionstart(session):  # noqa: V103 - pytest hook
+    """Stop the session with one message when the environment lacks a pixi PyPI dependency.
+
+    Without it a merge run in such an environment fails with hundreds of collection errors.
+    Under xdist only the controller checks; its workers inherit the same environment.
+    """
+    if hasattr(session.config, "workerinput"):
+        return
+    message = pypi_dependency_check.check_environment()
+    if message:
+        pytest.exit(message, returncode=3)
 
 
 @pytest.fixture
