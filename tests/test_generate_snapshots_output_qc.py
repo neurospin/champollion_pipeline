@@ -156,7 +156,7 @@ class TestOutputQcReport:
 
 
 class TestExpectedSulcalFiles:
-    """The sulcal step expects one file per unambiguous hemisphere of the rendered subject."""
+    """The sulcal step expects one file per hemisphere of the rendered subject that has a sulcal graph."""
 
     def test_both_hemispheres_expected(self, temp_dir):
         """REQ-NTUI-BDRABCZUK-70F8EA6C643F."""
@@ -176,12 +176,12 @@ class TestExpectedSulcalFiles:
             "sulcal_graph_default_acquisition_right.png",
         ]
 
-    def test_ambiguous_hemisphere_gives_no_row(self, temp_dir):
-        """REQ-NTUI-BDRABCZUK-70F8EA6C643F: a hemisphere with two graphs has no expected file."""
+    def test_ambiguous_hemisphere_gives_a_row(self, temp_dir):
+        """REQ-SNAPSULC-BDRABCZUK-9924F275B219: a hemisphere with two graphs still has its file row."""
         args = _sulcal_args(temp_dir)
         _second_acquisition_left_graph(temp_dir)
         _run_stage(args)
-        assert sorted(_rows(temp_dir)) == [SULCAL_RIGHT]
+        assert sorted(_rows(temp_dir)) == [SULCAL_LEFT, SULCAL_RIGHT]
 
     def test_unselected_step_gives_no_row(self, temp_dir):
         """REQ-NTUI-BDRABCZUK-70F8EA6C643F: --umap-only leaves the sulcal step out."""
@@ -428,3 +428,22 @@ class TestCompleteRun:
         result = _run_stage([*_output_args(temp_dir), "--tiles-only"])
         assert _rows(temp_dir) == {}
         assert result == 0
+
+
+class TestAmbiguousHemisphereQc:
+    """REQ-SNAPSULC-BDRABCZUK-9924F275B219: a hemisphere skipped for ambiguity is a lost snapshot, never silent."""
+
+    def test_ambiguous_row_holds_qc_0_missing_snapshot(self, temp_dir):
+        """The left hemisphere with two graphs gets qc 0 and reason missing_snapshot."""
+        args = _sulcal_args(temp_dir)
+        _second_acquisition_left_graph(temp_dir)
+        _run_stage(args)
+        row = _rows(temp_dir).get(SULCAL_LEFT)
+        assert row is not None, "no output_qc.tsv row for the ambiguous left hemisphere"
+        assert (row["qc"], row["reason"]) == ("0", "missing_snapshot")
+
+    def test_ambiguous_hemisphere_makes_the_run_partial(self, temp_dir):
+        """The ambiguous left beside a usable right snapshot makes the stage return 3, not 0."""
+        args = _sulcal_args(temp_dir)
+        _second_acquisition_left_graph(temp_dir)
+        assert _run_stage(args) == 3

@@ -4,6 +4,7 @@ import glob
 import logging
 import os
 import os.path as osp
+from pathlib import Path
 
 import champollion_utils.logger  # noqa: F401 - installs Logger.trace/output/fail (LOG 22, OUTPUT 25, FAIL 45)
 
@@ -15,6 +16,8 @@ logger = logging.getLogger(__name__)
 HEMISPHERES = ("left", "right")
 # Morphologist names a sulcal graph <L|R><subject>[_<session>].arg: the first character is the side.
 SIDE_BY_LETTER = {"L": "left", "R": "right"}
+# Morphologist folder holding a subject's acquisition folders: <subject>/t1mri/<acquisition>/...
+T1MRI_FOLDER = "t1mri"
 
 
 def list_acquisitions(subject_dir):
@@ -81,6 +84,39 @@ def find_sulcal_graphs(morphologist_dir, subject=None, acquisition=None):
         graphs = [g for g in graphs if f"/{acquisition}/" in f"/{relative[g]}"]
     graphs.sort()
     return graphs
+
+
+def compute_session_graphs(graphs, sessions):
+    """Return the graphs lying directly in the first of ``sessions`` that holds one, else ``graphs`` unchanged.
+
+    A graph lies in a session when its parent folder is named after it
+    (``folds/3.1/<session>/<side><subject>_<session>.arg``).
+
+    Args:
+        graphs: Sulcal graph paths of one hemisphere.
+        sessions: Labelling session folder names, in priority order.
+
+    Returns:
+        A new list of graph paths, in the order of ``graphs``.
+
+    Complexity: O(len(sessions) * len(graphs)).
+    """
+    for session in sessions:
+        in_session = [graph for graph in graphs if osp.basename(osp.dirname(graph)) == session]
+        if in_session:
+            return in_session
+    return list(graphs)
+
+
+def find_subject_dir(graph_path):
+    """Return the folder holding the ``t1mri`` folder nearest above ``graph_path``, or None when there is none.
+
+    Complexity: O(depth of graph_path).
+    """
+    for parent in Path(graph_path).parents:
+        if parent.name == T1MRI_FOLDER:
+            return str(parent.parent)
+    return None
 
 
 def find_white_mesh(graph_path):
