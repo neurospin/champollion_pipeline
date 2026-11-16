@@ -189,7 +189,10 @@ class GenerateEmbeddings(ScriptBuilder):
         """Return a temp dir containing symlinks to only the requested region subdirs."""
         missing = [r for r in self.args.regions if not os.path.isdir(join(models_path, r))]
         if missing:
-            raise FileNotFoundError(f"Regions not found in {models_path}: {', '.join(missing)}")
+            raise FileNotFoundError(
+                f"Model folder(s) not found for {len(missing)} requested region(s): {', '.join(missing)} "
+                f"(models_path searched: {models_path})"
+            )
         tmpdir = tempfile.mkdtemp(prefix="champollion_regions_")
         for region in self.args.regions:
             os.symlink(join(models_path, region), join(tmpdir, region))
