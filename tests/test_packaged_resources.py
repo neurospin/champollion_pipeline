@@ -14,8 +14,8 @@ stopped right after the read under test, so the tests depend on no code that fol
 Requirements:
 - REQ-LAYOUT-BDRABCZUK-7DC3A0D78810, -50520AE5222D, -15612D17F29A: the wheel contains each file.
 - REQ-LAYOUT-BDRABCZUK-77FEAB50B31A, -6E194496B465: the move keeps each file's bytes.
-- REQ-LAYOUT-BDRABCZUK-9609E7AB5B18 (supersedes -700FB107C68C): the template keeps its bytes minus the
-  skip_distbottom line (epic NODISTB).
+- REQ-LAYOUT-BDRABCZUK-D7352515AB47 (supersedes -9609E7AB5B18, itself superseding -700FB107C68C): the template
+  keeps its bytes minus the skip_distbottom line, with input_type extremities replaced by skeleton (epic NODISTB).
 - REQ-LAYOUT-BDRABCZUK-73AB5FC0DAB8, -13578E19D70D, -7153BA94441D: the repository root keeps no copy.
 - REQ-LAYOUT-BDRABCZUK-D9B4FB454285: GenerateMasks.run() reads the packaged region table.
 - REQ-LAYOUT-BDRABCZUK-136516FF987E: GenerateChampollionConfig.run() copies the packaged reference.yaml.
@@ -52,11 +52,12 @@ TEMPLATE = "pipeline_loop_2mm.json"
 # SHA-256 of each packaged resource: the repository-root file at commit d35966d, the last commit before the move,
 # except reference.yaml, whose six distbottom and extremities keys commit c6bf8c31 dropped (epic NODISTB): its digest
 # is the current file, pinned by REQ-LAYOUT-BDRABCZUK-E39834C1AE4D, which supersedes REQ-LAYOUT-BDRABCZUK-6E194496B465;
-# and pipeline_loop_2mm.json, whose skip_distbottom line was then dropped (epic NODISTB).
+# and pipeline_loop_2mm.json, whose skip_distbottom line was then dropped and whose input_type extremities became
+# skeleton (epic NODISTB), pinned by REQ-LAYOUT-BDRABCZUK-D7352515AB47.
 RESOURCE_DIGESTS = {
     REGION_TABLE: "82585e8e531a1e11c9ee6a480444d1689444100686e8dfaf602487fafabf8500",
     REFERENCE_YAML: "a22fee84bcbd6e5adf08ae2c40c0580132c9302833eb92c26f1dfced8c1733ec",
-    TEMPLATE: "105e7ff93fdaf3c02ecf7db2baf38fd5aa575e40a70f2b7e0ad329bb35a44f8c",
+    TEMPLATE: "210741810dd5de9b5ccf4f7a0b6f6bec2911a9403460f90efeb44304ba8be107",
 }
 DATASET = "TEST01"
 SUBPROCESS_TIMEOUT = 120

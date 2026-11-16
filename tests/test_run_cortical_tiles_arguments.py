@@ -2,6 +2,9 @@
 """
 Argument parsing, --njobs and path validation tests of run_cortical_tiles.py
 (moved out of test_run_cortical_tiles.py).
+
+- REQ-NODISTB-BDRABCZUK-FC93F9CF8CFC: an --input-types value outside {skeleton, foldlabel} is an argparse usage
+  error (exit 2) naming the rejected value (NTUI, user decision 2026-11-09).
 """
 
 import logging
@@ -120,10 +123,9 @@ class TestRunCorticalTilesArguments:
                 "--input-types",
                 "skeleton",
                 "foldlabel",
-                "extremities",
             ]
         )
-        assert args.input_types == ["skeleton", "foldlabel", "extremities"]
+        assert args.input_types == ["skeleton", "foldlabel"]
 
     def test_bids_default_false(self):
         """--bids is an opt-in flag on RunCorticalTiles's parser, defaulting to False (REQ-BIDS-01/-02)."""
@@ -199,3 +201,15 @@ class TestValidatePaths:
             pytest.raises(ValueError, match="Please input valid paths"),
         ):
             script.run()
+
+
+class TestInputTypesRestricted:
+    """REQ-NODISTB-BDRABCZUK-FC93F9CF8CFC: the parser stops a removed or unknown input type."""
+
+    @pytest.mark.parametrize("value", ["extremities", "distbottom", "not_a_type"])
+    def test_value_outside_the_set_is_a_usage_error(self, value, capsys):
+        with pytest.raises(SystemExit) as excinfo:
+            parsed_script("/input", "/output", "--input-types", "skeleton", value)
+
+        assert excinfo.value.code == 2
+        assert value in capsys.readouterr().err

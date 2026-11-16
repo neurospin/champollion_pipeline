@@ -238,7 +238,7 @@ Pass `--masks canonical_25` (or another version) to override the default.
 | `--sk_qc_input_only` | Limit the input QC to the subjects of the input: an id of the `--sk_qc_path` file with no input subject folder gets no `input_qc.tsv` row. For a run on part of the cohort the file covers. |
 | `--njobs` | Number of CPU cores (default: auto) |
 | `--region-file` | Accepted but currently has no effect (dead code upstream) — do not rely on it. |
-| `--input-types` | Input types to generate (e.g. `skeleton foldlabel extremities`). Default: `skeleton foldlabel` — extremities only when listed explicitly. |
+| `--input-types` | Input types to generate: `skeleton` and/or `foldlabel`. Default: `skeleton foldlabel`. |
 | `--masks` | Mask version tag |
 | `--regions` | Restrict to specific sulcal regions (space-separated) |
 | `--skel-seed` | Skeleton seed for the 2 mm re-skeletonization. Without the option, the `skel_seed` key of `{output}/pipeline_loop_2mm.json` sets the seed. Pipeline config: `dataset.skel_seed`; null (the default) leaves the `pipeline_loop_2mm.json` value in effect. |

@@ -310,12 +310,12 @@ class TestCheckedKinds:
 
         assert _run_stage(temp_dir, {_SUBJECT: "LR"}, args, kinds=("skeleton",)).rows()[_SUBJECT]["qc"] == 1
 
-    def test_extremities_on_request_need_their_files(self, temp_dir):
-        args = ["--regions", *_REGIONS, "--input-types", "skeleton", "extremities"]
+    def test_requested_input_type_needs_its_files(self, temp_dir):
+        args = ["--regions", *_REGIONS, "--input-types", "skeleton", "foldlabel"]
 
         row = _run_stage(temp_dir, {_SUBJECT: "LR"}, args, kinds=("skeleton",)).rows()[_SUBJECT]
 
-        assert f"missing_crop:extremities:R:{_REGIONS[1]}" in row["reason"]
+        assert f"missing_crop:foldlabel:R:{_REGIONS[1]}" in row["reason"]
 
     def test_absent_mask_npy_fails_the_subject(self, temp_dir):
         row = _run_stage(temp_dir, {_SUBJECT: "LR"}, has_masks=False).rows()[_SUBJECT]
