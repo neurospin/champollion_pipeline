@@ -202,6 +202,8 @@ setup-data = "mkdir -p ../data"
 install-pipeline = "pip install -e . --no-deps --no-build-isolation"
 install-champollion = { cmd = "pip install -e external/champollion_V1 --no-deps --no-build-isolation", depends-on = ["init-submodules"] }
 check-install = "python scripts/install_health.py"
+# Fails with ONE message naming every PyPI package of [pypi-dependencies] the environment lacks.
+check-env = "pytest tests/test_pixi_pypi_dependencies_importable.py -q --no-cov -p no:cacheprovider -n 0"
 check-install-fix = "python scripts/install_health.py --fix"
 profile-report = "python src/champollion_pipeline/profile_report.py"
 pre-update = "python scripts/install_health.py --pre-update"
