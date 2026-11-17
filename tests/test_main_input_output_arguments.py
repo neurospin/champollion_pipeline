@@ -24,7 +24,7 @@ from pathlib import Path
 import pytest
 import yaml
 
-from tests.main_stage_helpers import load_main_module
+from tests.main_stage_helpers import load_main_module, main_runner, ran_config
 
 MAIN = load_main_module("_champollion_main_input_output_arguments_under_test")
 
@@ -80,14 +80,6 @@ SAME_OUTPUT_SPELLINGS = [
 ]
 
 
-@dataclasses.dataclass
-class RunOutcome:
-    """Exit status of one main() run and the PipelineConfigs it handed to the orchestrator."""
-
-    status: int | str | None
-    configs: list
-
-
 @pytest.fixture
 def work_dir(monkeypatch, tmp_path) -> Path:
     """tmp_path as the working folder: two T1 input folders, an output folder and a symlink to each of the two."""
@@ -104,46 +96,11 @@ def work_dir(monkeypatch, tmp_path) -> Path:
 @pytest.fixture
 def run_main(monkeypatch, work_dir):
     """Run main() with the given arguments; return its exit status and the configurations it ran."""
-    configs: list = []
-
-    class _RecordingOrchestrator:
-        STAGE_REGISTRY = MAIN.PipelineOrchestrator.STAGE_REGISTRY
-
-        def __init__(self, config) -> None:
-            configs.append(config)
-
-        def run(self) -> int:
-            return 0
-
-    monkeypatch.setattr(MAIN, "check_for_updates", lambda: None)
-    monkeypatch.setattr(MAIN, "init_pipeline_process", lambda: logging.getLogger())
-    monkeypatch.setattr(MAIN, "start_profiling", lambda *a, **k: None)
-    monkeypatch.setattr(MAIN, "PipelineOrchestrator", _RecordingOrchestrator)
-    monkeypatch.setattr("champollion_utils.script_builder.check_for_updates", lambda *a, **k: None)
-    monkeypatch.setattr("champollion_utils.script_builder.init_process", lambda *a, **k: logging.getLogger())
-    monkeypatch.setattr("champollion_utils.script_builder.start_profiling", lambda *a, **k: None)
-
-    def _run(*cli_args: str) -> RunOutcome:
-        configs.clear()
-        monkeypatch.setattr("sys.argv", ["main.py", *cli_args])
-        try:
-            status = MAIN.main()
-        except SystemExit as stop:
-            status = stop.code
-        return RunOutcome(status=status, configs=list(configs))
-
-    return _run
-
-
-def _ran_config(outcome: RunOutcome, cli_args: tuple[str, ...]):
-    """The one configuration main() ran; fails when main() refused the command line or ran none."""
-    assert outcome.status == 0, f"main() exit status {outcome.status} for {list(cli_args)}, expected 0"
-    assert len(outcome.configs) == 1, f"main() ran {len(outcome.configs)} configurations for {list(cli_args)}"
-    return outcome.configs[0]
+    return main_runner(MAIN, monkeypatch)
 
 
 def _run_config(run_main, *cli_args: str):
-    return _ran_config(run_main(*cli_args), cli_args)
+    return ran_config(run_main(*cli_args), cli_args)
 
 
 def _write_yaml_config(path: Path, input_path: str, datasets_root: str) -> str:

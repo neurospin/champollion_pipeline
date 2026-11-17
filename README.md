@@ -587,6 +587,7 @@ champollion_pipeline/
 │       ├── input_kind_choice.py     # Asks or stops on an ambiguous main.py input (--input-kind)
 │       ├── process_setup.py
 │       ├── cli_options.py           # Registry of main.py arguments, one per config field
+│       ├── env_file.py              # Reads main.py --env files and CHAMPOLLION_* variables (python-dotenv)
 │       ├── _stage_base.py           # Template base class of main.py's pipeline stages
 │       └── generate_labelling_qc.py
 ├── data/                       # Created by install-all; not committed

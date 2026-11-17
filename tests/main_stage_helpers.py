@@ -5,6 +5,7 @@ file path under its own private module name. The stage helpers replace the scrip
 own module by a MagicMock, run the stage and return the argv handed to ``parse_args``.
 """
 
+import dataclasses
 import importlib.util
 import logging
 from pathlib import Path
@@ -145,3 +146,58 @@ def fake_script(argv, name, on_run=None):
     script.parse_args.side_effect = parse_args  # noqa: V101
     script.run.side_effect = run  # noqa: V101
     return script_cls
+
+
+@dataclasses.dataclass
+class RunOutcome:
+    """Exit status of one main() run and the PipelineConfigs it handed to the orchestrator."""
+
+    status: int | str | None
+    configs: list
+
+
+def main_runner(main_module, monkeypatch, before_run=None):
+    """Return a function running main_module.main() with the given arguments.
+
+    The orchestrator is replaced by a recorder and the update check, process setup and profiling are
+    switched off; the function returns the exit status and the configurations main() handed over.
+    ``before_run`` is called with the arguments before each run.
+    """
+    configs: list = []
+
+    class _RecordingOrchestrator:
+        STAGE_REGISTRY = main_module.PipelineOrchestrator.STAGE_REGISTRY
+
+        def __init__(self, config) -> None:
+            configs.append(config)
+
+        def run(self) -> int:
+            return 0
+
+    monkeypatch.setattr(main_module, "check_for_updates", lambda: None)
+    monkeypatch.setattr(main_module, "init_pipeline_process", lambda: logging.getLogger())
+    monkeypatch.setattr(main_module, "start_profiling", lambda *a, **k: None)
+    monkeypatch.setattr(main_module, "PipelineOrchestrator", _RecordingOrchestrator)
+    monkeypatch.setattr("champollion_utils.script_builder.check_for_updates", lambda *a, **k: None)
+    monkeypatch.setattr("champollion_utils.script_builder.init_process", lambda *a, **k: logging.getLogger())
+    monkeypatch.setattr("champollion_utils.script_builder.start_profiling", lambda *a, **k: None)
+
+    def _run(*cli_args: str) -> RunOutcome:
+        if before_run is not None:
+            before_run(cli_args)
+        configs.clear()
+        monkeypatch.setattr("sys.argv", ["main.py", *cli_args])
+        try:
+            status = main_module.main()
+        except SystemExit as stop:
+            status = stop.code
+        return RunOutcome(status=status, configs=list(configs))
+
+    return _run
+
+
+def ran_config(outcome: RunOutcome, cli_args: tuple[str, ...]):
+    """The one configuration main() ran; fails when main() refused the command line or ran none."""
+    assert outcome.status == 0, f"main() exit status {outcome.status} for {list(cli_args)}, expected 0"
+    assert len(outcome.configs) == 1, f"main() ran {len(outcome.configs)} configurations for {list(cli_args)}"
+    return outcome.configs[0]

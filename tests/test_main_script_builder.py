@@ -278,20 +278,22 @@ _CONFIG_FLAGS = frozenset(row.flag for row in CONFIG_ARGUMENTS)
 
 
 def _is_left_out_entry(line: str) -> bool:
-    """True for the first line of the --log, --allow-prefix-ids, --output-path or a CONFIG_ARGUMENTS flag entry."""
+    """True for the first line of the --log, --allow-prefix-ids, --output-path, --env or a CONFIG_ARGUMENTS entry."""
     if line.startswith(("  --log", "  --allow-prefix-ids", "  --output-path")):
         return True
     if not line.startswith("  --"):
         return False
-    return line.split()[0].rstrip(",") in _CONFIG_FLAGS
+    first_word = line.split()[0].rstrip(",")
+    return first_word == "--env" or first_word in _CONFIG_FLAGS
 
 
 def _comparable_help(text: str) -> str:
     """Help text without the usage lines, the left-out entries, the "positional arguments" and "profiling" groups.
 
-    REQ-REFACTOR-BDRABCZUK-EB93D016860C leaves out the positional arguments section (INPUT, OUTPUT), the --log,
-    --allow-prefix-ids and --output-path entries and the entry of each CONFIG_ARGUMENTS flag. --allow-prefix-ids is
-    TEMPORARY (DEF-CORTILES-BDRABCZUK-8A44DAD7F312) and REQ-CORTILES-BDRABCZUK-937E3705E661 requires it listed.
+    REQ-REFACTOR-BDRABCZUK-007502A6260E leaves out the positional arguments section (INPUT, OUTPUT), the --log,
+    --allow-prefix-ids, --output-path and --env entries and the entry of each CONFIG_ARGUMENTS flag.
+    --allow-prefix-ids is TEMPORARY (DEF-CORTILES-BDRABCZUK-8A44DAD7F312) and REQ-CORTILES-BDRABCZUK-937E3705E661
+    requires it listed.
     """
     lines = text.splitlines()
     first_blank = lines.index("")
@@ -451,7 +453,7 @@ def test_help_usage_names_champollion_pipeline(harness, monkeypatch, capsys):
     assert text.startswith(f"usage: {SCRIPT_NAME} "), text.splitlines()[0]
 
 
-# REQ-REFACTOR-BDRABCZUK-230A54CA2187, head REQ-REFACTOR-BDRABCZUK-EB93D016860C
+# REQ-REFACTOR-BDRABCZUK-230A54CA2187, head REQ-REFACTOR-BDRABCZUK-007502A6260E
 def test_help_text_unchanged_since_cbe51d7(harness, monkeypatch, capsys):
     text = _help_text(harness, monkeypatch, capsys)
     assert _comparable_help(text) == _comparable_help(CBE51D7_HELP)
