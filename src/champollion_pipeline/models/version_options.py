@@ -1,12 +1,17 @@
 """Parse-time checks of the embeddings stage's model version options, and the version a model set marker names."""
 
 import argparse
+import logging
 import os
 import warnings
 from os.path import join
 
 from champollion_pipeline.derivatives_layout import DEFAULT_MASKS_VERSION
 from champollion_pipeline.models.cache import MODEL_SET_FILE_NAME, read_model_set
+
+MASK_VERSIONS = (DEFAULT_MASKS_VERSION, "canonical_corrected_26_1")
+
+logger = logging.getLogger(__name__)
 
 
 def resolve_model_version_alias(args: argparse.Namespace, parser: argparse.ArgumentParser) -> None:
@@ -29,11 +34,32 @@ def resolve_model_version_alias(args: argparse.Namespace, parser: argparse.Argum
     args.model_version = alias
 
 
-def resolve_masks_default(args: argparse.Namespace) -> None:
-    """Fill --masks when it was not given: the model version if set, else DEFAULT_MASKS_VERSION."""
-    if args.masks is None:
-        model_version = args.model_version
-        args.masks = model_version if model_version is not None else DEFAULT_MASKS_VERSION
+def find_folder_mask_version(models_path: str) -> str | None:
+    """The last folder name of models_path when it is one of MASK_VERSIONS, else None."""
+    folder_name = os.path.basename(os.path.normpath(models_path))
+    return folder_name if folder_name in MASK_VERSIONS else None
+
+
+def resolve_masks_default(args: argparse.Namespace, parser: argparse.ArgumentParser) -> None:
+    """Fill --masks when it was not given: the model version if set; else, for a local models directory, its folder
+    name when it is a Mask version (exit 2 asking for --masks when it is not); else DEFAULT_MASKS_VERSION."""
+    if args.masks is not None:
+        return
+    if args.model_version is not None:
+        args.masks = args.model_version
+        return
+    if not os.path.isdir(args.models_path):
+        args.masks = DEFAULT_MASKS_VERSION
+        return
+    folder_version = find_folder_mask_version(args.models_path)
+    if folder_version is None:
+        message = (
+            f"--masks not given and the local models folder {args.models_path!r} is not named after a mask version "
+            f"({', '.join(MASK_VERSIONS)}); pass --masks <mask version of the crops to embed>"
+        )
+        logger.error(message)
+        parser.error(message)
+    args.masks = folder_version
 
 
 def check_version_mismatch(args: argparse.Namespace, parser: argparse.ArgumentParser) -> None:

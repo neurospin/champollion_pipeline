@@ -35,6 +35,11 @@ HYDRA_CONFIG = "backbone_name: convnet\ndata:\n- input_size: (1, 20, 30, 40)\n"
 # --------------------------------------------------------------------------- #
 
 
+# A tmp models dir with an arbitrary name is not a Mask version: the parser needs --masks
+# (REQ-MODELVER-BDRABCZUK-1B06D337ECC0); canonical_25 keeps the masks these tests always ran with.
+MASKS_ARGS = ("--masks", "canonical_25")
+
+
 def ckpt_dir_of(model_dir: Path, version: int = 0) -> Path:
     return model_dir / "logs" / "lightning_logs" / f"version_{version}" / "checkpoints"
 
@@ -125,7 +130,7 @@ def run_region(tmp_path: Path) -> FakeEvaluate:
     """Run _run_per_region over tmp_path/models with the fake evaluate."""
     models = tmp_path / "models"
     script = GenerateEmbeddings()
-    script.parse_args([str(models), str(tmp_path / "dataset")])
+    script.parse_args([str(models), str(tmp_path / "dataset"), *MASKS_ARGS])
     fake = FakeEvaluate()
     script.execute_command = fake
     code = script._run_per_region("evaluate.py", str(tmp_path / "crops"), str(tmp_path / "out"))

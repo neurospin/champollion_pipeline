@@ -45,6 +45,11 @@ STAND_IN = "Aaa_left"
 # --------------------------------------------------------------------------- #
 
 
+# A tmp models dir with an arbitrary name is not a Mask version: the parser needs --masks
+# (REQ-MODELVER-BDRABCZUK-1B06D337ECC0); canonical_25 keeps the masks these tests always ran with.
+MASKS_ARGS = ("--masks", "canonical_25")
+
+
 def make_region_dir(tmp_path: Path, region: str) -> Path:
     """<tmp>/models/<region> with an empty logs/ and the region's .hydra/config.yaml."""
     model_dir = tmp_path / "models" / region
@@ -111,7 +116,7 @@ class StageResult:
 def run_stage(tmp_path: Path, checkpoint_epoch: int = DEFAULT_EPOCH) -> StageResult:
     """Run _run_per_region over tmp_path/models; an exception counts as a non-zero status."""
     script = GenerateEmbeddings()
-    script.parse_args([str(tmp_path / "models"), str(tmp_path / "dataset")])
+    script.parse_args([str(tmp_path / "models"), str(tmp_path / "dataset"), *MASKS_ARGS])
     script.args.checkpoint_epoch = checkpoint_epoch
     fake = BytesEvaluate()
     script.execute_command = fake
@@ -220,7 +225,7 @@ class TestStandInWarning:
         stand_in_best_weights_only(make_region_dir(tmp_path, STAND_IN))
         write_epoch_ckpt(make_region_dir(tmp_path, "Bbb_left"), DEFAULT_EPOCH, 106272)
         script = GenerateEmbeddings()
-        script.parse_args([str(tmp_path / "models"), str(tmp_path / "dataset")])
+        script.parse_args([str(tmp_path / "models"), str(tmp_path / "dataset"), *MASKS_ARGS])
         script.args.checkpoint_epoch = DEFAULT_EPOCH
         script.execute_command = BytesEvaluate()
 

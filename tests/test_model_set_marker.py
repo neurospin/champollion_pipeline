@@ -17,6 +17,7 @@ No model, no evaluate.py, no network: only the reader and the real GenerateEmbed
 """
 
 import json
+import logging
 import warnings
 
 import pytest
@@ -42,7 +43,9 @@ def _write_marker(directory, content) -> str:
 
 
 def _local_model_set(tmp_path, masks: str = MARKER_MASKS):
-    models = tmp_path / "models"
+    """A local model set whose marker names <masks>, in a folder named after the canonical_25 Mask version, so a run
+    without --masks resolves --masks to canonical_25 (REQ-MODELVER-BDRABCZUK-8C57E27DFA80)."""
+    models = tmp_path / MASKS
     _write_marker(models, {"model_version": masks, "masks": masks, "checkpoint_epoch": 80})
     return models
 
@@ -124,7 +127,7 @@ class TestLocalMarkerMasksMismatch:
         assert MARKER_MASKS in stderr, stderr
 
     def test_marker_masks_mismatch_with_default_masks_exits_2(self, tmp_path, capsys):
-        """Neither --masks nor --model-version: the resolved --masks is the canonical_25 default."""
+        """Neither --masks nor --model-version: the resolved --masks is canonical_25, the models folder's name."""
         models = _local_model_set(tmp_path)
         stderr = self._expect_usage_error([str(models), _datasets_root(tmp_path)], capsys)
         assert MASKS in stderr, stderr
@@ -147,9 +150,11 @@ class TestLocalMarkerMasksMismatchAllowed:
         assert any(MASKS in m and MARKER_MASKS in m for m in messages), messages
 
 
-class TestLocalMarkerMissing:
-    """REQ-MODELVER-BDRABCZUK-FF80E381F552: a local directory <D> without model_set.json gives a UserWarning naming
-    <D>/model_set.json and the resolved --masks <M>, instead of exiting."""
+class TestLocalMarkerMissingExplicitMasks:
+    """Today's behaviour, pinned until TASK-MODELVER-BDRABCZUK-86405DAD28CE (the stage-4 crops-vs-model check) decides
+    it: an explicit --masks <M> with a local directory <D> without model_set.json gives a UserWarning naming
+    <D>/model_set.json and <M>, instead of exiting. Was REQ-MODELVER-BDRABCZUK-FF80E381F552 before its 2026-11-17
+    revision, which covers only the case without --masks (TestLocalMarkerMissingUnknownName)."""
 
     def _parse_expect_warning(self, argv) -> list[str]:
         """Parse argv with the real parser; fail on SystemExit; return the UserWarning messages emitted."""
@@ -168,10 +173,39 @@ class TestLocalMarkerMissing:
         messages = self._parse_expect_warning([str(models), _datasets_root(tmp_path), "--masks", MARKER_MASKS])
         assert any(marker_path in m and MARKER_MASKS in m for m in messages), messages
 
-    def test_missing_marker_with_default_masks_warns(self, tmp_path):
-        """Neither --masks nor --model-version: the resolved --masks is the canonical_25 default."""
+
+class TestLocalMarkerMissingUnknownName:
+    """REQ-MODELVER-BDRABCZUK-FF80E381F552 (revised 2026-11-17): a local directory without model_set.json whose last
+    folder name is not a Mask version, neither --model-version nor --masks: exit status 2 after exactly one log record
+    at level ERROR, and no UserWarning."""
+
+    @staticmethod
+    def _argv(tmp_path) -> list[str]:
         models = tmp_path / "models"
         models.mkdir()
-        marker_path = str(models / MODEL_SET_FILE_NAME)
-        messages = self._parse_expect_warning([str(models), _datasets_root(tmp_path)])
-        assert any(marker_path in m and MASKS in m for m in messages), messages
+        return [str(models), _datasets_root(tmp_path)]
+
+    @staticmethod
+    def _parse_expect_exit(argv):
+        """Parse argv with the real parser, recording every warning; return (exit code, UserWarning messages)."""
+        with warnings.catch_warnings(record=True) as record:
+            warnings.simplefilter("always")
+            with pytest.raises(SystemExit) as exc_info:
+                GenerateEmbeddings().parse_args(argv)
+        user_warnings = [str(w.message) for w in record if issubclass(w.category, UserWarning)]
+        return exc_info.value.code, user_warnings
+
+    def test_exits_2(self, tmp_path):
+        code, _ = self._parse_expect_exit(self._argv(tmp_path))
+        assert code == 2
+
+    @pytest.mark.usefixtures("pipeline_caplog")
+    def test_logs_exactly_one_error_record(self, tmp_path, caplog):
+        self._parse_expect_exit(self._argv(tmp_path))
+        # A propagating record reaches caplog's handler twice (pipeline logger and root): count each record once.
+        errors = {id(r): r for r in caplog.records if r.levelno == logging.ERROR}
+        assert len(errors) == 1, [(r.name, r.getMessage()) for r in errors.values()]
+
+    def test_emits_no_user_warning(self, tmp_path):
+        _, user_warnings = self._parse_expect_exit(self._argv(tmp_path))
+        assert user_warnings == []

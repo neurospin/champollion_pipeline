@@ -36,6 +36,9 @@ pytestmark = pytest.mark.unit  # noqa: V107
 
 PROVENANCE = "provenance.json"
 COMMIT = "0123456789abcdef0123456789abcdef01234567"
+# Name of the tmp local models dir: a Mask version, so a run without --masks takes canonical_25 from it
+# (REQ-MODELVER-BDRABCZUK-8C57E27DFA80), the masks these tests always ran with.
+LOCAL_MODELS = "canonical_25"
 REPO_ID = "neurospin/Champollion_V1"
 VERSION = "canonical_corrected_26_1"
 REGIONS = ["Aaa_left", "Bbb_right"]
@@ -102,7 +105,7 @@ def workdir(tmp_path, monkeypatch):
 
 def local_argv(workdir: Path, *extra: str) -> list[str]:
     return [
-        str(workdir / "models"),
+        str(workdir / LOCAL_MODELS),
         str(workdir / "dataset"),
         "--models-cache",
         str(workdir / "cache"),
@@ -121,19 +124,21 @@ class TestProvenanceWrittenWithMasks:
     """REQ-MODELVER-BDRABCZUK-E821EF840132: provenance.json in the output directory; masks = --masks in effect."""
 
     def test_written_in_output_dir_with_default_masks(self, workdir):
-        lay_out_regions(workdir / "models")
+        lay_out_regions(workdir / LOCAL_MODELS)
         run_stage(local_argv(workdir))
         assert read_provenance(workdir / "out")["masks"] == "canonical_25"
 
     def test_written_in_default_region_embeddings_dir_with_given_masks(self, workdir):
-        lay_out_regions(workdir / "models")
+        lay_out_regions(workdir / LOCAL_MODELS)
         dataset = workdir / "dataset"
-        run_stage([str(workdir / "models"), str(dataset), "--models-cache", str(workdir / "cache"), "--masks", "m9"])
+        run_stage(
+            [str(workdir / LOCAL_MODELS), str(dataset), "--models-cache", str(workdir / "cache"), "--masks", "m9"]
+        )
         output_dir = Path(compute_region_embeddings_dir(str(dataset), "m9"))
         assert read_provenance(output_dir)["masks"] == "m9"
 
     def test_written_when_every_region_is_skipped(self, workdir):
-        lay_out_regions(workdir / "models")
+        lay_out_regions(workdir / LOCAL_MODELS)
         for region in REGIONS:
             existing = workdir / "out" / region / "full_embeddings.csv"
             existing.parent.mkdir(parents=True)
@@ -151,24 +156,24 @@ class TestProvenanceModelVersion:
     """REQ-MODELVER-BDRABCZUK-F981AB1172B4: model_version from model_set.json, else --model-version, else null."""
 
     def test_from_local_model_set_marker(self, workdir):
-        models = lay_out_regions(workdir / "models")
+        models = lay_out_regions(workdir / LOCAL_MODELS)
         write_model_set(str(models), ModelSet("marker_version", "canonical_25"))
         run_stage(local_argv(workdir))
         assert read_provenance(workdir / "out")["model_version"] == "marker_version"
 
     def test_from_marker_when_regions_are_restricted(self, workdir):
-        models = lay_out_regions(workdir / "models")
+        models = lay_out_regions(workdir / LOCAL_MODELS)
         write_model_set(str(models), ModelSet("marker_version", "canonical_25"))
         run_stage(local_argv(workdir, "--regions", REGIONS[0]))
         assert read_provenance(workdir / "out")["model_version"] == "marker_version"
 
     def test_from_model_version_option_without_marker(self, workdir):
-        lay_out_regions(workdir / "models")
+        lay_out_regions(workdir / LOCAL_MODELS)
         run_stage(local_argv(workdir, "--model-version", "v_option"))
         assert read_provenance(workdir / "out")["model_version"] == "v_option"
 
     def test_null_without_marker_or_option(self, workdir):
-        lay_out_regions(workdir / "models")
+        lay_out_regions(workdir / LOCAL_MODELS)
         run_stage(local_argv(workdir))
         provenance = read_provenance(workdir / "out")
         assert "model_version" in provenance and provenance["model_version"] is None
@@ -198,19 +203,19 @@ class TestProvenanceCheckpointEpoch:
     """REQ-MODELVER-BDRABCZUK-4BD0061E6FC2: checkpoint_epoch = the --checkpoint-epoch value."""
 
     def test_default_epoch_80(self, workdir):
-        lay_out_regions(workdir / "models")
+        lay_out_regions(workdir / LOCAL_MODELS)
         run_stage(local_argv(workdir))
         epoch = read_provenance(workdir / "out")["checkpoint_epoch"]
         assert type(epoch) is int and epoch == 80
 
     def test_given_epoch(self, workdir):
-        lay_out_regions(workdir / "models", epoch=12)
+        lay_out_regions(workdir / LOCAL_MODELS, epoch=12)
         run_stage(local_argv(workdir, "--checkpoint-epoch", "12"))
         epoch = read_provenance(workdir / "out")["checkpoint_epoch"]
         assert type(epoch) is int and epoch == 12
 
     def test_marker_epoch_does_not_replace_option(self, workdir):
-        models = lay_out_regions(workdir / "models")
+        models = lay_out_regions(workdir / LOCAL_MODELS)
         write_model_set(str(models), ModelSet("marker_version", "canonical_25", 12))
         run_stage(local_argv(workdir))
         assert read_provenance(workdir / "out")["checkpoint_epoch"] == 80
@@ -225,15 +230,15 @@ class TestProvenanceModelsSource:
     """REQ-MODELVER-BDRABCZUK-E46B4CCA8743: models_source = local path, or HF repo id and subfolder."""
 
     def test_local_absolute_path(self, workdir):
-        lay_out_regions(workdir / "models")
+        lay_out_regions(workdir / LOCAL_MODELS)
         run_stage(local_argv(workdir))
-        expected = {"type": "local", "path": os.path.abspath(workdir / "models")}
+        expected = {"type": "local", "path": os.path.abspath(workdir / LOCAL_MODELS)}
         assert read_provenance(workdir / "out")["models_source"] == expected
 
     def test_local_relative_path_made_absolute(self, workdir):
-        lay_out_regions(workdir / "models")
-        run_stage(["models", "dataset", "--models-cache", "cache", "--output", str(workdir / "out")])
-        expected = {"type": "local", "path": os.path.abspath("models")}
+        lay_out_regions(workdir / LOCAL_MODELS)
+        run_stage([LOCAL_MODELS, "dataset", "--models-cache", "cache", "--output", str(workdir / "out")])
+        expected = {"type": "local", "path": os.path.abspath(LOCAL_MODELS)}
         assert read_provenance(workdir / "out")["models_source"] == expected
 
     def test_hugging_face_repo_id_and_subfolder(self, workdir):
@@ -307,12 +312,12 @@ class TestProvenancePipelineCommit:
     """REQ-MODELVER-BDRABCZUK-EA3EDB342A85: pipeline_commit = 40-hex pipeline commit, else null."""
 
     def test_stage_records_the_pipeline_commit(self, workdir):
-        lay_out_regions(workdir / "models")
+        lay_out_regions(workdir / LOCAL_MODELS)
         run_stage(local_argv(workdir), commit=COMMIT)
         assert read_provenance(workdir / "out")["pipeline_commit"] == COMMIT
 
     def test_stage_records_null_when_commit_unknown(self, workdir):
-        lay_out_regions(workdir / "models")
+        lay_out_regions(workdir / LOCAL_MODELS)
         run_stage(local_argv(workdir), commit=None)
         provenance = read_provenance(workdir / "out")
         assert "pipeline_commit" in provenance and provenance["pipeline_commit"] is None

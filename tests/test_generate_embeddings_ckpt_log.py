@@ -40,6 +40,11 @@ FS_ORDER = "filesystem order"
 Layout = Callable[[Path], tuple[list[str], list[Path]]]
 
 
+# A tmp models dir with an arbitrary name is not a Mask version: the parser needs --masks
+# (REQ-MODELVER-BDRABCZUK-1B06D337ECC0); canonical_25 keeps the masks these tests always ran with.
+MASKS_ARGS = ("--masks", "canonical_25")
+
+
 def best_weights_mirror_over_two_native(model_dir: Path) -> tuple[list[str], list[Path]]:
     """best_model_weights.pt beside two native ckpts: -m is a mirror with one converted ckpt."""
     write_weights(model_dir, BEST_STATE)
@@ -75,7 +80,7 @@ def run_layout(tmp_path: Path, layout: Layout) -> tuple[FakeEvaluate, list[Path]
     model_dir = make_model_dir(tmp_path)
     extra_argv, candidates = layout(model_dir)
     script = GenerateEmbeddings()
-    script.parse_args([str(tmp_path / "models"), str(tmp_path / "dataset"), *extra_argv])
+    script.parse_args([str(tmp_path / "models"), str(tmp_path / "dataset"), *MASKS_ARGS, *extra_argv])
     fake = FakeEvaluate()
     script.execute_command = fake
     code = script._run_per_region("evaluate.py", str(tmp_path / "crops"), str(tmp_path / "out"))

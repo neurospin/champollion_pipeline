@@ -19,6 +19,7 @@ from champollion_pipeline import generate_embeddings as generate_embeddings_modu
 from champollion_pipeline.generate_embeddings import GenerateEmbeddings, HuggingFaceStrategy
 from champollion_pipeline.models.checkpoint import find_region_model_dirs
 from champollion_pipeline.utils.lib import CORTICAL_TILES_VERSION
+from tests.embeddings_parse_helpers import MASKS_ARGS
 from tests.log_assertions import FAIL, LOG, OUTPUT, print_call_lines
 
 
@@ -91,7 +92,7 @@ class TestPerRegionInvocation:
         make_region_logs(models_dir / "SC-sylv_right")
 
         script = GenerateEmbeddings()
-        script.args = script.parse_args([str(models_dir), str(tmp_path)])
+        script.args = script.parse_args([str(models_dir), str(tmp_path), *MASKS_ARGS])
 
         executed_cmds = []
 
@@ -118,7 +119,7 @@ class TestPerRegionInvocation:
         (out / "full_embeddings.csv").write_text("existing")
 
         script = GenerateEmbeddings()
-        script.args = script.parse_args([str(models_dir), str(tmp_path)])
+        script.args = script.parse_args([str(models_dir), str(tmp_path), *MASKS_ARGS])
 
         executed = []
         with patch.object(script, "execute_command", side_effect=lambda c, **k: executed.append(c) or 0):
@@ -140,7 +141,7 @@ class TestPerRegionInvocation:
         (out / "full_embeddings.csv").write_text("existing")
 
         script = GenerateEmbeddings()
-        script.args = script.parse_args([str(models_dir), str(tmp_path), "--overwrite"])
+        script.args = script.parse_args([str(models_dir), str(tmp_path), *MASKS_ARGS, "--overwrite"])
 
         executed = []
         with patch.object(script, "execute_command", side_effect=lambda c, **k: executed.append(c) or 0):
@@ -197,7 +198,7 @@ class TestModelDiscovery:
         right = self._make_model(parent / "FCLp-subsc-FCLa-INSULA_right")
 
         script = GenerateEmbeddings()
-        script.args = script.parse_args([str(models_dir), str(tmp_path)])
+        script.args = script.parse_args([str(models_dir), str(tmp_path), *MASKS_ARGS])
 
         model_args = self._collect_model_args(script, tmp_path)
 
@@ -210,7 +211,7 @@ class TestModelDiscovery:
         real = self._make_model(models_dir / "FCMpost-SpC_left")
 
         script = GenerateEmbeddings()
-        script.args = script.parse_args([str(models_dir), str(tmp_path)])
+        script.args = script.parse_args([str(models_dir), str(tmp_path), *MASKS_ARGS])
 
         model_args = self._collect_model_args(script, tmp_path)
 
@@ -234,7 +235,7 @@ class TestModelDiscovery:
         (mirror / "logs" / "best_model_weights.pt.metadata").write_text("{}\n")
 
         script = GenerateEmbeddings()
-        script.args = script.parse_args([str(models_dir), str(tmp_path)])
+        script.args = script.parse_args([str(models_dir), str(tmp_path), *MASKS_ARGS])
 
         found = find_region_model_dirs(str(models_dir))
 
@@ -290,7 +291,7 @@ class TestRegionNameResolution:
         out = tmp_path / "out"
 
         script = GenerateEmbeddings()
-        script.args = script.parse_args([str(models_dir), str(tmp_path)])
+        script.args = script.parse_args([str(models_dir), str(tmp_path), *MASKS_ARGS])
         return script, crops, out
 
     def test_nested_hf_layout_skeleton_path_uses_region_side_folder(self, tmp_path):
@@ -346,7 +347,7 @@ class TestRunMethod:
         (tmp_path / "SC-sylv_left").mkdir()
 
         script = GenerateEmbeddings()
-        script.parse_args([str(tmp_path), str(tmp_path)])
+        script.parse_args([str(tmp_path), str(tmp_path), *MASKS_ARGS])
 
         with (
             patch.object(script, "fetch_models", return_value=str(tmp_path)),
@@ -360,7 +361,7 @@ class TestRunMethod:
         (tmp_path / "SC-sylv_left").mkdir()
 
         script = GenerateEmbeddings()
-        script.parse_args([str(tmp_path), str(tmp_path)])
+        script.parse_args([str(tmp_path), str(tmp_path), *MASKS_ARGS])
 
         with (
             patch.object(script, "fetch_models", return_value=str(tmp_path)),
@@ -381,7 +382,7 @@ class TestLegacyCropsPath:
         datasets_root.mkdir()
 
         script = GenerateEmbeddings()
-        script.parse_args([str(models_dir), str(datasets_root), *extra_args])
+        script.parse_args([str(models_dir), str(datasets_root), *MASKS_ARGS, *extra_args])
 
         with (
             patch.object(script, "fetch_models", return_value=str(models_dir)),
@@ -415,7 +416,7 @@ class TestGenerateEmbeddingsIntegration:
         (tmp_path / "SC-sylv_left").mkdir()
 
         script = GenerateEmbeddings()
-        script.parse_args([str(tmp_path), str(tmp_path), "--overwrite"])
+        script.parse_args([str(tmp_path), str(tmp_path), *MASKS_ARGS, "--overwrite"])
 
         with (
             patch.object(script, "fetch_models", return_value=str(tmp_path)),
@@ -540,7 +541,9 @@ class TestRegionsFilter:
         (tmp_path / "other_region").mkdir()
 
         script = GenerateEmbeddings()
-        script.args = script.parse_args([str(tmp_path), "/d", "--regions", "SC-sylv_left", "SC-sylv_right"])
+        script.args = script.parse_args(
+            [str(tmp_path), "/d", *MASKS_ARGS, "--regions", "SC-sylv_left", "SC-sylv_right"]
+        )
 
         tmpdir = script._make_regions_tmpdir(str(tmp_path))
         try:
@@ -555,7 +558,7 @@ class TestRegionsFilter:
         (tmp_path / "SC-sylv_left").mkdir()
 
         script = GenerateEmbeddings()
-        script.args = script.parse_args([str(tmp_path), "/d", "--regions", "SC-sylv_left", "no_a", "no_b"])
+        script.args = script.parse_args([str(tmp_path), "/d", *MASKS_ARGS, "--regions", "SC-sylv_left", "no_a", "no_b"])
 
         with pytest.raises(FileNotFoundError, match=rf"Model folder.*: no_a, no_b .*searched: {tmp_path}"):
             script._make_regions_tmpdir(str(tmp_path))
@@ -565,7 +568,7 @@ class TestRegionsFilter:
         (tmp_path / "SC-sylv_right").mkdir()
 
         script = GenerateEmbeddings()
-        script.parse_args([str(tmp_path), str(tmp_path), "--regions", "SC-sylv_left"])
+        script.parse_args([str(tmp_path), str(tmp_path), *MASKS_ARGS, "--regions", "SC-sylv_left"])
 
         # Capture models_path seen by _run_per_region
         snapshot = {}
@@ -591,7 +594,7 @@ class TestRegionsFilter:
         (tmp_path / "SC-sylv_left").mkdir()
 
         script = GenerateEmbeddings()
-        script.parse_args([str(tmp_path), str(tmp_path), "--regions", "SC-sylv_left"])
+        script.parse_args([str(tmp_path), str(tmp_path), *MASKS_ARGS, "--regions", "SC-sylv_left"])
 
         created_tmpdirs = []
 
@@ -615,7 +618,7 @@ class TestRegionsFilter:
 
     def test_run_pipeline_no_tmpdir_without_regions(self, temp_dir):
         script = GenerateEmbeddings()
-        script.parse_args([temp_dir, temp_dir])
+        script.parse_args([temp_dir, temp_dir, *MASKS_ARGS])
 
         with (
             patch.object(script, "fetch_models", return_value=temp_dir),
@@ -631,7 +634,7 @@ class TestProfiling:
 
     def test_run_dispatches_to_profiling_when_flag_set(self, temp_dir):
         script = GenerateEmbeddings()
-        script.parse_args([temp_dir, temp_dir, "--profiling"])
+        script.parse_args([temp_dir, temp_dir, *MASKS_ARGS, "--profiling"])
 
         with (
             patch.object(script, "_validate_inputs"),
@@ -642,7 +645,7 @@ class TestProfiling:
 
     def test_run_dispatches_to_normal_without_profiling_flag(self, temp_dir):
         script = GenerateEmbeddings()
-        script.parse_args([temp_dir, temp_dir])
+        script.parse_args([temp_dir, temp_dir, *MASKS_ARGS])
 
         with (
             patch.object(script, "_validate_inputs"),
@@ -653,7 +656,7 @@ class TestProfiling:
 
     def test_run_with_profiling_calls_run_normal(self, temp_dir):
         script = GenerateEmbeddings()
-        script.parse_args([temp_dir, temp_dir, "--profiling"])
+        script.parse_args([temp_dir, temp_dir, *MASKS_ARGS, "--profiling"])
 
         with (
             patch("champollion_pipeline.generate_embeddings.cProfile.Profile"),
@@ -666,7 +669,7 @@ class TestProfiling:
 
     def test_run_with_profiling_dumps_profile_file(self, temp_dir):
         script = GenerateEmbeddings()
-        script.parse_args([temp_dir, temp_dir, "--profiling"])
+        script.parse_args([temp_dir, temp_dir, *MASKS_ARGS, "--profiling"])
 
         mock_stats = MagicMock()
 
@@ -680,7 +683,7 @@ class TestProfiling:
 
     def test_run_with_profiling_dumps_on_error(self, temp_dir):
         script = GenerateEmbeddings()
-        script.parse_args([temp_dir, temp_dir, "--profiling"])
+        script.parse_args([temp_dir, temp_dir, *MASKS_ARGS, "--profiling"])
 
         mock_stats = MagicMock()
 
@@ -843,7 +846,7 @@ class TestPerRegionSubjectsFile:
             make_region_logs(models_dir / name)
 
         script = GenerateEmbeddings()
-        script.parse_args([str(models_dir), str(datasets_root), "--output", str(tmp_path / "out")])
+        script.parse_args([str(models_dir), str(datasets_root), *MASKS_ARGS, "--output", str(tmp_path / "out")])
 
         crops_2mm_dir = (
             datasets_root / "derivatives" / script._get_derivatives_folder() / "crops" / script.args.masks / "2mm"
@@ -896,7 +899,7 @@ def _region_script(tmp_path, regions, *extra_args):
     for region in regions:
         make_region_logs(models_dir / region)
     script = GenerateEmbeddings()
-    script.args = script.parse_args([str(models_dir), str(tmp_path), *extra_args])
+    script.args = script.parse_args([str(models_dir), str(tmp_path), *MASKS_ARGS, *extra_args])
     return script
 
 
@@ -1027,7 +1030,7 @@ class TestEmbeddingsLogging:
     def test_cpu_mode_logged(self, tmp_path, monkeypatch, pipeline_caplog):
         monkeypatch.delenv("CUDA_VISIBLE_DEVICES", raising=False)
         script = GenerateEmbeddings()
-        script.parse_args([str(tmp_path), str(tmp_path), "--cpu"])
+        script.parse_args([str(tmp_path), str(tmp_path), *MASKS_ARGS, "--cpu"])
 
         with patch.object(script, "_run_pipeline", return_value=0):
             script._run_normal()
@@ -1035,9 +1038,11 @@ class TestEmbeddingsLogging:
         record = pipeline_caplog.assert_logged(LOG, "CUDA_VISIBLE_DEVICES")
         assert record.name == LOGGER_NAME
 
-    def test_profile_file_logged_at_output(self, temp_dir, pipeline_caplog):
+    @staticmethod
+    def _run_profiled(temp_dir) -> None:
+        """Parse --profiling and run _run_with_profiling with the profiler and _run_normal mocked."""
         script = GenerateEmbeddings()
-        script.parse_args([temp_dir, temp_dir, "--profiling"])
+        script.parse_args([temp_dir, temp_dir, *MASKS_ARGS, "--profiling"])
 
         with (
             patch("champollion_pipeline.generate_embeddings.cProfile.Profile"),
@@ -1046,20 +1051,13 @@ class TestEmbeddingsLogging:
         ):
             script._run_with_profiling()
 
+    def test_profile_file_logged_at_output(self, temp_dir, pipeline_caplog):
+        self._run_profiled(temp_dir)
         record = pipeline_caplog.assert_logged(OUTPUT, "embeddings_profile.prof")
         assert record.name == LOGGER_NAME
 
     def test_profile_statistics_logged_at_output(self, temp_dir, pipeline_caplog):
-        script = GenerateEmbeddings()
-        script.parse_args([temp_dir, temp_dir, "--profiling"])
-
-        with (
-            patch("champollion_pipeline.generate_embeddings.cProfile.Profile"),
-            patch("champollion_pipeline.generate_embeddings.pstats.Stats", _FakeStats),
-            patch.object(script, "_run_normal", return_value=0),
-        ):
-            script._run_with_profiling()
-
+        self._run_profiled(temp_dir)
         record = pipeline_caplog.assert_logged(OUTPUT, _FakeStats.HEADER.strip())
         assert record.name == LOGGER_NAME
 

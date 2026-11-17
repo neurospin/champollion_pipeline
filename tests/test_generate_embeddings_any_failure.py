@@ -20,14 +20,19 @@ from tests.test_generate_embeddings_best_weights import record_text
 
 pytestmark = pytest.mark.unit  # noqa: V107
 
+# Name of the tmp models dir: a Mask version, so the parser takes --masks from it.
+LOCAL_MODELS = "canonical_25"
 MARKER = "<<fake-evaluate-done>>"
 # Pipeline log records are captured in emission order, so the marker orders them by region.
 MARKER_LOGGER = logging.getLogger("champollion_pipeline.tests.fake_evaluate")
 
 
 def make_models(tmp_path: Path, regions: list[str]) -> Path:
-    """Create a flat models dir with one <region>/logs/ per region, each holding an epoch=80 checkpoint."""
-    models = tmp_path / "models"
+    """Create a flat models dir with one <region>/logs/ per region, each holding an epoch=80 checkpoint.
+
+    The dir is named after the canonical_25 Mask version, so a run without --masks keeps the masks these
+    tests always ran with (REQ-MODELVER-BDRABCZUK-8C57E27DFA80)."""
+    models = tmp_path / LOCAL_MODELS
     for region in regions:
         ckpt_dir = models / region / "logs" / "lightning_logs" / "version_0" / "checkpoints"
         ckpt_dir.mkdir(parents=True)

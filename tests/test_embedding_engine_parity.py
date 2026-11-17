@@ -118,7 +118,7 @@ def reference(dataset):
     assert EVALUATE.is_file(), f"champollion_V1 evaluate.py not found at {EVALUATE}"
     out = dataset["root"] / "evaluate_out"
     script = GenerateEmbeddings()
-    script.parse_args([str(dataset["models"]), str(dataset["root"] / "dataset")])
+    script.parse_args([str(dataset["models"]), str(dataset["root"] / "dataset"), "--masks", "canonical_25"])
     script.args.checkpoint_epoch = EPOCH
     script.args.overwrite = True
     with pytest.MonkeyPatch.context() as patch:

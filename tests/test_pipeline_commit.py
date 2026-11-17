@@ -33,7 +33,13 @@ from hypothesis import strategies as st
 
 from champollion_pipeline import generate_embeddings as ge
 from champollion_pipeline.generate_embeddings import GenerateEmbeddings
-from tests.test_generate_embeddings_provenance import fake_evaluate, lay_out_regions, local_argv, read_provenance
+from tests.test_generate_embeddings_provenance import (
+    LOCAL_MODELS,
+    fake_evaluate,
+    lay_out_regions,
+    local_argv,
+    read_provenance,
+)
 
 pytestmark = pytest.mark.unit  # noqa: V107
 
@@ -91,7 +97,7 @@ def write_commit_file(code_dir: Path, content: bytes) -> None:
 
 def run_stage_from(code_dir: Path, workdir: Path) -> dict:
     """Run the embeddings stage with the reader of code_dir and return the provenance.json it wrote."""
-    lay_out_regions(workdir / "models")
+    lay_out_regions(workdir / LOCAL_MODELS)
     script = GenerateEmbeddings()
     script.parse_args(local_argv(workdir))
     script.execute_command = fake_evaluate

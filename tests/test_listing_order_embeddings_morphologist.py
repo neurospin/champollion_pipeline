@@ -25,6 +25,11 @@ CONFIG_TARGET = "cortical_tiles-2026"
 CONFIG_FILES = ("a.yaml", "m/b.yaml", "m/n/c.yaml", "z.yaml")
 
 
+# A tmp models dir with an arbitrary name is not a Mask version: the parser needs --masks
+# (REQ-MODELVER-BDRABCZUK-1B06D337ECC0); canonical_25 keeps the masks these tests always ran with.
+MASKS_ARGS = ("--masks", "canonical_25")
+
+
 @pytest.mark.unit
 class TestRglobOrderControl:
     """The first audit's guards cover glob and Path.glob; _patch_config_paths lists with Path.rglob."""
@@ -62,7 +67,7 @@ class TestFindCropDirOrder:
         make_region_logs(models / MODEL_REGION)
         crops = tmp_path / "crops"
         _make_crop_dirs(crops)
-        script = make_script([str(models), "/d"])
+        script = make_script([str(models), "/d", *MASKS_ARGS])
         calls = []
         script.execute_command = lambda cmd, shell=False: calls.append(cmd) or 0
         with _listing_in(order):

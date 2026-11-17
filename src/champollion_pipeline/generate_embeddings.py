@@ -236,7 +236,7 @@ class GenerateEmbeddings(ScriptBuilder):
         """Parse args, then resolve the deprecated --masks-version alias into model_version."""
         parsed = super().parse_args(args)
         resolve_model_version_alias(self.args, self.parser)
-        resolve_masks_default(self.args)
+        resolve_masks_default(self.args, self.parser)
         check_version_mismatch(self.args, self.parser)
         check_local_model_set(self.args, self.parser)
         return parsed
