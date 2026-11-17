@@ -123,7 +123,8 @@ class GenerateEmbeddings(ScriptBuilder):
             .add_optional_argument(
                 "--cortical_version",
                 f"Derivatives folder name (e.g. 'cortical_tiles-2027'). "
-                f"Defaults to cortical_tiles-{CORTICAL_TILES_VERSION}.",
+                f"Defaults to cortical_tiles-{CORTICAL_TILES_VERSION}. Crops are read from "
+                f"<datasets_root>/derivatives/<cortical_version>/crops/<masks>/2mm.",
                 default=f"cortical_tiles-{CORTICAL_TILES_VERSION}",
             )
             .add_flag(
@@ -143,8 +144,11 @@ class GenerateEmbeddings(ScriptBuilder):
             )
             .add_optional_argument(
                 "--masks",
-                "Cortical tiles mask version used as crops subdirectory (e.g. 'canonical_25'). "
-                "Defaults to the --model-version value when given, else canonical_25.",
+                "Cortical tiles mask version used as crops subdirectory (e.g. 'canonical_25'): crops are read from "
+                "<datasets_root>/derivatives/<cortical_version>/crops/<masks>/2mm. "
+                "Default: the --model-version value when given; else, when models_path is a local folder, "
+                "the name of that folder if it is a known Mask version (otherwise exit 2 with an ERROR, pass --masks); "
+                "canonical_25 only when models_path is not a local directory.",
                 default=None,
             )
             .add_flag(
