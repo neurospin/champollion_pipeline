@@ -773,7 +773,8 @@ class RunCorticalTiles(ScriptBuilder):
         # generate_sulcal_regions.py reads it from {path_dataset}/pipeline_loop_2mm.json,
         # and we pass output as -d so the config is never inside the subjects directory
         # (which would cause generate_skeletons.py to list it as a subject).
-        if not self.validate_paths([config_file_path]) or grants_no_write(config_file_path):
+        # Existence test, not validate_paths: a missing config is nominal on a first run and must not log ERROR.
+        if not exists(config_file_path) or grants_no_write(config_file_path):
             source_config = abspath(join(dirname(__file__), "resources", "pipeline_loop_2mm.json"))
             replace_with_writable_copy(source_config, config_file_path)
 
