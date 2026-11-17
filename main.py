@@ -21,6 +21,9 @@ Usage:
     # Config-less run: infer every path from the input, run stages 1-6 (T1 files) or 2-6 (Morphologist outputs)
     python main.py /data/my_dataset
 
+    # Read HF_TOKEN and the CHAMPOLLION_* variables from ./.env (a bare --env goes after INPUT)
+    python main.py /data/my_dataset --env
+
     # Run with overrides
     python main.py --dataset-name test_data --verbose
 """
@@ -54,6 +57,7 @@ from champollion_pipeline.derivatives_layout import (
     compute_region_model_names,
     compute_snapshots_dir,
 )
+from champollion_pipeline.env_file import EnvFileError, add_env_argument, apply_env_values, read_env_values
 from champollion_pipeline.file_indexer import SubjectEligibilityChecker
 from champollion_pipeline.file_indexer.pipeline_checks import build_output_report
 from champollion_pipeline.input_kind_choice import (
@@ -863,6 +867,7 @@ class ChampollionPipeline(ScriptBuilder):
         )
         add_config_arguments(self.parser)
         add_path_arguments(self.parser)
+        add_env_argument(self.parser)
 
     def _resolve_log_path(self) -> str | None:
         """main.py's own run log: only with a bare --log, stored for the streaming log_dir. args.log is left as is."""
@@ -887,21 +892,28 @@ class ChampollionPipeline(ScriptBuilder):
         return self
 
     def run(self) -> int:
-        """Run the pipeline; InputChoiceError (status 1) or ArgumentConflictError (2) ends it with one ERROR record."""
+        """Run the pipeline; InputChoiceError (status 1), ArgumentConflictError, EnvFileError (2): one ERROR record."""
         try:
             return self._run_pipeline(self.args)
         except InputChoiceError as error:
             logger.error(str(error))
             return 1
-        except ArgumentConflictError as error:
+        except (ArgumentConflictError, EnvFileError) as error:
             logger.error(str(error))
             return _USAGE_ERROR_STATUS
 
     def _run_pipeline(self, args: argparse.Namespace) -> int:
-        """The --generate-config template, or the configured run in streaming or batch mode."""
+        """The --generate-config template, or the configured run in streaming or batch mode.
+
+        The --env file and the process environment are read first, so their refusals come before any output; their
+        values go over the --config YAML (or the default config) of a run and under its command-line arguments, never
+        into the template.
+        """
+        env_values = read_env_values(args.env)
         if args.generate_config:
             return _save_config_template(args)
         config = _load_config(args)
+        apply_env_values(config, env_values)
         _apply_cli_overrides(config, args, from_default=not args.config)
         check_input_kind_value(config.dataset)
         _start_config_profiling(config, args)

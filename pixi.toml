@@ -90,6 +90,9 @@ labelling-qc = "python3 src/champollion_pipeline/generate_labelling_qc.py"
 # Needed here because no-default-feature envs don't inherit [dependencies].
 hatchling = ">=1.18"
 editables = ">=0.3"
+# main.py --env reads its .env file with python-dotenv (src/champollion_pipeline/env_file.py); every env that runs
+# main.py includes this feature.
+python-dotenv = ">=1.0,<2"
 
 [feature.utils.tasks]
 install-utils = """
