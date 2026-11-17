@@ -43,7 +43,9 @@ def _expected_region_embeddings(datasets_root, masks):
 
 def _standalone_output_base(tmp_path, extra_args):
     """Run GenerateEmbeddings.run() with fetch/per-region stubbed; return (output_base, datasets_root)."""
-    models_dir = tmp_path / "models"
+    # Named after the default Mask version: without --masks the parser takes masks from the folder name
+    # (REQ-MODELVER-BDRABCZUK-8C57E27DFA80), canonical_25 as before.
+    models_dir = tmp_path / DEFAULT_MASKS
     models_dir.mkdir()
     datasets_root = tmp_path / "MYDATASET"
     datasets_root.mkdir()

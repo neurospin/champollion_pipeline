@@ -34,6 +34,10 @@ from champollion_pipeline.generate_embeddings import (
 from champollion_pipeline.models import fetch as models_fetch
 from tests.log_assertions import LOG, OUTPUT
 
+# A tmp models dir with an arbitrary name is not a Mask version: the parser needs --masks
+# (REQ-MODELVER-BDRABCZUK-1B06D337ECC0); canonical_25 keeps the masks these tests always ran with.
+MASKS_ARGS = ("--masks", "canonical_25")
+
 
 def make_region_logs(model_dir) -> None:
     """Create model_dir/logs/ holding an epoch=80 checkpoint, so the region has weights to evaluate."""
@@ -553,7 +557,7 @@ class TestRunPerRegion:
     def test_empty_models_path_raises_value_error(self, tmp_path):
         models = tmp_path / "models"
         models.mkdir()
-        script = make_script([str(models), "/d"])
+        script = make_script([str(models), "/d", *MASKS_ARGS])
         with pytest.raises(ValueError, match="No region model directories"):
             script._run_per_region("evaluate.py", str(tmp_path), str(tmp_path))
 
@@ -564,7 +568,7 @@ class TestRunPerRegion:
         (out / "SOr_left").mkdir(parents=True)
         (out / "SOr_left" / "full_embeddings.csv").touch()
 
-        script = make_script([str(models), "/d"])
+        script = make_script([str(models), "/d", *MASKS_ARGS])
         script.execute_command = lambda cmd, shell=False: pytest.fail("must not run evaluate.py")
         script._run_per_region("evaluate.py", str(tmp_path), str(out))
         pipeline_caplog.assert_logged(LOG, "[SKIP] SOr_left")
@@ -576,7 +580,7 @@ class TestRunPerRegion:
         (out / "SOr_left").mkdir(parents=True)
         (out / "SOr_left" / "full_embeddings.csv").touch()
 
-        script = make_script([str(models), "/d", "--overwrite"])
+        script = make_script([str(models), "/d", *MASKS_ARGS, "--overwrite"])
         calls = []
         script.execute_command = lambda cmd, shell=False: calls.append(cmd) or 0
         script._run_per_region("evaluate.py", str(tmp_path), str(out))
@@ -588,7 +592,7 @@ class TestRunPerRegion:
         crops = tmp_path / "crops"
         (crops / "S.Or.").mkdir(parents=True)
 
-        script = make_script([str(models), "/d"])
+        script = make_script([str(models), "/d", *MASKS_ARGS])
         calls = []
         script.execute_command = lambda cmd, shell=False: calls.append(cmd) or 0
         script._run_per_region("evaluate.py", str(crops), str(tmp_path / "out"))
@@ -601,7 +605,7 @@ class TestRunPerRegion:
         models = tmp_path / "models"
         make_region_logs(models / "SOr_right")
 
-        script = make_script([str(models), "/d"])
+        script = make_script([str(models), "/d", *MASKS_ARGS])
         calls = []
         script.execute_command = lambda cmd, shell=False: calls.append(cmd) or 0
         script._run_per_region("evaluate.py", str(tmp_path), str(tmp_path / "out"))
@@ -612,7 +616,7 @@ class TestRunPerRegion:
     def test_returns_last_command_result(self, tmp_path):
         models = tmp_path / "models"
         make_region_logs(models / "SOr_left")
-        script = make_script([str(models), "/d"])
+        script = make_script([str(models), "/d", *MASKS_ARGS])
         script.execute_command = lambda cmd, shell=False: 3
         result = script._run_per_region("evaluate.py", str(tmp_path), str(tmp_path / "out"))
         assert result == 3

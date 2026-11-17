@@ -45,6 +45,11 @@ DEFAULT_EPOCH = 80
 # --------------------------------------------------------------------------- #
 
 
+# A tmp models dir with an arbitrary name is not a Mask version: the parser needs --masks
+# (REQ-MODELVER-BDRABCZUK-1B06D337ECC0); canonical_25 keeps the masks these tests always ran with.
+MASKS_ARGS = ("--masks", "canonical_25")
+
+
 def write_epoch_ckpt(model_dir: Path, epoch: int, step: int, version: int = 0) -> Path:
     """Write a Lightning-style checkpoint whose bytes are unique to (epoch, step, version)."""
     ckpt_dir = ckpt_dir_of(model_dir, version)
@@ -87,7 +92,7 @@ class BytesEvaluate:
 def run_region(tmp_path: Path, checkpoint_epoch: int = DEFAULT_EPOCH) -> BytesEvaluate:
     """Run _run_per_region over tmp_path/models with args.checkpoint_epoch and the fake evaluate."""
     script = GenerateEmbeddings()
-    script.parse_args([str(tmp_path / "models"), str(tmp_path / "dataset")])
+    script.parse_args([str(tmp_path / "models"), str(tmp_path / "dataset"), *MASKS_ARGS])
     script.args.checkpoint_epoch = checkpoint_epoch
     fake = BytesEvaluate()
     script.execute_command = fake
