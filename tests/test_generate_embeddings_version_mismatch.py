@@ -4,8 +4,8 @@ generate_embeddings: --masks / --model-version mismatch policy (MODELVER epic).
 
 --masks picks the input crops (and the default output folder); --model-version picks the
 model set. When both are given and differ, the parser exits with status 2 naming both
-values, unless --allow-version-mismatch is given, in which case it emits a UserWarning
-naming both and keeps both values.
+values, unless --allow-version-mismatch is given, in which case it keeps both values (its
+WARNING log record is tested in test_generate_embeddings_allow_mismatch_record.py).
 
 Decisions settled by these requirements:
 - The check is a parse-time check: it applies whether models_path is a local directory
@@ -92,7 +92,9 @@ class TestMasksAliasMismatchError:
 
 
 class TestAllowVersionMismatch:
-    """REQ-MODELVER-BDRABCZUK-55C6CBEED962 and REQ-MODELVER-BDRABCZUK-93C601727466: the override flag."""
+    """REQ-MODELVER-BDRABCZUK-93C601727466: the override flag keeps both versions. The UserWarning of
+    REQ-MODELVER-BDRABCZUK-55C6CBEED962 is superseded by REQ-MODELVER-BDRABCZUK-790B770EB0B1 (one WARNING log
+    record), tested in test_generate_embeddings_allow_mismatch_record.py."""
 
     def _argv(self, tmp_path) -> list[str]:
         return [
@@ -105,14 +107,6 @@ class TestAllowVersionMismatch:
             "--allow-version-mismatch",
         ]
 
-    def test_override_warns_naming_both(self, tmp_path):
-        """REQ-MODELVER-BDRABCZUK-55C6CBEED962: a UserWarning names <M> and <V>."""
-        with pytest.warns(UserWarning) as record:
-            _parse(self._argv(tmp_path))
-        messages = [str(w.message) for w in record if issubclass(w.category, UserWarning)]
-        assert any(MASKS in m and MODEL_VERSION in m for m in messages), messages
-
-    @pytest.mark.filterwarnings("ignore::UserWarning")
     def test_override_keeps_both_versions(self, tmp_path):
         """REQ-MODELVER-BDRABCZUK-93C601727466: masks <M> with model_version <V>."""
         script = _parse(self._argv(tmp_path))

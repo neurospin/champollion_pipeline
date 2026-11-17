@@ -63,7 +63,7 @@ def resolve_masks_default(args: argparse.Namespace, parser: argparse.ArgumentPar
 
 
 def check_version_mismatch(args: argparse.Namespace, parser: argparse.ArgumentParser) -> None:
-    """Exit 2 when --masks and --model-version differ, unless --allow-version-mismatch (then warn)."""
+    """Exit 2 when --masks and --model-version differ, unless --allow-version-mismatch (then log one WARNING)."""
     model_version, masks = args.model_version, args.masks
     if model_version is None or masks == model_version:
         return
@@ -72,11 +72,9 @@ def check_version_mismatch(args: argparse.Namespace, parser: argparse.ArgumentPa
             f"--masks {masks!r} and --model-version {model_version!r} differ: --masks picks the input crops, "
             "--model-version the model set; pass --allow-version-mismatch to run with both"
         )
-    warnings.warn(
+    logger.warning(
         f"--masks {masks!r} and --model-version {model_version!r} differ; running anyway "
-        f"(--allow-version-mismatch): crops {masks!r}, models {model_version!r}",
-        UserWarning,
-        stacklevel=2,
+        f"(--allow-version-mismatch): crops {masks!r}, models {model_version!r}"
     )
 
 
