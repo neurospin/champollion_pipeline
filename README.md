@@ -239,7 +239,7 @@ Pass `--masks canonical_25` (or another version) to override the default.
 | `--njobs` | Number of CPU cores (default: auto) |
 | `--region-file` | Accepted but currently has no effect (dead code upstream) — do not rely on it. |
 | `--input-types` | Input types to generate: `skeleton` and/or `foldlabel`. Default: `skeleton foldlabel`. |
-| `--masks` | Mask version tag |
+| `--masks` | Mask version tag; crops are read from `<datasets_root>/derivatives/<cortical_version>/crops/<masks>/2mm`. See the `--masks` row in the embeddings options table for the default |
 | `--regions` | Restrict to specific sulcal regions (space-separated) |
 | `--skel-seed` | Skeleton seed for the 2 mm re-skeletonization. Without the option, the `skel_seed` key of `{output}/pipeline_loop_2mm.json` sets the seed. Pipeline config: `dataset.skel_seed`; null (the default) leaves the `pipeline_loop_2mm.json` value in effect. |
 | `--labelling_session` | Morphologist labelling session whose labelled graphs locate the ventricle for whole-brain removal (e.g. `0_auto`). Default: per subject, the first of `deepcnn_session_auto` and `default_session_auto` that holds a labelled graph. |
@@ -360,7 +360,7 @@ Downloaded and extracted models are cached in `{datasets_root}/derivatives/champ
 |--------|-------------|
 | `--model-version` | Model set to use: the subfolder downloaded from Hugging Face (e.g. `canonical_25`). With a local `models_path` nothing is downloaded, but the value still sets the `--masks` default and is checked against `--masks`. |
 | `--masks-version` | Deprecated alias of `--model-version` (same value); prints a FutureWarning. Giving both with different values exits with status 2. |
-| `--masks` | Cortical tiles mask version used as the crops subdirectory. Default: the `--model-version` value when given, else `canonical_25`. |
+| `--masks` | Cortical tiles mask version used as the crops subdirectory: crops are read from `<datasets_root>/derivatives/<cortical_version>/crops/<masks>/2mm`. Default: the `--model-version` value when given; else, when `models_path` is a local folder, that folder's name if it is a known Mask version (otherwise exit 2 with one ERROR, pass `--masks`); `canonical_25` only when `models_path` is not a local directory. |
 | `--allow-version-mismatch` | Run when `--masks` differs from `--model-version`, or from the `masks` of a local `model_set.json`, with a warning instead of exiting with status 2. |
 | `--regions` | Restrict to specific region names (space-separated). Default: all regions found in `models_path`. |
 | `--output` | Output base directory override. Default: `{datasets_root}/derivatives/champollion_V1/{masks}/region_embeddings/`. |
@@ -371,7 +371,7 @@ Downloaded and extracted models are cached in `{datasets_root}/derivatives/champ
 | `--no-cache` | Force re-extraction of the archive (ignore cache) |
 | `--models-cache` | Directory for downloaded and extracted models. Default: `{datasets_root}/derivatives/champollion_V1/models_cache/`. A relative path resolves against the current working directory. Pipeline config: `dataset.models_cache`. |
 | `--run-cka` | Run CKA coherence test after embeddings |
-| `--cortical_version` | Override the cortical tiles derivatives folder name (default: `cortical_tiles-2026`) |
+| `--cortical_version` | Override the cortical tiles derivatives folder name (default: `cortical_tiles-2026`); crops are read from `<datasets_root>/derivatives/<cortical_version>/crops/<masks>/2mm` |
 | `--legacy` | Shorthand for `--cortical_version deep_folding-2025` (for older datasets) |
 | `--profiling` | Enable Python profiling (cProfile) |
 
