@@ -267,8 +267,8 @@ def test_run_parallel_pipeline_imported_inside_streaming_mode():
     assert "run_parallel_pipeline" in imported, f"_run_streaming_mode imports {sorted(imported)} from the runner"
 
 
-def test_subject_eligibility_checker_imported_from_file_indexer():
-    assert "SubjectEligibilityChecker" in _module_level_imports("champollion_pipeline.file_indexer")
+def test_default_stage_indexer_imported_from_pipeline_checks():
+    assert "FileIndexStageIndexer" in _module_level_imports("champollion_pipeline.file_indexer.pipeline_checks")
 
 
 def test_main_py_import_error_handler_guards_only_streaming_runner():
