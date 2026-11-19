@@ -111,12 +111,8 @@ class TestLiveSiblingsKept:
     def test_lib_keeps_find_dataset_folder(self):
         assert "find_dataset_folder" in _function_names(_tree(LIB_PY).body)
 
-    def test_main_keeps_subject_eligibility_checker_import(self):
-        """The live sibling ``SubjectEligibilityChecker`` stays imported, from ``champollion_pipeline.file_indexer``."""
-        imported = {
-            alias.asname or alias.name
-            for node in _tree(MAIN_PY).body
-            if isinstance(node, ast.ImportFrom) and node.module == "champollion_pipeline.file_indexer"
-            for alias in node.names
-        }
-        assert "SubjectEligibilityChecker" in imported
+    def test_default_stage_indexer_keeps_subject_eligibility_checker(self):
+        """The live sibling ``SubjectEligibilityChecker`` stays in use through the default StageIndexer adapter."""
+        adapter = _class_def(_tree(PKG_DIR / "file_indexer" / "pipeline_checks.py"), "FileIndexStageIndexer")
+        used = {node.id for node in ast.walk(adapter) if isinstance(node, ast.Name)}
+        assert "SubjectEligibilityChecker" in used

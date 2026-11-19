@@ -5,8 +5,9 @@ The streaming arrival barrier polls ``SubjectEligibilityChecker`` through
 the scan folder; the sequential pre-stage report uses ``check_subject_patterns``,
 with patterns relative to the subject folder. After a sequential stage,
 ``build_output_report`` indexes the stage's output directory and counts its files
-by extension. Patterns and paths come from the user's configuration, so they are
-checked, never trusted.
+by extension. ``FileIndexStageIndexer`` is the default StageIndexer adapter main.py
+uses for the sequential stages' pre and post index files. Patterns and paths come
+from the user's configuration, so they are checked, never trusted.
 """
 
 from __future__ import annotations
@@ -56,6 +57,12 @@ def _is_hidden(name: str) -> bool:
 def _fetch_file_index(root: str, btree_order: int, include_hidden: bool = False) -> BTree:
     """Index the files under root: key = POSIX path relative to root, inserted in code-point walk order."""
     tree = BTree(t=btree_order)
+    _walk_into(tree, root, root, include_hidden)
+    return tree
+
+
+def _walk_into(tree: BTree, root: str, key_root: str, include_hidden: bool) -> None:
+    """Insert the files under root into tree: key = POSIX path relative to key_root, in code-point walk order."""
     for folder, dirs, files in os.walk(root):
         # The BTree's shape follows insertion order; top-down os.walk descends in the order of dirs.
         dirs[:] = sorted(d for d in dirs if include_hidden or not _is_hidden(d))
@@ -68,11 +75,10 @@ def _fetch_file_index(root: str, btree_order: int, include_hidden: bool = False)
             except OSError:
                 logger.debug("Cannot stat %s; left out of the index", path, exc_info=True)
                 continue
-            key = os.path.relpath(path, root).replace(os.sep, "/")
+            key = os.path.relpath(path, key_root).replace(os.sep, "/")
             tree.insert(
                 key, {"type": "file", "size": stat.st_size, "modified": stat.st_mtime, "ext": splitext(fname)[1]}
             )
-    return tree
 
 
 def _save_index_json(tree: BTree, path: str) -> None:
@@ -304,3 +310,63 @@ def build_output_report(
     return OutputIndexReport(
         stage_name=stage_name, output_dir=output_dir, total_files=len(tree), by_ext=dict(sorted(counts.items()))
     )
+
+
+def build_input_index(folders: list[str], save_index_to: str, btree_order: int = 64) -> int:
+    """Index the files of the existing folders among ``folders`` into one JSON index at ``save_index_to``.
+
+    Keys are POSIX paths relative to the folders' common parent (the folder itself when there is one); a missing
+    folder adds no key; dot-named entries are left out. Returns the number of files indexed. O(files).
+    """
+    key_root = os.path.commonpath([os.path.abspath(folder) for folder in folders])
+    tree = BTree(t=btree_order)
+    for folder in folders:
+        if os.path.isdir(folder):
+            _walk_into(tree, os.path.abspath(folder), key_root, include_hidden=False)
+    _save_index_json(tree, save_index_to)
+    return len(tree)
+
+
+class FileIndexStageIndexer:  # noqa: V102 - used by main.py
+    """Default StageIndexer adapter: B-tree JSON indexes index_<phase>_<stage>.json under outputs_path."""
+
+    def __init__(self, outputs_path: str, bids: bool = False, path_to_graph: str = "") -> None:
+        self.outputs_path = outputs_path
+        self.bids = bids
+        self.path_to_graph = path_to_graph
+
+    def _index_path(self, phase: str, stage_name: str) -> str | None:
+        """Path of the pre/post index JSON of a stage, or None without outputs_path."""
+        if not self.outputs_path:
+            return None
+        return join(self.outputs_path, f"index_{phase}_{stage_name}.json")
+
+    def index_pre(  # noqa: V105 - used by main.py
+        self, stage_name: str, input_dirs: list[str], required_patterns: list[str]
+    ) -> None:
+        """Eligibility report and index when patterns are given; else the index of the input folders only.
+
+        Raises ValueError when patterns are given with other than one input folder.
+        """
+        index_path = self._index_path("pre", stage_name)
+        if required_patterns:
+            if len(input_dirs) != 1:
+                raise ValueError(f"The eligibility pre-check takes one subjects folder, got {input_dirs!r}")
+            if self.outputs_path:
+                os.makedirs(self.outputs_path, exist_ok=True)
+            checker = SubjectEligibilityChecker(
+                input_dirs[0],
+                required_patterns,
+                stage_name=stage_name,
+                bids=self.bids,
+                path_to_graph=self.path_to_graph,
+            )
+            checker.check_subject_patterns(save_index_to=index_path).log_summary()
+            return
+        if index_path is None or not any(os.path.isdir(folder) for folder in input_dirs):
+            return
+        build_input_index(input_dirs, index_path)
+
+    def index_post(self, stage_name: str, output_dir: str) -> None:  # noqa: V105 - used by main.py
+        """Index output_dir and log the post-stage summary."""
+        build_output_report(output_dir, stage_name, save_index_to=self._index_path("post", stage_name)).log_summary()

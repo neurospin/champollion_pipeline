@@ -48,7 +48,7 @@ class PurgeSubject(ScriptBuilder):
             .add_optional_argument(
                 "--masks",
                 "Mask version of the crops to purge: crops/<masks>/2mm under the derivatives directory "
-                "(default canonical_25). Files under other crops/<version>/ trees are left untouched.",
+                f"(default {DEFAULT_MASKS_VERSION}). Files under other crops/<version>/ trees are left untouched.",
                 default=DEFAULT_MASKS_VERSION,
             )
         )
@@ -211,7 +211,7 @@ class PurgeSubject(ScriptBuilder):
         if not dirs and not crop_files and not has_array_rows:
             logger.error(
                 f"Refusing --subject {subject!r}: no per-subject directory, crop file "
-                f"or subject CSV row in {derivatives}."
+                f"or subject CSV row in {derivatives} (crops searched: {crops_dir})."
             )
             return 1
 

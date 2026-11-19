@@ -181,7 +181,7 @@ pixi run champollion-cortical-tiles \
 ```
 
 - **First argument** — directory containing one folder per subject (Morphologist's `subjects/` output). This path may be read-only (e.g. a shared NFS database); the script never writes to it.
-- **Second argument** — derivatives parent directory. Crops are written to `{output}/cortical_tiles-2026/crops/{masks_version}/2mm/` (`{masks_version}` defaults to `canonical_25`, see [Mask versions](#mask-versions)).
+- **Second argument** — derivatives parent directory. Crops are written to `{output}/cortical_tiles-2026/crops/{masks_version}/2mm/` (`{masks_version}` defaults to `canonical_corrected_26_1`, see [Mask versions](#mask-versions)).
 - **`--path_to_graph` / `--path_sk_with_hull`** — required; there is no default, since the sub-path under a subject's Morphologist output depends on your acquisition/analysis naming.
 
 `--path_to_graph` supports wildcards (`*`) for variable path segments (e.g. an acquisition or analysis label that differs per subject).
@@ -360,7 +360,7 @@ Downloaded and extracted models are cached in `{datasets_root}/derivatives/champ
 |--------|-------------|
 | `--model-version` | Model set to use: the subfolder downloaded from Hugging Face (e.g. `canonical_25`). With a local `models_path` nothing is downloaded, but the value still sets the `--masks` default and is checked against `--masks`. |
 | `--masks-version` | Deprecated alias of `--model-version` (same value); prints a FutureWarning. Giving both with different values exits with status 2. |
-| `--masks` | Cortical tiles mask version used as the crops subdirectory: crops are read from `<datasets_root>/derivatives/<cortical_version>/crops/<masks>/2mm`. Default: the `--model-version` value when given; else, when `models_path` is a local folder, that folder's name if it is a known Mask version (otherwise exit 2 with one ERROR, pass `--masks`); `canonical_25` only when `models_path` is not a local directory. |
+| `--masks` | Cortical tiles mask version used as the crops subdirectory: crops are read from `<datasets_root>/derivatives/<cortical_version>/crops/<masks>/2mm`. Default: the `--model-version` value when given; else, when `models_path` is a local folder, that folder's name if it is a known Mask version (otherwise exit 2 with one ERROR, pass `--masks`); `canonical_corrected_26_1` only when `models_path` is not a local directory. |
 | `--allow-version-mismatch` | Run when `--masks` differs from `--model-version`, or from the `masks` of a local `model_set.json`, with a warning instead of exiting with status 2. |
 | `--regions` | Restrict to specific region names (space-separated). Default: all regions found in `models_path`. |
 | `--output` | Output base directory override. Default: `{datasets_root}/derivatives/champollion_V1/{masks}/region_embeddings/`. |
@@ -470,7 +470,7 @@ Use `--sulcal-only`, `--tiles-only`, or `--umap-only` to generate only one snaps
 
 ### UMAP Visualization
 
-UMAP scatter plots project each subject's sulcal embeddings onto pre-trained 2D maps (one per region and hemisphere). Each plot shows a reference cloud of embeddings from a large pre-trained cohort, with the new subject highlighted. `--reference_data_dir` points at a directory of pre-trained UMAP artifacts (`umap_{region}_{hemi}.pkl` / `_coords.npy`) that contain no subject identifiers; this directory is **not shipped in the repository** (it's gitignored) — obtain it separately and pass its path explicitly.
+UMAP scatter plots project each subject's sulcal embeddings onto pre-trained 2D maps (one per region and hemisphere). Each plot shows a reference cloud of embeddings from a large pre-trained cohort, with the new subject highlighted. `--reference_data_dir` points at a directory of pre-trained UMAP artifacts (`umap_{region}_{hemi}.pkl` / `_coords.npy`) that contain no subject identifiers; this directory is **not shipped in the repository** (it's gitignored) — obtain it separately and pass its path explicitly. UMAP snapshots need a locally fitted UMAP reference of the same Mask version as the embeddings; without `--reference_data_dir` the UMAP step is skipped with one warning.
 
 By default all regions with an available embedding CSV and a pre-trained model are plotted. Restrict to specific regions with `--umap_region`:
 
@@ -588,6 +588,7 @@ champollion_pipeline/
 │       ├── process_setup.py
 │       ├── cli_options.py           # Registry of main.py arguments, one per config field
 │       ├── env_file.py              # Reads main.py --env files and CHAMPOLLION_* variables (python-dotenv)
+│       ├── replay_config.py         # Writes the replay config of a main.py run into its logs folder (main.py --config replays it)
 │       ├── _stage_base.py           # Template base class of main.py's pipeline stages
 │       └── generate_labelling_qc.py
 ├── data/                       # Created by install-all; not committed

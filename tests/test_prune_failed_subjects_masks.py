@@ -3,10 +3,10 @@
 prune_failed_subjects.py on the versioned crops root crops/<masks>/2mm.
 
 run_cortical_tiles writes its crops under
-<output>/cortical_tiles-<version>/crops/<masks>/2mm (e.g. crops/canonical_25/2mm)
+<output>/cortical_tiles-<version>/crops/<masks>/2mm (e.g. crops/canonical_corrected_26_1/2mm)
 and moves the legacy unversioned crops/2mm away (DEF-PATTERNS-BDRABCZUK-36F2AACA0EBF).
 
-- REQ (masks default): with no --masks the parser yields masks canonical_25.
+- REQ (masks default): tested in tests/test_masks_default_corrected.py (REQ-PATTERNS-BDRABCZUK-28A325628A4D).
 - REQ (explicit masks): --masks <M> is kept as given.
 - REQ (missing root): an absent crops/<M>/2mm raises a ValueError naming that path,
   a legacy crops/2mm being no fallback.
@@ -69,9 +69,6 @@ def _crop_names(base: Path, region: str, masks: str = MASKS) -> set[str]:
 
 
 class TestMasksArgument:
-    def test_no_masks_yields_canonical_25(self, tmp_path):
-        assert _parse(tmp_path).masks == "canonical_25"
-
     def test_explicit_masks_kept(self, tmp_path):
         assert _parse(tmp_path, "--masks", OTHER_MASKS).masks == OTHER_MASKS
 
@@ -83,7 +80,9 @@ class TestMasksArgument:
 
 class TestVersionedCropsRoot:
     def test_default_masks_prunes_failed_subject_under_canonical_25(self, tmp_path):
-        """The defect: on crops/canonical_25/2mm alone prune raised 'crops/2mm directory not found'."""
+        """The defect: on crops/<default masks>/2mm alone prune raised 'crops/2mm directory not found'.
+
+        Named when canonical_25 was the default; the name stays, REQ-PATTERNS-BDRABCZUK-75B777B6C467 cites it."""
         make_crop_files(tmp_path, "region_a", "R", ["sub-01", "sub-02"])
 
         assert run_prune(tmp_path, [("sub-01", 1), ("sub-02", 0)]) == 0

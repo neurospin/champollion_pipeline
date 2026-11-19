@@ -5,7 +5,7 @@ crops/<masks>/2mm/<region>/mask/<side>crops/<id>_cropped_skeleton.nii.gz (the su
 ID is the file name minus CROP_SUFFIX, kept whole) and stacks each crop dir into
 crops/<masks>/2mm/<region>/mask/<side><name>.npy, whose rows follow
 crops/<masks>/2mm/<region>/mask/<side><name>_subject.csv (column Subject).
-<masks> is the mask version (MASKS, canonical_25, unless a helper is given another);
+<masks> is the mask version (MASKS, the default DEFAULT_MASKS_VERSION, unless a helper is given another);
 crops/2mm without a version is the legacy layout run_cortical_tiles migrates away.
 Resampled skeletons sit at skeletons/2mm/<side>/<side>resampled_skeleton_<id>.nii.gz.
 
@@ -18,11 +18,12 @@ from pathlib import Path
 import numpy as np
 import pandas as pd
 
+from champollion_pipeline.derivatives_layout import DEFAULT_MASKS_VERSION
 from champollion_pipeline.prune_failed_subjects import PruneFailedSubjects
 from champollion_pipeline.utils.lib import DERIVATIVES_FOLDER
 
 CROP_SUFFIX = "_cropped_skeleton.nii.gz"
-MASKS = "canonical_25"
+MASKS = DEFAULT_MASKS_VERSION
 
 
 def crops_2mm(base: Path, masks: str = MASKS) -> Path:

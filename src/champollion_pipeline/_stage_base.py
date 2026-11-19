@@ -11,7 +11,7 @@ from dataclasses import dataclass
 from datetime import datetime
 from os.path import join
 from pathlib import Path
-from typing import ClassVar
+from typing import ClassVar, Protocol
 
 from champollion_utils.run_log import RunLogCapture
 from champollion_utils.script_builder import ScriptBuilder
@@ -20,6 +20,26 @@ from champollion_pipeline.config import PipelineConfig
 from champollion_pipeline.derivatives_layout import RUN_LOG_TIMESTAMP_FORMAT
 
 PARTIAL_STATUS = 3
+
+
+def existing_dir(path: str | None) -> str | None:  # noqa: V103 - used by main.py
+    """path when it names an existing folder, else None. O(1)."""
+    return path if path and os.path.isdir(path) else None
+
+
+class StageIndexer(Protocol):  # noqa: V102 - used by main.py
+    """Port: indexes a sequential stage's input folders before it runs and its output folder after.
+
+    Plain types only; the adapter owns where and in which format the indexes go. main.py chooses it in one place.
+    """
+
+    def index_pre(  # noqa: V105 - the port, called by main.py
+        self, stage_name: str, input_dirs: list[str], required_patterns: list[str]
+    ) -> None:
+        """Index the stage's input folders; non-empty required_patterns also judge each scan."""
+
+    def index_post(self, stage_name: str, output_dir: str) -> None:  # noqa: V105 - the port, called by main.py
+        """Index the folder the stage wrote."""
 
 
 @dataclass
@@ -150,6 +170,11 @@ class PipelineStage(ABC):
     def subject_input_dir(self) -> str | None:  # noqa: V105 - used by main.py
         """Return the subjects directory to index before this stage. None = skip."""
         return None
+
+    def index_input_dirs(self) -> list[str]:  # noqa: V105 - used by main.py
+        """Folders the pre-stage index covers: the subject_input_dir, when set."""
+        folder = self.subject_input_dir()
+        return [folder] if folder else []
 
     def required_file_patterns(self) -> list[str]:  # noqa: V105 - used by main.py
         """Glob patterns (relative to subject dir) required per subject."""

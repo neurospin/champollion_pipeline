@@ -44,7 +44,7 @@ from cortical_tiles.brainvisa.utils.skip_list import (
 from joblib import cpu_count
 from soma import aims
 
-from champollion_pipeline.derivatives_layout import compute_run_log_path
+from champollion_pipeline.derivatives_layout import DEFAULT_MASKS_VERSION, compute_run_log_path
 from champollion_pipeline.generate_labelling_qc import REASON_NO_SESSION_DIR, fetch_subject_row
 from champollion_pipeline.generate_masks import _REGIONS_DEFAULT
 from champollion_pipeline.process_setup import init_pipeline_process
@@ -732,7 +732,7 @@ class RunCorticalTiles(ScriptBuilder):
         )
         config["path_to_graph"] = self.args.path_to_graph
         config["path_to_skeleton_with_hull"] = self.args.path_sk_with_hull
-        config["masks_version"] = self.args.masks if self.args.masks else "canonical_25"
+        config["masks_version"] = self.args.masks if self.args.masks else DEFAULT_MASKS_VERSION
         config["skel_qc_path"] = sk_qc_abs
         if self.args.bids:
             config["bids"] = True

@@ -3,6 +3,7 @@ import os
 
 import pytest
 
+from champollion_pipeline.derivatives_layout import DEFAULT_MASKS_VERSION
 from champollion_pipeline.utils.cortical_tiles_config import (
     CorticalTilesConfigFactory,
     compute_versioned_crops_dir,
@@ -22,10 +23,10 @@ class TestCorticalTilesConfigFactory:
         assert cfg.masks_version == "canonical_corrected_26_1"
         assert cfg.out_voxel_size == 2.0
 
-    def test_from_args_defaults_to_canonical_25(self):
+    def test_from_args_defaults_to_default_masks_version(self):
         args = FakeArgs(masks=None)
         cfg = CorticalTilesConfigFactory.from_args(args)
-        assert cfg.masks_version == "canonical_25"
+        assert cfg.masks_version == DEFAULT_MASKS_VERSION
 
     def test_from_pipeline_json_reads_version(self, tmp_path):
         cfg_file = tmp_path / "pipeline_loop_2mm.json"
@@ -39,7 +40,7 @@ class TestCorticalTilesConfigFactory:
         cfg_file.write_text(json.dumps({}))
         cfg = CorticalTilesConfigFactory.from_pipeline_json(str(cfg_file))
         assert cfg is not None
-        assert cfg.masks_version == "canonical_25"
+        assert cfg.masks_version == DEFAULT_MASKS_VERSION
 
     def test_from_pipeline_json_absent_file_returns_none(self, tmp_path):
         cfg = CorticalTilesConfigFactory.from_pipeline_json(str(tmp_path / "missing.json"))

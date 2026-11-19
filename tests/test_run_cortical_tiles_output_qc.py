@@ -20,6 +20,7 @@ from unittest.mock import MagicMock, patch
 import pytest
 from cortical_tiles.brainvisa.utils.skip_list import SKIP_LIST_FILENAME, record_skip
 
+from champollion_pipeline.derivatives_layout import DEFAULT_MASKS_VERSION
 from champollion_pipeline.generate_masks import _REGIONS_DEFAULT
 from champollion_pipeline.run_cortical_tiles import RunCorticalTiles
 from champollion_pipeline.utils.cortical_tiles_config import compute_versioned_crops_dir
@@ -43,7 +44,7 @@ _CROP_SCRIPT = "generate_sulcal_regions.py"
 _TRANSFORM_QC_FILE = "transform_qc.tsv"
 _PARTIAL_STATUS = 3
 _STOPPING_STATUSES = (1, 2, 4)
-_MASKS_DEFAULT = "canonical_25"
+_MASKS_DEFAULT = DEFAULT_MASKS_VERSION
 _MASKS_OTHER = "other_masks"
 _REGIONS = ("S.C.-sylv.", "S.T.s.")
 _DEFAULT_KINDS = ("skeleton", "foldlabel")

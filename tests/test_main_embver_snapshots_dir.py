@@ -23,12 +23,13 @@ from unittest.mock import MagicMock, patch
 
 import pytest
 
+from champollion_pipeline.derivatives_layout import DEFAULT_MASKS_VERSION
 from champollion_pipeline.generate_snapshots import GenerateSnapshots
 
 MAIN_PY = Path(__file__).resolve().parent.parent / "main.py"
 DATASETS_ROOT = "/data/MYDATASET"
-DEFAULT_MASKS = "canonical_25"
-OTHER_MASKS = "canonical_corrected_26_1"
+DEFAULT_MASKS = DEFAULT_MASKS_VERSION
+OTHER_MASKS = "canonical_25"  # a Mask version other than the default
 LOGGER = logging.getLogger("test_main_embver_snapshots_dir")
 
 
@@ -80,14 +81,14 @@ class TestSnapshotsEmbeddingsDirVersioned:
     """REQ-EMBVER-BDRABCZUK-F0EE5542FAB9: --embeddings_dir is <root>/derivatives/champollion_V1/<masks>/embeddings."""
 
     def test_embeddings_dir_uses_default_masks_version(self, main_module):
-        """Default masks_version (canonical_25) -> --embeddings_dir ends in canonical_25/embeddings."""
+        """Default masks_version -> --embeddings_dir ends in <default>/embeddings."""
         config = _config(main_module, snapshots_path="/snapshots", embeddings_path="/data/MYDATASET/embeddings_raw")
         namespace, argv = _snapshots_namespace(main_module, config)
         assert namespace.embeddings_dir is not None, f"no --embeddings_dir in {argv!r}"
         assert Path(namespace.embeddings_dir) == _versioned_dir(DEFAULT_MASKS, "embeddings")
 
     def test_embeddings_dir_uses_configured_masks_version(self, main_module):
-        """masks_version canonical_corrected_26_1 -> --embeddings_dir ends in canonical_corrected_26_1/embeddings."""
+        """masks_version canonical_25 (not the default) -> --embeddings_dir ends in canonical_25/embeddings."""
         config = _config(main_module, snapshots_path="/snapshots", embeddings_path="/data/MYDATASET/embeddings_raw")
         config.dataset.masks_version = OTHER_MASKS  # noqa: V101
         namespace, argv = _snapshots_namespace(main_module, config)
@@ -100,14 +101,14 @@ class TestSnapshotsOutputDirDefault:
     """REQ-EMBVER-BDRABCZUK-03D4262668CF: empty snapshots_path -> --output_dir is <...>/<masks>/snapshots."""
 
     def test_output_dir_defaults_under_default_masks_version(self, main_module):
-        """Empty snapshots_path, default masks_version -> --output_dir ends in canonical_25/snapshots."""
+        """Empty snapshots_path, default masks_version -> --output_dir ends in <default>/snapshots."""
         config = _config(main_module)
         namespace, argv = _snapshots_namespace(main_module, config)
         assert namespace.output_dir, f"empty --output_dir in {argv!r}"
         assert Path(namespace.output_dir) == _versioned_dir(DEFAULT_MASKS, "snapshots")
 
     def test_output_dir_defaults_under_configured_masks_version(self, main_module):
-        """Empty snapshots_path, masks_version canonical_corrected_26_1 -> --output_dir ends in that folder."""
+        """Empty snapshots_path, masks_version canonical_25 (not the default) -> --output_dir ends in that folder."""
         config = _config(main_module)
         config.dataset.masks_version = OTHER_MASKS  # noqa: V101
         namespace, argv = _snapshots_namespace(main_module, config)

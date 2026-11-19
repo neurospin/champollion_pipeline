@@ -22,6 +22,7 @@ import yaml
 from champollion_utils.script_builder import ScriptBuilder
 
 from champollion_pipeline.derivatives_layout import (
+    DEFAULT_MASKS_VERSION,
     compute_champollion_configs_root,
     compute_region_model_name,
     compute_run_log_derivatives_dir,
@@ -182,7 +183,7 @@ class GenerateChampollionConfig(ScriptBuilder):
             .add_optional_argument(
                 "--masks",
                 "Mask version tag (e.g. 'canonical_25'). Must match the value used when running run_cortical_tiles.",
-                default="canonical_25",
+                default=DEFAULT_MASKS_VERSION,
             )
             .add_optional_argument(
                 "--localization",

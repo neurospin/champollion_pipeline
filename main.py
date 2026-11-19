@@ -42,7 +42,7 @@ from champollion_utils.process import active_profiling, start_profiling
 from champollion_utils.script_builder import ScriptBuilder
 from champollion_utils.update_check import check_for_updates
 
-from champollion_pipeline._stage_base import PARTIAL_STATUS, PipelineStage, StageResult
+from champollion_pipeline._stage_base import PARTIAL_STATUS, PipelineStage, StageIndexer, StageResult, existing_dir
 from champollion_pipeline.cli_options import (
     ArgumentConflictError,
     add_config_arguments,
@@ -52,14 +52,14 @@ from champollion_pipeline.cli_options import (
 )
 from champollion_pipeline.config import ConfigLoader, DatasetConfig, PipelineConfig
 from champollion_pipeline.derivatives_layout import (
+    compute_champollion_configs_root,
     compute_combined_embeddings_dir,
     compute_region_embeddings_dir,
     compute_region_model_names,
     compute_snapshots_dir,
 )
 from champollion_pipeline.env_file import EnvFileError, add_env_argument, apply_env_values, read_env_values
-from champollion_pipeline.file_indexer import SubjectEligibilityChecker
-from champollion_pipeline.file_indexer.pipeline_checks import build_output_report
+from champollion_pipeline.file_indexer.pipeline_checks import FileIndexStageIndexer
 from champollion_pipeline.input_kind_choice import (
     InputChoiceError,
     check_input_kind_value,
@@ -68,8 +68,11 @@ from champollion_pipeline.input_kind_choice import (
 )
 from champollion_pipeline.path_inference import AmbiguousGraphFolders, DatasetRootNotInferable, infer_paths
 from champollion_pipeline.process_setup import init_pipeline_process
+from champollion_pipeline.replay_config import write_replay_config
 from champollion_pipeline.streaming import StreamingSettings
+from champollion_pipeline.utils.cortical_tiles_config import compute_versioned_crops_dir
 from champollion_pipeline.utils.input_kind import InputKind, stage1_subjects_dir
+from champollion_pipeline.utils.lib import DERIVATIVES_FOLDER, find_dataset_folder
 from champollion_pipeline.utils.skeleton_qc import SKELETON_SIDES, compute_skeleton_pattern
 
 logger = logging.getLogger("champollion_pipeline.main")
@@ -193,8 +196,7 @@ class RunCorticalTilesStage(PipelineStage):
         return RunCorticalTiles()
 
     def subject_input_dir(self) -> str | None:
-        d = _compute_morphologist_subjects_dir(self.config.dataset)
-        return d if d and os.path.isdir(d) else None
+        return existing_dir(_compute_morphologist_subjects_dir(self.config.dataset))
 
     def required_file_patterns(self) -> list[str]:
         g = self.config.dataset.path_to_graph
@@ -231,6 +233,32 @@ class GenerateChampollionConfigStage(PipelineStage):
         from champollion_pipeline.generate_champollion_config import GenerateChampollionConfig
 
         return GenerateChampollionConfig()
+
+    def subject_input_dir(self) -> str | None:
+        return existing_dir(self.config.dataset.crops_path)
+
+    def output_dir(self) -> str | None:
+        return _compute_configs_dir(self.config.dataset) or None
+
+
+def _compute_configs_dir(dataset: DatasetConfig) -> str:
+    """Stage 3's configs root <D>/<name>/derivatives/champollion_V1/configs, D the parent of the name folder in
+    crops_path; "" when crops_path or name is empty or crops_path does not hold name. Pure, O(1)."""
+    if not dataset.crops_path or not dataset.name:
+        return ""
+    try:
+        parent = find_dataset_folder(dataset.crops_path, dataset.name)
+    except ValueError:
+        return ""
+    return compute_champollion_configs_root(parent, dataset.name)
+
+
+def _compute_stage4_crops_dir(dataset: DatasetConfig) -> str:
+    """The 2mm crops folder generate_embeddings reads; "" without datasets_root. Pure, O(1)."""
+    if not dataset.datasets_root:
+        return ""
+    derivatives = os.path.join(dataset.datasets_root, "derivatives", DERIVATIVES_FOLDER)
+    return compute_versioned_crops_dir(derivatives, dataset.masks_version)
 
 
 _HF_REPO_ID_REQUIRED = "hf_enabled requires dataset.hf_repo_id"
@@ -323,6 +351,15 @@ class GenerateEmbeddingsStage(PipelineStage):
         with _scoped_env("HF_TOKEN", hf_token):
             return script.run()
 
+    def subject_input_dir(self) -> str | None:
+        return existing_dir(_compute_stage4_crops_dir(self.config.dataset))
+
+    def index_input_dirs(self) -> list[str]:
+        return [d for d in (self.subject_input_dir(), _compute_configs_dir(self.config.dataset)) if d]
+
+    def output_dir(self) -> str | None:
+        return _compute_region_embeddings_source(self.config.dataset) or None
+
 
 def _compute_region_embeddings_source(dataset: DatasetConfig) -> str:
     """Return the per-region embeddings directory shared by stage 4 (output) and stage 5 (input).
@@ -348,6 +385,21 @@ def _compute_snapshots_output_dir(dataset: DatasetConfig) -> str:
     if dataset.datasets_root:
         return compute_snapshots_dir(dataset.datasets_root, dataset.masks_version)
     return ""
+
+
+def _compute_combined_output_dir(config: PipelineConfig) -> str:
+    """Stage 5's --output_path: combined folder under datasets_root, else cortical_tiles_output or outputs_path."""
+    dataset = config.dataset
+    if dataset.datasets_root:
+        return str(Path(compute_combined_embeddings_dir(dataset.datasets_root, dataset.masks_version)))
+    return dataset.cortical_tiles_output or config.outputs_path
+
+
+def _compute_snapshots_embeddings_dir(dataset: DatasetConfig) -> str:
+    """Stage 6's --embeddings_dir: the combined folder under datasets_root, else embeddings_path. Pure, O(1)."""
+    if dataset.datasets_root:
+        return compute_combined_embeddings_dir(dataset.datasets_root, dataset.masks_version)
+    return dataset.embeddings_path
 
 
 def _compute_morphologist_subjects_dir(dataset: DatasetConfig) -> str:
@@ -380,11 +432,7 @@ class PutTogetherEmbeddingsStage(PipelineStage):
 
     def build_args(self) -> list[str]:
         dataset = self.config.dataset
-        output_path = (
-            Path(compute_combined_embeddings_dir(dataset.datasets_root, dataset.masks_version))
-            if dataset.datasets_root
-            else (dataset.cortical_tiles_output or self.config.outputs_path)
-        )
+        output_path = _compute_combined_output_dir(self.config)
         args = [_compute_region_embeddings_source(dataset), f"--output_path={output_path}"]
         if dataset.regions:
             args.extend(["--regions", *compute_region_model_names(dataset.regions)])
@@ -394,6 +442,12 @@ class PutTogetherEmbeddingsStage(PipelineStage):
         from champollion_pipeline.put_together_embeddings import PutTogetherEmbeddings
 
         return PutTogetherEmbeddings()
+
+    def subject_input_dir(self) -> str | None:
+        return existing_dir(_compute_region_embeddings_source(self.config.dataset))
+
+    def output_dir(self) -> str | None:
+        return _compute_combined_output_dir(self.config) or None
 
 
 class GenerateSnapshotsStage(PipelineStage):
@@ -417,11 +471,9 @@ class GenerateSnapshotsStage(PipelineStage):
     def build_args(self) -> list[str]:
         dataset = self.config.dataset
         args = [f"--output_dir={_compute_snapshots_output_dir(dataset)}"]
-        if dataset.datasets_root:
-            combined_dir = compute_combined_embeddings_dir(dataset.datasets_root, dataset.masks_version)
-            args.append(f"--embeddings_dir={combined_dir}")
-        elif dataset.embeddings_path:
-            args.append(f"--embeddings_dir={dataset.embeddings_path}")
+        embeddings_dir = _compute_snapshots_embeddings_dir(dataset)
+        if embeddings_dir:
+            args.append(f"--embeddings_dir={embeddings_dir}")
         morphologist_dir = _compute_morphologist_subjects_dir(dataset)
         if morphologist_dir:
             args.append(f"--morphologist_dir={morphologist_dir}")
@@ -445,6 +497,12 @@ class GenerateSnapshotsStage(PipelineStage):
 
         return GenerateSnapshots()
 
+    def subject_input_dir(self) -> str | None:
+        return existing_dir(_compute_snapshots_embeddings_dir(self.config.dataset))
+
+    def output_dir(self) -> str | None:
+        return _compute_snapshots_output_dir(self.config.dataset) or None
+
 
 # ====================== Pipeline Orchestrator ======================
 
@@ -462,8 +520,9 @@ class PipelineOrchestrator:
         "generate_snapshots": GenerateSnapshotsStage,
     }
 
-    def __init__(self, config: PipelineConfig):
+    def __init__(self, config: PipelineConfig, indexer: StageIndexer | None = None):
         self.config = config
+        self._indexer = indexer
         self.logger = self._setup_logger()
         self.stages: dict[str, PipelineStage] = {}
         self._register_stages()
@@ -529,31 +588,15 @@ class PipelineOrchestrator:
 
         return True
 
-    def _index_path(self, phase: str, stage_name: str) -> str | None:
-        """Path of the pre/post index JSON of a stage, or None without outputs_path."""
-        if not self.config.outputs_path:
-            return None
-        return os.path.join(self.config.outputs_path, f"index_{phase}_{stage_name}.json")
+    def _stage_indexer(self) -> StageIndexer:
+        """The injected StageIndexer, else the default adapter built from the current config."""
+        return self._indexer if self._indexer is not None else _default_stage_indexer(self.config)
 
     def _report_pre_stage(self, stage_name: str, stage: PipelineStage) -> None:
-        """Index the stage's input subjects and print the eligibility report."""
-        input_dir = stage.subject_input_dir()
-        if not input_dir:
+        """Ask the stage indexer to index the stage's input folders; no input folder: nothing."""
+        if not stage.subject_input_dir():
             return
-        patterns = stage.required_file_patterns()
-        if not patterns:
-            return
-        if self.config.outputs_path:
-            os.makedirs(self.config.outputs_path, exist_ok=True)
-        index_path = self._index_path("pre", stage_name)
-        checker = SubjectEligibilityChecker(
-            input_dir,
-            patterns,
-            stage_name=stage_name,
-            bids=self.config.dataset.bids,
-            path_to_graph=self.config.dataset.path_to_graph,
-        )
-        checker.check_subject_patterns(save_index_to=index_path).log_summary()
+        self._stage_indexer().index_pre(stage_name, stage.index_input_dirs(), stage.required_file_patterns())
 
     def _report_post_stage(self, stage_name: str, stage: PipelineStage) -> None:
         """Index the folder the stage wrote and log its output report; never fails the stage (NTUI)."""
@@ -561,8 +604,7 @@ class PipelineOrchestrator:
         if not output_dir or not os.path.isdir(output_dir):
             return
         try:
-            report = build_output_report(output_dir, stage_name, save_index_to=self._index_path("post", stage_name))
-            report.log_summary()
+            self._stage_indexer().index_post(stage_name, output_dir)
         except Exception as e:
             self.logger.warning(f"Output report after stage '{stage_name}' failed, stage kept as completed: {e}")
 
@@ -631,6 +673,11 @@ class PipelineOrchestrator:
                 break
 
         return self._log_summary(completed_stages, failed_stages, partial_stages)
+
+
+def _default_stage_indexer(config: PipelineConfig) -> StageIndexer:
+    """The one place the sequential stages' indexer adapter is chosen."""
+    return FileIndexStageIndexer(config.outputs_path, config.dataset.bids, config.dataset.path_to_graph)
 
 
 # ====================== CLI Interface ======================
@@ -729,15 +776,6 @@ def _compute_models_source(config: PipelineConfig) -> str:
     return dataset.hf_repo_id if dataset.hf_enabled else str(config.models_path)
 
 
-def _compute_streaming_log_dir(config: PipelineConfig, run_log_path: str | None) -> str:
-    """Worker and consumer log folder: beside main.py's run log, under --log DIR, or the default logs folder."""
-    if run_log_path is not None:
-        return run_log_path.removesuffix(".log")
-    if config.log:
-        return config.log
-    return config.log_dir or str(Path(config.outputs_path) / "logs")
-
-
 def _build_streaming_settings(
     config: PipelineConfig, args: argparse.Namespace, run_log_path: str | None
 ) -> StreamingSettings:
@@ -745,7 +783,7 @@ def _build_streaming_settings(
     return StreamingSettings(
         subjects_dir=_compute_morphologist_subjects_dir(config.dataset),
         output_dir=config.outputs_path,
-        log_dir=_compute_streaming_log_dir(config, run_log_path),
+        log_dir=StreamingSettings.compute_log_dir(config, run_log_path),
         n_workers=config.n_workers,
         worker_timeout=config.worker_timeout,
         dry_run=args.dry_run,
@@ -774,6 +812,7 @@ def _run_streaming_mode(config: PipelineConfig, args: argparse.Namespace, *, run
         )
         return 1
     config = _resolve_streaming_input(config, args)
+    write_replay_config(config)
     try:
         from champollion_pipeline.streaming.runner import run_parallel_pipeline
     except ImportError as e:
@@ -939,6 +978,7 @@ class ChampollionPipeline(ScriptBuilder):
         kind = _apply_input_kind(config)
         if configless_input:
             config = _infer_configless_paths(config, kind, args)
+        write_replay_config(config)
         return PipelineOrchestrator(config).run()
 
 

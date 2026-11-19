@@ -143,7 +143,7 @@ def test_main_py_orchestrator_record_printed_once_in_unified_format(tmp_path):
         ),
         encoding="utf-8",
     )
-    result = _run_driver(tmp_path, MAIN_PY, ["--config", str(config)])
+    result = _run_driver(tmp_path, MAIN_PY, ["--config", str(config), "--log-dir", str(tmp_path / "replay_logs")])
     assert result.returncode == 0, result.stderr
 
     console = result.stdout.splitlines() + result.stderr.splitlines()
@@ -180,7 +180,9 @@ def test_main_py_stage_exception_logged_at_fail_with_traceback(tmp_path):
         encoding="utf-8",
     )
     # The stage calls script.parse_args(args) on its ScriptBuilder subclass; make that raise.
-    result = _run_driver(tmp_path, MAIN_PY, ["--config", str(config)], raise_in="parse_args")
+    result = _run_driver(
+        tmp_path, MAIN_PY, ["--config", str(config), "--log-dir", str(tmp_path / "replay_logs")], raise_in="parse_args"
+    )
 
     stderr_lines = result.stderr.splitlines()
     fail_indexes = [
