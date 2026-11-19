@@ -18,19 +18,19 @@ Here is the minimal happy path to generate embeddings from a pre-trained model �
 ```bash
 # 1. Generate Morphologist sulcal graphs (requires BrainVISA — skip if you already have .arg files)
 #    # This takes as inputs the list of T1 MRI (here: sub-001.nii.gz sub-002.nii.gz)
-#    # and outputs the morphologist graphs into the folder /data/myproject/derivatives/morphologist-6.0/subjects
+#    # and outputs the morphologist graphs into the folder /data/myproject/derivatives/morphologist-6.0 (one folder per subject, no subjects/ level)
 pixi run champollion-morphologist sub-001.nii.gz sub-002.nii.gz /data/myproject/ \
     -- --of morphologist-auto-nonoverlap-1.0 --if morphologist-auto-nonoverlap-1.0
 
 # 2. Extract sulcal regions
-#    # Input:  morphologist subjects directory (read-only, never written to)
+#    # Input:  morphologist subjects directory (read-only, never written to); an existing tree may end in .../subjects
 #    # Output: /data/myproject/derivatives/cortical_tiles-2026/crops/canonical_25/2mm/
-#    /data/myproject/derivatives/morphologist-6.0/subjects: morphologist output dir
+#    /data/myproject/derivatives/morphologist-6.0: morphologist output dir (stage 1 writes no subjects/ level)
 #    /data/myproject/derivatives/: derivatives root (crops land here)
 #    --path_to_graph "t1mri/default_acquisition/*/folds/3.1": required: glob pattern to .arg graph files
 #    --path_sk_with_hull "t1mri/default_acquisition/default_analysis/segmentation": required: skeleton directory
 pixi run champollion-cortical-tiles \
-    /data/myproject/derivatives/morphologist-6.0/subjects \
+    /data/myproject/derivatives/morphologist-6.0 \
     /data/myproject/derivatives/ \
     --path_to_graph "t1mri/default_acquisition/*/folds/3.1" \
     --path_sk_with_hull "t1mri/default_acquisition/default_analysis/segmentation"
@@ -73,6 +73,11 @@ pixi run champollion-snapshots \
 ```
 
 The sections below explain each step in detail.
+
+`main.py` itself needs no Config file: `python main.py <input>` infers the paths of the Dataset from one input path, a folder of T1 files (nested folders included) or of Morphologist outputs.
+Every PipelineConfig and Dataset field has an optional argument (`--<field-name>`), and `--env` reads the secrets and root paths from a file; see [Running main.py without a Config file](docs/usage.md#running-mainpy-without-a-config-file).
+Each run writes `replay_<timestamp>.yaml` in its logs folder, and `python main.py --config <that file>` rebuilds the
+run's PipelineConfig; the secret `dataset.hf_token` is never written. See [Replay config](docs/usage.md#replay-config).
 
 For inference on many scans, `python main.py --mode streaming --config my_pipeline.yaml` runs cortical_tiles and
 the embeddings scan by scan, with one resident model; see [Streaming mode](docs/usage.md#streaming-mode).
@@ -145,7 +150,7 @@ pixi run champollion-morphologist sub-001.nii.gz sub-002.nii.gz /data/myproject/
     -- --of morphologist-auto-nonoverlap-1.0 --if morphologist-auto-nonoverlap-1.0
 ```
 
-This writes one folder per subject under `/data/myproject/derivatives/morphologist-6.0/subjects/`.
+This writes one folder per subject directly under `/data/myproject/derivatives/morphologist-6.0/`: stage 1 writes no `subjects/` level. A Morphologist tree that already exists may have one (`.../morphologist-6.0/subjects/`); see [Morphologist trees](docs/usage.md#morphologist-trees).
 
 ### Optional: parallel processing on HPC (soma-workflow)
 
@@ -171,16 +176,16 @@ pixi run champollion-morphologist sub-001.nii.gz ... /data/myproject/ \
 Extract standardized 3D patches around 28 sulcal regions per hemisphere using *cortical_tiles*:
 
 ```bash
-#    /data/myproject/derivatives/morphologist-6.0/subjects: morphologist subjects dir (read-only)
+#    /data/myproject/derivatives/morphologist-6.0: morphologist subjects dir (read-only); pass the subjects/ folder of an existing tree that has one
 #    /data/myproject/derivatives/: derivatives root; crops land at {root}/cortical_tiles-2026/crops/{masks_version}/2mm/
 pixi run champollion-cortical-tiles \
-    /data/myproject/derivatives/morphologist-6.0/subjects \
+    /data/myproject/derivatives/morphologist-6.0 \
     /data/myproject/derivatives/ \
     --path_to_graph "t1mri/default_acquisition/*/folds/3.1" \
     --path_sk_with_hull "t1mri/default_acquisition/default_analysis/segmentation"
 ```
 
-- **First argument** — directory containing one folder per subject (Morphologist's `subjects/` output). This path may be read-only (e.g. a shared NFS database); the script never writes to it.
+- **First argument** — directory containing one folder per subject (the folder stage 1 writes, `derivatives/morphologist-6.0/`, or the `subjects/` folder of an existing tree that has one). This path may be read-only (e.g. a shared NFS database); the script never writes to it.
 - **Second argument** — derivatives parent directory. Crops are written to `{output}/cortical_tiles-2026/crops/{masks_version}/2mm/` (`{masks_version}` defaults to `canonical_corrected_26_1`, see [Mask versions](#mask-versions)).
 - **`--path_to_graph` / `--path_sk_with_hull`** — required; there is no default, since the sub-path under a subject's Morphologist output depends on your acquisition/analysis naming.
 
