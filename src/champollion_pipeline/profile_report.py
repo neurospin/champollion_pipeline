@@ -11,7 +11,7 @@ import json
 import logging
 import pstats
 import re
-from pathlib import Path
+from pathlib import Path, PurePosixPath
 
 from champollion_utils.script_builder import ScriptBuilder
 
@@ -27,6 +27,12 @@ DEFAULT_INTERVAL_S = 1.0
 GPU_DT_CAP_S = max(DEFAULT_INTERVAL_S, 2.0)
 NVIDIA_SMI_BACKEND = "nvidia-smi"
 _UNSAFE_NAME_CHARS = re.compile(r"[^A-Za-z0-9._()-]")
+# Region of champollion_V1 evaluate.py processes (EvaluateRegion): stage 4 runs
+# ``evaluate.py ... -s <output_base>/<region>/full_embeddings.csv``.
+REGION_GROUP_BY = "tag:region"
+EVALUATE_SCRIPT_PARTS = ("champollion", "evaluate.py")
+SAVING_PATH_FLAG = "-s"
+_NO_REGION_NAMES = frozenset({"", ".", ".."})
 
 
 # ---------------------------------------------------------------------------
@@ -213,8 +219,48 @@ def _build_entries(sidecars: list[dict], samples: list[dict]) -> list[dict]:
     return entries
 
 
+def _is_evaluate_script(arg: str) -> bool:
+    """True when ``arg`` is a path ending in ``champollion/evaluate.py`` (champollion_V1's inference script)."""
+    return PurePosixPath(arg).parts[-2:] == EVALUATE_SCRIPT_PARTS
+
+
+def _find_saving_path(args: list[str]) -> str | None:
+    """Value of the last ``-s`` option of ``args`` (argparse keeps the last one), None without one."""
+    saving_path = None
+    for index, arg in enumerate(args[:-1]):
+        if arg == SAVING_PATH_FLAG:
+            saving_path = args[index + 1]
+    return saving_path
+
+
+def find_evaluate_region(argv: list[str]) -> str | None:
+    """Sulcal region of a champollion_V1 evaluate.py process: the parent directory name of its ``-s`` path.
+
+    Args:
+        argv: sidecar ``argv`` or tree-sample ``cmdline`` of one process.
+
+    Returns:
+        The region name, or None when ``argv`` holds no ``champollion/evaluate.py`` followed by ``-s <path>``
+        whose parent directory has a name.
+
+    Complexity: O(len(argv)).
+    """
+    script_index = next((index for index, arg in enumerate(argv) if _is_evaluate_script(arg)), None)
+    if script_index is None:
+        return None
+    saving_path = _find_saving_path(argv[script_index + 1 :])
+    if saving_path is None:
+        return None
+    region = PurePosixPath(saving_path).parent.name
+    return None if region in _NO_REGION_NAMES else region
+
+
 def _group_name(entry: dict, group_by: str) -> str:
     """Name of the group ``entry`` belongs to under ``group_by``."""
+    if group_by == REGION_GROUP_BY:
+        region = find_evaluate_region(entry["argv"])
+        if region is not None:
+            return region
     if group_by == "process":
         if entry["_seq"] is None:
             return f"{entry['host']}-{entry['pid']}"
