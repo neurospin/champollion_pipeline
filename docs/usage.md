@@ -134,6 +134,8 @@ refused, or when the combine fails; it exits with code 0 when no scan ends FAILE
 Limits: inference only (no training); no Morphologist stage; the consumer gives up after 7200 s without a newly ready
 scan.
 
+The profiling of the embedding path behind this mode is in [Streaming profile](streaming_profile.md).
+
 ## Running Tests
 
 ```bash
