@@ -21,14 +21,17 @@ from unittest.mock import patch
 
 import pytest
 
+from champollion_pipeline.derivatives_layout import DEFAULT_MASKS_VERSION
 from champollion_pipeline.generate_embeddings import GenerateEmbeddings
 from tests.main_stage_helpers import embeddings_stage_argv, load_main_module
 
 DERIVATIVES = "derivatives"
 CHAMPOLLION_FOLDER = "champollion_V1"
 REGION_EMBEDDINGS = "region_embeddings"
-DEFAULT_MASKS = "canonical_25"
-OTHER_MASKS = "canonical_corrected_26_1"
+# Local models folder name, a Mask version: a standalone run without --masks takes masks from it.
+LOCAL_MODELS = "canonical_25"
+OTHER_MASKS = "canonical_corrected_26_1"  # an explicit --masks other than LOCAL_MODELS
+NON_DEFAULT_MASKS = "canonical_25"  # a dataset.masks_version other than DEFAULT_MASKS_VERSION
 DATASETS_ROOT = "/data/MYDATASET"
 
 
@@ -43,9 +46,9 @@ def _expected_region_embeddings(datasets_root, masks):
 
 def _standalone_output_base(tmp_path, extra_args):
     """Run GenerateEmbeddings.run() with fetch/per-region stubbed; return (output_base, datasets_root)."""
-    # Named after the default Mask version: without --masks the parser takes masks from the folder name
+    # Named after a Mask version: without --masks the parser takes masks from the folder name
     # (REQ-MODELVER-BDRABCZUK-8C57E27DFA80), canonical_25 as before.
-    models_dir = tmp_path / DEFAULT_MASKS
+    models_dir = tmp_path / LOCAL_MODELS
     models_dir.mkdir()
     datasets_root = tmp_path / "MYDATASET"
     datasets_root.mkdir()
@@ -69,7 +72,7 @@ class TestStandaloneDefaultOutput:
     def test_default_output_uses_default_masks_canonical_25(self, tmp_path):
         """No --output, no --masks -> <datasets_root>/derivatives/champollion_V1/canonical_25/region_embeddings."""
         output_base, datasets_root = _standalone_output_base(tmp_path, [])
-        assert Path(output_base) == _expected_region_embeddings(datasets_root, DEFAULT_MASKS)
+        assert Path(output_base) == _expected_region_embeddings(datasets_root, LOCAL_MODELS)
 
     def test_default_output_follows_masks_argument(self, tmp_path):
         """No --output, --masks X -> <datasets_root>/derivatives/champollion_V1/X/region_embeddings."""
@@ -97,11 +100,11 @@ class TestOrchestratedDefaultOutput:
     """REQ-EMBVER-BDRABCZUK-26D4C6214910: GenerateEmbeddingsStage --output when embeddings_path is empty."""
 
     def test_empty_embeddings_path_passes_default_masks_region_embeddings(self, main_module):
-        """Default masks_version -> --output=<root>/derivatives/champollion_V1/canonical_25/region_embeddings."""
+        """Default masks_version -> --output=<root>/derivatives/champollion_V1/<default>/region_embeddings."""
         output = _orchestrated_output(main_module, None)
-        assert Path(output) == _expected_region_embeddings(DATASETS_ROOT, DEFAULT_MASKS)
+        assert Path(output) == _expected_region_embeddings(DATASETS_ROOT, DEFAULT_MASKS_VERSION)
 
     def test_empty_embeddings_path_follows_masks_version(self, main_module):
         """masks_version X -> --output=<datasets_root>/derivatives/champollion_V1/X/region_embeddings."""
-        output = _orchestrated_output(main_module, OTHER_MASKS)
-        assert Path(output) == _expected_region_embeddings(DATASETS_ROOT, OTHER_MASKS)
+        output = _orchestrated_output(main_module, NON_DEFAULT_MASKS)
+        assert Path(output) == _expected_region_embeddings(DATASETS_ROOT, NON_DEFAULT_MASKS)

@@ -148,7 +148,7 @@ class GenerateEmbeddings(ScriptBuilder):
                 "<datasets_root>/derivatives/<cortical_version>/crops/<masks>/2mm. "
                 "Default: the --model-version value when given; else, when models_path is a local folder, "
                 "the name of that folder if it is a known Mask version (otherwise exit 2 with an ERROR, pass --masks); "
-                "canonical_25 only when models_path is not a local directory.",
+                f"{DEFAULT_MASKS_VERSION} only when models_path is not a local directory.",
                 default=None,
             )
             .add_flag(

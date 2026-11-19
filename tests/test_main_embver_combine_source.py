@@ -23,14 +23,15 @@ from unittest.mock import MagicMock, patch
 
 import pytest
 
+from champollion_pipeline.derivatives_layout import DEFAULT_MASKS_VERSION
 from champollion_pipeline.put_together_embeddings import PutTogetherEmbeddings
 
 MAIN_PY = Path(__file__).resolve().parent.parent / "main.py"
 DERIVATIVES = "derivatives"
 CHAMPOLLION_FOLDER = "champollion_V1"
 REGION_EMBEDDINGS = "region_embeddings"
-DEFAULT_MASKS = "canonical_25"
-OTHER_MASKS = "canonical_corrected_26_1"
+DEFAULT_MASKS = DEFAULT_MASKS_VERSION
+OTHER_MASKS = "canonical_25"  # a Mask version other than the default
 DATASETS_ROOT = "/data/MYDATASET"
 
 
@@ -90,7 +91,7 @@ class TestCombineSourceDefault:
     """REQ-EMBVER-BDRABCZUK-EF890636D83B: stage-5 source when embeddings_path is empty."""
 
     def test_execute_empty_embeddings_path_passes_default_masks_region_embeddings(self, main_module):
-        """Default masks_version -> source=<root>/derivatives/champollion_V1/canonical_25/region_embeddings."""
+        """Default masks_version -> source=<root>/derivatives/champollion_V1/<default>/region_embeddings."""
         source = _execute_source(main_module, None)
         assert source == _expected_region_embeddings(DATASETS_ROOT, DEFAULT_MASKS)
 
@@ -100,7 +101,7 @@ class TestCombineSourceDefault:
         assert source == _expected_region_embeddings(DATASETS_ROOT, OTHER_MASKS)
 
     def test_validate_empty_embeddings_path_checks_default_masks_region_embeddings(self, main_module, tmp_path):
-        """validate() is False until <root>/derivatives/champollion_V1/canonical_25/region_embeddings exists."""
+        """validate() is False until <root>/derivatives/champollion_V1/<default>/region_embeddings exists."""
         datasets_root = tmp_path / "MYDATASET"
         datasets_root.mkdir()
         stage = _stage(main_module, _config(main_module, datasets_root, None))
@@ -109,7 +110,7 @@ class TestCombineSourceDefault:
         assert stage.validate() is True
 
     def test_validate_empty_embeddings_path_follows_masks_version(self, main_module, tmp_path):
-        """masks_version X: an existing canonical_25 folder does not satisfy validate(); the X folder does."""
+        """masks_version X: an existing default-version folder does not satisfy validate(); the X folder does."""
         datasets_root = tmp_path / "MYDATASET"
         _expected_region_embeddings(datasets_root, DEFAULT_MASKS).mkdir(parents=True)
         stage = _stage(main_module, _config(main_module, datasets_root, OTHER_MASKS))

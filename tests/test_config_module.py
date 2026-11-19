@@ -14,7 +14,9 @@ user decision 2026-11-02: written even while None), one 'parallel' line after ve
 case keeps the default false) and one dataset 'labelling_session' line
 after skel_seed (REQ-WHOLEBRAIN-BDRABCZUK-3DBF0C9F422F) and one dataset 'allow_prefix_ids' line
 after bids (REQ-CORTILES-BDRABCZUK-A20F9F75095C, TEMPORARY: DEF-CORTILES-BDRABCZUK-8A44DAD7F312)
-and one dataset 'input_kind' line after input_path (TASK-INPUTKIND-BDRABCZUK-5ECD06E2023D);
+and one dataset 'input_kind' line after input_path (TASK-INPUTKIND-BDRABCZUK-5ECD06E2023D),
+and the default dataset masks_version canonical_corrected_26_1 instead of canonical_25 (the default
+Mask version, TASK-MODELVER-BDRABCZUK-39D727185A86);
 the serialiser must reproduce them
 byte for byte (REQ-REFACTOR-BDRABCZUK-B5835A3C130E, superseding -20D84DC86928, -B65FECA525EF, -679F9A49A534
 and -2636D42F82B1)
@@ -95,7 +97,7 @@ dataset:
   path_to_graph: t1mri/default_acquisition/default_analysis/folds/3.3/base
   path_sk_with_hull: t1mri/default_acquisition/default_analysis/segmentation
   sk_qc_path: ''
-  masks_version: canonical_25
+  masks_version: canonical_corrected_26_1
   skel_seed: null
   labelling_session: ''
   regions: []

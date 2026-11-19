@@ -11,7 +11,9 @@ object with the keys:
   else null;
 - checkpoint_epoch: the --checkpoint-epoch value that selected the region checkpoints;
 - models_source: {"type": "local", "path": <absolute models_path>} or
-  {"type": "huggingface", "repo_id": <repository id>, "subfolder": <--model-version or null>};
+  {"type": "huggingface", "repo_id": <repository id>, "subfolder": <downloaded subfolder, or null for the
+  repository root>} (REQ-MODELVER-BDRABCZUK-CA199B64FC67: with neither --masks nor --model-version the
+  default Mask version subfolder is downloaded; --masks alone still downloads the repository root);
 - pipeline_commit: the 40-hex git commit of the champollion_pipeline checkout, else null.
 
 No network, no real evaluate.py, no real git: huggingface_hub.snapshot_download is a fake that lays
@@ -29,7 +31,7 @@ from unittest.mock import patch
 import pytest
 
 from champollion_pipeline import generate_embeddings as ge
-from champollion_pipeline.derivatives_layout import compute_region_embeddings_dir
+from champollion_pipeline.derivatives_layout import DEFAULT_MASKS_VERSION, compute_region_embeddings_dir
 from champollion_pipeline.generate_embeddings import GenerateEmbeddings, ModelSet, write_model_set
 
 pytestmark = pytest.mark.unit  # noqa: V107
@@ -222,12 +224,12 @@ class TestProvenanceCheckpointEpoch:
 
 
 # --------------------------------------------------------------------------- #
-# REQ-MODELVER-BDRABCZUK-E46B4CCA8743: models_source
+# REQ-MODELVER-BDRABCZUK-CA199B64FC67: models_source
 # --------------------------------------------------------------------------- #
 
 
 class TestProvenanceModelsSource:
-    """REQ-MODELVER-BDRABCZUK-E46B4CCA8743: models_source = local path, or HF repo id and subfolder."""
+    """REQ-MODELVER-BDRABCZUK-CA199B64FC67 (supersedes E46B4CCA8743): local path, or HF repo id and subfolder."""
 
     def test_local_absolute_path(self, workdir):
         lay_out_regions(workdir / LOCAL_MODELS)
@@ -273,7 +275,25 @@ class TestProvenanceModelsSource:
         expected = {"type": "huggingface", "repo_id": REPO_ID, "subfolder": VERSION}
         assert read_provenance(workdir / "out")["models_source"] == expected
 
-    def test_hugging_face_without_model_version_has_null_subfolder(self, workdir):
+    def test_hugging_face_masks_without_model_version_has_null_subfolder(self, workdir):
+        """--masks without --model-version downloads the repository root (unchanged, user decision Q4 2026-11-19)."""
+        run_stage(
+            [
+                REPO_ID,
+                str(workdir / "dataset"),
+                "--masks",
+                LOCAL_MODELS,
+                "--models-cache",
+                str(workdir / "cache"),
+                "--output",
+                str(workdir / "out"),
+            ]
+        )
+        expected = {"type": "huggingface", "repo_id": REPO_ID, "subfolder": None}
+        assert read_provenance(workdir / "out")["models_source"] == expected
+
+    def test_hugging_face_without_version_options_names_default_subfolder(self, workdir):
+        """Neither --masks nor --model-version: the default Mask version subfolder (user decision Q2 2026-11-19)."""
         run_stage(
             [
                 REPO_ID,
@@ -284,7 +304,7 @@ class TestProvenanceModelsSource:
                 str(workdir / "out"),
             ]
         )
-        expected = {"type": "huggingface", "repo_id": REPO_ID, "subfolder": None}
+        expected = {"type": "huggingface", "repo_id": REPO_ID, "subfolder": DEFAULT_MASKS_VERSION}
         assert read_provenance(workdir / "out")["models_source"] == expected
 
 

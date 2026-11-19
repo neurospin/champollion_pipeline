@@ -14,6 +14,7 @@ import numpy as np
 import pandas as pd
 import pytest
 
+from champollion_pipeline.derivatives_layout import DEFAULT_MASKS_VERSION
 from champollion_pipeline.purge_subject import PurgeSubject
 
 SUBJECT = "sub-01"
@@ -31,8 +32,8 @@ def _run_purge(derivatives) -> int:
 
 
 def _mask_dir(derivatives):
-    """crops/canonical_25/2mm/<REGION>/mask under derivatives, created."""
-    mask_dir = derivatives / "crops" / "canonical_25" / "2mm" / REGION / "mask"
+    """crops/<default masks>/2mm/<REGION>/mask under derivatives, created."""
+    mask_dir = derivatives / "crops" / DEFAULT_MASKS_VERSION / "2mm" / REGION / "mask"
     mask_dir.mkdir(parents=True, exist_ok=True)
     return mask_dir
 

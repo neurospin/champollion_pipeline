@@ -19,11 +19,12 @@ loaded by file path under a private module name, as in test_main_stage_argv.py.
 
 import pytest
 
+from champollion_pipeline.derivatives_layout import DEFAULT_MASKS_VERSION
 from champollion_pipeline.generate_champollion_config import GenerateChampollionConfig
 from tests.main_stage_helpers import capture_stage_argv, load_main_module
 
-DEFAULT_MASKS_VERSION = "canonical_25"
-OTHER_MASKS_VERSION = "canonical_corrected_26_1"
+# A Mask version other than DEFAULT_MASKS_VERSION.
+OTHER_MASKS_VERSION = "canonical_25"
 
 
 @pytest.fixture(scope="module")

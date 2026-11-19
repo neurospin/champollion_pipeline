@@ -8,6 +8,7 @@ from unittest.mock import mock_open, patch
 
 import pytest
 
+from champollion_pipeline.derivatives_layout import DEFAULT_MASKS_VERSION
 from champollion_pipeline.generate_champollion_config import GenerateChampollionConfig, main
 from tests.test_generate_champollion_config_internals import fake_execute_command
 
@@ -236,7 +237,7 @@ class TestRunMethod:
                     written_lines = write_calls[0][0][0]
                     written_content = "".join(written_lines)
                     assert dataset_name in written_content
-                    assert "canonical_25" in written_content
+                    assert DEFAULT_MASKS_VERSION in written_content
                     assert "TESTXX" not in written_content
 
     @pytest.mark.usefixtures("stubbed_reference_copy")
