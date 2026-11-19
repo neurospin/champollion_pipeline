@@ -37,7 +37,7 @@ Each `run_with_params()` call executes the following steps in sequence. All inte
 
 Builds a canonical **3-D bounding-box mask** for the region in ICBM2009c space at 2 mm isotropic resolution.
 
-- Reads the `masks_version` field from `pipeline_loop_2mm.json` (e.g. `canonical_25`) to select the pre-computed population mask NIfTI.
+- Reads the `masks_version` field from `pipeline_loop_2mm.json` (default `canonical_corrected_26_1`; `canonical_25` is the older set) to select the pre-computed population mask NIfTI.
 - Dilates / thresholds the mask to define the crop bounding box.
 - Output: `{output_dir}/crops/2mm/{region}/mask/{side}mask_cropped.nii.gz` + `.minf` sidecar (stores `sizeX/Y/Z`).
 
@@ -90,7 +90,7 @@ Key fields resolved at runtime:
 | `brain_regions_json` | Absolute path of the packaged region table `resources/sulci_regions_champollion_V1.json` |
 | `path_to_graph` | Sub-path under each subject to the `.arg` graph |
 | `path_to_skeleton_with_hull` | Sub-path to the skeleton-with-hull NIfTI |
-| `masks_version` | Which canonical mask set to use (`canonical_25` by default) |
+| `masks_version` | Which canonical mask set to use (`canonical_corrected_26_1` by default; `canonical_25` stays selectable with `--masks canonical_25`, and a missing `canonical_corrected_26_1` mask stops the run with an error) |
 | `skel_qc_path` | Path to QC TSV; empty string = no filtering |
 
 ---

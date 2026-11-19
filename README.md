@@ -228,9 +228,16 @@ Datasets whose crops were built before the `skel_seed` key existed used clock-se
 | Version | Description |
 |---------|-------------|
 | `canonical_25` | Original masks, used for Champollion V1. |
-| `canonical_corrected_26_1` | Revised labeling with reduced artifacts. |
+| `canonical_corrected_26_1` | Revised labeling with reduced artifacts. **Default.** |
 
-Pass `--masks canonical_25` (or another version) to override the default.
+**Breaking change:** the default Mask version is now `canonical_corrected_26_1` (it was `canonical_25`). Every stage that takes `--masks`, and the `masks_version` field of the pipeline config, uses it when nothing else is given.
+
+- A rerun of a dataset built with the old default writes a new versioned tree (`crops/canonical_corrected_26_1/`, `champollion_V1/canonical_corrected_26_1/`) next to the old one; the old tree is not modified.
+- `canonical_25` stays selectable: pass `--masks canonical_25` to work on an old dataset or to rerun it as before.
+- `champollion-purge` and `champollion-prune` act on `crops/<masks>/2mm` for `--masks` (default `canonical_corrected_26_1`) and leave other `crops/<version>/` trees untouched. For a tree built with `canonical_25`, pass `--masks canonical_25`.
+- Stage 2 (cortical tiles) stops with an error when a `canonical_corrected_26_1` mask is missing; it writes no crops in that case.
+- In stage 5 (embeddings), `--masks` follows `--model-version` or the local models folder name, so a `canonical_25` model set keeps reading `canonical_25` crops; the default applies only when neither names a version.
+- UMAP snapshots stay opt-in through `--reference_data_dir` and need a locally fitted UMAP reference of the same Mask version as the embeddings; no reference is shipped.
 
 <details>
 <summary>All options</summary>

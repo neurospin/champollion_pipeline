@@ -2,6 +2,8 @@
 
 The pipeline runs in 6 stages: T1 MRI → sulcal graphs → region crops → config → embeddings → combined embeddings → snapshots.
 
+The default Mask version is `canonical_corrected_26_1` (a breaking change: it was `canonical_25`). Pass `--masks canonical_25` to work on an old dataset or to rerun it with the old masks; `champollion-purge` and `champollion-prune` need `--masks canonical_25` for an old tree. Stage 2 stops with an error when a `canonical_corrected_26_1` mask is missing. UMAP snapshots (stage 6) stay opt-in through `--reference_data_dir` and need a locally fitted reference of the same Mask version. See "Mask versions" in the README.
+
 ## Stage 1 — Generate Morphologist Graphs
 
 > Skip this step if you already have Morphologist `.arg` graph files.
