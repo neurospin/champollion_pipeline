@@ -3,6 +3,7 @@
 Pytest configuration and fixtures for champollion_pipeline tests.
 """
 
+import importlib
 import logging
 import os
 import shutil
@@ -228,3 +229,27 @@ def pipeline_caplog(caplog):
     capture.start()
     yield capture
     capture.stop()
+
+
+REPO_ROOT = Path(__file__).resolve().parent.parent
+
+
+@pytest.fixture(autouse=True)  # noqa: V103
+def replay_files_in_tmp(monkeypatch, tmp_path_factory):
+    """Send the replay files of every test to a temporary folder: no test leaves outputs/ or logs/ in the repo.
+
+    A logs folder inside the repository (the default <outputs_path>/logs, or a relative log_dir against a working
+    directory in the repository) is moved to the same relative place under a temporary folder; any other logs folder
+    (a test's own tmp_path) is left as it is.
+    """
+    replay_config = importlib.import_module("champollion_pipeline.replay_config")
+    original = replay_config.logs_folder
+    sink = tmp_path_factory.mktemp("replay_sink")
+
+    def _redirected(config):
+        folder = original(config)
+        if folder.is_relative_to(REPO_ROOT):
+            return sink / folder.relative_to(REPO_ROOT)
+        return folder
+
+    monkeypatch.setattr(replay_config, "logs_folder", _redirected)

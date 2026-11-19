@@ -180,11 +180,14 @@ class ConfigLoader:
         return pipeline_config
 
     @staticmethod
-    def save_to_yaml(config: PipelineConfig, output_path: str):
-        """Save configuration to YAML file."""
+    def save_to_yaml(config: PipelineConfig, output_path: str, omit: tuple[str, ...] | None = None):
+        """Save configuration to YAML file, leaving out the keys named in omit ("key" or "dataset.key")."""
         config_dict = asdict(config)
         for key in _UNSAVED_DATASET_KEYS:
             config_dict["dataset"].pop(key, None)
+        for dotted in omit or ():
+            section, _, key = dotted.rpartition(".")
+            (config_dict[section] if section else config_dict).pop(key, None)
 
         with open(output_path, "w") as f:
             yaml.safe_dump(config_dict, f, default_flow_style=False, sort_keys=False)
