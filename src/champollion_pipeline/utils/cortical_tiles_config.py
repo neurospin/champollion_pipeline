@@ -2,6 +2,8 @@ import json
 import os
 from dataclasses import dataclass
 
+from champollion_pipeline.derivatives_layout import DEFAULT_MASKS_VERSION
+
 CROPS_DIRNAME = "crops"
 DEFAULT_VOXEL_SIZE = 2.0
 INPUT_TYPES_DEFAULT = ("skeleton", "foldlabel")
@@ -16,7 +18,7 @@ class CorticalTilesConfig:
 class CorticalTilesConfigFactory:
     @classmethod
     def from_args(cls, args) -> "CorticalTilesConfig":
-        masks_version = args.masks if args.masks else "canonical_25"
+        masks_version = args.masks if args.masks else DEFAULT_MASKS_VERSION
         return CorticalTilesConfig(masks_version=masks_version, out_voxel_size=2.0)
 
     @classmethod
@@ -25,7 +27,7 @@ class CorticalTilesConfigFactory:
             return None
         with open(path) as f:
             config = json.load(f)
-        masks_version = config.get("masks_version", "canonical_25")
+        masks_version = config.get("masks_version", DEFAULT_MASKS_VERSION)
         return CorticalTilesConfig(masks_version=masks_version, out_voxel_size=2.0)
 
 
