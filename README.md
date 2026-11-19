@@ -588,6 +588,7 @@ champollion_pipeline/
 │       ├── process_setup.py
 │       ├── cli_options.py           # Registry of main.py arguments, one per config field
 │       ├── env_file.py              # Reads main.py --env files and CHAMPOLLION_* variables (python-dotenv)
+│       ├── replay_config.py         # Writes the replay config of a main.py run into its logs folder (main.py --config replays it)
 │       ├── _stage_base.py           # Template base class of main.py's pipeline stages
 │       └── generate_labelling_qc.py
 ├── data/                       # Created by install-all; not committed

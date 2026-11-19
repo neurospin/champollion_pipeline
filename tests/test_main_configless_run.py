@@ -29,8 +29,14 @@ import pytest
 
 from champollion_pipeline.config import PipelineConfig
 from champollion_pipeline.path_inference import infer_paths
-from champollion_pipeline.utils.input_kind import InputKind, detect_input_kind
-from tests.main_stage_helpers import enter_work_dir, load_main_module, stub_main_setup
+from champollion_pipeline.utils.input_kind import InputKind
+from tests.main_stage_helpers import (
+    enter_work_dir,
+    load_main_module,
+    make_morphologist_input,
+    make_t1_input,
+    stub_main_setup,
+)
 
 MAIN = load_main_module("_champollion_main_configless_run_under_test")
 
@@ -42,8 +48,6 @@ ALL_STAGES = [
     "put_together_embeddings",
     "generate_snapshots",
 ]
-GRAPH_FOLDER = ("t1mri", "default_acquisition", "default_analysis", "folds", "3.1")
-STAGE1_SUBJECTS = ("derivatives", "morphologist-6.0")
 CHAMPOLLION_OUTPUTS = ("derivatives", "champollion_V1")
 # Every field infer_paths fills: the dataset fields, then outputs_path of the PipelineConfig.
 INFERRED_DATASET_FIELDS = (
@@ -111,22 +115,12 @@ def run_main(monkeypatch, work_dir):
 
 def _t1_input(tmp_path: Path) -> Path:
     """Folder t1set holding one top-level T1 file."""
-    raw = tmp_path / "t1set"
-    raw.mkdir()
-    (raw / "sub-01.nii.gz").write_bytes(b"synthetic")
-    assert detect_input_kind(str(raw)) is InputKind.T1
-    return raw
+    return make_t1_input(tmp_path, "t1set")
 
 
 def _morphologist_input(tmp_path: Path) -> Path:
     """Dataset root morphset holding the left and right graphs of one subject under derivatives/morphologist-6.0."""
-    root = tmp_path / "morphset"
-    graphs = root.joinpath(*STAGE1_SUBJECTS, "sub-01", *GRAPH_FOLDER)
-    graphs.mkdir(parents=True)
-    for side in ("L", "R"):
-        (graphs / f"{side}sub-01.arg").write_text("synthetic")
-    assert detect_input_kind(str(root)) is InputKind.MORPHOLOGIST
-    return root
+    return make_morphologist_input(tmp_path, "morphset")
 
 
 def _input_of(kind: str, tmp_path: Path) -> Path:

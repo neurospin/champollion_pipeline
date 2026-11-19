@@ -68,6 +68,7 @@ from champollion_pipeline.input_kind_choice import (
 )
 from champollion_pipeline.path_inference import AmbiguousGraphFolders, DatasetRootNotInferable, infer_paths
 from champollion_pipeline.process_setup import init_pipeline_process
+from champollion_pipeline.replay_config import write_replay_config
 from champollion_pipeline.streaming import StreamingSettings
 from champollion_pipeline.utils.cortical_tiles_config import compute_versioned_crops_dir
 from champollion_pipeline.utils.input_kind import InputKind, stage1_subjects_dir
@@ -775,15 +776,6 @@ def _compute_models_source(config: PipelineConfig) -> str:
     return dataset.hf_repo_id if dataset.hf_enabled else str(config.models_path)
 
 
-def _compute_streaming_log_dir(config: PipelineConfig, run_log_path: str | None) -> str:
-    """Worker and consumer log folder: beside main.py's run log, under --log DIR, or the default logs folder."""
-    if run_log_path is not None:
-        return run_log_path.removesuffix(".log")
-    if config.log:
-        return config.log
-    return config.log_dir or str(Path(config.outputs_path) / "logs")
-
-
 def _build_streaming_settings(
     config: PipelineConfig, args: argparse.Namespace, run_log_path: str | None
 ) -> StreamingSettings:
@@ -791,7 +783,7 @@ def _build_streaming_settings(
     return StreamingSettings(
         subjects_dir=_compute_morphologist_subjects_dir(config.dataset),
         output_dir=config.outputs_path,
-        log_dir=_compute_streaming_log_dir(config, run_log_path),
+        log_dir=StreamingSettings.compute_log_dir(config, run_log_path),
         n_workers=config.n_workers,
         worker_timeout=config.worker_timeout,
         dry_run=args.dry_run,
@@ -820,6 +812,7 @@ def _run_streaming_mode(config: PipelineConfig, args: argparse.Namespace, *, run
         )
         return 1
     config = _resolve_streaming_input(config, args)
+    write_replay_config(config)
     try:
         from champollion_pipeline.streaming.runner import run_parallel_pipeline
     except ImportError as e:
@@ -985,6 +978,7 @@ class ChampollionPipeline(ScriptBuilder):
         kind = _apply_input_kind(config)
         if configless_input:
             config = _infer_configless_paths(config, kind, args)
+        write_replay_config(config)
         return PipelineOrchestrator(config).run()
 
 

@@ -4,6 +4,11 @@ from __future__ import annotations
 
 import os
 from dataclasses import dataclass
+from pathlib import Path
+from typing import TYPE_CHECKING
+
+if TYPE_CHECKING:
+    from champollion_pipeline.config import PipelineConfig
 
 DEFAULT_POLL_INTERVAL = 10
 DEFAULT_WORKER_TIMEOUT = 7200
@@ -37,6 +42,15 @@ class StreamingSettings:
             value = getattr(self, name)
             if not value > 0:
                 raise ValueError(f"{name} must be greater than 0, got {value!r}")
+
+    @staticmethod  # noqa: V105 - used by main.py
+    def compute_log_dir(config: PipelineConfig, run_log_path: str | None) -> str:
+        """Worker and consumer log folder: beside main.py's run log, under --log DIR, or the default logs folder."""
+        if run_log_path is not None:
+            return run_log_path.removesuffix(".log")
+        if config.log:
+            return config.log
+        return config.log_dir or str(Path(config.outputs_path) / "logs")
 
     @property
     def producer_workers(self) -> int:

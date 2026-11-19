@@ -11,6 +11,8 @@ import logging
 from pathlib import Path
 from unittest.mock import MagicMock, patch
 
+from champollion_pipeline.utils.input_kind import InputKind, detect_input_kind
+
 MAIN_PY = Path(__file__).resolve().parent.parent / "main.py"
 
 
@@ -201,3 +203,32 @@ def ran_config(outcome: RunOutcome, cli_args: tuple[str, ...]):
     assert outcome.status == 0, f"main() exit status {outcome.status} for {list(cli_args)}, expected 0"
     assert len(outcome.configs) == 1, f"main() ran {len(outcome.configs)} configurations for {list(cli_args)}"
     return outcome.configs[0]
+
+
+GRAPH_FOLDER = ("t1mri", "default_acquisition", "default_analysis", "folds", "3.1")
+STAGE1_SUBJECTS = ("derivatives", "morphologist-6.0")
+
+
+def make_t1_input(tmp_path, name="t1set"):
+    """Folder ``name`` under tmp_path holding one top-level T1 file; return it."""
+    raw = tmp_path / name
+    raw.mkdir()
+    (raw / "sub-01.nii.gz").write_bytes(b"synthetic")
+    assert detect_input_kind(str(raw)) is InputKind.T1
+    return raw
+
+
+def make_morphologist_input(tmp_path, name="morphset", with_t1=False):
+    """Dataset root ``name`` holding the left and right graphs of one subject under derivatives/morphologist-6.0.
+
+    With ``with_t1`` it also holds a top-level T1 file, so the input kind is both and the kind prompt asks.
+    """
+    root = tmp_path / name
+    graphs = root.joinpath(*STAGE1_SUBJECTS, "sub-01", *GRAPH_FOLDER)
+    graphs.mkdir(parents=True)
+    for side in ("L", "R"):
+        (graphs / f"{side}sub-01.arg").write_text("synthetic")
+    if with_t1:
+        (root / "sub-01.nii.gz").write_bytes(b"synthetic")
+    assert detect_input_kind(str(root)) is (InputKind.BOTH if with_t1 else InputKind.MORPHOLOGIST)
+    return root
