@@ -252,7 +252,7 @@ class PruneFailedSubjects(ScriptBuilder):
             .add_optional_argument(
                 "--masks",
                 "Mask version of the crops to prune: crops/<masks>/2mm under the derivatives directory "
-                "(default canonical_25). Files under other crops/<version>/ trees are left untouched.",
+                f"(default {DEFAULT_MASKS_VERSION}). Files under other crops/<version>/ trees are left untouched.",
                 default=DEFAULT_MASKS_VERSION,
             )
         )
