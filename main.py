@@ -752,14 +752,28 @@ def _build_streaming_settings(
     )
 
 
+def _resolve_streaming_input(config: PipelineConfig, args: argparse.Namespace) -> PipelineConfig:
+    """Return config with the paths the input path fixes filled: the streaming subjects folder is the resolved one."""
+    if config.dataset.morphologist_graphs or not config.dataset.input_path:
+        return config
+    configless_input = not args.config
+    if configless_input and args.datasets_root is None:
+        config.dataset.datasets_root = DatasetConfig().datasets_root
+    kind = _apply_input_kind(config)
+    if configless_input:
+        config = _infer_configless_paths(config, kind, args)
+    return config
+
+
 def _run_streaming_mode(config: PipelineConfig, args: argparse.Namespace, *, run_log_path: str | None) -> int:
     """Run the scan-centric streaming mode after its two guards."""
     if not config.dataset.embeddings_only:
         logger.error(
             "--mode streaming requires dataset.embeddings_only: true in the --config YAML "
-            "(training aggregates subjects and must remain batch)."
+            "or the --embeddings-only argument (training aggregates subjects and must remain batch)."
         )
         return 1
+    config = _resolve_streaming_input(config, args)
     try:
         from champollion_pipeline.streaming.runner import run_parallel_pipeline
     except ImportError as e:
