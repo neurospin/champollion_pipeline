@@ -377,6 +377,10 @@ class GenerateSnapshots(ScriptBuilder):
             logger.warning(f"Embeddings directory not found: {self.args.embeddings_dir}")
             return snapshots
         if not self.args.reference_data_dir:
+            logger.warning(
+                "UMAP skipped: no --reference_data_dir given; UMAP needs a locally fitted UMAP reference of the same "
+                f"Mask version as the embeddings in {self.args.embeddings_dir}"
+            )
             return snapshots
         if not osp.exists(self.args.reference_data_dir):
             logger.warning(f"Reference data directory not found: {self.args.reference_data_dir}")

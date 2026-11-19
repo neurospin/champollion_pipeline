@@ -15,6 +15,7 @@ from pathlib import Path
 
 import pytest
 
+from champollion_pipeline.derivatives_layout import DEFAULT_MASKS_VERSION
 from champollion_pipeline.put_together_embeddings import PutTogetherEmbeddings
 from tests.main_stage_helpers import capture_stage_argv, load_main_module
 
@@ -57,14 +58,14 @@ class TestCombineOutputPathVersioned:
     """REQ-EMBVER-BDRABCZUK-EB2EF83C785C: combine --output_path carries the masks_version folder."""
 
     def test_combine_output_path_uses_default_masks_version(self, main_module):
-        """Unset masks_version -> datasets_root/derivatives/champollion_V1/canonical_25/embeddings."""
+        """Unset masks_version -> datasets_root/derivatives/champollion_V1/<DEFAULT_MASKS_VERSION>/embeddings."""
         config = _config(main_module)
-        expected = Path(DATASETS_ROOT) / "derivatives" / "champollion_V1" / "canonical_25" / "embeddings"
+        expected = Path(DATASETS_ROOT) / "derivatives" / "champollion_V1" / DEFAULT_MASKS_VERSION / "embeddings"
         assert _combine_output_path(main_module, config) == expected
 
     def test_combine_output_path_uses_configured_masks_version(self, main_module):
-        """masks_version=canonical_corrected_26_1 -> that folder sits between champollion_V1 and embeddings."""
+        """masks_version=canonical_25 (not the default) -> that folder sits between champollion_V1 and embeddings."""
         config = _config(main_module)
-        config.dataset.masks_version = "canonical_corrected_26_1"  # noqa: V101
-        expected = Path(DATASETS_ROOT) / "derivatives" / "champollion_V1" / "canonical_corrected_26_1" / "embeddings"
+        config.dataset.masks_version = "canonical_25"  # noqa: V101
+        expected = Path(DATASETS_ROOT) / "derivatives" / "champollion_V1" / "canonical_25" / "embeddings"
         assert _combine_output_path(main_module, config) == expected

@@ -20,11 +20,12 @@ loaded by file path under a private module name.
 
 import pytest
 
+from champollion_pipeline.derivatives_layout import DEFAULT_MASKS_VERSION
 from champollion_pipeline.run_cortical_tiles import RunCorticalTiles
 from tests.main_stage_helpers import load_main_module, tiles_config, tiles_stage_argv
 
-DEFAULT_MASKS_VERSION = "canonical_25"
-OTHER_MASKS_VERSION = "canonical_corrected_26_1"
+# A Mask version other than DEFAULT_MASKS_VERSION.
+OTHER_MASKS_VERSION = "canonical_25"
 
 
 @pytest.fixture(scope="module")
@@ -47,7 +48,7 @@ class TestRunCorticalTilesStageMasksArgv:
     """REQ-EMBVER-BDRABCZUK-C0F4A13F662F: dataset.masks_version reaches run_cortical_tiles as --masks."""
 
     def test_default_masks_version_passed_as_masks(self, main_module):
-        """Unset dataset.masks_version -> run_cortical_tiles receives --masks canonical_25."""
+        """Unset dataset.masks_version -> run_cortical_tiles receives --masks DEFAULT_MASKS_VERSION."""
         config = tiles_config(main_module)
         masks, argv = _stage_masks_value(main_module, config)
         assert masks == DEFAULT_MASKS_VERSION, (

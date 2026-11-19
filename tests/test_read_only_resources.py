@@ -38,6 +38,7 @@ from unittest.mock import patch
 
 import pytest
 
+from champollion_pipeline.derivatives_layout import DEFAULT_MASKS_VERSION
 from champollion_pipeline.generate_champollion_config import FAILED_STATUS, GenerateChampollionConfig
 from champollion_pipeline.utils.cortical_tiles_config import compute_versioned_crops_dir
 from champollion_pipeline.utils.lib import DERIVATIVES_FOLDER
@@ -135,7 +136,7 @@ def _assert_write_refused(path):
 
 def _config_crop_path(root):
     """Create the crop folder of the dataset under ``root`` and return it."""
-    crop_path = root / "data" / DATASET / "derivatives" / DERIVATIVES_FOLDER / "crops" / "canonical_25" / "2mm"
+    crop_path = root / "data" / DATASET / "derivatives" / DERIVATIVES_FOLDER / "crops" / DEFAULT_MASKS_VERSION / "2mm"
     crop_path.mkdir(parents=True)
     return crop_path
 
@@ -296,7 +297,7 @@ def test_stage2_input_qc_failure_leaves_read_only_copy(tmp_path, mode):
 def test_stage2_marked_crops_leave_read_only_copy(tmp_path, mode):
     """Marked crops make _preflight_check return False: stage 2 stops before the copy site, so the copy stays."""
     input_dir, output_dir, copy, text = _stage2_over_read_only_copy(tmp_path, mode)
-    crops_dir = compute_versioned_crops_dir(str(output_dir / DERIVATIVES_FOLDER), "canonical_25")
+    crops_dir = compute_versioned_crops_dir(str(output_dir / DERIVATIVES_FOLDER), DEFAULT_MASKS_VERSION)
     add_crops(crops_dir, [SUBJECT], [MARKED_REGION])
     add_crop_marker(crops_dir)
     assert _run_stage2_to_its_stop(input_dir, output_dir) == STAGE2_OUTPUT_QC_PASSED

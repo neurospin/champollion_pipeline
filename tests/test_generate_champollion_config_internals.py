@@ -17,6 +17,7 @@ import numpy as np
 import pytest
 
 from champollion_pipeline import generate_champollion_config as gcc
+from champollion_pipeline.derivatives_layout import DEFAULT_MASKS_VERSION
 from champollion_pipeline.generate_champollion_config import GenerateChampollionConfig, main
 from champollion_pipeline.utils.lib import DERIVATIVES_FOLDER
 
@@ -205,7 +206,8 @@ class TestWriteLocalizationYaml:
 @pytest.fixture
 def crop_tree(temp_dir):
     """Build a pipeline-shaped crops tree containing one region, both sides."""
-    crops = Path(temp_dir) / "data" / "TEST01" / "derivatives" / DERIVATIVES_FOLDER / "crops" / "canonical_25" / "2mm"
+    derivatives = Path(temp_dir) / "data" / "TEST01" / "derivatives" / DERIVATIVES_FOLDER
+    crops = derivatives / "crops" / DEFAULT_MASKS_VERSION / "2mm"
     make_crop(crops, "S.C.-sylv.", side="L", shape=(1, 4, 5, 6))
     make_crop(crops, "S.C.-sylv.", side="R", shape=(1, 4, 5, 6))
     return crops
@@ -233,7 +235,7 @@ class TestRun:
         out = Path(temp_dir) / "configs"
         self._run([str(crop_tree), "--dataset", "TEST01", "--output", str(out)])
         ref = (out / "dataset" / "TEST01" / "reference.yaml").read_text()
-        assert f"TEST01/derivatives/{DERIVATIVES_FOLDER}/crops/canonical_25/2mm" in ref
+        assert f"TEST01/derivatives/{DERIVATIVES_FOLDER}/crops/{DEFAULT_MASKS_VERSION}/2mm" in ref
         assert "TESTXX/crops/2mm" not in ref
 
     def test_reference_yaml_has_no_distbottom_or_extremity_keys(self, crop_tree, temp_dir):

@@ -9,7 +9,7 @@ from os.path import join
 from champollion_pipeline.derivatives_layout import DEFAULT_MASKS_VERSION
 from champollion_pipeline.models.cache import MODEL_SET_FILE_NAME, read_model_set
 
-MASK_VERSIONS = (DEFAULT_MASKS_VERSION, "canonical_corrected_26_1")
+MASK_VERSIONS = ("canonical_25", "canonical_corrected_26_1")
 
 logger = logging.getLogger(__name__)
 
@@ -42,14 +42,15 @@ def find_folder_mask_version(models_path: str) -> str | None:
 
 def resolve_masks_default(args: argparse.Namespace, parser: argparse.ArgumentParser) -> None:
     """Fill --masks when it was not given: the model version if set; else, for a local models directory, its folder
-    name when it is a Mask version (exit 2 asking for --masks when it is not); else DEFAULT_MASKS_VERSION."""
+    name when it is a Mask version (exit 2 asking for --masks when it is not); else (models_path not a local
+    directory) DEFAULT_MASKS_VERSION for both --masks and --model-version, so the downloaded model set matches."""
     if args.masks is not None:
         return
     if args.model_version is not None:
         args.masks = args.model_version
         return
     if not os.path.isdir(args.models_path):
-        args.masks = DEFAULT_MASKS_VERSION
+        args.masks = args.model_version = DEFAULT_MASKS_VERSION
         return
     folder_version = find_folder_mask_version(args.models_path)
     if folder_version is None:

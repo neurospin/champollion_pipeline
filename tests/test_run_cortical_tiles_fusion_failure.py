@@ -22,6 +22,7 @@ from unittest.mock import MagicMock, patch
 
 import pytest
 
+from champollion_pipeline.derivatives_layout import DEFAULT_MASKS_VERSION
 from champollion_pipeline.run_cortical_tiles import RunCorticalTiles
 from champollion_pipeline.utils.cortical_tiles_config import compute_versioned_crops_dir
 from champollion_pipeline.utils.lib import DERIVATIVES_FOLDER, LABELLING_SESSION_CANDIDATES
@@ -30,7 +31,7 @@ from tests.stage2_layout import GRAPH_DIR, add_crops, add_graphs, write_whole_br
 
 _MODULE = "champollion_pipeline.run_cortical_tiles"
 _LOGGER_NAME = _MODULE
-_MASKS = "canonical_25"
+_MASKS = DEFAULT_MASKS_VERSION
 _REGIONS = ("S.C.-sylv.", "S.T.s.")
 _KINDS = ("skeleton", "foldlabel")
 _SUBJECT = "sub-01"
