@@ -562,18 +562,21 @@ class RunCorticalTiles(ScriptBuilder):
 
     def _write_labelling_qc(
         self, subjects: list[str], input_abs: str, output_abs: str, candidates: tuple[str, ...]
-    ) -> tuple[str, list[str]]:
-        """Write labelling_qc.tsv, one ERROR per failing subject; return its path and the subjects with qc 1."""
+    ) -> tuple[str, list[str], bool]:
+        """Write labelling_qc.tsv, one ERROR per failing subject; return its path, the subjects with qc 1 and
+        whether no subject has a labelling session folder (every row no_session_dir: no ERROR is logged then,
+        the caller warns once)."""
         rows = [
             fetch_labelling_qc_row(input_abs, self.args.path_to_graph, subject, candidates, self.args.bids)
             for subject in sorted(subjects)
         ]
         qc_path = join(output_abs, DERIVATIVES_FOLDER, LABELLING_QC_FILENAME)
         write_qc_tsv(qc_path, rows, extra_columns=LABELLING_QC_EXTRA_COLUMNS)
+        has_no_labels = all(row["reason"] == REASON_NO_SESSION_DIR for row in rows)
         for row in rows:
-            if row["qc"] == "0":
+            if row["qc"] == "0" and not has_no_labels:
                 logger.error(f"labelling QC excluded {row['participant_id']}: {row['reason']}")
-        return qc_path, [row["participant_id"] for row in rows if row["qc"] == "1"]
+        return qc_path, [row["participant_id"] for row in rows if row["qc"] == "1"], has_no_labels
 
     def _write_input_qc(self, input_abs: str, output_abs: str, sk_qc_abs: str) -> tuple[str, bool, str]:
         """Write input_qc.tsv, one record per qc 0 row, and crop_qc.tsv; return path, a subject passed, crop_qc path."""
@@ -894,9 +897,16 @@ class RunCorticalTiles(ScriptBuilder):
             logger.warning(f"No fused volume under {skeleton_src_dir}/F; whole-brain ventricle removal skipped.")
             return True
 
-        qc_path, passed = self._write_labelling_qc(list(fused), input_abs, output_abs, candidates)
+        qc_path, passed, has_no_labels = self._write_labelling_qc(list(fused), input_abs, output_abs, candidates)
         groups, excluded = self._group_whole_brain_subjects(list(fused), input_abs, candidates)
         exclusions = exclusion_warning(excluded, self.args.path_to_graph, candidates) if excluded else ""
+        if has_no_labels:
+            no_labels = (
+                f"Whole-brain volume left out: the Morphologist graphs carry no sulcal labels (no labelling session "
+                f"folder for any subject), see {qc_path}. Run stage 1 with --enable-sulcal-recognition to produce it."
+            )
+            logger.warning(f"{no_labels} {exclusions}".rstrip())
+            return True
         if not passed:
             left_out = f"Whole-brain volume left out: no subject passed the labelling pre-check, see {qc_path}."
             logger.warning(f"{left_out} {exclusions}".rstrip())
