@@ -26,6 +26,7 @@ import numpy as np
 import pandas as pd
 import pytest
 
+from champollion_pipeline.derivatives_layout import DEFAULT_MASKS_VERSION
 from champollion_pipeline.purge_subject import PurgeSubject
 from tests.log_assertions import LOG, OUTPUT
 
@@ -49,7 +50,7 @@ def _skeleton_dir(derivatives: Path) -> Path:
 
 
 def _crop_file(derivatives: Path) -> Path:
-    mask_dir = derivatives / "crops" / "canonical_25" / "2mm" / "region_a" / "mask" / "Rcrops"
+    mask_dir = derivatives / "crops" / DEFAULT_MASKS_VERSION / "2mm" / "region_a" / "mask" / "Rcrops"
     mask_dir.mkdir(parents=True)
     crop_file = mask_dir / f"{SUBJECT}.nii.gz"
     crop_file.touch()
@@ -58,7 +59,7 @@ def _crop_file(derivatives: Path) -> Path:
 
 def _aggregated_array(derivatives: Path) -> Path:
     """region_a/mask/Lskeleton.npy with its subject CSV listing SUBJECT and sub-02."""
-    mask_dir = derivatives / "crops" / "canonical_25" / "2mm" / "region_a" / "mask"
+    mask_dir = derivatives / "crops" / DEFAULT_MASKS_VERSION / "2mm" / "region_a" / "mask"
     mask_dir.mkdir(parents=True, exist_ok=True)
     np.save(mask_dir / "Lskeleton.npy", np.zeros((2, 1, 4, 4, 4), dtype=np.float32))
     pd.DataFrame({"participant_id": [SUBJECT, "sub-02"]}).to_csv(mask_dir / "Lskeleton_subject.csv", index=False)
@@ -93,7 +94,7 @@ def test_deleted_dir_logged_at_output(tmp_path, pipeline_caplog):
 def test_deleted_crop_file_logged_at_output(tmp_path, pipeline_caplog):
     crop_file = _crop_file(tmp_path)
 
-    _script(tmp_path)._purge_per_subject_crop_files(str(tmp_path / "crops" / "canonical_25" / "2mm"))
+    _script(tmp_path)._purge_per_subject_crop_files(str(tmp_path / "crops" / DEFAULT_MASKS_VERSION / "2mm"))
 
     assert not crop_file.exists()
     record = pipeline_caplog.assert_logged(OUTPUT, "Delete file:")
@@ -104,7 +105,7 @@ def test_deleted_crop_file_logged_at_output(tmp_path, pipeline_caplog):
 def test_array_row_filter_logged_at_output(tmp_path, pipeline_caplog):
     npy_path = _aggregated_array(tmp_path)
 
-    _script(tmp_path)._purge_aggregated_arrays(str(tmp_path / "crops" / "canonical_25" / "2mm"))
+    _script(tmp_path)._purge_aggregated_arrays(str(tmp_path / "crops" / DEFAULT_MASKS_VERSION / "2mm"))
 
     assert np.load(npy_path).shape[0] == 1
     records = [

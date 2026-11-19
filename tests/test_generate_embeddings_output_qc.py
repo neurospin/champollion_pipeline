@@ -15,14 +15,14 @@ from unittest.mock import patch
 
 import pytest
 
-from champollion_pipeline.derivatives_layout import DEFAULT_MASKS_VERSION, compute_region_embeddings_dir
+from champollion_pipeline.derivatives_layout import compute_region_embeddings_dir
 from champollion_pipeline.generate_embeddings import GenerateEmbeddings
 from champollion_pipeline.models.embeddings_qc import fetch_embeddings_csv_reasons
 from champollion_pipeline.utils.lib import CORTICAL_TILES_VERSION
 from champollion_pipeline.utils.qc_report import read_qc_tsv
 from tests.log_assertions import FAIL, assert_one_subject_error
 from tests.stage2_layout import add_crops
-from tests.test_generate_embeddings_any_failure import make_models, make_script, region_of
+from tests.test_generate_embeddings_any_failure import LOCAL_MODELS, make_models, make_script, region_of
 
 pytestmark = pytest.mark.unit  # noqa: V107
 
@@ -154,7 +154,8 @@ def _finish(root, stage=_DEFAULT_STAGE):
     root = Path(root)
     dataset = root / "dataset"
     derivatives = dataset / "derivatives" / f"cortical_tiles-{CORTICAL_TILES_VERSION}"
-    stage.lay(derivatives / "crops" / DEFAULT_MASKS_VERSION / "2mm", stage.subjects)
+    # The run takes --masks from the local models folder name, LOCAL_MODELS (REQ-MODELVER-BDRABCZUK-8C57E27DFA80).
+    stage.lay(derivatives / "crops" / LOCAL_MODELS / "2mm", stage.subjects)
     models = make_models(root, list(_REGIONS))
     _lay_configs(models, stage)
     output_args = ["--output", str(root / "out")] if stage.has_output_option else []

@@ -4,7 +4,8 @@ generate_embeddings: --masks defaults to --model-version (MODELVER epic, second 
 
 When only --model-version <V> is given, the cortical_tiles crops mask version (--masks)
 defaults to <V>, so the crops directory and the default output folder follow the model
-set. With neither option, --masks stays canonical_25 (today's default). An explicit
+set. The value with neither option is tested in tests/test_masks_default_corrected.py
+(REQ-MODELVER-BDRABCZUK-82AC4A152D01, superseding the canonical_25 default). An explicit
 --masks is kept as given. The deprecated --masks-version <V> alone also yields masks <V>
 (alias resolved first). The --masks / --model-version mismatch error belongs to the
 next task and is not tested here.
@@ -22,7 +23,6 @@ pytestmark = pytest.mark.unit  # noqa: V107
 
 VERSION = "canonical_corrected_26_1"
 EXPLICIT_MASKS = "canonical_24"
-DEFAULT_MASKS = "canonical_25"
 
 
 def _positionals(tmp_path) -> list[str]:
@@ -41,14 +41,6 @@ class TestMasksDefaultsToModelVersion:
         script = parse_or_fail([*_positionals(tmp_path), "--model-version", VERSION])
         expected = join(datasets_root, "derivatives", script.args.cortical_version, "crops", VERSION, "2mm")
         assert script._get_crops_2mm_dir(datasets_root) == expected
-
-
-class TestMasksDefaultWithoutVersions:
-    """REQ-MODELVER-BDRABCZUK-6307AC2A6A2B: neither --model-version nor --masks yields masks canonical_25."""
-
-    def test_no_version_options_yield_canonical_25(self, tmp_path):
-        script = parse_or_fail(_positionals(tmp_path))
-        assert masks_of(script) == DEFAULT_MASKS, vars(script.args)
 
 
 class TestExplicitMasksKept:

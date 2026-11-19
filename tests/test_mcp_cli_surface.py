@@ -28,10 +28,12 @@ depend on the network.
 Requirements (area MCPCLI, author BDRABCZUK):
 7477D569050A 89E4F241000A 46888B709ACA 01852DAB6201 66374B760AAC 4572AE92E465
 D45C694E8754 F288A4A5C45D 1157AE9A1732 MCP argv; 29CD3DC21560 0A9784F4F0DC
-5FC9DCCFB22C D543F0EAEB4B C30221660399 1986D14C884B 131825D12989 B61DA5965AAD
+D543F0EAEB4B C30221660399 1986D14C884B 131825D12989 B61DA5965AAD
 defaults; 190321567F55 276BC23EA421 3CF0B16A7629 86440988A44A 5CF7C4F56B96
 7206664A2841 93167F2FBB4E required options; 5DE36858B82B run by path;
-CDCCFFFC2B72 console scripts; 526A041D63FF main callable.
+CDCCFFFC2B72 console scripts; 526A041D63FF main callable. The generate_champollion_config
+defaults (5FC9DCCFB22C, superseded by REQ-MCPCLI-BDRABCZUK-C840CC1D1DFE) are pinned in
+tests/test_masks_default_corrected.py::TestSupersededDefaults.
 """
 
 import importlib
@@ -354,24 +356,9 @@ def test_cortical_tiles_defaults():
     )
 
 
-def test_config_defaults():
-    ns = _parse("generate_champollion_config", ["/crops", "--dataset", "MYDATASET"])
-    assert Path(ns.pop("champollion_loc")).resolve() == (_REPO_ROOT / "external" / "champollion_V1").resolve()
-    _assert_subset(
-        ns,
-        {
-            "masks": "canonical_25",
-            "localization": "local",
-            "output": None,
-            "external_config": None,
-            "external_crops": False,
-        },
-    )
-
-
 def test_embeddings_defaults():
     # Since the MODELVER merge --masks has no parser default: GenerateEmbeddings.parse_args fills it from
-    # --model-version, else canonical_25 (pinned in tests/test_generate_embeddings_masks_default.py).
+    # --model-version, else the default Mask version (tests/test_masks_default_corrected.py).
     ns = _parse("generate_embeddings", ["/models", "/data/MYDATASET"])
     _assert_subset(
         ns,

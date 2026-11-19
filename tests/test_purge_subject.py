@@ -9,6 +9,7 @@ import numpy as np
 import pandas as pd
 import pytest
 
+from champollion_pipeline.derivatives_layout import DEFAULT_MASKS_VERSION
 from champollion_pipeline.purge_subject import PurgeSubject
 from tests.log_assertions import OUTPUT
 
@@ -110,7 +111,7 @@ class TestRunValidation:
         assert record.name == "champollion_pipeline.purge_subject"
 
     def test_returns_zero_on_success(self, tmp_path):
-        crops_2mm = tmp_path / "crops" / "canonical_25" / "2mm"
+        crops_2mm = tmp_path / "crops" / DEFAULT_MASKS_VERSION / "2mm"
         crops_2mm.mkdir(parents=True)
         (tmp_path / "skeletons" / "sub-01").mkdir(parents=True)
         script = _make_script(str(tmp_path), "sub-01")
@@ -332,8 +333,8 @@ class TestPurgeAggregatedArrays:
 class TestRunEndToEnd:
     @staticmethod
     def _populate(tmp_path, subject):
-        """Skeleton dir, crop file and aggregated array of subject under crops/canonical_25/2mm."""
-        crops_2mm = tmp_path / "crops" / "canonical_25" / "2mm"
+        """Skeleton dir, crop file and aggregated array of subject under crops/<default masks>/2mm."""
+        crops_2mm = tmp_path / "crops" / DEFAULT_MASKS_VERSION / "2mm"
         skel_dir = tmp_path / "skeletons" / subject
         skel_dir.mkdir(parents=True)
         (skel_dir / "x.nii.gz").touch()
@@ -369,15 +370,9 @@ class TestRunEndToEnd:
 
 
 # ---------------------------------------------------------------------------
-# --masks: versioned crops root crops/<masks>/2mm
+# --masks: versioned crops root crops/<masks>/2mm (the default value is tested in
+# tests/test_masks_default_corrected.py, REQ-PATTERNS-BDRABCZUK-8CC8EFCBDB20)
 # ---------------------------------------------------------------------------
-
-
-class TestMasksArgument:
-    def test_masks_defaults_to_canonical_25(self, tmp_path):
-        """REQ-PATTERNS-BDRABCZUK-7A4C1CB45061: no --masks yields masks canonical_25."""
-        args = PurgeSubject().parse_args([str(tmp_path), "--subject", "sub-01"])
-        assert getattr(args, "masks", None) == "canonical_25"
 
 
 class TestMasksNameGuard:
@@ -418,9 +413,9 @@ class TestVersionedCropsRoot:
     """REQ-PATTERNS-BDRABCZUK-75B777B6C467 (purge half): crops are read from crops/<masks>/2mm only."""
 
     def test_default_masks_purges_crop_file_under_canonical_25(self, tmp_path):
-        """REQ-PATTERNS-BDRABCZUK-75B777B6C467, -7A4C1CB45061, -BF1732DC44EE."""
+        """REQ-PATTERNS-BDRABCZUK-75B777B6C467, -8CC8EFCBDB20, -BF1732DC44EE (named when canonical_25 was default)."""
         (tmp_path / "skeletons" / "sub-01").mkdir(parents=True)
-        target = _make_crop_file(tmp_path / "crops" / "canonical_25" / "2mm", "region_a", "Lcrops", "sub-01")
+        target = _make_crop_file(tmp_path / "crops" / DEFAULT_MASKS_VERSION / "2mm", "region_a", "Lcrops", "sub-01")
         _make_crop_file(tmp_path / "crops" / "other_v" / "2mm", "region_a", "Lcrops", "sub-01")
         other_before = _snapshot(tmp_path / "crops" / "other_v")
 
@@ -473,6 +468,6 @@ class TestVersionedCropsRoot:
 
         _make_script(str(tmp_path), "sub-01").run()
 
-        record = pipeline_caplog.assert_logged(logging.WARNING, str(tmp_path / "crops" / "canonical_25" / "2mm"))
+        record = pipeline_caplog.assert_logged(logging.WARNING, str(tmp_path / "crops" / DEFAULT_MASKS_VERSION / "2mm"))
         assert record.name == "champollion_pipeline.purge_subject"
         assert _snapshot(tmp_path / "crops" / "2mm") == legacy_before

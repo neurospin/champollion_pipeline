@@ -14,13 +14,13 @@ from unittest.mock import patch
 
 import pytest
 
-from champollion_pipeline.derivatives_layout import DEFAULT_MASKS_VERSION, compute_region_embeddings_dir
+from champollion_pipeline.derivatives_layout import compute_region_embeddings_dir
 from champollion_pipeline.generate_embeddings import GenerateEmbeddings
 from champollion_pipeline.utils.lib import CORTICAL_TILES_VERSION
 from champollion_pipeline.utils.qc_report import fetch_crop_qc_rows, read_qc_tsv
 from tests.log_assertions import FAIL, assert_one_subject_error
 from tests.stage2_layout import add_crops, crop_array
-from tests.test_generate_embeddings_any_failure import FakeEvaluate, make_models, make_script
+from tests.test_generate_embeddings_any_failure import LOCAL_MODELS, FakeEvaluate, make_models, make_script
 
 _LOGGER_NAME = "champollion_pipeline.generate_embeddings"
 _QC_FILE = "input_qc.tsv"
@@ -43,8 +43,8 @@ def _stub_stage4_input_qc():
     """Run the real input QC: overrides the conftest fixture of the same name."""
 
 
-def _default_crops_dir(dataset, masks=DEFAULT_MASKS_VERSION):
-    """Crops folder of a default run on ``dataset``."""
+def _default_crops_dir(dataset, masks=LOCAL_MODELS):
+    """Crops folder of a run on ``dataset`` without --masks: the local models folder name, LOCAL_MODELS."""
     return Path(dataset) / "derivatives" / f"cortical_tiles-{CORTICAL_TILES_VERSION}" / "crops" / masks / "2mm"
 
 

@@ -22,6 +22,7 @@ from pathlib import Path
 
 import pytest
 
+from champollion_pipeline.derivatives_layout import DEFAULT_MASKS_VERSION
 from champollion_pipeline.generate_champollion_config import GenerateChampollionConfig
 from champollion_pipeline.generate_embeddings import GenerateEmbeddings
 from champollion_pipeline.generate_morphologist_graphs import GenerateMorphologistGraphs
@@ -163,7 +164,7 @@ class TestPutTogetherEmbeddingsStageArgv:
         assert namespace.embeddings_source == "/data/MYDATASETembeddings"
 
 
-_COMBINED_EMBEDDINGS_SUBDIR = Path("derivatives") / "champollion_V1" / "canonical_25" / "embeddings"
+_COMBINED_EMBEDDINGS_SUBDIR = Path("derivatives") / "champollion_V1" / DEFAULT_MASKS_VERSION / "embeddings"
 
 
 @pytest.mark.unit

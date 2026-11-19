@@ -211,7 +211,7 @@ class PurgeSubject(ScriptBuilder):
         if not dirs and not crop_files and not has_array_rows:
             logger.error(
                 f"Refusing --subject {subject!r}: no per-subject directory, crop file "
-                f"or subject CSV row in {derivatives}."
+                f"or subject CSV row in {derivatives} (crops searched: {crops_dir})."
             )
             return 1
 

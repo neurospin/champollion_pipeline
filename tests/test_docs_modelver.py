@@ -9,15 +9,14 @@ to the model version, refuses a ``--masks``/model-version mismatch unless
 embeddings. Section "5. Generate Embeddings" of ``README.md`` must say so.
 
 Every check reads the facts from the live code (the ``GenerateEmbeddings``
-parser, ``MODEL_SET_FILE_NAME``, ``PROVENANCE_FILE_NAME``, ``ModelSet`` fields,
-``DEFAULT_MASKS_VERSION`` and the provenance dict ``generate_embeddings``
-builds), never from hard-coded prose.
+parser, ``MODEL_SET_FILE_NAME``, ``PROVENANCE_FILE_NAME``, ``ModelSet`` fields
+and the provenance dict ``generate_embeddings`` builds), never from hard-coded prose.
 
-Requirements pinned here (one test per requirement):
+Requirements pinned here (one test per requirement; the ``--masks`` row, REQ-MODELVER-BDRABCZUK-6A7EC2D5389F,
+which supersedes 37B69C8D1B88, is pinned in tests/test_masks_default_corrected.py):
 
 * REQ-MODELVER-BDRABCZUK-B431CAC3145D - options table rows for the version options.
 * REQ-MODELVER-BDRABCZUK-36B042A2A3EC - ``--masks-version`` row: deprecated alias of ``--model-version``.
-* REQ-MODELVER-BDRABCZUK-37B69C8D1B88 - ``--masks`` row: defaults to the model version, else canonical_25.
 * REQ-MODELVER-BDRABCZUK-3389BCA1D219 - ``model_set.json`` subsection.
 * REQ-MODELVER-BDRABCZUK-CE3FBFAB1A03 - ``provenance.json`` subsection names every key.
 
@@ -35,7 +34,6 @@ import pytest
 
 from champollion_pipeline import generate_embeddings as ge
 from champollion_pipeline.generate_embeddings import (
-    DEFAULT_MASKS_VERSION,
     MODEL_SET_FILE_NAME,
     PROVENANCE_FILE_NAME,
     GenerateEmbeddings,
@@ -119,17 +117,6 @@ class TestReadmeMasksVersionRow:
         assert re.search(r"\bdeprecated\b", row, re.IGNORECASE), f"--masks-version row does not say deprecated: {row}"
         assert re.search(r"\balias\b", row, re.IGNORECASE), f"--masks-version row does not say alias: {row}"
         assert "--model-version" in row, f"--masks-version row does not name --model-version: {row}"
-
-
-@pytest.mark.smoke
-class TestReadmeMasksRow:
-    """REQ-MODELVER-BDRABCZUK-37B69C8D1B88."""
-
-    def test_row_states_model_version_default(self):
-        row = _options_rows().get("--masks")
-        assert row, "README section 5 options table has no --masks row"
-        assert "--model-version" in row, f"--masks row does not name --model-version as its default: {row}"
-        assert DEFAULT_MASKS_VERSION in row, f"--masks row does not name the {DEFAULT_MASKS_VERSION} fallback: {row}"
 
 
 @pytest.mark.smoke

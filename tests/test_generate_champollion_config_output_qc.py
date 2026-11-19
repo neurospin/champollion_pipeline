@@ -16,6 +16,7 @@ from pathlib import Path
 import pytest
 import yaml
 
+from champollion_pipeline.derivatives_layout import DEFAULT_MASKS_VERSION
 from champollion_pipeline.generate_champollion_config import GenerateChampollionConfig
 from champollion_pipeline.utils.lib import DERIVATIVES_FOLDER
 from tests.log_assertions import FAIL
@@ -110,8 +111,9 @@ def _dataset_parent(crops_dir):
 
 
 def _crops_dir(root):
-    """Crops folder of the dataset under ``root``."""
-    return Path(root) / "data" / _DATASET / "derivatives" / DERIVATIVES_FOLDER / "crops" / "canonical_25" / "2mm"
+    """Crops folder of the dataset under ``root``, for the default Mask version."""
+    crops = Path(root) / "data" / _DATASET / "derivatives" / DERIVATIVES_FOLDER / "crops"
+    return crops / DEFAULT_MASKS_VERSION / "2mm"
 
 
 def _add_cohort(crops_dir):

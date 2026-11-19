@@ -356,7 +356,7 @@ class PruneFailedSubjects(ScriptBuilder):
         to_remove, shadowing = self._select_subjects(all_subjects)
 
         if not to_remove:
-            logger.output(f"All {len(all_subjects)} subjects pass QC. Nothing to prune.")
+            logger.output(f"All {len(all_subjects)} subjects pass QC. Nothing to prune in {crops_dir}.")
             return 0
 
         logger.output(f"Subjects to remove ({len(to_remove)}): {sorted(to_remove)}")
