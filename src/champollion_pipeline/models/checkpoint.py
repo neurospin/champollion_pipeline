@@ -8,6 +8,7 @@ import re
 import shutil
 import tempfile
 from collections.abc import Iterator
+from dataclasses import dataclass
 from os.path import abspath, exists, join
 from pathlib import Path
 
@@ -209,3 +210,51 @@ def resolve_region_name(model_path: str, models_path: str) -> str:
             return name
         segment = os.path.dirname(segment)
     return os.path.basename(model_path)
+
+
+@dataclass(frozen=True)
+class ModelEntry:
+    """One discovered region model: region name, model id (POSIX path from the region folder), label, directory."""
+
+    region: str
+    model_id: str
+    label: str
+    path: str
+
+
+def _model_id(model_path: str, models_path: str) -> str:
+    """POSIX path from the nearest *_left/_right directory (at or above model_path, below models_path) to
+    model_path; empty when they coincide or no such ancestor exists. O(depth)."""
+    models_path = os.path.normpath(models_path)
+    model_path = os.path.normpath(model_path)
+    segment = model_path
+    while segment and segment != models_path:
+        if os.path.basename(segment).endswith(("_left", "_right")):
+            return "" if segment == model_path else Path(os.path.relpath(model_path, segment)).as_posix()
+        segment = os.path.dirname(segment)
+    return ""
+
+
+def find_region_models(models_path: str) -> list[ModelEntry]:
+    """One ModelEntry per directory find_region_model_dirs returns, sorted by (region, model_id).
+
+    The label is "<region>/<model_id>" for a non-empty id, else the region name. Raises ValueError when the
+    models path is missing, or when two models of one region share a model id (both directories named).
+    O(n log n) in the number of model directories.
+    """
+    entries = []
+    for path in find_region_model_dirs(models_path):
+        region = resolve_region_name(path, models_path)
+        model_id = _model_id(path, models_path)
+        label = f"{region}/{model_id}" if model_id else region
+        entries.append(ModelEntry(region=region, model_id=model_id, label=label, path=path))
+    entries.sort(key=lambda entry: (entry.region, entry.model_id))
+    seen: dict[tuple[str, str], str] = {}
+    for entry in entries:
+        key = (entry.region, entry.model_id)
+        if key in seen:
+            raise ValueError(
+                f"Two models of region {entry.region!r} share model id {entry.model_id!r}: {seen[key]} and {entry.path}"
+            )
+        seen[key] = entry.path
+    return entries
