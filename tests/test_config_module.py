@@ -12,7 +12,8 @@ one 'profile_dir: null' line after log (PipelineConfig.profile_dir, REQ-PROFILIN
 user decision 2026-11-02: written even while None), one 'parallel' line after verbose
 (PipelineConfig.parallel, REQ-INPUTKIND-BDRABCZUK-9AD1D6F6E0B7; user decision 2026-11-13: the custom
 case keeps the default false) and one dataset 'labelling_session' line
-after skel_seed (REQ-WHOLEBRAIN-BDRABCZUK-3DBF0C9F422F) and one dataset 'allow_prefix_ids' line
+after skel_seed (REQ-WHOLEBRAIN-BDRABCZUK-3DBF0C9F422F), one dataset 'model' line after it
+(REQ-MULTIMODEL-BDRABCZUK-E6A7694B64B2) and one dataset 'allow_prefix_ids' line
 after bids (REQ-CORTILES-BDRABCZUK-A20F9F75095C, TEMPORARY: DEF-CORTILES-BDRABCZUK-8A44DAD7F312)
 and one dataset 'input_kind' line after input_path (TASK-INPUTKIND-BDRABCZUK-5ECD06E2023D),
 and the default dataset masks_version canonical_corrected_26_1 instead of canonical_25 (the default
@@ -100,6 +101,7 @@ dataset:
   masks_version: canonical_corrected_26_1
   skel_seed: null
   labelling_session: ''
+  model: ''
   regions: []
   classifier_name: svm
   overwrite: false
@@ -175,6 +177,7 @@ dataset:
   masks_version: canonical_28
   skel_seed: 42
   labelling_session: 0_auto
+  model: v2/run2
   regions:
   - S.C.-sylv._left
   classifier_name: logistic
@@ -249,6 +252,7 @@ _CUSTOM_DATASET_VALUES = {
     "masks_version": "canonical_28",
     "skel_seed": 42,
     "labelling_session": "0_auto",
+    "model": "v2/run2",
     "classifier_name": "logistic",
     "overwrite": True,
     "embeddings_only": True,

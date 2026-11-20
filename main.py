@@ -436,6 +436,8 @@ class PutTogetherEmbeddingsStage(PipelineStage):
         args = [_compute_region_embeddings_source(dataset), f"--output_path={output_path}"]
         if dataset.regions:
             args.extend(["--regions", *compute_region_model_names(dataset.regions)])
+        if dataset.model:
+            args.extend(["--model", dataset.model])
         return args
 
     def create_script(self) -> ScriptBuilder:
