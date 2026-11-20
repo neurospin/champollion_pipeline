@@ -63,6 +63,10 @@ class DatasetConfig:
     overwrite: bool = False
     embeddings_only: bool = False  # noqa: V107 - YAML config field
     checkpoint_epoch: int = DEFAULT_CHECKPOINT_EPOCH
+    # '<id>=N' strings, one per model id: stage 4 gets each as --checkpoint-epoch <id>=N after the bare default
+    checkpoint_epochs: list[str] = field(default_factory=list)
+    # One output folder per model: forwarded to stage 4 as --per-model-folders
+    per_model_folders: bool = False
     models_cache: str | None = None  # None: <datasets_root>/derivatives/champollion_V1/models_cache
     subsets: list[str] = field(default_factory=lambda: ["full"])  # noqa: V107 - YAML config field
     epochs: list[int | None] = field(default_factory=lambda: [None])  # noqa: V107 - YAML config field

@@ -334,6 +334,9 @@ class GenerateEmbeddingsStage(PipelineStage):
         if dataset.cpu:
             args.append("--cpu")
         args.append(f"--checkpoint-epoch={dataset.checkpoint_epoch}")
+        args.extend(f"--checkpoint-epoch={entry}" for entry in dataset.checkpoint_epochs)
+        if dataset.per_model_folders:
+            args.append("--per-model-folders")
         if dataset.models_cache is not None:
             args.append(f"--models-cache={dataset.models_cache}")
         if dataset.regions:
