@@ -204,7 +204,7 @@ class TestUsageStreamingSection:
     def test_consumer_resume(self, usage_section):
         """REQ: a rerun skips the embedding of a scan already holding a row in each region's full_embeddings.csv."""
         section = usage_section()
-        name = _module_constant(STREAMING_DIR / "consumer.py", "_EMBEDDINGS_FILENAME")
+        name = _module_constant(STREAMING_DIR / "barrier.py", "_EMBEDDINGS_FILENAME")
         _assert_block(section, re.escape(name), r"\bskip", where=self.where)
 
     def test_exit_code_failed_scan(self, usage_section):

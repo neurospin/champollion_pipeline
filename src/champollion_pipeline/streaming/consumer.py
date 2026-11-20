@@ -28,9 +28,10 @@ from champollion_pipeline.derivatives_layout import compute_region_embeddings_di
 from champollion_pipeline.embedding_engine import EmbeddingEngine
 from champollion_pipeline.file_indexer import ScanId, SubjectEligibilityChecker
 from champollion_pipeline.generate_embeddings import GenerateEmbeddings
+from champollion_pipeline.models.epoch_spec import parse_epoch_specs, resolve_model_epochs
 from champollion_pipeline.process_setup import init_pipeline_process
 
-from .barrier import poll_ready_scans, scan_embeddings_exist
+from .barrier import embeddings_layout, poll_ready_scans, scan_embeddings_exist
 from .settings import StreamingSettings
 from .stages import SCAN_TILES_DIRNAME, compute_scan_tiles_dir, find_scan_crops_root
 from .worker import TILES_COMPLETE_MARKER, tiles_marker_matches
@@ -38,7 +39,6 @@ from .worker import TILES_COMPLETE_MARKER, tiles_marker_matches
 logger = logging.getLogger(__name__)
 
 CONSUMER_LOG_NAME = "consumer.log"
-_EMBEDDINGS_FILENAME = "full_embeddings.csv"
 
 
 class ConsumerStatus(str, Enum):
@@ -112,65 +112,66 @@ def _skip(results: dict, scan: ScanId, reason: str) -> None:
     results[scan] = ConsumerResult(scan, ConsumerStatus.SKIPPED)
 
 
-def _write_rows(scan: ScanId, tables: dict[str, pd.DataFrame], dataset: DatasetConfig) -> None:
-    """Append the scan's row to each region's full_embeddings.csv (regions already holding it are skipped)."""
+def _write_rows(
+    scan: ScanId, tables: dict[tuple[str, str], pd.DataFrame], layout: dict, dataset: DatasetConfig
+) -> None:
+    """Append the scan's row to each model's embeddings file (files already holding it are skipped)."""
     base = compute_region_embeddings_dir(dataset.datasets_root, dataset.masks_version)
-    paths = {region: os.path.join(base, region, _EMBEDDINGS_FILENAME) for region in tables}
-    for region, path in paths.items():
+    paths = {key: os.path.join(base, layout[key]) for key in tables}
+    for key, path in paths.items():
         if os.path.isfile(path) and os.path.getsize(path) > 0:
             with open(path, newline="") as handle:
                 header = next(csv.reader(handle), [])
-            if header != list(tables[region].columns):
-                raise _ScanFailure(f"{path} has columns {header}, not {list(tables[region].columns)}")
-    for region, table in tables.items():
-        if scan_embeddings_exist(scan, dataset.datasets_root, dataset.masks_version, [region]):
+            if header != list(tables[key].columns):
+                raise _ScanFailure(f"{path} has columns {header}, not {list(tables[key].columns)}")
+    for key, table in tables.items():
+        if scan_embeddings_exist(scan, dataset.datasets_root, dataset.masks_version, [key[0]], relpaths=[layout[key]]):
             continue
-        path = paths[region]
+        path = paths[key]
         os.makedirs(os.path.dirname(path), exist_ok=True)
         new_file = not os.path.isfile(path) or os.path.getsize(path) == 0
         table.to_csv(path, mode="a", header=new_file, index=False)
 
 
-def _embed_tables(engine: EmbeddingEngine, regions: Sequence[str], scan: ScanId, crops: str) -> dict:
-    """One single-row embedding table per region, ID set to str(scan)."""
+def _embed_tables(engine: EmbeddingEngine, models: Sequence[tuple[str, str]], scan: ScanId, crops: str) -> dict:
+    """One single-row embedding table per (region, model id), ID set to str(scan)."""
     tables = {}
-    for region in regions:
-        table = engine.embed_crops(region, crops)
+    for region, model_id in models:
+        table = engine.embed_crops(region, crops, model_id=model_id)
+        label = f"{region}/{model_id}" if model_id else region
         if len(table) != 1:
-            raise _ScanFailure(f"region {region} gave {len(table)} embedding rows, expected 1")
+            raise _ScanFailure(f"model {label} gave {len(table)} embedding rows, expected 1")
         table["ID"] = str(scan)
         dims = table.drop(columns=["ID"])
         if dims.isna().to_numpy().any():
-            logger.warning("consumer: scan %s region %s: embedding holds NaN", scan.path_prefix, region)
-        tables[region] = table
+            logger.warning("consumer: scan %s model %s: embedding holds NaN", scan.path_prefix, label)
+        tables[(region, model_id)] = table
     return tables
 
 
-def _embed_scan(
-    engine: EmbeddingEngine, regions: Sequence[str], scan: ScanId, dataset: DatasetConfig
-) -> ConsumerResult:
-    """Embed every region of one ready scan and write its rows; never raises."""
+def _embed_scan(engine: EmbeddingEngine, layout: dict, scan: ScanId, dataset: DatasetConfig) -> ConsumerResult:
+    """Embed every model of one ready scan and write its rows; never raises."""
     logger.log(LOG, "consumer: embedding scan %s", scan.path_prefix)
     tiles = compute_scan_tiles_dir(dataset.cortical_tiles_output, scan)
     try:
         crops = find_scan_crops_root(tiles, dataset.masks_version)
         if crops is None:
             raise _ScanFailure(f"no crops for masks version {dataset.masks_version} under {tiles}")
-        tables = _embed_tables(engine, regions, scan, crops)
-        _write_rows(scan, tables, dataset)
+        tables = _embed_tables(engine, list(layout), scan, crops)
+        _write_rows(scan, tables, layout, dataset)
     except (Exception, SystemExit) as error:
         logger.error("consumer: scan %s failed: %s: %s", scan.path_prefix, type(error).__name__, error, exc_info=error)
         return ConsumerResult(scan, ConsumerStatus.FAILED)
-    logger.log(OUTPUT, "consumer: scan %s embedded (%d regions)", scan.path_prefix, len(tables))
+    logger.log(OUTPUT, "consumer: scan %s embedded (%d models)", scan.path_prefix, len(tables))
     return ConsumerResult(scan, ConsumerStatus.OK)
 
 
 def _poll_loop(context: dict, pending: list[ScanId], producers_done, results: dict) -> list[ScanId]:
     """Embed scans as they become ready; return the scans still pending at drain or stall."""
-    settings, engine, regions, dataset, checker = (
+    settings, engine, layout, dataset, checker = (
         context["settings"],
         context["engine"],
-        context["regions"],
+        context["layout"],
         context["dataset"],
         context["checker"],
     )
@@ -180,7 +181,7 @@ def _poll_loop(context: dict, pending: list[ScanId], producers_done, results: di
         now = time.monotonic()
         ready = poll_ready_scans(checker, pending)
         for scan in ready:
-            results[scan] = _embed_scan(engine, regions, scan, dataset)
+            results[scan] = _embed_scan(engine, layout, scan, dataset)
         pending = [scan for scan in pending if scan not in ready]
         if ready:
             last_progress = now
@@ -201,10 +202,11 @@ def _poll_loop(context: dict, pending: list[ScanId], producers_done, results: di
 
 def _consume(context: dict, ordered: list[ScanId], producers_done, results: dict) -> None:
     """Resume, then poll and embed; every scan of ``ordered`` ends with a result."""
-    dataset, regions = context["dataset"], context["regions"]
+    dataset, regions, layout = context["dataset"], context["regions"], context["layout"]
+    relpaths = list(layout.values())
     pending = []
     for scan in ordered:
-        if scan_embeddings_exist(scan, dataset.datasets_root, dataset.masks_version, regions):
+        if scan_embeddings_exist(scan, dataset.datasets_root, dataset.masks_version, regions, relpaths=relpaths):
             _skip(results, scan, "embeddings already present")
         else:
             pending.append(scan)
@@ -248,11 +250,15 @@ def run_consumer(
                 logger.error("consumer: scan %s failed: run log %s unusable: %s", scan.path_prefix, log_path, error)
                 results[scan] = ConsumerResult(scan, ConsumerStatus.FAILED)
             return [results[scan] for scan in ordered]
-        engine = EmbeddingEngine(models_path, settings.device, epoch=dataset.checkpoint_epoch)
+        default_epoch, epochs = parse_epoch_specs(dataset.checkpoint_epochs, dataset.checkpoint_epoch)
+        engine = EmbeddingEngine(models_path, settings.device, epoch=default_epoch, epochs=epochs)
         regions = engine.regions
         if not regions:
             raise ValueError(f"No region model under models path {models_path}")
-        context = {"settings": settings, "engine": engine, "regions": regions, "dataset": dataset}
+        models = engine.models
+        resolve_model_epochs(default_epoch, epochs, [model_id for _, model_id in models])
+        layout = embeddings_layout(models, dataset.per_model_folders)
+        context = {"settings": settings, "engine": engine, "regions": regions, "layout": layout, "dataset": dataset}
         try:
             _consume(context, ordered, producers_done, results)
         finally:

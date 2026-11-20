@@ -85,11 +85,6 @@ EXEMPTIONS: dict[tuple[str, str, str], str] = {
         "os.listdir(t1mri_dir)",
     ): "the kept names are returned as sorted(candidates)",
     (
-        "src/champollion_pipeline/streaming/combine.py",
-        "run_combine",
-        "os.listdir(combined)",
-    ): "a count of the combined embeddings files",
-    (
         "src/champollion_pipeline/utils/archive.py",
         "reuse_cached_extraction",
         "os.scandir(cached_path)",

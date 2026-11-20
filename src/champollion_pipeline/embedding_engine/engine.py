@@ -10,7 +10,7 @@ from __future__ import annotations
 import io
 import logging
 import time
-from collections.abc import Sequence
+from collections.abc import Mapping, Sequence
 from contextlib import redirect_stdout
 from os.path import join
 
@@ -23,10 +23,10 @@ from champollion_utils.logger import LOG
 from champollion_pipeline.generate_embeddings import GenerateEmbeddings
 from champollion_pipeline.models.checkpoint import (
     DEFAULT_CHECKPOINT_EPOCH,
+    ModelEntry,
     check_region_weights,
     evaluation_model_dir,
-    find_region_model_dirs,
-    resolve_region_name,
+    find_region_models,
     uses_best_weights_stand_in,
     weights_source,
 )
@@ -37,7 +37,7 @@ _SKELETON_NDIM = 5
 
 
 class EmbeddingEngine:
-    """Region encoders of one models path, loaded on first use and kept resident."""
+    """Encoders of the models of one models path, keyed by (region, model id), loaded on first use and kept resident."""
 
     def __init__(
         self,
@@ -45,6 +45,7 @@ class EmbeddingEngine:
         device: torch.device | str,
         *,
         epoch: int = DEFAULT_CHECKPOINT_EPOCH,
+        epochs: Mapping[str, int] | None = None,
         batch_size: int = 32,
     ) -> None:
         if batch_size < 1:
@@ -52,29 +53,31 @@ class EmbeddingEngine:
         self.models_path = models_path
         self.device = torch.device(device)
         self.epoch = epoch
+        self.epochs: dict[str, int] = dict(epochs or {})
         self.batch_size = batch_size
-        self._region_dirs: dict[str, str] = {}
-        for model_dir in find_region_model_dirs(models_path):
-            region = resolve_region_name(model_dir, models_path)
-            if region in self._region_dirs:
-                logger.warning(
-                    "%s: duplicate region model directory %s ignored; using %s",
-                    region,
-                    model_dir,
-                    self._region_dirs[region],
-                )
-                continue
-            self._region_dirs[region] = model_dir
-        self._encoders: dict[str, tuple[torch.nn.Module, tuple[int, ...]]] = {}
+        self._models: dict[tuple[str, str], ModelEntry] = {
+            (entry.region, entry.model_id): entry for entry in find_region_models(models_path)
+        }
+        self._encoders: dict[tuple[str, str], tuple[torch.nn.Module, tuple[int, ...]]] = {}
 
     @property
     def regions(self) -> list[str]:
-        """Region names of the region model directories under the models path, sorted."""
-        return sorted(self._region_dirs)
+        """Distinct region names of the models under the models path, sorted."""
+        return sorted({region for region, _ in self._models})
 
-    def embed(self, region: str, skeletons: np.ndarray, scan_ids: Sequence[str]) -> pd.DataFrame:
-        """Embed skeletons shaped (N, H, W, D, C) with the region encoder: columns ID, dim1..dimK."""
-        self._check_region(region)
+    @property
+    def models(self) -> list[tuple[str, str]]:
+        """(region name, model id) of each model under the models path, in the order find_region_models gives."""
+        return list(self._models)
+
+    def embed(
+        self, region: str, skeletons: np.ndarray, scan_ids: Sequence[str], model_id: str | None = None
+    ) -> pd.DataFrame:
+        """Embed skeletons shaped (N, H, W, D, C) with the encoder of the model: columns ID, dim1..dimK.
+
+        ``model_id`` None is the only model of the region (ValueError when it holds several).
+        """
+        entry = self._resolve(region, model_id)
         if skeletons.ndim != _SKELETON_NDIM:
             raise ValueError(f"Skeletons must be shaped (N, H, W, D, C); got shape {skeletons.shape}")
         if len(scan_ids) != skeletons.shape[0]:
@@ -85,11 +88,11 @@ class EmbeddingEngine:
         np.save(buffer, skeletons)
         buffer.seek(0)
         loader, in_shape = evaluate.load_data(buffer, batch_size=self.batch_size)
-        return self._embed_loader(region, loader, in_shape, scan_ids)
+        return self._embed_loader(entry, loader, in_shape, scan_ids)
 
-    def embed_crops(self, region: str, crops_2mm: str) -> pd.DataFrame:
+    def embed_crops(self, region: str, crops_2mm: str, model_id: str | None = None) -> pd.DataFrame:
         """Embed the region skeletons of a crops directory, labelled by its subjects CSV."""
-        self._check_region(region)
+        entry = self._resolve(region, model_id)
         side = "L" if region.endswith("_left") else "R"
         mask_dir = join(crops_2mm, GenerateEmbeddings._find_crop_dir(None, crops_2mm, region), "mask")
         skels_path = join(mask_dir, f"{side}skeleton.npy")
@@ -101,37 +104,51 @@ class EmbeddingEngine:
                 f"{skels_path} holds {len(loader.dataset)} skeleton(s) but {subjects_path} lists "
                 f"{len(subjects)} subject(s)"
             )
-        return self._embed_loader(region, loader, in_shape, subjects)
+        return self._embed_loader(entry, loader, in_shape, subjects)
 
-    def _check_region(self, region: str) -> None:
-        if region not in self._region_dirs:
+    def _resolve(self, region: str, model_id: str | None) -> ModelEntry:
+        """The model of a region: the given id, else the region's only model."""
+        ids = [mid for reg, mid in self._models if reg == region]
+        if not ids:
             raise ValueError(f"Unknown region {region!r}: no region model directory for it under {self.models_path}")
+        if model_id is None:
+            if len(ids) > 1:
+                raise ValueError(f"Region {region!r} holds several models; give one of the model ids {ids!r}")
+            model_id = ids[0]
+        if (region, model_id) not in self._models:
+            raise ValueError(f"Region {region!r} holds no model with id {model_id!r}; model ids: {ids!r}")
+        return self._models[(region, model_id)]
 
-    def _embed_loader(self, region: str, loader, in_shape: tuple[int, ...], scan_ids: Sequence[str]) -> pd.DataFrame:
-        model = self._encoder(region, in_shape)
+    def _embed_loader(
+        self, entry: ModelEntry, loader, in_shape: tuple[int, ...], scan_ids: Sequence[str]
+    ) -> pd.DataFrame:
+        model = self._encoder(entry, in_shape)
         embeddings = evaluate.generate_embeddings(model, loader, self.device)
         table = pd.DataFrame(embeddings, columns=[f"dim{i}" for i in range(1, embeddings.shape[1] + 1)])
         table.insert(0, "ID", list(scan_ids))
         return table
 
-    def _encoder(self, region: str, in_shape: tuple[int, ...]) -> torch.nn.Module:
-        """The resident encoder of a region, loaded on first use for this input shape."""
-        if region in self._encoders:
-            model, loaded_shape = self._encoders[region]
+    def _encoder(self, entry: ModelEntry, in_shape: tuple[int, ...]) -> torch.nn.Module:
+        """The resident encoder of a model, loaded on first use for this input shape."""
+        key = (entry.region, entry.model_id)
+        label = entry.label
+        if key in self._encoders:
+            model, loaded_shape = self._encoders[key]
             if loaded_shape != in_shape:
-                raise ValueError(f"{region}: skeletons shaped {in_shape} but its encoder was loaded for {loaded_shape}")
+                raise ValueError(f"{label}: skeletons shaped {in_shape} but its encoder was loaded for {loaded_shape}")
             return model
-        model_dir = self._region_dirs[region]
-        check_region_weights([model_dir], self.models_path, self.epoch)
+        model_dir = entry.path
+        epoch = self.epochs.get(entry.model_id, self.epoch)
+        check_region_weights([model_dir], self.models_path, epoch)
         start = time.perf_counter()
         captured = io.StringIO()
-        with evaluation_model_dir(model_dir, self.epoch) as eval_dir, redirect_stdout(captured):
+        with evaluation_model_dir(model_dir, epoch) as eval_dir, redirect_stdout(captured):
             model = evaluate.load_model(eval_dir, in_shape).to(self.device)
         seconds = time.perf_counter() - start
         if captured.getvalue():
-            logger.debug("%s: load_model output:\n%s", region, captured.getvalue().rstrip())
-        logger.log(LOG, "%s: encoder loaded in %.3f s from %s", region, seconds, weights_source(model_dir, self.epoch))
-        if uses_best_weights_stand_in(model_dir, self.epoch):
-            logger.warning("%s: no epoch-%d checkpoint; best_model_weights.pt stands in for it", region, self.epoch)
-        self._encoders[region] = (model, in_shape)
+            logger.debug("%s: load_model output:\n%s", label, captured.getvalue().rstrip())
+        logger.log(LOG, "%s: encoder loaded in %.3f s from %s", label, seconds, weights_source(model_dir, epoch))
+        if uses_best_weights_stand_in(model_dir, epoch):
+            logger.warning("%s: no epoch-%d checkpoint; best_model_weights.pt stands in for it", label, epoch)
+        self._encoders[key] = (model, in_shape)
         return model
