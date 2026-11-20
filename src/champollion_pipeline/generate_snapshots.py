@@ -54,6 +54,7 @@ from champollion_pipeline.snapshot_types.umap import (
     discover_umap_pairs,
     generate_umap_snapshot,
     list_embedding_csvs,
+    resolve_umap_embeddings_dir,
 )
 from champollion_pipeline.utils.lib import (
     LABELLING_SESSION_CANDIDATES,
@@ -152,6 +153,11 @@ class GenerateSnapshots(ScriptBuilder):
                 ),
             )
             .add_optional_argument("--embeddings_dir", "Path to embeddings output directory")
+            .add_optional_argument(
+                "--model",
+                "Model id whose combined embeddings folder <embeddings_dir>/<id> the UMAP step renders. "
+                "Without it a flat folder or the only model id folder is used; several model id folders are refused.",
+            )
             .add_optional_argument("--cortical_tiles_dir", "Path to cortical tiles crops directory")
             .add_argument("--output_dir", type=str, required=True, help="Directory to save snapshot images")
             .add_optional_argument("--width", "Snapshot width", default=800, type_=int)
@@ -179,6 +185,8 @@ class GenerateSnapshots(ScriptBuilder):
         os.makedirs(self.args.output_dir, exist_ok=True)
 
         run_sulcal, run_tiles, run_umap = self._selected_steps()
+        if run_umap and not self._choose_umap_embeddings_dir():
+            return FAILED_STATUS
         excluded, input_status = self._run_input_qc(run_sulcal, run_tiles, run_umap)
 
         size = (self.args.width, self.args.height)
@@ -213,6 +221,18 @@ class GenerateSnapshots(ScriptBuilder):
         """Return --morphologist_dir when given and existing, else None."""
         morphologist_dir = self.args.morphologist_dir
         return morphologist_dir if morphologist_dir and osp.exists(morphologist_dir) else None
+
+    def _choose_umap_embeddings_dir(self) -> bool:
+        """Point --embeddings_dir at the chosen model id folder; log the refusal and return False when none can be."""
+        embeddings_dir = self.args.embeddings_dir
+        if not (embeddings_dir and osp.isdir(embeddings_dir)):
+            return True
+        chosen, refusal = resolve_umap_embeddings_dir(embeddings_dir, self.args.model)
+        if refusal:
+            logger.error(f"UMAP snapshots refused: {refusal}")
+            return False
+        self.args.embeddings_dir = chosen
+        return True
 
     def _umap_dirs(self) -> tuple[str, str] | None:
         """Return (embeddings_dir, reference_data_dir) when both are given and exist, else None."""
