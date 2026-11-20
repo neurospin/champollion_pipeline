@@ -218,3 +218,26 @@ def compute_run_log_path(derivatives_dir: str, stage: str, started_at: datetime)
     Pure, no I/O, O(1).
     """
     return join(derivatives_dir, RUN_LOG_DIRNAME, f"{stage}_{started_at.strftime(RUN_LOG_TIMESTAMP_FORMAT)}.log")
+
+
+def compute_model_output_dir(
+    output_base: str, region: str, model_id: str, region_model_count: int, per_model_folders: bool
+) -> str:
+    """Return the folder of the embeddings files of one model in the stage 4 output.
+
+    Args:
+        output_base: the stage 4 output base directory.
+        region: the region folder name (e.g. "SC-sylv_left").
+        model_id: the model id of the model; empty when the model sits directly in the region folder.
+        region_model_count: how many models the region holds in the run.
+        per_model_folders: True when every model with a non-empty id gets its own folder.
+
+    Returns:
+        <output_base>/<region>/<model_id> for a non-empty model id when the region holds two or more models or
+        per_model_folders is True; else <output_base>/<region>.
+
+    Complexity: O(len(path)).
+    """
+    if model_id and (region_model_count >= 2 or per_model_folders):
+        return join(output_base, region, model_id)
+    return join(output_base, region)
