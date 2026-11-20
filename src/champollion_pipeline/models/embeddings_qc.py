@@ -237,6 +237,43 @@ def fetch_region_files_qc_rows(
     return _fetch_csv_files_qc_rows(files, expected_subjects)
 
 
+def fetch_model_files_qc_rows(
+    source: str, region_folders: Iterable[tuple[str, str, int | None]], expected_subjects: Iterable[str]
+) -> list[dict[str, object]]:
+    """One QC row per expected subject and per unexpected ID, sorted, over (region, folder below source, width).
+
+    The file of a triple is <source>/<folder>/full_embeddings.csv; its reasons carry the region, not the folder.
+    A reason of a whole file reaches every row.
+    """
+    files = [(region, join(source, folder, EMBEDDINGS_FILENAME), width) for region, folder, width in region_folders]
+    return _fetch_csv_files_qc_rows(files, expected_subjects)
+
+
+def _fetch_region_model_ids(region_dir: str) -> list[str]:
+    """The ids below ``region_dir``: posix paths of the folders holding full_embeddings.csv, sorted."""
+    ids = []
+    for folder, dirs, names in os.walk(region_dir):
+        dirs.sort()
+        names.sort()
+        if folder != region_dir and EMBEDDINGS_FILENAME in names:
+            ids.append(os.path.relpath(folder, region_dir).replace(os.sep, "/"))
+    return sorted(ids)
+
+
+def fetch_model_ids(source: str, regions: Iterable[str]) -> list[str]:
+    """The sorted, distinct model ids found below the region folders of ``regions`` in ``source``."""
+    return sorted({model_id for region in regions for model_id in _fetch_region_model_ids(join(source, region))})
+
+
+def fetch_mixed_regions(source: str, regions: Iterable[str]) -> list[str]:
+    """The sorted regions whose folder holds full_embeddings.csv beside a model id folder."""
+    return sorted(
+        region
+        for region in regions
+        if exists(join(source, region, EMBEDDINGS_FILENAME)) and _fetch_region_model_ids(join(source, region))
+    )
+
+
 def fetch_region_copies_qc_rows(
     output_path: str, region_widths: Iterable[tuple[str, int | None]], input_rows: Iterable[Mapping[str, object]]
 ) -> list[dict[str, object]]:
