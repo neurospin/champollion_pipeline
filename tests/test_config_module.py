@@ -107,6 +107,8 @@ dataset:
   overwrite: false
   embeddings_only: false
   checkpoint_epoch: 80
+  checkpoint_epochs: []
+  per_model_folders: false
   models_cache: null
   subsets:
   - full
@@ -184,6 +186,10 @@ dataset:
   overwrite: true
   embeddings_only: true
   checkpoint_epoch: 12
+  checkpoint_epochs:
+  - a=1
+  - b=2
+  per_model_folders: true
   models_cache: /cache
   subsets:
   - train
@@ -257,6 +263,8 @@ _CUSTOM_DATASET_VALUES = {
     "overwrite": True,
     "embeddings_only": True,
     "checkpoint_epoch": 12,
+    "checkpoint_epochs": ["a=1", "b=2"],
+    "per_model_folders": True,
     "models_cache": "/cache",
     "subsets": ["train", "val"],
     "epochs": [None, 5],
