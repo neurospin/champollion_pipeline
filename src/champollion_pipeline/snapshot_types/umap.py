@@ -2,6 +2,7 @@
 
 import glob
 import logging
+import os
 import os.path as osp
 import re
 
@@ -67,6 +68,41 @@ def _iter_embedding_csvs(embeddings_dir):
     for csv_path in sorted(glob.glob(osp.join(embeddings_dir, "*_embeddings.csv"))):
         region, hemi = _parse_embedding_csv_name(osp.basename(csv_path))
         yield csv_path, region, hemi
+
+
+def _holds_embedding_csvs(folder):
+    """Return True when ``folder`` holds a ``*_embeddings.csv`` directly."""
+    return bool(sorted(glob.glob(osp.join(folder, "*_embeddings.csv"))))
+
+
+def list_model_id_folders(embeddings_dir):
+    """Return the sorted model ids: ``/``-joined folder paths under ``embeddings_dir`` holding ``*_embeddings.csv``."""
+    ids = []
+    for root, dirs, _files in os.walk(embeddings_dir):
+        dirs.sort()
+        if root != embeddings_dir and _holds_embedding_csvs(root):
+            ids.append(osp.relpath(root, embeddings_dir).replace(os.sep, "/"))
+    return sorted(ids)
+
+
+def resolve_umap_embeddings_dir(embeddings_dir, model_id=None):
+    """Return (folder to render, None), or (None, refusal message) when the model id folder cannot be chosen.
+
+    With ``model_id``: ``<embeddings_dir>/<model_id>``. Without it: the flat folder when it holds CSV files itself, else
+    the only model id folder; several model id folders are refused, naming each one.
+    """
+    ids = list_model_id_folders(embeddings_dir)
+    listing = ", ".join(ids) if ids else "none"
+    if model_id:
+        chosen = osp.join(embeddings_dir, model_id)
+        if osp.isdir(chosen):
+            return chosen, None
+        return None, f"--model {model_id}: no such model id folder in {embeddings_dir}; model id folders: {listing}"
+    if _holds_embedding_csvs(embeddings_dir) or not ids:
+        return embeddings_dir, None
+    if len(ids) == 1:
+        return osp.join(embeddings_dir, ids[0]), None
+    return None, f"{len(ids)} model id folders in {embeddings_dir}, choose one with --model: {listing}"
 
 
 def list_embedding_csvs(embeddings_dir, regions=None):

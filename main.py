@@ -495,6 +495,8 @@ class GenerateSnapshotsStage(PipelineStage):
             args.append(f"--champollion_data_root={self.config.dataset.champollion_data_root}")
         if dataset.labelling_session:
             args.append(f"--labelling_session={dataset.labelling_session}")
+        if dataset.model:
+            args.append(f"--model={dataset.model}")
         return args
 
     def create_script(self) -> ScriptBuilder:
