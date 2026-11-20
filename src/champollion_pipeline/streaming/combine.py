@@ -44,12 +44,29 @@ def run_combine(settings: StreamingSettings, dataset: DatasetConfig) -> str:
     code = script.run()
     if code not in (0, PARTIAL_STATUS):
         raise RuntimeError(f"PutTogetherEmbeddings failed with return code {code} for combined directory {combined}")
-    n = sum(1 for name in os.listdir(combined) if name.endswith(_COMBINED_SUFFIX)) if isdir(combined) else 0
+    n = _count_combined_files(combined)
     if n == 0:
         logger.warning(f"Combine QC: no *{_COMBINED_SUFFIX} file in combined directory {combined}")
     else:
         logger.output(f"Combined {n} region embeddings files into {combined}")
     return combined
+
+
+def _count_combined_files(combined: str) -> int:
+    """Combined files in the directory, else in its model id sub-folders."""
+    if not isdir(combined):
+        return 0
+    names = sorted(os.listdir(combined))
+    top = sum(1 for name in names if name.endswith(_COMBINED_SUFFIX))
+    if top:
+        return top
+    return sum(
+        1
+        for folder in names
+        if isdir(os.path.join(combined, folder))
+        for name in sorted(os.listdir(os.path.join(combined, folder)))
+        if name.endswith(_COMBINED_SUFFIX)
+    )
 
 
 def _resolve_embeddings_source(dataset: DatasetConfig) -> str:

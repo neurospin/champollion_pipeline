@@ -10,11 +10,12 @@ import csv
 import logging
 import os
 import time
+from collections import Counter
 from collections.abc import Iterable, Iterator, Sequence
 
 from champollion_utils.logger import LOG
 
-from champollion_pipeline.derivatives_layout import compute_region_embeddings_dir
+from champollion_pipeline.derivatives_layout import compute_model_output_dir, compute_region_embeddings_dir
 from champollion_pipeline.file_indexer import ScanId, SubjectEligibilityChecker
 
 logger = logging.getLogger(__name__)
@@ -77,13 +78,35 @@ def _poll(
         time.sleep(poll_interval)
 
 
+def embeddings_layout(models: Sequence[tuple[str, str]], per_model_folders: bool) -> dict[tuple[str, str], str]:
+    """Path of each (region, model id) embeddings file, relative to the region embeddings directory.
+
+    Decided per region by derivatives_layout.compute_model_output_dir (the stage 4 rule):
+    <region>/<model id>/full_embeddings.csv when the region holds two or more models, or
+    when ``per_model_folders`` is set and the id is not empty; else <region>/full_embeddings.csv.
+    """
+    counts = Counter(region for region, _ in models)
+    return {
+        (region, model_id): os.path.join(
+            compute_model_output_dir("", region, model_id, counts[region], per_model_folders), _EMBEDDINGS_FILENAME
+        )
+        for region, model_id in models
+    }
+
+
 def scan_embeddings_exist(
     scan_id: ScanId,
     datasets_root: str,
     masks_version: str,
     regions: Sequence[str],
+    *,
+    relpaths: Sequence[str] | None = None,
 ) -> bool:
-    """Return True when each region's full_embeddings.csv holds a row for the scan."""
+    """Return True when each embeddings file holds a row for the scan.
+
+    The files are each region's full_embeddings.csv, or the ``relpaths`` (relative to the region embeddings
+    directory, see embeddings_layout) when given.
+    """
     if not isinstance(scan_id, ScanId):
         raise TypeError(f"scan_id must be a ScanId, got {type(scan_id).__name__} {scan_id!r}")
     if isinstance(regions, str):
@@ -92,8 +115,8 @@ def scan_embeddings_exist(
         raise ValueError("regions must not be empty")
     base = compute_region_embeddings_dir(datasets_root, masks_version)
     target = str(scan_id)
-    for region in regions:
-        path = os.path.join(base, region, _EMBEDDINGS_FILENAME)
+    for rel in relpaths if relpaths is not None else [os.path.join(r, _EMBEDDINGS_FILENAME) for r in regions]:
+        path = os.path.join(base, rel)
         if not os.path.isfile(path):
             return False
         with open(path, newline="") as f:

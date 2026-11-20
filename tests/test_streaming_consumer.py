@@ -196,7 +196,9 @@ def _fake_engine_class(state: FakeEngineState) -> type:
     class FakeEngine:
         """Stand-in for EmbeddingEngine: same constructor, regions, embed and embed_crops."""
 
-        def __init__(self, models_path: str, device: object, *, epoch: int = 0, batch_size: int = 32) -> None:
+        def __init__(
+            self, models_path: str, device: object, *, epoch: int = 0, epochs: object = None, batch_size: int = 32
+        ) -> None:
             state.events.append("engine")
             state.instances.append({"models_path": models_path, "device": device, "epoch": epoch})
             state.batch_sizes.append(batch_size)
@@ -205,10 +207,17 @@ def _fake_engine_class(state: FakeEngineState) -> type:
         def regions(self) -> list[str]:
             return list(state.regions)
 
-        def embed(self, region: str, skeletons: np.ndarray, scan_ids: list[str]) -> pd.DataFrame:
+        @property
+        def models(self) -> list[tuple[str, str]]:
+            """One model per region, empty model id (the single-model layout these tests use)."""
+            return [(region, "") for region in state.regions]
+
+        def embed(
+            self, region: str, skeletons: np.ndarray, scan_ids: list[str], model_id: str | None = None
+        ) -> pd.DataFrame:
             return state.table(region, np.asarray(skeletons), list(scan_ids))
 
-        def embed_crops(self, region: str, crops_2mm: str) -> pd.DataFrame:
+        def embed_crops(self, region: str, crops_2mm: str, model_id: str | None = None) -> pd.DataFrame:
             base = region.rsplit("_", 1)[0]
             crop = next(d for d in os.listdir(crops_2mm) if d.replace(".", "") == base)
             side = "L" if region.endswith("_left") else "R"
