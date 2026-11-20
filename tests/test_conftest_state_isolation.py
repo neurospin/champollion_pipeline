@@ -28,6 +28,7 @@ Why this shape rather than two sibling tests in this file:
 
 from __future__ import annotations
 
+import os
 from pathlib import Path
 
 import pytest
@@ -125,10 +126,19 @@ def test_b_observes():
         pytest.param(_THREADING_EXCEPTHOOK, id="threading_excepthook"),
     ],
 )
-def test_conftest_restores_process_wide_state_after_each_test(pytester, inner_module):
+def test_conftest_restores_process_wide_state_after_each_test(pytester, monkeypatch, inner_module):
     """A test's change to one piece of process-wide state is undone before the next test runs."""
     pytester.makeconftest(REAL_CONFTEST.read_text(encoding="utf-8"))
     pytester.makepyfile(test_inner=inner_module)
+
+    # The copied conftest imports ``tests.*`` at top level and finds ``src/`` relative to
+    # its own (temporary) location; CI sets no PYTHONPATH, so give the inner run both.
+    repo_root = REAL_CONFTEST.parent.parent
+    paths = [str(repo_root), str(repo_root / "src")]
+    existing = os.environ.get("PYTHONPATH")
+    if existing:
+        paths.append(existing)
+    monkeypatch.setenv("PYTHONPATH", os.pathsep.join(paths))
 
     result = pytester.runpytest_subprocess("-p", "no:cacheprovider", "-p", "no:randomly", "-v")
 
