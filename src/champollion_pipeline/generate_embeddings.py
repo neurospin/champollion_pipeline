@@ -19,7 +19,7 @@ from io import StringIO
 from os.path import abspath, dirname, exists, join
 from pathlib import Path
 
-from champollion.metrics.cka_coherence import test_models_coherence_from_directory
+from champollion.metrics.cka_coherence import CKACoherenceTester, test_models_coherence_from_directory
 from champollion_utils.script_builder import ScriptBuilder
 
 from champollion_pipeline._stage_base import PARTIAL_STATUS
@@ -37,10 +37,7 @@ from champollion_pipeline.models.cache import read_model_set as read_model_set
 from champollion_pipeline.models.cache import write_model_set as write_model_set
 from champollion_pipeline.models.checkpoint import (
     DEFAULT_CHECKPOINT_EPOCH,
-    check_region_weights,
     evaluation_model_dir,
-    find_region_model_dirs,
-    resolve_region_name,
     uses_best_weights_stand_in,
     weights_source,
 )
@@ -50,17 +47,20 @@ from champollion_pipeline.models.embeddings_qc import (
     compute_crops_by_side,
     compute_excluded_subjects,
     compute_region_side,
-    fetch_embeddings_qc_rows,
+    fetch_named_files_qc_rows,
     fetch_region_model_qc_rows,
+    read_model_width,
     remove_subject_rows,
-    write_region_widths,
+    write_model_widths,
 )
+from champollion_pipeline.models.epoch_spec import parse_epoch_specs
 from champollion_pipeline.models.fetch import HuggingFaceStrategy as HuggingFaceStrategy
 from champollion_pipeline.models.fetch import InteractiveFallbackStrategy as InteractiveFallbackStrategy
 from champollion_pipeline.models.fetch import LocalPathStrategy as LocalPathStrategy
 from champollion_pipeline.models.fetch import ModelFetchStrategy as ModelFetchStrategy
 from champollion_pipeline.models.fetch import RemoteArchiveStrategy as RemoteArchiveStrategy
 from champollion_pipeline.models.fetch import fetch_model_set
+from champollion_pipeline.models.model_run import ModelRun, ModelRunRefused, resolve_model_run
 from champollion_pipeline.models.version_options import (
     check_local_model_set,
     check_version_mismatch,
@@ -80,15 +80,21 @@ FAILED_STATUS = 1
 logger = logging.getLogger(__name__)
 
 
-def _parse_non_negative_int(value: str) -> int:
-    """argparse type: an integer >= 0 (Lightning numbers epochs from 0)."""
-    try:
-        number = int(value)
-    except ValueError as err:
-        raise argparse.ArgumentTypeError(f"must be a non-negative integer, got {value!r}") from err
-    if number < 0:
-        raise argparse.ArgumentTypeError(f"must be a non-negative integer, got {value!r}")
-    return number
+class _CheckpointEpochAction(argparse.Action):
+    """Repeatable --checkpoint-epoch [<id>=]N: sets checkpoint_epoch (the default) and checkpoint_epochs_by_id.
+
+    A value parse_epoch_specs refuses ends the parse with exit 2.
+    """
+
+    def __call__(self, parser, namespace, values, _option_string=None):
+        held = [*getattr(namespace, "checkpoint_epoch_values", ()), values]
+        try:
+            default, by_id = parse_epoch_specs(held, DEFAULT_CHECKPOINT_EPOCH)
+        except ValueError as err:
+            raise argparse.ArgumentError(self, str(err)) from err
+        namespace.checkpoint_epoch_values = held
+        setattr(namespace, self.dest, default)
+        namespace.checkpoint_epochs_by_id = by_id
 
 
 class GenerateEmbeddings(ScriptBuilder):
@@ -113,12 +119,20 @@ class GenerateEmbeddings(ScriptBuilder):
             .add_flag("--profiling", "Enable Python profiling (cProfile).")
             .add_flag("--run-cka", "Run CKA coherence test after embeddings.")
             .add_flag("--no-cache", "Force re-extraction of archive (ignore cache).")
-            .add_optional_argument(
+            .add_argument(
                 "--checkpoint-epoch",
-                "Training epoch N (0-based) of the Lightning checkpoint epoch=N-step=*.ckpt to evaluate each region "
-                "with. Default: 80.",
+                action=_CheckpointEpochAction,
                 default=DEFAULT_CHECKPOINT_EPOCH,
-                type_=_parse_non_negative_int,
+                metavar="[ID=]N",
+                help="Training epoch N (0-based) of the Lightning checkpoint epoch=N-step=*.ckpt to evaluate each "
+                f"model with. Default: {DEFAULT_CHECKPOINT_EPOCH}. Repeatable: a bare N is the default epoch (at most "
+                "one); ID=N sets the epoch of the models with model id ID (the folder path between the region folder "
+                "and the model folder).",
+            )
+            .add_flag(
+                "--per-model-folders",
+                "Write the embeddings of every model with a model id to <output>/<region>/<model id>/, even a "
+                "single model of its region (by default only a region holding two or more models does).",
             )
             .add_optional_argument(
                 "--cortical_version",
@@ -188,6 +202,7 @@ class GenerateEmbeddings(ScriptBuilder):
         )
         self._models_source: dict | None = None
         self._excluded_subjects: frozenset[str] = frozenset()
+        self._run: ModelRun | None = None
 
     def _make_regions_tmpdir(self, models_path: str) -> str:
         """Return a temp dir containing symlinks to only the requested region subdirs."""
@@ -380,6 +395,8 @@ class GenerateEmbeddings(ScriptBuilder):
                 stacklevel=2,
             )
 
+        self._run = None
+        cka_files = None
         try:
             input_status = self._run_input_qc(crops_2mm_dir, output_base)
             if input_status == FAILED_STATUS:
@@ -387,14 +404,19 @@ class GenerateEmbeddings(ScriptBuilder):
             result = self._run_per_region(evaluate_script, crops_2mm_dir, output_base)
             self._remove_excluded_rows(output_base)
             output_status = self._run_output_qc(output_base)
+            if self._run is not None:
+                cka_files = self._run.compute_cka_files(output_base)
+                if self._run.lists_models():
+                    provenance["models"] = self._run.compute_provenance_models()
         finally:
             if tmpdir:
                 shutil.rmtree(tmpdir)
             self.args.models_path = original_models_path
+            self._run = None
 
         self._write_provenance(output_base, provenance)
         if self.args.run_cka:
-            self._run_cka_test(output_base)
+            self._run_cka_test(output_base, cka_files)
 
         return result or output_status or input_status
 
@@ -416,30 +438,38 @@ class GenerateEmbeddings(ScriptBuilder):
                     return dname
         return base
 
-    def _find_checked_region_dirs(self) -> list[str]:
-        """Region model dirs of the run; ValueError when there is none or when a region has no weights."""
-        models_path = self.args.models_path
-        region_dirs = find_region_model_dirs(models_path)
-        if not region_dirs:
-            raise ValueError(f"No region model directories (containing logs/) found under {models_path}")
-        check_region_weights(region_dirs, models_path, self.args.checkpoint_epoch)
-        return region_dirs
+    def _get_run(self) -> ModelRun:
+        """The models of the run, resolved once per run; a refused models tree or epoch id exits 2."""
+        if self._run is None:
+            try:
+                self._run = resolve_model_run(
+                    self.args.models_path,
+                    self.args.checkpoint_epoch,
+                    getattr(self.args, "checkpoint_epochs_by_id", {}),
+                    bool(getattr(self.args, "per_model_folders", False)),
+                )
+            except ModelRunRefused as err:
+                self.parser.error(str(err))
+        return self._run
 
     def _run_input_qc(self, crops_2mm_dir: str, output_base: str) -> int:
         """Write <output_base>/input_qc.tsv, keep its qc 0 subjects; return the status of _report_qc_rows."""
-        models_path = self.args.models_path
-        regions = [resolve_region_name(path, models_path) for path in self._find_checked_region_dirs()]
+        regions = dict.fromkeys(entry.region for entry in self._get_run().entries)
         crops = {region: self._find_crop_dir(crops_2mm_dir, region) for region in regions}
         rows = fetch_region_model_qc_rows(crops_2mm_dir, compute_crops_by_side(crops))
         self._excluded_subjects = compute_excluded_subjects(rows)
         return self._report_qc_rows(rows, join(output_base, INPUT_QC_FILENAME), "input")
 
     def _run_output_qc(self, output_base: str) -> int:
-        """Write <output_base>/output_qc.tsv over each region model; return the status of _report_qc_rows."""
-        models_path = self.args.models_path
-        models = {path: resolve_region_name(path, models_path) for path in find_region_model_dirs(models_path)}
-        write_region_widths(output_base, models)
-        rows = fetch_embeddings_qc_rows(output_base, models, read_qc_tsv(join(output_base, INPUT_QC_FILENAME)))
+        """Write <output_base>/output_qc.tsv over each model; return the status of _report_qc_rows."""
+        models = self._get_run().entries
+        folders = self._get_run().compute_output_folders(output_base)
+        write_model_widths((entry.path, folders[entry.path]) for entry in models)
+        files = [
+            (entry.label, join(folders[entry.path], EMBEDDINGS_FILENAME), read_model_width(entry.path))
+            for entry in models
+        ]
+        rows = fetch_named_files_qc_rows(files, read_qc_tsv(join(output_base, INPUT_QC_FILENAME)))
         return self._report_qc_rows(rows, join(output_base, OUTPUT_QC_FILENAME), "output")
 
     def _report_qc_rows(self, rows: list[dict[str, object]], qc_path: str, step: str) -> int:
@@ -452,43 +482,43 @@ class GenerateEmbeddings(ScriptBuilder):
         return PARTIAL_STATUS if n_excluded else 0
 
     def _remove_excluded_rows(self, output_base: str) -> None:
-        """Drop the qc 0 subjects from the full_embeddings.csv of each region model of the run, reused ones too."""
+        """Drop the qc 0 subjects from the full_embeddings.csv of each model of the run, reused ones too."""
         if not self._excluded_subjects:
             return
-        models_path = self.args.models_path
-        for model_path in find_region_model_dirs(models_path):
-            path = join(output_base, resolve_region_name(model_path, models_path), EMBEDDINGS_FILENAME)
+        for folder in self._get_run().compute_output_folders(output_base).values():
+            path = join(folder, EMBEDDINGS_FILENAME)
             if exists(path):
                 remove_subject_rows(path, self._excluded_subjects)
 
     def _run_per_region(self, evaluate_script: str, crops_2mm_dir: str, output_base: str) -> int:
-        """Invoke champollion/evaluate.py for each region in models_path.
+        """Invoke champollion/evaluate.py for each model in models_path, with the weights of its own epoch.
 
-        Every region is attempted even after a failure. Returns the first non-zero
-        evaluate code, or 0 when all evaluated regions succeed.
+        Every model is attempted even after a failure. Returns the first non-zero
+        evaluate code, or 0 when all evaluated models succeed.
         """
-        models_path = self.args.models_path
-        epoch = self.args.checkpoint_epoch
-        region_dirs = self._find_checked_region_dirs()
+        run = self._get_run()
+        models = run.entries
+        folders = run.compute_output_folders(output_base)
 
-        n_regions = len(region_dirs)
-        logger.trace(f"Generating embeddings for {n_regions} regions → {output_base}")
+        n_models = len(models)
+        logger.trace(f"Generating embeddings for {n_models} models → {output_base}")
 
-        failed_regions: list[str] = []
+        failed_models: list[str] = []
         first_failure = 0
-        for fold, model_path in enumerate(region_dirs, start=1):
-            region = resolve_region_name(model_path, models_path)
-            # Machine-read by champollion_sulcal_mcp (FOLD_RE): one record per region directory.
-            logger.trace(f"Fold {fold}/{n_regions}: {region}")
+        for fold, entry in enumerate(models, start=1):
+            region, label, model_path = entry.region, entry.label, entry.path
+            epoch = run.epoch_of(entry)
+            # Machine-read by champollion_sulcal_mcp (FOLD_RE): one record per model directory.
+            logger.trace(f"Fold {fold}/{n_models}: {label}")
             side = compute_region_side(region)
             crop_name = self._find_crop_dir(crops_2mm_dir, region)
             mask_dir = join(crops_2mm_dir, crop_name, "mask")
             skels_path = join(mask_dir, f"{side}skeleton.npy")
             subjects_path = join(mask_dir, f"{side}skeleton_subject.csv")
-            saving_path = join(output_base, region, EMBEDDINGS_FILENAME)
+            saving_path = join(folders[model_path], EMBEDDINGS_FILENAME)
 
             if exists(saving_path) and not getattr(self.args, "overwrite", False):
-                logger.trace(f"[SKIP] {region} — already exists (--overwrite to recompute)")
+                logger.trace(f"[SKIP] {label} — already exists (--overwrite to recompute)")
                 continue
 
             with evaluation_model_dir(model_path, epoch) as eval_model_path:
@@ -511,35 +541,46 @@ class GenerateEmbeddings(ScriptBuilder):
                 ]
 
                 weights = weights_source(model_path, epoch) or "<none found>"
-                logger.trace(f"[Region {region}] weights: {weights}")
+                logger.trace(f"[Region {label}] weights: {weights}")
                 if uses_best_weights_stand_in(model_path, epoch):
                     logger.warning(
-                        f"[Region {region}] no epoch={epoch} checkpoint; "
+                        f"[Region {label}] no epoch={epoch} checkpoint; "
                         f"best_model_weights.pt stands in for epoch {epoch} (interim)"
                     )
                 code = self.execute_command(cmd, shell=False)
             if code != 0:
-                failed_regions.append(region)
+                failed_models.append(label)
                 first_failure = first_failure or code
                 if exists(saving_path):
                     os.remove(saving_path)
 
-        if failed_regions:
-            logger.fail(f"[FAILED] {len(failed_regions)} region(s) failed: {', '.join(failed_regions)}")
+        if failed_models:
+            logger.fail(f"[FAILED] {len(failed_models)} region(s) failed: {', '.join(failed_models)}")
         return first_failure
 
-    def _run_cka_test(self, output_base: str) -> None:
-        """Run CKA coherence test on the generated embeddings."""
+    def _run_cka_test(self, output_base: str, model_files: dict[str, str] | None = None) -> None:
+        """Run CKA coherence test on the generated embeddings.
+
+        ``model_files`` maps each model label to its embeddings file; the matrix then names each model by label.
+        None searches output_base for full_embeddings.csv files, named by their parent folder.
+        """
         cka_output = join(output_base, "cka_results")
         logger.trace(f"Running CKA coherence test: embeddings {output_base}, output {cka_output}")
 
         try:
-            test_models_coherence_from_directory(
-                models_dir=output_base,
-                embedding_filename="full_embeddings.csv",
-                output_dir=cka_output,
-                subject_column="ID",
-            )
+            if model_files is None:
+                test_models_coherence_from_directory(
+                    models_dir=output_base,
+                    embedding_filename="full_embeddings.csv",
+                    output_dir=cka_output,
+                    subject_column="ID",
+                )
+            else:
+                found = {label: path for label, path in model_files.items() if exists(path)}
+                tester = CKACoherenceTester(found, subject_column="ID")
+                tester.run_full_analysis()
+                tester.save_results(cka_output)
+                tester.print_summary()
             logger.output("CKA coherence test completed.")
         except Exception as e:
             logger.warning(f"CKA test failed - {e}", exc_info=True)

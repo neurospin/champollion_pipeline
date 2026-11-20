@@ -106,13 +106,13 @@ def read_model_width(model_path: str) -> int | None:
     return _compute_width(config, MODEL_WIDTH_KEY)
 
 
-def write_region_widths(output_base: str, region_by_model: Mapping[str, str]) -> None:
-    """Write <output_base>/<region>/embedding_width.json from each region model; no usable config writes nothing."""
-    for model_path, region in region_by_model.items():
+def write_model_widths(model_dirs: Iterable[tuple[str, str]]) -> None:
+    """Write <folder>/embedding_width.json from each (model path, output folder); no usable config writes nothing."""
+    for model_path, folder in model_dirs:
         width = read_model_width(model_path)
         if width is not None:
-            os.makedirs(join(output_base, region), exist_ok=True)
-            write_json_atomic(join(output_base, region, WIDTH_SIDECAR_FILENAME), {WIDTH_SIDECAR_KEY: width})
+            os.makedirs(folder, exist_ok=True)
+            write_json_atomic(join(folder, WIDTH_SIDECAR_FILENAME), {WIDTH_SIDECAR_KEY: width})
 
 
 def read_region_width(region_dir: str) -> int | None:
@@ -214,27 +214,16 @@ def fetch_embeddings_ids(source: str, regions: Iterable[str]) -> set[str]:
     return subjects
 
 
-def fetch_embeddings_qc_rows(
-    output_base: str, region_by_model: Mapping[str, str], input_rows: Iterable[Mapping[str, object]]
+def fetch_named_files_qc_rows(
+    model_files: Iterable[tuple[str, str, int | None]], input_rows: Iterable[Mapping[str, object]]
 ) -> list[dict[str, object]]:
-    """One output QC row per qc 1 subject of ``input_rows`` and per unexpected ID, sorted, over each region model.
+    """One output QC row per qc 1 subject of ``input_rows`` and per unexpected ID, sorted, over the model files.
 
-    ``region_by_model`` gives the region of each model folder. A reason of a whole file reaches every row.
+    ``model_files`` holds a (name, embeddings CSV path, width) triple per model; the name goes after the colon of
+    each reason of that file. A reason of a whole file reaches every row.
     """
     expected = {row[ID_COLUMN] for row in input_rows if row[QC_COLUMN] == 1}
-    widths = [(region, read_model_width(model_path)) for model_path, region in region_by_model.items()]
-    return fetch_region_files_qc_rows(output_base, widths, expected)
-
-
-def fetch_region_files_qc_rows(
-    output_base: str, region_widths: Iterable[tuple[str, int | None]], expected_subjects: Iterable[str]
-) -> list[dict[str, object]]:
-    """One QC row per expected subject and per unexpected ID, sorted, over the (region, width) pairs.
-
-    A reason of a whole file reaches every row.
-    """
-    files = [(region, join(output_base, region, EMBEDDINGS_FILENAME), width) for region, width in region_widths]
-    return _fetch_csv_files_qc_rows(files, expected_subjects)
+    return _fetch_csv_files_qc_rows(model_files, expected)
 
 
 def fetch_model_files_qc_rows(
