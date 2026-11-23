@@ -10,8 +10,9 @@ A model set directory may carry model_set.json, a JSON object with
 read_model_set(<dir>) returns those values (checkpoint_epoch None when absent) and raises
 a ValueError naming the file path on an invalid marker. When models_path is a local
 directory whose marker masks differs from the resolved --masks, the generate_embeddings
-parser exits with status 2 naming both, unless --allow-version-mismatch is given, in
-which case it emits a UserWarning naming both (policy of the mismatch-check Task).
+parser exits with status 2 naming both. The --allow-version-mismatch case (one WARNING record) and an explicit
+--masks with a directory without model_set.json are tested in test_generate_embeddings_unmarked_mismatch.py
+(TASK-MODELVER-BDRABCZUK-86405DAD28CE).
 
 No model, no evaluate.py, no network: only the reader and the real GenerateEmbeddings parser.
 """
@@ -132,46 +133,6 @@ class TestLocalMarkerMasksMismatch:
         stderr = self._expect_usage_error([str(models), _datasets_root(tmp_path)], capsys)
         assert MASKS in stderr, stderr
         assert MARKER_MASKS in stderr, stderr
-
-
-class TestLocalMarkerMasksMismatchAllowed:
-    """REQ-MODELVER-BDRABCZUK-8FA8D4F8599A: --allow-version-mismatch turns it into a UserWarning naming both."""
-
-    def test_override_warns_naming_both(self, tmp_path):
-        models = _local_model_set(tmp_path)
-        argv = [str(models), _datasets_root(tmp_path), "--masks", MASKS, "--allow-version-mismatch"]
-        script = GenerateEmbeddings()
-        with pytest.warns(UserWarning) as record:
-            try:
-                script.parse_args(argv)
-            except SystemExit as exc:
-                pytest.fail(f"GenerateEmbeddings parser rejected {argv!r} (SystemExit {exc.code})")
-        messages = [str(w.message) for w in record if issubclass(w.category, UserWarning)]
-        assert any(MASKS in m and MARKER_MASKS in m for m in messages), messages
-
-
-class TestLocalMarkerMissingExplicitMasks:
-    """Today's behaviour, pinned until TASK-MODELVER-BDRABCZUK-86405DAD28CE (the stage-4 crops-vs-model check) decides
-    it: an explicit --masks <M> with a local directory <D> without model_set.json gives a UserWarning naming
-    <D>/model_set.json and <M>, instead of exiting. Was REQ-MODELVER-BDRABCZUK-FF80E381F552 before its 2026-11-17
-    revision, which covers only the case without --masks (TestLocalMarkerMissingUnknownName)."""
-
-    def _parse_expect_warning(self, argv) -> list[str]:
-        """Parse argv with the real parser; fail on SystemExit; return the UserWarning messages emitted."""
-        script = GenerateEmbeddings()
-        with pytest.warns(UserWarning) as record:
-            try:
-                script.parse_args(argv)
-            except SystemExit as exc:
-                pytest.fail(f"GenerateEmbeddings parser rejected {argv!r} (SystemExit {exc.code})")
-        return [str(w.message) for w in record if issubclass(w.category, UserWarning)]
-
-    def test_missing_marker_warns_naming_path_and_masks(self, tmp_path):
-        models = tmp_path / "models"
-        models.mkdir()
-        marker_path = str(models / MODEL_SET_FILE_NAME)
-        messages = self._parse_expect_warning([str(models), _datasets_root(tmp_path), "--masks", MARKER_MASKS])
-        assert any(marker_path in m and MARKER_MASKS in m for m in messages), messages
 
 
 class TestLocalMarkerMissingUnknownName:

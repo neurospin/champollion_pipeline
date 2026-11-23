@@ -64,7 +64,6 @@ from champollion_pipeline.models.region_crops import (
     compute_region_crops_dir,
     fetch_input_qc_rows,
     find_crop_dir,
-    get_region_mask_versions,
     refuse_legacy_with_map,
     refuse_unmapped_regions,
     refuse_unnamed_models_folder,
@@ -270,8 +269,7 @@ class GenerateEmbeddings(ScriptBuilder):
         refuse_unnamed_models_folder(self.args, self.parser)
         resolve_masks_default(self.args, self.parser)
         check_version_mismatch(self.args, self.parser)
-        if get_region_mask_versions(self.args) is None:
-            check_local_model_set(self.args, self.parser)
+        check_local_model_set(self.args, self.parser)
         return parsed
 
     def fetch_models(self, models_path):

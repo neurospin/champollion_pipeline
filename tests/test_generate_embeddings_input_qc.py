@@ -4,6 +4,10 @@ Stage 4 input QC tests of generate_embeddings.py: input_qc.tsv over the crops of
 and the exit policy (user decisions 2026-11-04). Synthetic fixtures only; evaluate.py is faked.
 
 The crops come from tests/stage2_layout.py. Only the skeleton files count: evaluate.py reads nothing else.
+
+The models folder is named after the canonical_25 Mask version (LOCAL_MODELS). A run given another --masks writes a
+PROVENANCE.csv naming that Mask version for each region model, so stage 4 does not refuse the run as a mismatch between
+the crops and the models (TASK-MODELVER-BDRABCZUK-86405DAD28CE).
 """
 
 import logging
@@ -16,6 +20,8 @@ import pytest
 
 from champollion_pipeline.derivatives_layout import compute_region_embeddings_dir
 from champollion_pipeline.generate_embeddings import GenerateEmbeddings
+from champollion_pipeline.models.version_options import PROVENANCE_FILE_NAME as MODELS_PROVENANCE_FILE_NAME
+from champollion_pipeline.models.version_options import PROVENANCE_REGION_COLUMN, PROVENANCE_VERSION_COLUMN
 from champollion_pipeline.utils.lib import CORTICAL_TILES_VERSION
 from champollion_pipeline.utils.qc_report import fetch_crop_qc_rows, read_qc_tsv
 from tests.log_assertions import FAIL, assert_one_subject_error
@@ -27,7 +33,7 @@ _QC_FILE = "input_qc.tsv"
 _KIND = "skeleton"
 _PARTIAL_STATUS = 3
 _EVALUATE_FAILURE = 7
-_MASKS_OTHER = "other_masks"
+_MASKS_OTHER = "canonical_corrected_26_1"
 _CROPS = ("S.C.-sylv.", "S.T.s.")
 _MODELS = ("SC-sylv_left", "SC-sylv_right", "STs_left", "STs_right")
 _FIRST_CROP_MODELS = _MODELS[:2]
@@ -131,6 +137,13 @@ class _Stage:
     crops_dir: Path | None = None
     has_output_option: bool = True
     reused_regions: tuple[str, ...] = ()
+    model_mask_version: str | None = None
+
+
+def _write_models_provenance(models: Path, version: str) -> None:
+    """Write models/PROVENANCE.csv naming ``version`` as the Mask version of each region model of _MODELS."""
+    rows = "".join(f"{region},{version}\n" for region in _MODELS)
+    (models / MODELS_PROVENANCE_FILE_NAME).write_text(f"{PROVENANCE_REGION_COLUMN},{PROVENANCE_VERSION_COLUMN}\n{rows}")
 
 
 _DEFAULT_STAGE = _Stage()
@@ -143,6 +156,8 @@ def _run_stage(root, stage=_DEFAULT_STAGE):
     crops_dir = _default_crops_dir(dataset) if stage.crops_dir is None else root / stage.crops_dir
     stage.lay(crops_dir)
     models = make_models(root, list(_MODELS))
+    if stage.model_mask_version is not None:
+        _write_models_provenance(models, stage.model_mask_version)
     output_args = ["--output", str(output)] if stage.has_output_option else []
     script = make_script([str(models), str(dataset), *output_args, *stage.extra_args])
     output_base = (
@@ -225,7 +240,9 @@ class TestReport:
     def test_masks_option_selects_the_crops_folder(self, tmp_path):
         crops_dir = _default_crops_dir("dataset", _MASKS_OTHER)
 
-        run = _run_stage(tmp_path, _Stage(extra_args=("--masks", _MASKS_OTHER), crops_dir=crops_dir))
+        stage = _Stage(extra_args=("--masks", _MASKS_OTHER), crops_dir=crops_dir, model_mask_version=_MASKS_OTHER)
+
+        run = _run_stage(tmp_path, stage)
 
         assert run.qc_values() == {_SUBJECT: 1, _OTHER_SUBJECT: 1}
 
