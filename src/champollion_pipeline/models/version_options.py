@@ -1,9 +1,12 @@
-"""Parse-time checks of the embeddings stage's model version options, and the version a model set marker names."""
+"""Parse-time checks of the embeddings stage's model version options, and the Mask version of each region model of a
+local model set (from its model_set.json, else its PROVENANCE.csv, else its folder name)."""
 
 import argparse
+import csv
 import logging
 import os
 import warnings
+from collections.abc import Iterable, Mapping
 from dataclasses import dataclass
 from os.path import join
 
@@ -17,6 +20,11 @@ from champollion_pipeline.models.cache import MODEL_SET_FILE_NAME, read_model_se
 
 MASK_SOURCE_MODEL_SET = MODEL_SET_FILE_NAME
 MASK_SOURCE_FOLDER_NAME = "folder name"
+PROVENANCE_FILE_NAME = "PROVENANCE.csv"
+MASK_SOURCE_PROVENANCE = PROVENANCE_FILE_NAME
+PROVENANCE_REGION_COLUMN = "region"
+PROVENANCE_VERSION_COLUMN = "mask_version_trained_on"
+PROVENANCE_REQUIRED_COLUMNS = (PROVENANCE_REGION_COLUMN, PROVENANCE_VERSION_COLUMN)
 MASK_RESOLVED = "resolved"
 MASK_UNRESOLVED = "unresolved"
 MASK_CONFLICT = "conflict"
@@ -56,7 +64,8 @@ class RegionMaskVersion:
 
     status: MASK_RESOLVED, MASK_UNRESOLVED or MASK_CONFLICT; version and source are set only when resolved;
     named: the distinct values the sources gave for the region, in precedence order (empty when no source names one);
-    reason: the read error of an unreadable model_set.json (then unresolved), else None.
+    reason: the read error of an unreadable model_set.json, or the read error or missing column(s) of PROVENANCE.csv
+    (then unresolved, named empty), else None.
     """
 
     status: str
@@ -91,6 +100,67 @@ def _compute_region_mask_version(sources: tuple[tuple[str, str | None], ...]) ->
     return RegionMaskVersion(MASK_RESOLVED, named[0], source, named)
 
 
+def _compute_provenance_versions(rows: Iterable[Mapping[str, str]]) -> dict[str, tuple[str, ...]]:
+    """Per exact region value, the sorted distinct non-empty mask_version_trained_on values; O(len(rows) log).
+
+    A region value with only empty values has no key. Sorting makes the result independent of the row order.
+    """
+    values: dict[str, set[str]] = {}
+    for row in rows:
+        version = row[PROVENANCE_VERSION_COLUMN]
+        if version:
+            values.setdefault(row[PROVENANCE_REGION_COLUMN], set()).add(version)
+    return {region: tuple(sorted(versions)) for region, versions in values.items()}
+
+
+def _fetch_provenance_versions(models_path: str) -> tuple[dict[str, tuple[str, ...]], str | None]:
+    """(region -> sorted Mask versions, None) from models_path/PROVENANCE.csv; ({}, None) when absent;
+    ({}, reason naming the path) when it cannot be read or its header lacks a required column."""
+    path = join(models_path, PROVENANCE_FILE_NAME)
+    if not os.path.exists(path):
+        return {}, None
+    try:
+        with open(path, encoding="utf-8", newline="") as f:
+            reader = csv.DictReader(f, restval="")
+            columns = reader.fieldnames or []
+            missing = [column for column in PROVENANCE_REQUIRED_COLUMNS if column not in columns]
+            if missing:
+                return {}, f"{path}: header lacks the column(s) {', '.join(missing)}"
+            rows = list(reader)
+    except (OSError, UnicodeError, csv.Error) as err:
+        return {}, f"{path}: cannot be read ({err})"
+    return _compute_provenance_versions(rows), None
+
+
+def _compute_region_sources(
+    provenance_values: tuple[str, ...], folder_version: str | None
+) -> tuple[tuple[str, str | None], ...]:
+    """The (source, value) pairs of one region model name: its PROVENANCE.csv values when it has any (the folder
+    name is then not a source), else the folder name alone."""
+    if provenance_values:
+        return tuple((MASK_SOURCE_PROVENANCE, value) for value in provenance_values)
+    return ((MASK_SOURCE_FOLDER_NAME, folder_version),)
+
+
+def _compute_provenance_entries(
+    models_path: str, names: tuple[str, ...], folder_version: str | None
+) -> dict[str, RegionMaskVersion]:
+    """The entries of a model set without model_set.json: PROVENANCE.csv rows, else the folder name, per name.
+
+    An unreadable PROVENANCE.csv, or one lacking a required column, leaves every name unresolved with the reason
+    and logs one ERROR record naming its path; no folder-name fallback then.
+    """
+    versions, reason = _fetch_provenance_versions(models_path)
+    if reason is not None:
+        logger.error(f"{reason}; every region model name of {models_path} is unresolved")
+        entry = RegionMaskVersion(MASK_UNRESOLVED, None, None, (), reason)
+        return dict.fromkeys(names, entry)
+    return {
+        name: _compute_region_mask_version(_compute_region_sources(versions.get(name, ()), folder_version))
+        for name in names
+    }
+
+
 def resolve_region_mask_versions(models_path: str) -> dict[str, RegionMaskVersion]:
     """Mask version of each of the 56 region model names of the local model set at models_path, with its source.
 
@@ -98,18 +168,24 @@ def resolve_region_mask_versions(models_path: str) -> dict[str, RegionMaskVersio
         models_path: a local model set directory (the caller checks it is one).
 
     Returns:
-        region model name (compute_region_model_names(DEFAULT_REGIONS) order) -> RegionMaskVersion. Reads only
-        model_set.json; no logging, no exit, never raises for a directory. O(56).
+        region model name (compute_region_model_names(DEFAULT_REGIONS) order) -> RegionMaskVersion. Precedence:
+        model_set.json masks (PROVENANCE.csv then not opened) > the PROVENANCE.csv rows of the name > the folder
+        name (only for a name neither file names). Reads model_set.json and PROVENANCE.csv only; logs one ERROR
+        record naming PROVENANCE.csv when it is unreadable or lacks a required column, nothing else; no exit, never
+        raises for a directory. O(56 + rows).
     """
+    names = tuple(compute_region_model_names(DEFAULT_REGIONS))
     marker_masks, marker_error = _fetch_marker_masks(models_path)
+    folder_version = find_folder_mask_version(models_path)
     if marker_error is not None:
-        entry = RegionMaskVersion(MASK_UNRESOLVED, None, None, (), marker_error)
-    else:
-        folder_version = find_folder_mask_version(models_path)
+        result = dict.fromkeys(names, RegionMaskVersion(MASK_UNRESOLVED, None, None, (), marker_error))
+    elif marker_masks is not None:
         entry = _compute_region_mask_version(
             ((MASK_SOURCE_MODEL_SET, marker_masks), (MASK_SOURCE_FOLDER_NAME, folder_version))
         )
-    result = dict.fromkeys(compute_region_model_names(DEFAULT_REGIONS), entry)
+        result = dict.fromkeys(names, entry)
+    else:
+        result = _compute_provenance_entries(models_path, names, folder_version)
     assert len(result) == 56, "region_mask_version_resolver.resolve_region_mask_versions post: len(result) == 56"
     return result
 
