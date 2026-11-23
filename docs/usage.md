@@ -37,12 +37,14 @@ Pass `--output <dir>` to choose a different configs root.
 ```bash
 pixi run champollion-embeddings \
     neurospin/Champollion_V1 \
-    local \
-    myproject \
-    my_run \
-    --embeddings_only \
-    --config_path /data/myproject/derivatives/champollion_V1/configs/dataset/myproject
+    /data/myproject/ \
+    --masks canonical_25
 ```
+
+Downloaded and extracted models are cached in `{datasets_root}/derivatives/champollion_V1/models_cache/` by default.
+Pass `--models-cache PATH` to keep the cache elsewhere, for instance outside a read-only dataset tree; a relative
+`PATH` resolves against the current working directory. In a pipeline Config file the same setting is the key
+`dataset.models_cache`, which `champollion-pipeline` passes on to this stage. `--no-cache` forces a fresh download.
 
 ## Stage 5 — Combine Embeddings
 
@@ -68,11 +70,8 @@ Add `--log=PATH` to any stage script to also write its whole output (child proce
 ```bash
 pixi run champollion-embeddings \
     neurospin/Champollion_V1 \
-    local \
-    myproject \
-    my_run \
-    --embeddings_only \
-    --config_path /data/myproject/derivatives/champollion_V1/configs/dataset/myproject \
+    /data/myproject/ \
+    --masks canonical_25 \
     --log=/data/myproject/logs/embeddings.log
 ```
 
