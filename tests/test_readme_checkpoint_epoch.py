@@ -12,6 +12,9 @@ Behaviour documented (read from the code, branch at 5339fbb):
 * ``--use_last_checkpoint`` is removed (argparse exit status 2); the YAML keys
   ``dataset.use_last_checkpoint`` and ``dataset.use_best_model`` are ignored with a warning.
 
+The README.md section 5 text moved to the Stage 4 section of docs/usage.md (TASK-DOCS-BDRABCZUK-84BE8AB6FC73);
+the Requirements below name that place since.
+
 Requirements pinned here (one test per requirement):
 
 * REQ-EPOCH80-BDRABCZUK-BA917603BA48 - section 5 option table has a ``--checkpoint-epoch`` row stating
@@ -32,7 +35,7 @@ Requirements pinned here (one test per requirement):
 * REQ-EPOCH80-BDRABCZUK-B5C16C56B1CF - that subsection names the ``logs/best_model_weights.pt`` stand-in.
 * REQ-EPOCH80-BDRABCZUK-8F116839394A - that subsection names no ``best_model.pt``.
 
-README.md and docs/workflow.md are read as plain text: no package import, no Sphinx build, no network.
+docs/usage.md and docs/workflow.md are read as plain text: no package import, no Sphinx build, no network.
 """
 
 from __future__ import annotations
@@ -44,10 +47,10 @@ import pytest
 
 PROJECT_ROOT = Path(__file__).resolve().parents[1]
 
-README = PROJECT_ROOT / "README.md"
+USAGE = PROJECT_ROOT / "docs" / "usage.md"
 WORKFLOW = PROJECT_ROOT / "docs" / "workflow.md"
 
-EMBEDDINGS_SECTION_HEADING = r"\d+\.\s+Generate Embeddings"
+EMBEDDINGS_SECTION_HEADING = r"Stage 4\b[^\n]*"
 OPTION_NAME = "--checkpoint-epoch"
 CKPT_PATH_PATTERN = "logs/lightning_logs/version_*/checkpoints/epoch=N-step=*.ckpt"
 CKPT_FILE_PATTERN = "epoch=N-step=*.ckpt"
@@ -83,11 +86,11 @@ def _paragraphs(text: str) -> list[str]:
 
 
 def _embeddings_section() -> str:
-    return _section(_read(README), EMBEDDINGS_SECTION_HEADING)
+    return _section(_read(USAGE), EMBEDDINGS_SECTION_HEADING)
 
 
 def _checkpoint_selection() -> str:
-    return _subsection(_embeddings_section(), r"Checkpoint selection", "README.md section '5. Generate Embeddings'")
+    return _subsection(_embeddings_section(), r"Checkpoint selection", "docs/usage.md section 'Stage 4'")
 
 
 def _inference_subsection() -> str:
@@ -120,10 +123,10 @@ def _option_table_rows(section: str) -> list[list[str]]:
 def _checkpoint_epoch_row_description() -> str:
     """Description cell of the ``--checkpoint-epoch`` row of the section 5 option table."""
     rows = _option_table_rows(_embeddings_section())
-    assert rows, "README.md section '5. Generate Embeddings' has no table whose header row starts with 'Option'"
+    assert rows, "docs/usage.md section 'Stage 4' has no table whose header row starts with 'Option'"
     matches = [r for r in rows if r[0].strip("`").split()[0:1] == [OPTION_NAME]]
     assert len(matches) == 1, (
-        f"README.md section 5 option table must contain exactly one '{OPTION_NAME}' row; "
+        f"docs/usage.md Stage 4 option table must contain exactly one '{OPTION_NAME}' row; "
         f"option cells found: {[r[0] for r in rows]}"
     )
     return " | ".join(matches[0][1:])
@@ -137,7 +140,7 @@ def _paragraph_with(text: str, where: str, *patterns: str) -> str:
     raise AssertionError(f"{where}: no paragraph matches all of {list(patterns)}")
 
 
-SELECTION = "README.md 'Checkpoint selection' subsection"
+SELECTION = "docs/usage.md 'Checkpoint selection' subsection"
 
 
 @pytest.mark.smoke
@@ -147,7 +150,7 @@ class TestReadmeCheckpointEpochOptionRow:
     def test_option_row_states_default_80(self):
         description = _checkpoint_epoch_row_description()
         assert re.search(r"(?i)\bdefault\b", description) and re.search(r"(?<![\w.])80(?![\w.])", description), (
-            f"README.md section 5 '{OPTION_NAME}' row must state the default value 80; description: {description!r}"
+            f"docs/usage.md Stage 4 '{OPTION_NAME}' row must state the default value 80; description: {description!r}"
         )
 
 
@@ -158,7 +161,7 @@ class TestReadmeCheckpointEpochConfigKey:
     def test_option_row_names_config_key(self):
         description = _checkpoint_epoch_row_description()
         assert re.search(r"(?<![\w.])dataset\.checkpoint_epoch(?!\w)", description), (
-            f"README.md section 5 '{OPTION_NAME}' row must name the pipeline config key dataset.checkpoint_epoch; "
+            f"docs/usage.md Stage 4 '{OPTION_NAME}' row must name the pipeline config key dataset.checkpoint_epoch; "
             f"description: {description!r}"
         )
 
@@ -170,7 +173,7 @@ class TestReadmeCheckpointEpochZeroBased:
     def test_option_row_states_zero_based(self):
         description = _checkpoint_epoch_row_description()
         assert re.search(r"(?i)\b(0|zero)-based\b", description), (
-            f"README.md section 5 '{OPTION_NAME}' row must state that the epoch number is 0-based; "
+            f"docs/usage.md Stage 4 '{OPTION_NAME}' row must state that the epoch number is 0-based; "
             f"description: {description!r}"
         )
 

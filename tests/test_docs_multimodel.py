@@ -4,18 +4,21 @@
 Run by hand (``verify_ignore`` skips ``tests/test_docs_*.py``): ``pixi run pytest tests/test_docs_multimodel.py``.
 The parsers are only built, never parsed: no filesystem writes, no network.
 
-Requirements pinned here (one test each, README section names as in the file):
+The README.md stage 4-6 text (README sections 5-7) moved to the Stage sections of docs/usage.md
+(TASK-DOCS-BDRABCZUK-84BE8AB6FC73); the first ten Requirements below name that place since.
 
-* REQ-DOCS-BDRABCZUK-66C5D5EEBB15 - README stage 4 ``--per-model-folders`` row.
-* REQ-DOCS-BDRABCZUK-1385E20E250F - README stage 4 ``--checkpoint-epoch`` row: repeatable, ``<id>=N``.
+Requirements pinned here (one test each):
+
+* REQ-DOCS-BDRABCZUK-66C5D5EEBB15 - usage.md stage 4 ``--per-model-folders`` row.
+* REQ-DOCS-BDRABCZUK-1385E20E250F - usage.md stage 4 ``--checkpoint-epoch`` row: repeatable, ``<id>=N``.
 * REQ-DOCS-BDRABCZUK-56C754B68BEB - subsection "Models of one region" defines the model id.
 * REQ-DOCS-BDRABCZUK-B066B64747EC - both models_path layouts.
 * REQ-DOCS-BDRABCZUK-AB302E0CC1E4 - a same-id pair is refused.
 * REQ-DOCS-BDRABCZUK-152173387857 - per-model output file and when it applies.
-* REQ-DOCS-BDRABCZUK-B05E72E488FD - README stage 5 ``--model``.
-* REQ-DOCS-BDRABCZUK-024B6C36A4E6 - README stage 5 combined folder per model id.
-* REQ-DOCS-BDRABCZUK-11657C43203B - README stage 6 ``--model``.
-* REQ-DOCS-BDRABCZUK-BC9B388B4115 - README ``provenance.json`` ``models`` list.
+* REQ-DOCS-BDRABCZUK-B05E72E488FD - usage.md stage 5 ``--model``.
+* REQ-DOCS-BDRABCZUK-024B6C36A4E6 - usage.md stage 5 combined folder per model id.
+* REQ-DOCS-BDRABCZUK-11657C43203B - usage.md stage 6 ``--model``.
+* REQ-DOCS-BDRABCZUK-BC9B388B4115 - usage.md ``provenance.json`` ``models`` list.
 * REQ-DOCS-BDRABCZUK-16F6F559236E - usage.md stage 4 multi-model example.
 * REQ-DOCS-BDRABCZUK-9C40A807F2EA - usage.md stage 5 ``--model`` example.
 * REQ-DOCS-BDRABCZUK-D31F7FA24517 - usage.md stage 6 ``--model`` example.
@@ -37,7 +40,6 @@ from champollion_pipeline.put_together_embeddings import PutTogetherEmbeddings
 from tests.docs_test_helpers import md_section, option_strings, read_text, required_examples
 
 ROOT = Path(__file__).resolve().parents[1]
-README = read_text(ROOT / "README.md")
 USAGE = read_text(ROOT / "docs" / "usage.md")
 WORKFLOW = read_text(ROOT / "docs" / "workflow.md")
 MODEL_SUBSECTION = "Models of one region"
@@ -48,8 +50,9 @@ PARSERS = {
 }
 
 
-def _readme_section(number: int, title: str) -> str:
-    return md_section(README, rf"{number}\.\s+{re.escape(title)}\s*")
+def _usage_stage(number: int) -> str:
+    """Body of the ``## Stage <number> ...`` section of docs/usage.md (README sections 5-7 moved there)."""
+    return md_section(USAGE, rf"Stage {number}\b[^\n]*")
 
 
 def _subsection(text: str, heading: str) -> str:
@@ -59,15 +62,15 @@ def _subsection(text: str, heading: str) -> str:
 
 
 def _option_row(flag: str) -> str:
-    """The row of section 5's options table whose first cell names ``flag``."""
-    for line in _readme_section(5, "Generate Embeddings").splitlines():
+    """The row of the Stage 4 options table of docs/usage.md whose first cell names ``flag``."""
+    for line in _usage_stage(4).splitlines():
         if line.startswith("|") and flag in line.strip("|").split("|", 1)[0]:
             return line
-    raise AssertionError(f"README section 5 has no options table row for {flag}")
+    raise AssertionError(f"docs/usage.md Stage 4 has no options table row for {flag}")
 
 
 def _models_subsection() -> str:
-    return _subsection(_readme_section(5, "Generate Embeddings"), MODEL_SUBSECTION)
+    return _subsection(_usage_stage(4), MODEL_SUBSECTION)
 
 
 def _stage_section(number: int) -> str:
@@ -123,19 +126,19 @@ class TestReadmeStage4:
 class TestReadmeStages5And6:
     def test_combine_model_option(self):  # REQ-DOCS-BDRABCZUK-B05E72E488FD
         assert "--model" in _options_of("champollion-combine")
-        body = _readme_section(6, "Combine Embeddings")
+        body = _usage_stage(5)
         assert "--model" in body and "only the named model id" in body
 
     def test_combine_folder_per_model_id(self):  # REQ-DOCS-BDRABCZUK-024B6C36A4E6
-        assert "<output_path>/<model id>/<region>_embeddings.csv" in _readme_section(6, "Combine Embeddings")
+        assert "<output_path>/<model id>/<region>_embeddings.csv" in _usage_stage(5)
 
     def test_snapshots_model_option(self):  # REQ-DOCS-BDRABCZUK-11657C43203B
         assert "--model" in _options_of("champollion-snapshots")
-        body = _readme_section(7, "Generate Visualization Snapshots")
+        body = _usage_stage(6)
         assert "--model" in body and "two or more model id folders" in body and "refused" in body
 
     def test_provenance_models_list(self):  # REQ-DOCS-BDRABCZUK-BC9B388B4115
-        body = _subsection(_readme_section(5, "Generate Embeddings"), "Run record: `provenance.json`")
+        body = _subsection(_usage_stage(4), "Run record: `provenance.json`")
         for key in ("models", "region", "model_id", "checkpoint_epoch", "weights_source"):
             assert re.search(rf"`{key}`", body), f"provenance subsection does not name `{key}`"
 

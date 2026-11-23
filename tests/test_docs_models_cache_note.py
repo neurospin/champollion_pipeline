@@ -5,13 +5,13 @@ USER DECISION 2026-10-08: the downloaded/extracted model cache lives inside the
 dataset tree at ``{datasets_root}/derivatives/champollion_V1/models_cache/``
 (REQ-DATASETS-BDRABCZUK-C5669FCE4AB8). It is multi-GB and regenerable, so it must
 be kept out of any dataset sync or archive. No sync/archive tool exists in the
-Champollion repos, so the deliverable is a ``README.md`` note: a level-3
-subsection of section "5. Generate Embeddings" whose heading names
-``models_cache``.
+Champollion repos, so the deliverable is a ``docs/usage.md`` note: a level-3
+subsection of the Stage 4 section whose heading names ``models_cache`` (moved from
+README.md section "5. Generate Embeddings" by TASK-DOCS-BDRABCZUK-84BE8AB6FC73).
 
 Requirements pinned here (one test per requirement):
 
-* REQ-DATASETS-BDRABCZUK-BB97F11D9595 - section 5 has exactly one ``### ...models_cache...`` subsection.
+* REQ-DATASETS-BDRABCZUK-BB97F11D9595 - Stage 4 has exactly one ``### ...models_cache...`` subsection.
 * REQ-DATASETS-BDRABCZUK-A125F8E88891 - the subsection states the cache path
   ``{datasets_root}/derivatives/champollion_V1/models_cache/``.
 * REQ-DATASETS-BDRABCZUK-89F7EA7F27C0 - the subsection contains the word "regenerable".
@@ -21,7 +21,7 @@ Requirements pinned here (one test per requirement):
   ``--exclude`` names models_cache.
 * REQ-DATASETS-BDRABCZUK-CF12570BA65B - the subsection contains the option name ``--models-cache``.
 
-README.md is read as plain text: no package import, no Sphinx build, no network.
+docs/usage.md is read as plain text: no package import, no Sphinx build, no network.
 """
 
 from __future__ import annotations
@@ -36,9 +36,9 @@ from tests.docs_test_helpers import bash_blocks, strip_comment
 
 PROJECT_ROOT = Path(__file__).resolve().parents[1]
 
-README = PROJECT_ROOT / "README.md"
+USAGE = PROJECT_ROOT / "docs" / "usage.md"
 
-EMBEDDINGS_SECTION_HEADING = r"\d+\.\s+Generate Embeddings"
+EMBEDDINGS_SECTION_HEADING = r"Stage 4\b[^\n]*"
 CACHE_PATH_RE = re.compile(r"\{datasets_root\}/derivatives/champollion_V1/models_cache/?(?![A-Za-z0-9_])")
 SHELL_OPERATORS = {"|", "||", "&&", ";", "&"}
 
@@ -51,7 +51,7 @@ def _read(path: Path) -> str:
 def _section(text: str, heading_regex: str) -> str:
     """Body of the ``## <heading>`` section, up to the next level-2 heading."""
     m = re.search(rf"^##\s+{heading_regex}\s*$(.*?)(?=^##\s|\Z)", text, re.MULTILINE | re.DOTALL)
-    assert m, f"no '## {heading_regex}' section found in README.md"
+    assert m, f"no '## {heading_regex}' section found in docs/usage.md"
     return m.group(1)
 
 
@@ -76,15 +76,15 @@ def _subsections(section: str) -> list[tuple[str, str]]:
 
 
 def _models_cache_subsections() -> list[tuple[str, str]]:
-    section = _section(_read(README), EMBEDDINGS_SECTION_HEADING)
+    section = _section(_read(USAGE), EMBEDDINGS_SECTION_HEADING)
     return [(h, body) for h, body in _subsections(section) if "models_cache" in h]
 
 
 def _models_cache_note() -> str:
-    """Body of the single models_cache subsection of section 5."""
+    """Body of the single models_cache subsection of the Stage 4 section."""
     matches = _models_cache_subsections()
     assert len(matches) == 1, (
-        "README.md section '5. Generate Embeddings' must have exactly one level-3 subsection whose "
+        "docs/usage.md section 'Stage 4' must have exactly one level-3 subsection whose "
         f"heading contains 'models_cache'; found headings {[h for h, _ in matches]}"
     )
     return matches[0][1]
@@ -135,10 +135,10 @@ def _exclude_values(args: list[str]) -> list[str]:
 def _assert_exclude_example(command: str) -> None:
     note = _models_cache_note()
     invocations = _command_invocations(note, command)
-    assert invocations, f"README.md models_cache subsection has no fenced bash block with a '{command}' command"
+    assert invocations, f"docs/usage.md models_cache subsection has no fenced bash block with a '{command}' command"
     excludes = [v for args in invocations for v in _exclude_values(args)]
     assert any("models_cache" in v for v in excludes), (
-        f"README.md models_cache subsection: no '{command}' command passes an --exclude value containing "
+        f"docs/usage.md models_cache subsection: no '{command}' command passes an --exclude value containing "
         f"'models_cache'; --exclude values found: {excludes}"
     )
 
@@ -150,7 +150,7 @@ class TestReadmeModelsCacheSubsection:
     def test_embeddings_section_has_exactly_one_models_cache_subsection(self):
         matches = _models_cache_subsections()
         assert len(matches) == 1, (
-            "README.md section '5. Generate Embeddings' must contain exactly one level-3 subsection whose "
+            "docs/usage.md section 'Stage 4' must contain exactly one level-3 subsection whose "
             f"heading contains 'models_cache'; found headings {[h for h, _ in matches]}"
         )
 
@@ -161,7 +161,7 @@ class TestReadmeModelsCachePath:
 
     def test_subsection_states_cache_path(self):
         assert CACHE_PATH_RE.search(_models_cache_note()), (
-            "README.md models_cache subsection must state the cache path "
+            "docs/usage.md models_cache subsection must state the cache path "
             "{datasets_root}/derivatives/champollion_V1/models_cache/"
         )
 
@@ -172,7 +172,7 @@ class TestReadmeModelsCacheRegenerable:
 
     def test_subsection_says_regenerable(self):
         assert re.search(r"\bregenerable\b", _models_cache_note(), re.IGNORECASE), (
-            "README.md models_cache subsection must contain the word 'regenerable'"
+            "docs/usage.md models_cache subsection must contain the word 'regenerable'"
         )
 
 
@@ -198,5 +198,5 @@ class TestReadmeModelsCacheOverrideOption:
 
     def test_subsection_names_models_cache_option(self):
         assert re.search(r"--models-cache(?![\w-])", _models_cache_note()), (
-            "README.md models_cache subsection must contain the champollion-embeddings option name --models-cache"
+            "docs/usage.md models_cache subsection must contain the champollion-embeddings option name --models-cache"
         )

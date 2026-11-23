@@ -14,6 +14,9 @@ Behaviour documented (read from the code, WIP a367ad5):
 * A fixed seed makes the 2mm re-skeletonization, and so every crop, reproducible; crops built
   before the seed existed came from clock-seeded skeletons, so they and their embeddings differ.
 
+The README.md section 3 text moved to the Stage 2 section of docs/usage.md (TASK-DOCS-BDRABCZUK-84BE8AB6FC73);
+the Requirements below name that place since.
+
 Requirements pinned here (one test per requirement):
 
 * REQ-SKELSEED-BDRABCZUK-E48CDFD68B58 - the section 3 option table has one ``--skel-seed`` row.
@@ -28,7 +31,7 @@ Requirements pinned here (one test per requirement):
 * REQ-SKELSEED-BDRABCZUK-2C0A2394DE52 - that subsection states that crops and embeddings of datasets
   built before the skel_seed key differ from those of a seeded run.
 
-README.md is read as plain text: no package import, no Sphinx build, no network.
+docs/usage.md is read as plain text: no package import, no Sphinx build, no network.
 """
 
 from __future__ import annotations
@@ -40,9 +43,9 @@ import pytest
 
 PROJECT_ROOT = Path(__file__).resolve().parents[1]
 
-README = PROJECT_ROOT / "README.md"
+USAGE = PROJECT_ROOT / "docs" / "usage.md"
 
-CROPS_SECTION_HEADING = r"\d+\.\s+Generate Sulcal Region Crops"
+CROPS_SECTION_HEADING = r"Stage 2\b[^\n]*"
 OPTION_NAME = "--skel-seed"
 JSON_NAME = "pipeline_loop_2mm.json"
 OUTPUT_JSON = "{output}/pipeline_loop_2mm.json"
@@ -58,12 +61,12 @@ def _read(path: Path) -> str:
 def _section(text: str, heading_regex: str) -> str:
     """Body of the ``## <heading>`` section, up to the next level-2 heading."""
     m = re.search(rf"^##\s+{heading_regex}\s*$(.*?)(?=^##\s|\Z)", text, re.MULTILINE | re.DOTALL)
-    assert m, f"no '## {heading_regex}' section found in README.md"
+    assert m, f"no '## {heading_regex}' section found in docs/usage.md"
     return m.group(1)
 
 
 def _crops_section() -> str:
-    return _section(_read(README), CROPS_SECTION_HEADING)
+    return _section(_read(USAGE), CROPS_SECTION_HEADING)
 
 
 def _cells(line: str) -> list[str]:
@@ -92,9 +95,7 @@ def _option_table_rows(section: str) -> list[list[str]]:
 def _skel_seed_rows() -> tuple[list[list[str]], list[list[str]]]:
     """(all option rows, ``--skel-seed`` rows) of the section 3 option table."""
     rows = _option_table_rows(_crops_section())
-    assert rows, (
-        "README.md section '3. Generate Sulcal Region Crops' has no table whose header row starts with 'Option'"
-    )
+    assert rows, "docs/usage.md section 'Stage 2' has no table whose header row starts with 'Option'"
     matches = [r for r in rows if r[0].strip("`").split()[0:1] == [OPTION_NAME]]
     return rows, matches
 
@@ -103,17 +104,17 @@ def _skel_seed_row_description() -> str:
     """Description cell of the ``--skel-seed`` row of the section 3 option table."""
     rows, matches = _skel_seed_rows()
     assert len(matches) == 1, (
-        f"README.md section 3 option table must contain exactly one '{OPTION_NAME}' row; "
+        f"docs/usage.md Stage 2 option table must contain exactly one '{OPTION_NAME}' row; "
         f"option cells found: {[r[0] for r in rows]}"
     )
     return " | ".join(matches[0][1:])
 
 
 def _skeleton_seed_subsection() -> str:
-    """Text of the ``### Skeleton seed`` subsection of section 3, up to the next heading."""
+    """Text of the ``### Skeleton seed`` subsection of the Stage 2 section, up to the next heading."""
     section = _crops_section()
     m = re.search(r"^###\s+Skeleton seed\s*$(.*?)(?=^#{1,3}\s|\Z)", section, re.MULTILINE | re.DOTALL)
-    assert m, "README.md section '3. Generate Sulcal Region Crops' has no '### Skeleton seed' subsection"
+    assert m, "docs/usage.md section 'Stage 2' has no '### Skeleton seed' subsection"
     return m.group(1)
 
 
@@ -124,7 +125,7 @@ class TestReadmeSkelSeedOptionRow:
     def test_option_table_has_skel_seed_row(self):
         rows, matches = _skel_seed_rows()
         assert len(matches) == 1, (
-            f"README.md section 3 option table must contain exactly one '{OPTION_NAME}' row; "
+            f"docs/usage.md Stage 2 option table must contain exactly one '{OPTION_NAME}' row; "
             f"option cells found: {[r[0] for r in rows]}"
         )
 
@@ -136,7 +137,7 @@ class TestReadmeSkelSeedConfigKey:
     def test_option_row_names_config_key(self):
         description = _skel_seed_row_description()
         assert CONFIG_KEY_RE.search(description), (
-            f"README.md section 3 '{OPTION_NAME}' row must name the pipeline config key dataset.skel_seed; "
+            f"docs/usage.md Stage 2 '{OPTION_NAME}' row must name the pipeline config key dataset.skel_seed; "
             f"description: {description!r}"
         )
 
@@ -152,7 +153,7 @@ class TestReadmeSkelSeedDefaultSource:
             and JSON_KEY_RE.search(description)
             and re.search(r"\bwithout\b", description, re.IGNORECASE)
         ), (
-            f"README.md section 3 '{OPTION_NAME}' row must state that, without the option, the skel_seed key of "
+            f"docs/usage.md Stage 2 '{OPTION_NAME}' row must state that, without the option, the skel_seed key of "
             f"{OUTPUT_JSON} sets the skeleton seed; description: {description!r}"
         )
 
@@ -168,7 +169,7 @@ class TestReadmeSkelSeedNullConfig:
             and CONFIG_KEY_RE.search(description)
             and JSON_NAME in description
         ), (
-            f"README.md section 3 '{OPTION_NAME}' row must state that a null dataset.skel_seed leaves the "
+            f"docs/usage.md Stage 2 '{OPTION_NAME}' row must state that a null dataset.skel_seed leaves the "
             f"skel_seed value of {JSON_NAME} in effect; description: {description!r}"
         )
 
@@ -184,7 +185,7 @@ class TestReadmeSkelSeedTemplateValue:
             and JSON_NAME in prose
             and re.search(r"\btemplate\b", prose, re.IGNORECASE)
         ), (
-            f"README.md 'Skeleton seed' subsection must state 42 as the skel_seed value of the {JSON_NAME} "
+            f"docs/usage.md 'Skeleton seed' subsection must state 42 as the skel_seed value of the {JSON_NAME} "
             f"template; subsection: {prose!r}"
         )
 
@@ -198,7 +199,7 @@ class TestReadmeSkelSeedDeterminism:
         assert re.search(r"\bsame\b", prose, re.IGNORECASE) and re.search(
             r"\bidentical\b[^.]*\bcrops\b", prose, re.IGNORECASE
         ), (
-            "README.md 'Skeleton seed' subsection must state that two runs with the same input and skeleton "
+            "docs/usage.md 'Skeleton seed' subsection must state that two runs with the same input and skeleton "
             f"seed produce identical crops; subsection: {prose!r}"
         )
 
@@ -215,6 +216,6 @@ class TestReadmeSkelSeedOlderDatasets:
             if not re.search(rf"\b{word}", prose, re.IGNORECASE)
         ]
         assert not missing, (
-            "README.md 'Skeleton seed' subsection must state that the crops and embeddings of datasets built "
+            "docs/usage.md 'Skeleton seed' subsection must state that the crops and embeddings of datasets built "
             f"before the skel_seed key existed differ from those of a seeded run; missing words: {missing}"
         )
