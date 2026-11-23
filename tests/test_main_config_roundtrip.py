@@ -25,14 +25,14 @@ from pathlib import Path
 import pytest
 import yaml
 
-MAIN_PY = Path(__file__).resolve().parent.parent / "main.py"
+CLI_PY = Path(__file__).resolve().parent.parent / "src" / "champollion_pipeline" / "cli.py"
 
 # Secret field never written to YAML (REQ-HFTOKEN-01).
 _UNSAVED_DATASET_FIELDS = {"hf_token"}
 
 
 def _load_main_module():
-    spec = importlib.util.spec_from_file_location("_champollion_main_config_roundtrip_under_test", MAIN_PY)
+    spec = importlib.util.spec_from_file_location("_champollion_main_config_roundtrip_under_test", CLI_PY)
     module = importlib.util.module_from_spec(spec)
     spec.loader.exec_module(module)
     return module

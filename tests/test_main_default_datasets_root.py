@@ -19,11 +19,11 @@ from pathlib import Path
 
 import pytest
 
-MAIN_PY = Path(__file__).resolve().parent.parent / "main.py"
+CLI_PY = Path(__file__).resolve().parent.parent / "src" / "champollion_pipeline" / "cli.py"
 
 
 def _load_main_module():
-    spec = importlib.util.spec_from_file_location("_champollion_main_default_root_under_test", MAIN_PY)
+    spec = importlib.util.spec_from_file_location("_champollion_main_default_root_under_test", CLI_PY)
     module = importlib.util.module_from_spec(spec)
     spec.loader.exec_module(module)
     return module
@@ -58,14 +58,14 @@ class TestNoContrastiveRemnant:
         """REQ-DEFROOT-02: the substring 'contrastive/' appears nowhere in main.py."""
         offending = [
             f"{lineno}: {line.strip()}"
-            for lineno, line in enumerate(MAIN_PY.read_text(encoding="utf-8").splitlines(), start=1)
+            for lineno, line in enumerate(CLI_PY.read_text(encoding="utf-8").splitlines(), start=1)
             if "contrastive/" in line
         ]
         assert offending == []
 
     def test_main_py_has_no_contrastive_string_literal(self):
         """REQ-DEFROOT-02: no Python string literal in main.py equals 'contrastive'."""
-        tree = ast.parse(MAIN_PY.read_text(encoding="utf-8"), filename=str(MAIN_PY))
+        tree = ast.parse(CLI_PY.read_text(encoding="utf-8"), filename=str(CLI_PY))
         offending = [
             node.lineno
             for node in ast.walk(tree)

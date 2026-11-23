@@ -53,8 +53,8 @@ from champollion_pipeline.streaming import StreamingSettings
 from champollion_pipeline.streaming.runner import run_parallel_pipeline as real_run_parallel_pipeline
 from tests.log_assertions import OUTPUT
 
-MAIN_PY = Path(__file__).resolve().parent.parent / "main.py"
-MAIN_TREE = ast.parse(MAIN_PY.read_text())
+CLI_PY = Path(__file__).resolve().parent.parent / "src" / "champollion_pipeline" / "cli.py"
+MAIN_TREE = ast.parse(CLI_PY.read_text())
 
 STDOUT_MARKER = "streaming-parent-stdout-marker"
 STDERR_MARKER = "streaming-parent-stderr-marker"
@@ -117,7 +117,7 @@ class _CountingLogPaths:
 
 
 def _load_main():
-    spec = importlib.util.spec_from_file_location("_champollion_main_streaming_under_test", MAIN_PY)
+    spec = importlib.util.spec_from_file_location("_champollion_main_streaming_under_test", CLI_PY)
     module = importlib.util.module_from_spec(spec)
     spec.loader.exec_module(module)
     return module

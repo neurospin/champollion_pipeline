@@ -24,7 +24,7 @@ from pathlib import Path
 import pytest
 
 REPO_ROOT = Path(__file__).resolve().parent.parent
-MAIN_PY = REPO_ROOT / "main.py"
+CLI_PY = REPO_ROOT / "src" / "champollion_pipeline" / "cli.py"
 PKG_DIR = REPO_ROOT / "src" / "champollion_pipeline"
 STAGE_BASE_PY = PKG_DIR / "_stage_base.py"  # StageResult moved here from main.py
 PRUNE_PY = PKG_DIR / "prune_failed_subjects.py"
@@ -60,7 +60,7 @@ class TestDeadCodeRemoved:
 
     def test_main_does_not_bind_scan_id(self):
         """``main.py`` neither imports ``ScanId`` nor assigns its ``None`` fallback."""
-        tree = _tree(MAIN_PY)
+        tree = _tree(CLI_PY)
         offenders = []
         for node in ast.walk(tree):
             if isinstance(node, (ast.Import, ast.ImportFrom)):

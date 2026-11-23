@@ -39,7 +39,7 @@ from champollion_pipeline.put_together_embeddings import PutTogetherEmbeddings
 from champollion_pipeline.run_cortical_tiles import RunCorticalTiles
 
 REPO_ROOT = Path(__file__).resolve().parent.parent
-MAIN_PY = REPO_ROOT / "main.py"
+CLI_PY = REPO_ROOT / "src" / "champollion_pipeline" / "cli.py"
 PROFILE_ENV_PREFIX = "CHAMPOLLION_PROFILE"
 STAGE_NAMES = (
     "generate_morphologist_graphs",
@@ -126,7 +126,7 @@ def _clean_env(**extra: str) -> dict[str, str]:
 def _run_main(argv: list[str], cwd: Path, **extra_env: str) -> tuple[subprocess.CompletedProcess, dict | None]:
     """Run the driver; return the completed process and its REPORT (None when it printed none)."""
     completed = subprocess.run(
-        [sys.executable, "-c", _DRIVER, str(MAIN_PY), *argv],
+        [sys.executable, "-c", _DRIVER, str(CLI_PY), *argv],
         cwd=str(cwd),
         env=_clean_env(**extra_env),
         capture_output=True,
@@ -243,7 +243,7 @@ def test_profiling_off_by_default(tmp_path):
 
 
 def _load_main_module():
-    spec = importlib.util.spec_from_file_location("_champollion_main_profile_under_test", MAIN_PY)
+    spec = importlib.util.spec_from_file_location("_champollion_main_profile_under_test", CLI_PY)
     module = importlib.util.module_from_spec(spec)
     spec.loader.exec_module(module)
     return module

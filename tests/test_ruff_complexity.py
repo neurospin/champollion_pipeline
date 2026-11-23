@@ -33,7 +33,7 @@ pytestmark = pytest.mark.smoke  # noqa: V107
 
 REPO_ROOT = Path(__file__).resolve().parents[1]
 RUFF_TOML = REPO_ROOT / "ruff.toml"
-MAIN_PY = REPO_ROOT / "main.py"
+CLI_PY = REPO_ROOT / "src" / "champollion_pipeline" / "cli.py"
 RULES = ("C901", "PLR0913", "PLR0915")
 CONFIG_MAX_COMPLEXITY = 15
 REFACTORED_MAX_COMPLEXITY = 10
@@ -102,8 +102,8 @@ def _isolated_findings(rule: str, paths: list[str], *, max_complexity: int, igno
 
 
 def _def_row(qualname: str) -> int:
-    """Line of the ``def`` of *qualname* (``func`` or ``Class.method``) in main.py."""
-    tree = ast.parse(MAIN_PY.read_text(encoding="utf-8"))
+    """Line of the ``def`` of *qualname* (``func`` or ``Class.method``) in cli.py, the orchestrator of main.py."""
+    tree = ast.parse(CLI_PY.read_text(encoding="utf-8"))
     parts = qualname.split(".")
     body = tree.body
     node = None
@@ -116,14 +116,16 @@ def _def_row(qualname: str) -> int:
             ),
             None,
         )
-        assert node is not None, f"{qualname} not found in main.py"
+        assert node is not None, f"{qualname} not found in {CLI_PY.name}"
         body = node.body
     return node.lineno
 
 
 def _function_findings(rule: str, qualname: str, *, max_complexity: int = CONFIG_MAX_COMPLEXITY) -> list[dict]:
     row = _def_row(qualname)
-    findings = _isolated_findings(rule, ["main.py"], max_complexity=max_complexity, ignore_noqa=True)
+    findings = _isolated_findings(
+        rule, [str(CLI_PY.relative_to(REPO_ROOT))], max_complexity=max_complexity, ignore_noqa=True
+    )
     return [f for f in findings if f["code"] == rule and f["location"]["row"] == row]
 
 

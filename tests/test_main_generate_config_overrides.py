@@ -12,25 +12,17 @@ main.py lives at the repo root (not inside the installed package), so it is
 loaded by file path under a private module name, as in test_main_stage_argv.py.
 """
 
-import importlib.util
 from pathlib import Path
 
 import pytest
 import yaml
 
-MAIN_PY = Path(__file__).resolve().parent.parent / "main.py"
-
-
-def _load_main_module():
-    spec = importlib.util.spec_from_file_location("_champollion_main_generate_config_under_test", MAIN_PY)
-    module = importlib.util.module_from_spec(spec)
-    spec.loader.exec_module(module)
-    return module
+from tests.main_stage_helpers import load_main_module
 
 
 @pytest.fixture
 def main_module():
-    return _load_main_module()
+    return load_main_module("_champollion_main_generate_config_under_test")
 
 
 @pytest.fixture

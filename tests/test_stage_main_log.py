@@ -17,13 +17,14 @@ test_maintenance_default_log_path.py.
 
 import importlib
 import inspect
-import sys
 from os.path import join
 from pathlib import Path
 
 import pytest
 import tomllib
 from champollion_utils.script_builder import ScriptBuilder
+
+from tests.main_stage_helpers import stub_script_entry_point
 
 PYPROJECT = Path(__file__).resolve().parent.parent / "pyproject.toml"
 
@@ -58,6 +59,7 @@ ENTRY_POINT_ARGV = {
     "champollion-train": ["--dataset=myproject", "--region=cingulate_left"],
     "champollion-prune": [DERIVATIVES, "--qc=/data/myproject/qc.tsv"],
     "champollion-purge": [DERIVATIVES, "--subject=sub-123456"],
+    "champollion-pipeline": [],
     "champollion-labelling-qc": [
         join(DERIVATIVES, "morphologist-6.0", "subjects"),
         join(ROOT, "qc", "labelling_qc.tsv"),
@@ -73,6 +75,9 @@ def _console_scripts() -> dict[str, str]:
 
 
 CONSOLE_SCRIPTS = sorted(_console_scripts())
+# champollion-pipeline keeps the --log=DIR folder meaning of main.py (REQ-RUNLOG-BDRABCZUK-29718A5CDD2D).
+LOG_DIR_SCRIPTS = ("champollion-pipeline",)
+LOG_PATH_SCRIPTS = [name for name in CONSOLE_SCRIPTS if name not in LOG_DIR_SCRIPTS]
 
 
 def test_every_console_script_has_a_command_line():
@@ -99,26 +104,14 @@ def stubbed_entry_point(monkeypatch):
 
     def _run(name: str, log_arg: str):
         module, entry_point, script_class = _entry_point_and_script_class(name)
-        calls = []
-
-        def _fake_run(self):
-            calls.append(self)
-            return 0
-
-        monkeypatch.setattr(script_class, "run", _fake_run)
-        monkeypatch.setattr("champollion_utils.script_builder.check_for_updates", lambda *a, **k: None)
-        monkeypatch.setattr("champollion_utils.script_builder.init_process", lambda *a, **k: None)
-        for setup_name in ("init_pipeline_process", "detach_frozen_root_handlers"):
-            if hasattr(module, setup_name):
-                monkeypatch.setattr(module, setup_name, lambda *a, **k: None)
-        monkeypatch.setattr(sys, "argv", [name, *ENTRY_POINT_ARGV[name], log_arg])
+        calls = stub_script_entry_point(monkeypatch, module, script_class, [name, *ENTRY_POINT_ARGV[name], log_arg])
         return entry_point(), calls
 
     return _run
 
 
-# REQ-RUNLOG-BDRABCZUK-79BCF456CFC5
-@pytest.mark.parametrize("name", CONSOLE_SCRIPTS)
+# REQ-RUNLOG-BDRABCZUK-29718A5CDD2D (revises REQ-RUNLOG-BDRABCZUK-79BCF456CFC5)
+@pytest.mark.parametrize("name", LOG_PATH_SCRIPTS)
 def test_console_script_log_path_writes_run_log(tmp_path, stubbed_entry_point, name):
     log_path = tmp_path / "explicit" / f"{name}.log"
     exit_code, calls = stubbed_entry_point(name, f"--log={log_path}")

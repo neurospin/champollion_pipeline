@@ -30,7 +30,7 @@ from unittest.mock import patch
 
 import pytest
 
-from tests.main_stage_helpers import MAIN_PY, load_main_module, stage_paths_config
+from tests.main_stage_helpers import CLI_PY, load_main_module, stage_paths_config
 
 REPO_ROOT = Path(__file__).resolve().parent.parent
 CONFIG_MARKER = "CONFIG="
@@ -85,7 +85,7 @@ def _run_probe(code: str, *args: str) -> subprocess.CompletedProcess:
     env = dict(os.environ)
     env["PYTHONPATH"] = os.pathsep.join(p for p in (str(REPO_ROOT / "src"), env.get("PYTHONPATH")) if p)
     return subprocess.run(
-        [sys.executable, "-c", code, str(MAIN_PY), *args],
+        [sys.executable, "-c", code, str(CLI_PY), *args],
         cwd=str(REPO_ROOT),
         env=env,
         capture_output=True,

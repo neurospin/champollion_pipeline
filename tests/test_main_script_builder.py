@@ -27,7 +27,7 @@ from champollion_utils.script_builder import ScriptBuilder
 from champollion_pipeline.cli_options import CONFIG_ARGUMENTS
 from champollion_pipeline.put_together_embeddings import PutTogetherEmbeddings
 
-MAIN_PY = Path(__file__).resolve().parent.parent / "main.py"
+CLI_PY = Path(__file__).resolve().parent.parent / "src" / "champollion_pipeline" / "cli.py"
 
 SCRIPT_NAME = "champollion_pipeline"
 RUN_LOG_HEADER = "==== champollion run log ===="
@@ -179,7 +179,7 @@ class _StubOrchestrator:
 
 
 def _load_main_module():
-    spec = importlib.util.spec_from_file_location("_champollion_main_script_builder_under_test", MAIN_PY)
+    spec = importlib.util.spec_from_file_location("_champollion_main_script_builder_under_test", CLI_PY)
     module = importlib.util.module_from_spec(spec)
     spec.loader.exec_module(module)
     return module

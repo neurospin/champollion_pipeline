@@ -26,7 +26,7 @@ import pytest
 from champollion_pipeline.derivatives_layout import DEFAULT_MASKS_VERSION
 from champollion_pipeline.put_together_embeddings import PutTogetherEmbeddings
 
-MAIN_PY = Path(__file__).resolve().parent.parent / "main.py"
+CLI_PY = Path(__file__).resolve().parent.parent / "src" / "champollion_pipeline" / "cli.py"
 DERIVATIVES = "derivatives"
 CHAMPOLLION_FOLDER = "champollion_V1"
 REGION_EMBEDDINGS = "region_embeddings"
@@ -36,7 +36,7 @@ DATASETS_ROOT = "/data/MYDATASET"
 
 
 def _load_main_module():
-    spec = importlib.util.spec_from_file_location("_champollion_main_embver_combine_source_under_test", MAIN_PY)
+    spec = importlib.util.spec_from_file_location("_champollion_main_embver_combine_source_under_test", CLI_PY)
     module = importlib.util.module_from_spec(spec)
     spec.loader.exec_module(module)
     return module

@@ -26,7 +26,7 @@ from unittest.mock import patch
 import pytest
 import yaml
 
-MAIN_PY = Path(__file__).resolve().parent.parent / "main.py"
+CLI_PY = Path(__file__).resolve().parent.parent / "src" / "champollion_pipeline" / "cli.py"
 
 RUN_LOG_HEADER = "==== champollion run log ===="
 RUN_LOG_FOOTER = "==== end of run ===="
@@ -34,7 +34,7 @@ RUN_OUTPUT_MARKER = "stage-run-output-marker"
 
 
 def _load_main_module():
-    spec = importlib.util.spec_from_file_location("_champollion_main_stage_run_log_under_test", MAIN_PY)
+    spec = importlib.util.spec_from_file_location("_champollion_main_stage_run_log_under_test", CLI_PY)
     module = importlib.util.module_from_spec(spec)
     spec.loader.exec_module(module)
     return module

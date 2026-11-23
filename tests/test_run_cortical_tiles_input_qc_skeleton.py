@@ -43,7 +43,7 @@ from tests.stage2_skeletons import (  # noqa: F401 - the fixture overrides the c
 )
 
 REPO_DIR = Path(__file__).resolve().parent.parent
-MAIN_PY = REPO_DIR / "main.py"
+CLI_PY = REPO_DIR / "src" / "champollion_pipeline" / "cli.py"
 CROP_SCRIPT_DIR = REPO_DIR / "external/cortical_tiles/cortical_tiles/brainvisa"
 
 LOGGER_NAME = "champollion_pipeline.run_cortical_tiles"
@@ -370,7 +370,7 @@ def test_reason_order(stage, graphs, skeletons, empty, expected):
 @pytest.fixture
 def pre_check_patterns(tmp_path) -> list[str]:
     """Stage 2 patterns of main.py on the real tree."""
-    spec = importlib.util.spec_from_file_location("_champollion_main_skeleton_qc_under_test", MAIN_PY)
+    spec = importlib.util.spec_from_file_location("_champollion_main_skeleton_qc_under_test", CLI_PY)
     main_module = importlib.util.module_from_spec(spec)
     spec.loader.exec_module(main_module)
     config = main_module.PipelineConfig(

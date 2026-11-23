@@ -38,7 +38,7 @@ import yaml
 from champollion_pipeline.run_cortical_tiles import RunCorticalTiles
 from tests.main_stage_helpers import option_values, tiles_config, tiles_stage_argv
 
-MAIN_PY = Path(__file__).resolve().parent.parent / "main.py"
+CLI_PY = Path(__file__).resolve().parent.parent / "src" / "champollion_pipeline" / "cli.py"
 
 LABELLING_SESSION_OPTION = "--labelling_session"
 CONFIGURED_SESSION = "0_auto"
@@ -51,7 +51,7 @@ REQ_NO_FORWARD = "REQ-WHOLEBRAIN-BDRABCZUK-96FF8A402A81"
 
 
 def _load_main_module():
-    spec = importlib.util.spec_from_file_location("_champollion_main_labelling_session_config_under_test", MAIN_PY)
+    spec = importlib.util.spec_from_file_location("_champollion_main_labelling_session_config_under_test", CLI_PY)
     module = importlib.util.module_from_spec(spec)
     spec.loader.exec_module(module)
     return module

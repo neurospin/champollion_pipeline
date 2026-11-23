@@ -23,7 +23,6 @@ reads, so the expected file name is one of two stamps.
 
 import importlib
 import inspect
-import sys
 from datetime import datetime
 from os.path import join
 
@@ -31,6 +30,7 @@ import pytest
 from champollion_utils.script_builder import ScriptBuilder
 
 from champollion_pipeline.derivatives_layout import compute_run_log_path
+from tests.main_stage_helpers import stub_script_entry_point
 
 DATA = "/data/myproject"
 
@@ -79,19 +79,7 @@ def stubbed_main(monkeypatch):
 
     def _run(name: str, log_arg: str):
         module, script_class = _module_and_script_class(name)
-        calls = []
-
-        def _fake_run(self):
-            calls.append(self)
-            return 0
-
-        monkeypatch.setattr(script_class, "run", _fake_run)
-        monkeypatch.setattr("champollion_utils.script_builder.check_for_updates", lambda *a, **k: None)
-        monkeypatch.setattr("champollion_utils.script_builder.init_process", lambda *a, **k: None)
-        for setup_name in ("init_pipeline_process", "detach_frozen_root_handlers"):
-            if hasattr(module, setup_name):
-                monkeypatch.setattr(module, setup_name, lambda *a, **k: None)
-        monkeypatch.setattr(sys, "argv", [name, *SCRIPT_ARGV[name], log_arg])
+        calls = stub_script_entry_point(monkeypatch, module, script_class, [name, *SCRIPT_ARGV[name], log_arg])
         return module.main(), calls
 
     return _run

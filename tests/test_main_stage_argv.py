@@ -29,7 +29,7 @@ from champollion_pipeline.generate_morphologist_graphs import GenerateMorphologi
 from champollion_pipeline.generate_snapshots import GenerateSnapshots
 from champollion_pipeline.put_together_embeddings import PutTogetherEmbeddings
 from champollion_pipeline.run_cortical_tiles import RunCorticalTiles
-from tests.main_stage_helpers import MAIN_PY, capture_stage_argv, load_main_module, stage_paths_config
+from tests.main_stage_helpers import CLI_PY, REPO_ROOT, capture_stage_argv, load_main_module, stage_paths_config
 
 _STAGE_SCRIPT_CLASSES = {
     "GenerateMorphologistGraphs": "champollion_pipeline.generate_morphologist_graphs.GenerateMorphologistGraphs",
@@ -231,8 +231,8 @@ print("RESOLVED=" + json.dumps(resolved))
 def loaded_main_report():
     """Load main.py in a fresh interpreter from the repo root; return (resolved names, combined output)."""
     completed = subprocess.run(
-        [sys.executable, "-c", _LOAD_MAIN_SNIPPET, str(MAIN_PY), *_STAGE_SCRIPT_CLASSES],
-        cwd=str(MAIN_PY.parent),
+        [sys.executable, "-c", _LOAD_MAIN_SNIPPET, str(CLI_PY), *_STAGE_SCRIPT_CLASSES],
+        cwd=str(REPO_ROOT),
         capture_output=True,
         text=True,
         timeout=120,
