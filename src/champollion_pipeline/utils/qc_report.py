@@ -265,7 +265,16 @@ def fetch_crop_qc_rows(  # noqa: PLR0913 - keyword-only sides, stage 2 positiona
     or a CSV not listing it, on the hemisphere ``sides`` only. Read-only; an absent or unreadable file is a
     gap, never an exception.
     """
-    steps = _list_crop_steps(crops_dir, regions, kinds, is_bids, sides)
+    return _build_crop_qc_rows(_list_crop_steps(crops_dir, regions, kinds, is_bids, sides), subjects)
+
+
+def _build_crop_qc_rows(
+    steps: Sequence[tuple[str, bool, set[str] | None]], subjects: Iterable[str] | None
+) -> list[dict[str, object]]:
+    """One QC row per subject, sorted: the missing_crop reasons of ``steps`` in step order, each once.
+
+    ``subjects`` None takes the subjects the subject CSVs of ``steps`` name.
+    """
     if subjects is None:
         cohort = set().union(*(listed for _, _, listed in steps if listed is not None))
     else:
@@ -285,6 +294,31 @@ def fetch_crop_qc_rows(  # noqa: PLR0913 - keyword-only sides, stage 2 positiona
             }
         )
     return rows
+
+
+def fetch_grouped_crop_qc_rows(
+    groups: Sequence[tuple[str, str, Sequence[str]]],
+    kinds: Sequence[str],
+    subjects: Iterable[str] | None = None,
+    is_bids: bool = False,
+) -> list[dict[str, object]]:
+    """One QC row per subject over the crop groups (crops_dir, side, regions), sorted by participant_id.
+
+    The crop QC of fetch_crop_qc_rows over several crops folders, one hemisphere side each: ``subjects`` None
+    takes the union of the subjects the subject CSVs of every group name. The missing_crop reasons follow the
+    group order, then region and kind order inside a group, each reason once. Read-only; an absent or
+    unreadable file is a gap, never an exception.
+    """
+    steps = [
+        step
+        for crops_dir, side, regions in groups
+        for step in _list_crop_steps(crops_dir, regions, kinds, is_bids, (side,))
+    ]
+    result = _build_crop_qc_rows(steps, subjects)
+    assert all(row["qc"] in (0, 1) for row in result), (
+        'crop_qc_groups.fetch_grouped_crop_qc_rows post: all(row["qc"] in (0, 1) for row in result)'
+    )
+    return result
 
 
 def compute_participant_id(key: str, is_bids: bool) -> str:

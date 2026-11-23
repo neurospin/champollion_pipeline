@@ -17,6 +17,8 @@ from champollion_pipeline.utils.lib import CORTICAL_TILES_VERSION
 DERIVATIVES_DIRNAME = "derivatives"
 CHAMPOLLION_DERIVATIVES_FOLDER = "champollion_V1"
 DEFAULT_MASKS_VERSION = "canonical_corrected_26_1"
+# Known Mask versions: the one list every stage checks a Mask version against.
+MASK_VERSIONS: tuple[str, ...] = ("canonical_25", "canonical_corrected_26_1")
 CONFIGS_SUBFOLDER = "configs"
 REGION_EMBEDDINGS_SUBFOLDER = "region_embeddings"
 COMBINED_EMBEDDINGS_SUBFOLDER = "embeddings"
