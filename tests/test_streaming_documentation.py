@@ -121,12 +121,12 @@ class TestUsageStreamingSection:
     where = "the docs/usage.md Streaming mode section"
 
     def test_example_command(self, usage_section):
-        """REQ: a level-2 Streaming mode section with a python main.py --mode streaming --config example."""
+        """REQ: a level-2 Streaming mode section with a champollion-pipeline --mode streaming --config example."""
         section = usage_section()
         commands = [" ".join(b.replace("\\\n", " ").split()) for b in _code_blocks(section)]
-        assert any("main.py" in c and re.search(r"--mode[ =]streaming", c) and "--config" in c for c in commands), (
-            f"no code block of {self.where} runs main.py with --mode streaming and --config: {commands}"
-        )
+        assert any(
+            "champollion-pipeline" in c and re.search(r"--mode[ =]streaming", c) and "--config" in c for c in commands
+        ), f"no code block of {self.where} runs champollion-pipeline with --mode streaming and --config: {commands}"
 
     def test_embeddings_only_guard(self, usage_section):
         """REQ: without dataset embeddings_only: true the run exits with code 1 before any scan."""
@@ -320,9 +320,9 @@ class TestWorkflowStreamingSection:
 
 class TestReadmeStreamingMention:
     def test_mentions_streaming_with_usage_link(self):
-        """REQ: README.md mentions python main.py --mode streaming with a link to docs/usage.md."""
+        """REQ: README.md mentions champollion-pipeline --mode streaming with a link to docs/usage.md."""
         text = README_MD.read_text(encoding="utf-8")
-        assert re.search(r"main\.py[^\n]*--mode[ =]streaming", text), (
-            "README.md does not mention main.py --mode streaming"
+        assert re.search(r"champollion-pipeline[^\n]*--mode[ =]streaming", text), (
+            "README.md does not mention champollion-pipeline --mode streaming"
         )
         assert re.search(r"\]\((?:\./)?docs/usage\.md(?:#[^)]*)?\)", text), "README.md has no link to docs/usage.md"

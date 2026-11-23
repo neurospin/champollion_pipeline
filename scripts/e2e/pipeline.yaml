@@ -1,4 +1,4 @@
-# main.py --config file of every e2e tier and layout, read inside the env SIF.
+# main.py --config file of every e2e tier and layout (champollion-pipeline --config), read inside the env SIF.
 # Container mount points only: the run script binds code at /opt/code, the input scans,
 # the Morphologist graphs and the models read-only, and every output under /opt/e2e/run.
 # Stages (--stages), layout (--bids) and profiling (--profile) come from e2e.env through

@@ -193,7 +193,7 @@ The pipeline runs **56 inference passes** (28 regions × 2 hemispheres), one per
 
 ## Streaming mode
 
-`main.py --mode streaming` calls `run_parallel_pipeline` of `champollion_pipeline.streaming.runner`, a
+`champollion-pipeline --mode streaming` calls `run_parallel_pipeline` of `champollion_pipeline.streaming.runner`, a
 producer/consumer run over scans rather than a sequence of stages.
 
 - Producers: each producer worker runs cortical_tiles for one scan, in a `spawn` process pool of `--n-workers`
