@@ -6,10 +6,8 @@ import os
 import warnings
 from os.path import join
 
-from champollion_pipeline.derivatives_layout import DEFAULT_MASKS_VERSION
+from champollion_pipeline.derivatives_layout import DEFAULT_MASKS_VERSION, MASK_VERSIONS
 from champollion_pipeline.models.cache import MODEL_SET_FILE_NAME, read_model_set
-
-MASK_VERSIONS = ("canonical_25", "canonical_corrected_26_1")
 
 logger = logging.getLogger(__name__)
 
