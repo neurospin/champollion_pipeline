@@ -8,7 +8,8 @@ Requirements pinned here (one test each):
 
 * REQ-CLICMD-BDRABCZUK-3AEC0C259D33 - the first fenced bash block of README's first level-2 section runs
   ``champollion-pipeline`` and no per-stage ``champollion-*`` command.
-* REQ-CLICMD-BDRABCZUK-578A2F5DCF4B - that section has an Advanced subsection listing the six stage commands.
+* REQ-CLICMD-BDRABCZUK-46BC5168AD98 (supersedes 578A2F5DCF4B) - the ``<details>`` element of that section holding
+  the per-stage commands has a fenced bash block listing the six stage commands.
 * REQ-CLICMD-BDRABCZUK-217305FB444D - README, usage and workflow show no ``python main.py`` command.
 * REQ-CLICMD-BDRABCZUK-BADEC38D0262 - each of the three files names ``main.py`` at most once.
 """
@@ -17,6 +18,8 @@ from __future__ import annotations
 
 import re
 from pathlib import Path
+
+from tests.docs_test_helpers import stage_details
 
 ROOT = Path(__file__).resolve().parents[1]
 README = ROOT / "README.md"
@@ -61,15 +64,12 @@ def test_first_section_block_runs_champollion_pipeline():
     assert not stage, f"first block still runs per-stage commands: {stage}"
 
 
-def test_first_section_advanced_lists_six_stage_commands():
-    section = _first_section()
-    m = re.search(r"^###\s+Advanced[^\n]*$(.*?)(?=^###?\s|\Z)", section, re.MULTILINE | re.DOTALL)
-    assert m, "no '### Advanced' subsection in the first level-2 section of README.md"
-    blocks = _bash_blocks(m.group(1))
-    assert blocks, "Advanced subsection has no fenced bash block"
+def test_first_section_details_lists_six_stage_commands():
+    blocks = _bash_blocks(stage_details(_first_section()).group("body"))
+    assert blocks, "the <details> element holding the stage commands has no fenced bash block"
     code = "\n".join(_code_lines(blocks[0]))
     missing = [c for c in STAGE_COMMANDS if c not in code]
-    assert not missing, f"Advanced block lacks stage commands: {missing}"
+    assert not missing, f"Advanced <details> block lacks stage commands: {missing}"
 
 
 def test_docs_show_no_python_main_py_command():
