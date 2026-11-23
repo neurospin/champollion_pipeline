@@ -106,3 +106,33 @@ def positional_args(tokens: list[str], parser: argparse.ArgumentParser) -> list[
             continue
         found.append(tok)
     return found
+
+
+STAGE_COMMANDS = (
+    "champollion-morphologist",
+    "champollion-cortical-tiles",
+    "champollion-config",
+    "champollion-embeddings",
+    "champollion-combine",
+    "champollion-snapshots",
+)
+STAGE_LINE_RE = re.compile(
+    r"^[ \t]*pixi run (" + "|".join(re.escape(c) for c in STAGE_COMMANDS) + r")(?![\w-])", re.MULTILINE
+)
+DETAILS_RE = re.compile(r"<details(?P<attrs>[^>]*)>(?P<body>.*?)</details>", re.DOTALL)
+
+
+def first_section(text: str) -> str:
+    """Body of the first ``## `` section of a Markdown text (the README's Quick start)."""
+    m = re.search(r"^##\s+.*?$(.*?)(?=^##\s|\Z)", text, re.MULTILINE | re.DOTALL)
+    assert m, "no level-2 section found"
+    return m.group(1)
+
+
+def stage_details(section: str) -> re.Match:
+    """The one ``<details>`` element of ``section`` holding a ``pixi run <stage command>`` line."""
+    found = [d for d in DETAILS_RE.finditer(section) if STAGE_LINE_RE.search(d.group("body"))]
+    assert len(found) == 1, (
+        f"expected exactly one <details> element holding the per-stage champollion-* commands, found {len(found)}"
+    )
+    return found[0]

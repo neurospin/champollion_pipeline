@@ -43,6 +43,12 @@ mentioned in README.md:
 * **REQ-DOCS-12** — section "1. Installation" must contain ``./install.sh`` or
   ``pixi run setup`` as the interactive install wizard entry point.
 
+The README's collapsed Advanced block (TASK-DOCS-BDRABCZUK-7954511DD1EC) shows the six stage commands:
+
+* **REQ-DOCS-BDRABCZUK-92F8CCADA55C** — each per-stage ``champollion-*`` command line in that
+  ``<details>`` element is accepted by the argument parser of the matching console script
+  (``TestQuickStartDetailsCommandsParse``; the parser is called on the documented tokens, nothing runs).
+
 Both artifacts are read as plain text: no import of the package, no Sphinx
 build, no network, and no checked-out ``external/`` submodule is required —
 except for REQ-DOCS-10's argparse-introspection tests, which instantiate the
@@ -52,15 +58,21 @@ only their ``argparse.ArgumentParser`` is inspected).
 
 from __future__ import annotations
 
+import contextlib
+import io
 import re
 from pathlib import Path
 
 import pytest
 
+from champollion_pipeline.generate_champollion_config import GenerateChampollionConfig
 from champollion_pipeline.generate_embeddings import GenerateEmbeddings
+from champollion_pipeline.generate_morphologist_graphs import GenerateMorphologistGraphs
+from champollion_pipeline.generate_snapshots import GenerateSnapshots
 from champollion_pipeline.put_together_embeddings import PutTogetherEmbeddings
 from champollion_pipeline.run_cortical_tiles import LABELLING_SESSION_DEFAULT, RunCorticalTiles
 from champollion_pipeline.utils.lib import DERIVATIVES_FOLDER
+from tests.docs_test_helpers import first_section, pixi_run_examples, stage_details
 
 PROJECT_ROOT = Path(__file__).resolve().parents[1]
 
@@ -154,29 +166,22 @@ class TestProjectWebsiteLink:
 
 
 def _quickstart_block() -> str:
-    """The fenced ``bash`` block of the Advanced subsection of the top-level ``## Quick start`` section."""
-    text = _read(README)
-    after = re.search(r"^##\s+Quick start\s*$(.*?)(?=^##\s)", text, re.MULTILINE | re.DOTALL)
-    assert after, "README.md has no '## Quick start' section"
-    advanced = re.search(r"^###\s+Advanced[^\n]*$(.*)", after.group(1), re.MULTILINE | re.DOTALL)
-    assert advanced, "the 'Quick start' section has no '### Advanced' subsection (stage-by-stage commands)"
-    block = re.search(r"```bash\n(.*?)```", advanced.group(1), re.DOTALL)
-    assert block, "the Advanced subsection of 'Quick start' contains no fenced bash block"
+    """The fenced ``bash`` block of the collapsed Advanced ``<details>`` element of README's ``## Quick start``."""
+    details = stage_details(first_section(_read(README)))
+    block = re.search(r"```bash\n(.*?)```", details.group("body"), re.DOTALL)
+    assert block, "the Advanced <details> element of 'Quick start' contains no fenced bash block"
     return block.group(1)
 
 
-def _quickstart_step(n: int) -> str:
-    """The text of quickstart step ``n`` (a ``# n. ...`` comment through the next step marker).
-
-    Quickstart steps are numbered 1-6 in their own inline-comment sequence
-    (``# 1. ...`` through ``# 6. ...``), which is offset by one from the full
-    numbered sections below it (``## 2.`` through ``## 7.``).
-    """
-    block = _quickstart_block()
-    pattern = rf"^# {n}\.(.*?)(?=^# {n + 1}\.|\Z)"
-    m = re.search(pattern, block, re.MULTILINE | re.DOTALL)
-    assert m, f"quickstart step {n} not found in the Quick start block"
-    return m.group(0)
+def _quickstart_command(command: str) -> str:
+    """The ``pixi run <command>`` line of the Advanced block, with its backslash-continued lines."""
+    lines = _quickstart_block().splitlines()
+    start = next((i for i, ln in enumerate(lines) if re.search(rf"\bpixi run {re.escape(command)}(?![\w-])", ln)), None)
+    assert start is not None, f"no 'pixi run {command}' line in the Quick start Advanced block"
+    end = start
+    while CONTINUATION_RE.search(lines[end]) and end + 1 < len(lines):
+        end += 1
+    return "\n".join(lines[start : end + 1])
 
 
 def _section_block(heading_regex: str) -> str:
@@ -283,7 +288,7 @@ class TestEmbeddingsCLIMatchesReadme:
     """REQ-DOCS-10: README's embeddings docs must match generate_embeddings.py's real argparse."""
 
     def _documented_flags(self) -> set[str]:
-        quickstart = _quickstart_step(4)  # "# 4. Generate embeddings ..."
+        quickstart = _quickstart_command("champollion-embeddings")
         section = _section_block(r"5\. Generate Embeddings")
         return _documented_embeddings_flags(quickstart, section)
 
@@ -296,7 +301,7 @@ class TestEmbeddingsCLIMatchesReadme:
         in section 5 (e.g. ``rsync``/``tar --exclude`` in the models_cache note) are not embeddings flags.
         """
         documented = self._documented_flags()
-        assert documented, "no embeddings flags found in README quickstart step 4 or section 5 (scope helper broken?)"
+        assert documented, "no embeddings flags found in the README quickstart or section 5 (scope helper broken?)"
         real = _real_option_strings(GenerateEmbeddings)
         bogus = sorted(documented - real)
         assert not bogus, (
@@ -365,7 +370,7 @@ class TestCombineCLIMatchesReadme:
     """REQ-DOCS-10: README's combine docs must match put_together_embeddings.py's real argparse."""
 
     def _documented_flags(self) -> set[str]:
-        quickstart = _quickstart_step(5)  # "# 5. Combine embeddings"
+        quickstart = _quickstart_command("champollion-combine")
         section = _section_block(r"6\. Combine Embeddings")
         return _flags_in_text(quickstart) | _flags_in_text(section)
 
@@ -394,7 +399,7 @@ class TestCorticalTilesQuickstartMatchesReadme:
 
     def test_quickstart_step_includes_required_flags(self):
         """As written, the quickstart's step 2 command is missing run_cortical_tiles.py's required flags."""
-        step = _quickstart_step(2)  # "# 2. Extract sulcal regions"
+        step = _quickstart_command("champollion-cortical-tiles")
         real_required = {
             action.option_strings[0]
             for action in RunCorticalTiles().parser._actions
@@ -403,7 +408,8 @@ class TestCorticalTilesQuickstartMatchesReadme:
         assert real_required, "expected run_cortical_tiles.py to declare at least one required flag"
         missing = sorted(flag for flag in real_required if flag not in step)
         assert not missing, (
-            f"quickstart step 2 omits required run_cortical_tiles.py flag(s) {missing}; as written, "
+            f"the quickstart champollion-cortical-tiles line omits required run_cortical_tiles.py flag(s) {missing}; "
+            "as written, "
             "running this exact command would exit with an argparse 'the following arguments are "
             "required' error"
         )
@@ -484,7 +490,7 @@ class TestMorphologistStepMatchesReadme:
 
     def test_quickstart_uses_champollion_morphologist_wrapper(self):
         """champollion-morphologist wraps morphologist-cli with explicit --if/--of to avoid BIDS auto-detection."""
-        step = _quickstart_step(1)  # "# 1. Generate Morphologist sulcal graphs ..."
+        step = _quickstart_block()
         assert "champollion-morphologist" in step, (
             "champollion-morphologist (generate_morphologist_graphs.py) sets --if/--of explicitly to "
             "route around the BIDS-filename auto-detection failure mode that broke Ivan's run; the "
@@ -598,3 +604,34 @@ class TestInstallWizardMatchesReadme:
             "README.md's '1. Installation' section must keep documenting 'pixi run install-all' "
             "(non-interactive/CI path) alongside the wizard"
         )
+
+
+STAGE_BUILDERS = {
+    "champollion-morphologist": GenerateMorphologistGraphs,
+    "champollion-cortical-tiles": RunCorticalTiles,
+    "champollion-config": GenerateChampollionConfig,
+    "champollion-embeddings": GenerateEmbeddings,
+    "champollion-combine": PutTogetherEmbeddings,
+    "champollion-snapshots": GenerateSnapshots,
+}
+
+
+@pytest.mark.smoke
+class TestQuickStartDetailsCommandsParse:
+    """REQ-DOCS-BDRABCZUK-92F8CCADA55C: the Advanced block's stage command lines parse with the real parsers."""
+
+    def test_stage_command_lines_parse(self):
+        body = stage_details(first_section(_read(README))).group("body")
+        refused: list[str] = []
+        seen = 0
+        for command, builder_cls in STAGE_BUILDERS.items():
+            for tokens in pixi_run_examples(body, command):
+                seen += 1
+                err = io.StringIO()
+                try:
+                    with contextlib.redirect_stderr(err):
+                        builder_cls().parser.parse_args(tokens)
+                except SystemExit:
+                    refused.append(f"{command} {' '.join(tokens)}: {err.getvalue().strip().splitlines()[-1]}")
+        assert seen, "no 'pixi run champollion-<stage>' line in the Advanced <details> element"
+        assert not refused, "README Advanced command lines refused by their argument parser:\n" + "\n".join(refused)
