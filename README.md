@@ -28,6 +28,85 @@ Common options: `--stages` selects the stages to run, `--embeddings-only` limits
 See [Running champollion-pipeline without a Config file](docs/usage.md#running-champollion-pipeline-without-a-config-file).
 
 <details>
+<summary>All champollion-pipeline options</summary>
+
+Every option of `champollion-pipeline --help`. An option given on the command line wins over the `--config` file;
+Default is the value used when neither sets it. `-` in Argument: the option takes no value. `<repo>` is this
+repository's root; OUTPUT is the dataset root (the second positional argument, or inferred from INPUT).
+
+| Option | Argument | Default | Meaning |
+|---|---|---|---|
+| `-h`, `--help` | - | - | Show the help message and exit |
+| `--config` | `CONFIG` | none | Configuration YAML file to load |
+| `--generate-config` | `OUTPUT_PATH` | none | Write a configuration template, with the other options applied, to OUTPUT_PATH and exit |
+| `--enable-all-stages` | - | off | Turn every stage on |
+| `--stages` | `STAGE [STAGE ...]` | all six with INPUT and no config file; else `generate_embeddings` | Stages to run, the others turned off: `generate_morphologist_graphs`, `run_cortical_tiles`, `generate_champollion_config`, `generate_embeddings`, `put_together_embeddings`, `generate_snapshots` |
+| `--mode` | `{sequential,streaming}` | `sequential` | Stage by stage over all scans, or scan by scan with one worker per scan (needs `--embeddings-only`) |
+| `--dry-run` | - | off | Streaming mode: list the scans and report, without processing |
+| `--n-workers` | `N` | `0` (CPU count) | Number of parallel scan workers in streaming mode |
+| `--worker-timeout` | `SECONDS` | `7200` | Streaming mode: time limit of one scan's run; a longer run ends FAILED |
+| `--stop-on-error`, `--no-stop-on-error` | - | on | Stop the run at the first failed stage |
+| `--parallel`, `--no-parallel` | - | off | Stage 1: schedule Morphologist through soma-workflow |
+| `--verbose`, `--no-verbose` | - | off | Verbose output; sets the log level to DEBUG unless `--log-level` is given |
+| `--log-level` | `{DEBUG,INFO,WARNING,ERROR,CRITICAL}` | `INFO` | Log level of the pipeline logger |
+| `--log-dir` | `LOG_DIR` | `<outputs-path>/logs` | Folder of the pipeline log file `pipeline.log` |
+| `--log-to-file`, `--no-log-to-file` | - | on | Write `pipeline.log` in the log folder |
+| `--log-to-console`, `--no-log-to-console` | - | on | Show the pipeline log on the console |
+| `--log` | `[DIR]` | no run log | Write a run log per stage in DIR; bare `--log`: each stage's default log folder, plus this run's log in `./.log/` |
+| `--profile` | `DIR` | off | Profile this run and its Python children into DIR (same as `CHAMPOLLION_PROFILE=DIR`) |
+| `--profile-mode` | `{cpu,light}` | `cpu` | Profiling mode; needs `--profile` |
+| `--env` | `[PATH]` | not read | Read `HF_TOKEN` and the `CHAMPOLLION_*` root paths from the .env file PATH; bare `--env`: `./.env` |
+| `--input-path` | `INPUT_PATH` | none | Input to process: T1 MRI files or Morphologist outputs (same as INPUT) |
+| `--input-kind` | `INPUT_KIND` | detected from INPUT | Kind of the input, `t1` or `morphologist` |
+| `--output-path` | `DIR` | inferred from INPUT | Dataset root holding `derivatives/` (same as OUTPUT) |
+| `--datasets-root` | `DATASETS_ROOT` | inferred from INPUT, else `<data-path>/<dataset-name>` | Dataset root holding `derivatives/` (same as OUTPUT) |
+| `--data-path` | `DATA_PATH` | `<repo>/data` | Parent folder of the default dataset root |
+| `--dataset-name` | `DATASET_NAME` | name of the dataset root folder | Dataset name, used in the generated Champollion configuration |
+| `--outputs-path` | `OUTPUTS_PATH` | `OUTPUT/derivatives/champollion_V1` | Champollion output folder; the pipeline log folder defaults to its `logs/` |
+| `--models-path` | `MODELS_PATH` | `<repo>/models` | Local models folder, used when Hugging Face download is off |
+| `--champollion-v1-path` | `CHAMPOLLION_V1_PATH` | `<repo>/external/champollion_V1` | Path of the champollion_V1 checkout; kept in the configuration, read by no stage |
+| `--morphologist-graphs` | `MORPHOLOGIST_GRAPHS` | `OUTPUT/derivatives/morphologist-6.0` | Morphologist subjects folder read by stage 2 |
+| `--path-to-graph` | `PATH_TO_GRAPH` | `t1mri/default_acquisition/default_analysis/folds/3.3/base` | Folder of the sulcal graphs below each subject |
+| `--path-sk-with-hull` | `PATH_SK_WITH_HULL` | `t1mri/default_acquisition/default_analysis/segmentation` | Folder of the skeletons with hull below each subject |
+| `--cortical-tiles-output` | `CORTICAL_TILES_OUTPUT` | `OUTPUT/derivatives` | Output folder of cortical_tiles (stage 2) |
+| `--njobs` | `NJOBS` | `22` | Number of parallel jobs of cortical_tiles |
+| `--sk-qc-path` | `SK_QC_PATH` | none | QC file passed to cortical_tiles |
+| `--skel-seed` | `SKEL_SEED` | the seed in `pipeline_loop_2mm.json` | Skeleton seed passed to cortical_tiles |
+| `--labelling-session` | `LABELLING_SESSION` | chosen per subject | Labelling session read by cortical_tiles and the snapshots |
+| `--bids`, `--no-bids` | - | off | Input follows the BIDS layout (`subjects/sub-*/ses-*/...`); passed to cortical_tiles |
+| `--allow-prefix-ids`, `--no-allow-prefix-ids` | - | off | Temporary: let cortical_tiles run when a subject ID is a strict prefix of another; its transforms may be wrong |
+| `--masks-version` | `MASKS_VERSION` | `canonical_corrected_26_1` | Mask version of the crops, embeddings and snapshots (`canonical_25` or `canonical_corrected_26_1`) |
+| `--crops-path` | `CROPS_PATH` | inferred below `OUTPUT/derivatives` | 2mm crops folder read by stages 3 and 4 |
+| `--regions` | `REGIONS [REGIONS ...]` | all 56 regions | Regions to crop and embed |
+| `--embeddings-path` | `EMBEDDINGS_PATH` | `OUTPUT/derivatives/champollion_V1/<masks-version>/region_embeddings` | Per-region embeddings folder (stage 4 output, stage 5 input) |
+| `--embeddings-only`, `--no-embeddings-only` | - | off | Inference-only run; required by `--mode streaming` |
+| `--overwrite`, `--no-overwrite` | - | off | Recompute embeddings already present (stage 4) |
+| `--cpu`, `--no-cpu` | - | off | Compute the embeddings on the CPU, without CUDA |
+| `--checkpoint-epoch` | `CHECKPOINT_EPOCH` | `80` | Training epoch whose checkpoint computes the embeddings |
+| `--checkpoint-epochs` | `CHECKPOINT_EPOCHS [CHECKPOINT_EPOCHS ...]` | none | Epoch of one model, as `<model id>=N`; wins over `--checkpoint-epoch` |
+| `--per-model-folders`, `--no-per-model-folders` | - | off | Write the embeddings of each model to its own folder |
+| `--models-cache` | `MODELS_CACHE` | `OUTPUT/derivatives/champollion_V1/models_cache` | Folder of the downloaded models |
+| `--hf-enabled`, `--no-hf-enabled` | - | off | Take the models from the Hugging Face repository `--hf-repo-id` |
+| `--hf-repo-id` | `HF_REPO_ID` | none | Hugging Face model repository, e.g. `neurospin/Champollion_V1` |
+| `--model` | `MODEL` | every model id | Combine and snapshot only this model id (stages 5 and 6) |
+| `--snapshots-path` | `SNAPSHOTS_PATH` | `OUTPUT/derivatives/champollion_V1/<masks-version>/snapshots` | Snapshots output folder (stage 6) |
+| `--reference-data-path` | `REFERENCE_DATA_PATH` | none (UMAP snapshots skipped) | UMAP reference data folder of the snapshots |
+| `--champollion-data-root` | `CHAMPOLLION_DATA_ROOT` | `CHAMPOLLION_DATA_ROOT` variable | Champollion data root passed to the snapshots |
+| `--dataset-localization` | `DATASET_LOCALIZATION` | `local` | Name of the champollion_V1 dataset localization file used in streaming mode |
+| `--datasets` | `DATASETS [DATASETS ...]` | `example` | Configuration file field; read by no stage |
+| `--labels` | `LABELS [LABELS ...]` | `Sex` | Configuration file field; read by no stage |
+| `--classifier-name` | `CLASSIFIER_NAME` | `svm` | Configuration file field; read by no stage |
+| `--subsets` | `SUBSETS [SUBSETS ...]` | `full` | Configuration file field; read by no stage |
+| `--epochs` | `EPOCHS [EPOCHS ...]` | none | Configuration file field; read by no stage |
+| `--split` | `SPLIT` | `random` | Configuration file field; read by no stage |
+| `--cv` | `CV` | `5` | Configuration file field; read by no stage |
+| `--splits-basedir` | `SPLITS_BASEDIR` | none | Configuration file field; read by no stage |
+| `--idx-region-evaluation` | `IDX_REGION_EVALUATION` | none | Configuration file field; read by no stage |
+| `--short-name` | `SHORT_NAME` | `eval` | Configuration file field; read by no stage |
+
+</details>
+
+<details>
 <summary>Advanced: running stages one by one</summary>
 
 Each stage also has its own command; with `/data/myproject/` as the dataset root:
