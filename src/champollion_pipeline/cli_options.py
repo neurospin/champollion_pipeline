@@ -56,6 +56,23 @@ _MODE_HELP = (
 _WORKER_TIMEOUT_HELP = (
     "Timeout in seconds of the whole producer-worker run of one scan; a longer run ends FAILED (default: 7200)."
 )
+# Help of the fields no stage and no champollion-train run reads; kept so existing YAML files still load.
+_UNREAD_FIELD_HELP = (
+    "Config file field, read by no stage and not by champollion-train; kept so existing YAML files load"
+)
+_UNREAD_FIELDS = (
+    "datasets",
+    "labels",
+    "classifier_name",
+    "subsets",
+    "epochs",
+    "split",
+    "cv",
+    "splits_basedir",
+    "idx_region_evaluation",
+    "short_name",
+    "champollion_v1_path",
+)
 
 
 class ArgumentConflictError(ValueError):
@@ -131,6 +148,7 @@ _FIELD_OPTIONS = {
     "worker_timeout": {"metavar": "SECONDS", "help": _WORKER_TIMEOUT_HELP},
     "log_level": {"choices": ("DEBUG", "INFO", "WARNING", "ERROR", "CRITICAL")},
     "log": {"nargs": "?", "const": "", "metavar": "DIR", "help": _LOG_HELP},
+    **{field_name: {"help": _UNREAD_FIELD_HELP} for field_name in _UNREAD_FIELDS},
 }
 
 
