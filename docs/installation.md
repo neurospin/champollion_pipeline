@@ -2,7 +2,7 @@
 
 ## Prerequisites
 
-- [Pixi](https://pixi.sh/) package manager
+- [Pixi](https://pixi.sh/) package manager, version 0.80.0 or newer (`pixi.toml` declares `requires-pixi = ">=0.80.0"`). Check with `pixi --version`; upgrade an existing install with `pixi self-update`. Pixi older than 0.68 fails with `expected a string, found table` instead of a version message.
 - Git
 - [BrainVISA / Morphologist](https://brainvisa.info) — required for step 1 (sulcal graph extraction) only. If you already have Morphologist `.arg` graphs, you can skip that step.
 
