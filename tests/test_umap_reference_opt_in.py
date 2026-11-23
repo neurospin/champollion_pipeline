@@ -9,7 +9,8 @@ Stage 6 UMAP stays opt-in on a user-named reference (TASK-MODELVER-BDRABCZUK-39D
   is skipped, naming --reference_data_dir.
 - REQ-MODELVER-BDRABCZUK-2C4BE1D9C176: main.py with no reference_data_path passes no --reference_data_dir.
 - REQ-MODELVER-BDRABCZUK-8ED5271F31DB: the repository tracks no umap_<region>_<hemisphere> reference file.
-- REQ-MODELVER-BDRABCZUK-FCBF2DDB548A: the README UMAP Visualization subsection says UMAP snapshots need a
+- REQ-MODELVER-BDRABCZUK-FCBF2DDB548A: the docs/usage.md UMAP Visualization subsection (moved from README.md by
+  TASK-DOCS-BDRABCZUK-84BE8AB6FC73) says UMAP snapshots need a
   locally fitted UMAP reference of the same Mask version as the embeddings (user decision 2026-11-19 13:05).
 
 The main.py stage path without reference data is covered by tests/test_main_snapshots_skip_no_reference.py
@@ -103,11 +104,11 @@ class TestNoTrackedReference:
 
 
 class TestReadmeUmapReferenceVersion:
-    """REQ-MODELVER-BDRABCZUK-FCBF2DDB548A: README says the UMAP reference is locally fitted on the same version."""
+    """REQ-MODELVER-BDRABCZUK-FCBF2DDB548A: docs/usage.md says the UMAP reference is fitted locally on the version."""
 
     def test_umap_section_states_local_same_version_reference(self):
-        section = _UMAP_SUBSECTION.search((REPO_ROOT / "README.md").read_text(encoding="utf-8"))
-        assert section, "README.md has no '### UMAP Visualization' subsection"
+        section = _UMAP_SUBSECTION.search((REPO_ROOT / "docs" / "usage.md").read_text(encoding="utf-8"))
+        assert section, "docs/usage.md has no '### UMAP Visualization' subsection"
         sentences = re.split(r"(?<=[.!?])\s+", " ".join(section.group(1).split()))
         stating = [
             sentence

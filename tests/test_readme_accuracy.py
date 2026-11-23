@@ -49,6 +49,10 @@ The README's collapsed Advanced block (TASK-DOCS-BDRABCZUK-7954511DD1EC) shows t
   ``<details>`` element is accepted by the argument parser of the matching console script
   (``TestQuickStartDetailsCommandsParse``; the parser is called on the documented tokens, nothing runs).
 
+README.md sections 3, 5 and 6 moved to the Stage 2, Stage 4 and Stage 5 sections of ``docs/usage.md``
+(TASK-DOCS-BDRABCZUK-84BE8AB6FC73): the REQ-DOCS-10 and REQ-DOCS-11 checks of those sections read
+``docs/usage.md`` since.
+
 Both artifacts are read as plain text: no import of the package, no Sphinx
 build, no network, and no checked-out ``external/`` submodule is required —
 except for REQ-DOCS-10's argparse-introspection tests, which instantiate the
@@ -58,8 +62,6 @@ only their ``argparse.ArgumentParser`` is inspected).
 
 from __future__ import annotations
 
-import contextlib
-import io
 import re
 from pathlib import Path
 
@@ -72,11 +74,12 @@ from champollion_pipeline.generate_snapshots import GenerateSnapshots
 from champollion_pipeline.put_together_embeddings import PutTogetherEmbeddings
 from champollion_pipeline.run_cortical_tiles import LABELLING_SESSION_DEFAULT, RunCorticalTiles
 from champollion_pipeline.utils.lib import DERIVATIVES_FOLDER
-from tests.docs_test_helpers import first_section, pixi_run_examples, stage_details
+from tests.docs_test_helpers import first_section, refused_command_lines, stage_details
 
 PROJECT_ROOT = Path(__file__).resolve().parents[1]
 
 README = PROJECT_ROOT / "README.md"
+USAGE = PROJECT_ROOT / "docs" / "usage.md"
 PYPROJECT = PROJECT_ROOT / "pyproject.toml"
 PKG_DIR = PROJECT_ROOT / "src" / "champollion_pipeline"
 
@@ -192,6 +195,14 @@ def _section_block(heading_regex: str) -> str:
     return m.group(1)
 
 
+def _usage_stage_block(number: int) -> str:
+    """Full text of the ``## Stage <number> ...`` section of docs/usage.md, up to the next ``##`` heading."""
+    text = _read(USAGE)
+    m = re.search(rf"^##\s+Stage {number}\b[^\n]*$(.*?)(?=^##\s|\Z)", text, re.MULTILINE | re.DOTALL)
+    assert m, f"docs/usage.md has no section matching '## Stage {number}'"
+    return m.group(1)
+
+
 def _flags_in_text(text: str) -> set[str]:
     """Every ``--flag``-shaped token appearing in ``text``."""
     return set(re.findall(r"--[A-Za-z][A-Za-z0-9_-]*", text))
@@ -289,23 +300,26 @@ class TestEmbeddingsCLIMatchesReadme:
 
     def _documented_flags(self) -> set[str]:
         quickstart = _quickstart_command("champollion-embeddings")
-        section = _section_block(r"5\. Generate Embeddings")
+        section = _usage_stage_block(4)
         return _documented_embeddings_flags(quickstart, section)
 
     def test_documented_flags_exist_in_real_parser(self):
-        """Every ``--flag`` passed to the embeddings command, or listed in section 5's options table,
+        """Every ``--flag`` passed to the embeddings command, or listed in the usage.md Stage 4 options table,
         must be a real generate_embeddings.py argument.
 
         Only embeddings-command invocations (``champollion-embeddings`` / ``generate_embeddings.py``,
         with their backslash-continued lines) and the options table are scanned: other commands shown
-        in section 5 (e.g. ``rsync``/``tar --exclude`` in the models_cache note) are not embeddings flags.
+        in that section (e.g. ``rsync``/``tar --exclude`` in the models_cache note) are not embeddings flags.
         """
         documented = self._documented_flags()
-        assert documented, "no embeddings flags found in the README quickstart or section 5 (scope helper broken?)"
+        assert documented, (
+            "no embeddings flags found in the README quickstart or the usage.md Stage 4 section (scope helper broken?)"
+        )
         real = _real_option_strings(GenerateEmbeddings)
         bogus = sorted(documented - real)
         assert not bogus, (
-            f"README documents embeddings flags that do not exist in generate_embeddings.py's argparse: {bogus}"
+            "README or docs/usage.md documents embeddings flags that do not exist in "
+            f"generate_embeddings.py's argparse: {bogus}"
         )
 
     def test_flag_scope_catches_misspelled_embeddings_flag_and_ignores_other_commands(self):
@@ -346,10 +360,10 @@ class TestEmbeddingsCLIMatchesReadme:
 
     def test_output_path_does_not_use_stale_split_named_subfolder(self):
         """generate_embeddings.py writes {output_base}/{region}/full_embeddings.csv, no {run}_{split}_embeddings/."""
-        section = _section_block(r"5\. Generate Embeddings")
+        section = _usage_stage_block(4)
         assert "_random_embeddings" not in section, (
             "the real per-region output path is {output_base}/{region}/full_embeddings.csv "
-            "(GenerateEmbeddings._run_per_region's saving_path); README's embeddings section "
+            "(GenerateEmbeddings._run_per_region's saving_path); the usage.md embeddings section "
             "still documents a '..._random_embeddings/full_embeddings.csv' subfolder that "
             "generate_embeddings.py does not write"
         )
@@ -371,7 +385,7 @@ class TestCombineCLIMatchesReadme:
 
     def _documented_flags(self) -> set[str]:
         quickstart = _quickstart_command("champollion-combine")
-        section = _section_block(r"6\. Combine Embeddings")
+        section = _usage_stage_block(5)
         return _flags_in_text(quickstart) | _flags_in_text(section)
 
     def test_documented_flags_exist_in_real_parser(self):
@@ -380,12 +394,13 @@ class TestCombineCLIMatchesReadme:
         real = _real_option_strings(PutTogetherEmbeddings)
         bogus = sorted(documented - real)
         assert not bogus, (
-            f"README documents combine flags that do not exist in put_together_embeddings.py's argparse: {bogus}"
+            "README or docs/usage.md documents combine flags that do not exist in "
+            f"put_together_embeddings.py's argparse: {bogus}"
         )
 
     def test_embeddings_subpath_pattern_not_referenced(self):
         """put_together_embeddings.py takes embeddings_source + --output_path, with no subpath templating."""
-        section = _section_block(r"6\. Combine Embeddings")
+        section = _usage_stage_block(5)
         assert "{short_name}_{split}" not in section, (
             "put_together_embeddings.py copies {embeddings_source}/{region}/full_embeddings.csv "
             "to {output_path}/{region}_embeddings.csv directly; there is no --embeddings_subpath "
@@ -416,11 +431,11 @@ class TestCorticalTilesQuickstartMatchesReadme:
 
     def test_crops_output_path_includes_masks_version_segment(self):
         """Crops land at {output}/cortical_tiles-{VERSION}/crops/{masks_version}/2mm/, not crops/2mm/."""
-        section = _section_block(r"3\. Generate Sulcal Region Crops")
+        section = _usage_stage_block(2)
         assert "crops/canonical_25/2mm" in section, (
             "CorticalTilesConfigFactory.from_args()/versioned_crops_exist() write and look for crops "
             "under {derivatives}/crops/{masks_version}/2mm/ (default masks_version='canonical_25'); "
-            "README's documented output path is missing the mask-version path segment"
+            "docs/usage.md's documented output path is missing the mask-version path segment"
         )
 
     def test_region_file_flag_documented_as_inactive(self):
@@ -438,14 +453,14 @@ class TestCorticalTilesQuickstartMatchesReadme:
             f"(the forwarding code is commented out); found active reference(s): {active_references}"
         )
 
-        section = _section_block(r"3\. Generate Sulcal Region Crops")
+        section = _usage_stage_block(2)
         row = next((line for line in section.splitlines() if "--region-file" in line), None)
-        assert row is not None, "README no longer documents --region-file at all"
+        assert row is not None, "docs/usage.md Stage 2 no longer documents --region-file at all"
         assert any(
             phrase in row.lower() for phrase in ("no effect", "inactive", "ignored", "not passed", "not forwarded")
         ), (
             "--region-file is accepted by argparse but never forwarded to generate_sulcal_regions.py "
-            "(the cmd.extend(['--region-file', ...]) call is commented out); README documents it as "
+            "(the cmd.extend(['--region-file', ...]) call is commented out); docs/usage.md documents it as "
             "a normal working option with no caveat"
         )
 
@@ -513,36 +528,39 @@ class TestMorphologistStepMatchesReadme:
 
 
 def _cortical_tiles_options_rows() -> dict[str, str]:
-    """Map each ``--flag`` to its row in section 3's ``All options`` table.
+    """Map each ``--flag`` to its row in the usage.md Stage 2 ``All options`` table.
 
     Only rows whose first cell is a backticked ``--flag`` are collected; the
     table lives inside the ``<details><summary>All options</summary>`` block.
     """
-    section = _section_block(r"3\. Generate Sulcal Region Crops")
+    section = _usage_stage_block(2)
     m = re.search(r"<summary>\s*All options\s*</summary>(.*?)</details>", section, re.DOTALL)
-    assert m, "section 3 has no '<summary>All options</summary>' ... '</details>' block"
+    assert m, "usage.md Stage 2 has no '<summary>All options</summary>' ... '</details>' block"
     rows: dict[str, str] = {}
     for line in m.group(1).splitlines():
         cell = re.match(r"^\|\s*`(--[A-Za-z][A-Za-z0-9_-]*)`\s*\|", line)
         if cell:
             rows[cell.group(1)] = line
-    assert rows, "sanity check: expected at least one `--flag` row in section 3's 'All options' table"
+    assert rows, "sanity check: expected at least one `--flag` row in the usage.md Stage 2 'All options' table"
     return rows
 
 
 @pytest.mark.smoke
 class TestCorticalTilesWholeBrainAndOptionsMatchReadme:
-    """REQ-DOCS-11: section 3 documents the whole-brain output and lists --labelling_session/--overwrite."""
+    """REQ-DOCS-11: usage.md Stage 2 (README section 3 before the move) documents the whole-brain output.
+
+    Its 'All options' table lists --labelling_session and --overwrite.
+    """
 
     def test_whole_brain_output_directory_is_documented(self):
         """run() fuses L+R and strips the ventricle into {output}/cortical_tiles-2026/whole_brain/F/."""
 
         expected = f"{{output}}/{DERIVATIVES_FOLDER}/whole_brain/F/"
-        section = _section_block(r"3\. Generate Sulcal Region Crops")
+        section = _usage_stage_block(2)
         assert expected in section, (
             f"run_cortical_tiles.py writes the fused whole-brain volume to '{expected}' (remove_ventricle "
-            "output_dir=<derivatives>/whole_brain, side 'F'), alongside the per-region crops; section 3 "
-            "of README.md does not document this output directory"
+            "output_dir=<derivatives>/whole_brain, side 'F'), alongside the per-region crops; the Stage 2 section "
+            "of docs/usage.md does not document this output directory"
         )
 
     def test_labelling_session_row_states_default(self):
@@ -553,7 +571,8 @@ class TestCorticalTilesWholeBrainAndOptionsMatchReadme:
         )
         rows = _cortical_tiles_options_rows()
         assert "--labelling_session" in rows, (
-            "run_cortical_tiles.py declares --labelling_session but section 3's 'All options' table has no row for it"
+            "run_cortical_tiles.py declares --labelling_session but the usage.md Stage 2 'All options' table "
+            "has no row for it"
         )
         assert LABELLING_SESSION_DEFAULT in rows["--labelling_session"], (
             f"the --labelling_session row does not state its default '{LABELLING_SESSION_DEFAULT}': "
@@ -567,7 +586,7 @@ class TestCorticalTilesWholeBrainAndOptionsMatchReadme:
         )
         rows = _cortical_tiles_options_rows()
         assert "--overwrite" in rows, (
-            "run_cortical_tiles.py declares --overwrite but section 3's 'All options' table has no row for it"
+            "run_cortical_tiles.py declares --overwrite but the usage.md Stage 2 'All options' table has no row for it"
         )
 
 
@@ -622,16 +641,6 @@ class TestQuickStartDetailsCommandsParse:
 
     def test_stage_command_lines_parse(self):
         body = stage_details(first_section(_read(README))).group("body")
-        refused: list[str] = []
-        seen = 0
-        for command, builder_cls in STAGE_BUILDERS.items():
-            for tokens in pixi_run_examples(body, command):
-                seen += 1
-                err = io.StringIO()
-                try:
-                    with contextlib.redirect_stderr(err):
-                        builder_cls().parser.parse_args(tokens)
-                except SystemExit:
-                    refused.append(f"{command} {' '.join(tokens)}: {err.getvalue().strip().splitlines()[-1]}")
+        seen, refused = refused_command_lines(body, STAGE_BUILDERS)
         assert seen, "no 'pixi run champollion-<stage>' line in the Advanced <details> element"
         assert not refused, "README Advanced command lines refused by their argument parser:\n" + "\n".join(refused)

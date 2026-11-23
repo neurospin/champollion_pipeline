@@ -162,12 +162,12 @@ def _messages(capture, level: int, logger_name: str) -> list[str]:
 
 
 def _readme_embeddings_masks_row() -> str:
-    """The --masks row of the options table in README section '## 5. Generate Embeddings'."""
-    text = (REPO_ROOT / "README.md").read_text(encoding="utf-8")
-    section = re.search(r"^##\s+5\.\s+Generate Embeddings\s*$(.*?)(?=^##\s|\Z)", text, re.MULTILINE | re.DOTALL)
-    assert section, "README.md has no '## 5. Generate Embeddings' section"
+    """The --masks row of the options table of the Stage 4 section of docs/usage.md (moved from README section 5)."""
+    text = (REPO_ROOT / "docs" / "usage.md").read_text(encoding="utf-8")
+    section = re.search(r"^##\s+Stage 4\b[^\n]*$(.*?)(?=^##\s|\Z)", text, re.MULTILINE | re.DOTALL)
+    assert section, "docs/usage.md has no '## Stage 4' section"
     rows = [line for line in section.group(1).splitlines() if re.match(r"^\|\s*`--masks`\s*\|", line.strip())]
-    assert rows, "README section 5 has no `--masks` table row"
+    assert rows, "docs/usage.md Stage 4 has no `--masks` table row"
     return rows[-1]
 
 

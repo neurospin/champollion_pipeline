@@ -8,6 +8,8 @@ that is built, never parsed: no filesystem writes, no network.
 from __future__ import annotations
 
 import argparse
+import contextlib
+import io
 import re
 import shlex
 from pathlib import Path
@@ -72,6 +74,27 @@ def required_examples(text: str, command: str, where: str) -> list[list[str]]:
     found = pixi_run_examples(text, command)
     assert found, f"{where}: no 'pixi run {command}' example found (test parser sanity check)"
     return found
+
+
+def refused_command_lines(text: str, builders: dict) -> tuple[int, list[str]]:
+    """Parse every ``pixi run <command>`` example of ``text`` with ``builders[command]().parser``.
+
+    Returns the number of examples seen and one ``"<command> <tokens>: <last stderr line>"`` entry per
+    example the parser refuses. Nothing runs: the parser only reads the documented tokens.
+    """
+    refused: list[str] = []
+    seen = 0
+    for command, builder_cls in builders.items():
+        for tokens in pixi_run_examples(text, command):
+            seen += 1
+            err = io.StringIO()
+            try:
+                with contextlib.redirect_stderr(err):
+                    builder_cls().parser.parse_args(tokens)
+            except SystemExit:
+                last = (err.getvalue().strip().splitlines() or ["(no message)"])[-1]
+                refused.append(f"{command} {' '.join(tokens)}: {last}")
+    return seen, refused
 
 
 def option_strings(parser: argparse.ArgumentParser) -> set[str]:
