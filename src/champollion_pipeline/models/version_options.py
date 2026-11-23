@@ -4,10 +4,22 @@ import argparse
 import logging
 import os
 import warnings
+from dataclasses import dataclass
 from os.path import join
 
-from champollion_pipeline.derivatives_layout import DEFAULT_MASKS_VERSION, MASK_VERSIONS
+from champollion_pipeline.derivatives_layout import (
+    DEFAULT_MASKS_VERSION,
+    DEFAULT_REGIONS,
+    MASK_VERSIONS,
+    compute_region_model_names,
+)
 from champollion_pipeline.models.cache import MODEL_SET_FILE_NAME, read_model_set
+
+MASK_SOURCE_MODEL_SET = MODEL_SET_FILE_NAME
+MASK_SOURCE_FOLDER_NAME = "folder name"
+MASK_RESOLVED = "resolved"
+MASK_UNRESOLVED = "unresolved"
+MASK_CONFLICT = "conflict"
 
 logger = logging.getLogger(__name__)
 
@@ -36,6 +48,70 @@ def find_folder_mask_version(models_path: str) -> str | None:
     """The last folder name of models_path when it is one of MASK_VERSIONS, else None."""
     folder_name = os.path.basename(os.path.normpath(models_path))
     return folder_name if folder_name in MASK_VERSIONS else None
+
+
+@dataclass(frozen=True)
+class RegionMaskVersion:
+    """Mask version of one region model of a local model set.
+
+    status: MASK_RESOLVED, MASK_UNRESOLVED or MASK_CONFLICT; version and source are set only when resolved;
+    named: the distinct values the sources gave for the region, in precedence order (empty when no source names one);
+    reason: the read error of an unreadable model_set.json (then unresolved), else None.
+    """
+
+    status: str
+    version: str | None
+    source: str | None
+    named: tuple[str, ...]
+    reason: str | None = None
+
+
+def _fetch_marker_masks(models_path: str) -> tuple[str | None, str | None]:
+    """(masks, None) from models_path/model_set.json; (None, None) when absent; (None, read error) when unreadable."""
+    if not os.path.exists(join(models_path, MODEL_SET_FILE_NAME)):
+        return None, None
+    try:
+        return read_model_set(models_path).masks, None
+    except (ValueError, OSError) as err:
+        return None, str(err)
+
+
+def _compute_region_mask_version(sources: tuple[tuple[str, str | None], ...]) -> RegionMaskVersion:
+    """Decide one region's Mask version from its (source, value) pairs, in precedence order; value None: no value.
+
+    Any value outside MASK_VERSIONS, or no value: unresolved; two distinct values: conflict; else resolved by the
+    first source giving the value. O(len(sources)).
+    """
+    named = tuple(dict.fromkeys(value for _, value in sources if value is not None))
+    if not named or any(value not in MASK_VERSIONS for value in named):
+        return RegionMaskVersion(MASK_UNRESOLVED, None, None, named)
+    if len(named) > 1:
+        return RegionMaskVersion(MASK_CONFLICT, None, None, named)
+    source = next(name for name, value in sources if value is not None)
+    return RegionMaskVersion(MASK_RESOLVED, named[0], source, named)
+
+
+def resolve_region_mask_versions(models_path: str) -> dict[str, RegionMaskVersion]:
+    """Mask version of each of the 56 region model names of the local model set at models_path, with its source.
+
+    Args:
+        models_path: a local model set directory (the caller checks it is one).
+
+    Returns:
+        region model name (compute_region_model_names(DEFAULT_REGIONS) order) -> RegionMaskVersion. Reads only
+        model_set.json; no logging, no exit, never raises for a directory. O(56).
+    """
+    marker_masks, marker_error = _fetch_marker_masks(models_path)
+    if marker_error is not None:
+        entry = RegionMaskVersion(MASK_UNRESOLVED, None, None, (), marker_error)
+    else:
+        folder_version = find_folder_mask_version(models_path)
+        entry = _compute_region_mask_version(
+            ((MASK_SOURCE_MODEL_SET, marker_masks), (MASK_SOURCE_FOLDER_NAME, folder_version))
+        )
+    result = dict.fromkeys(compute_region_model_names(DEFAULT_REGIONS), entry)
+    assert len(result) == 56, "region_mask_version_resolver.resolve_region_mask_versions post: len(result) == 56"
+    return result
 
 
 def resolve_masks_default(args: argparse.Namespace, parser: argparse.ArgumentParser) -> None:
