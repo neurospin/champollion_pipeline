@@ -13,7 +13,8 @@ legacy ``{parent_of_datasets_root}/{dataset_name}embeddings`` default.
 
 Requirements pinned here (one test per requirement):
 
-* REQ-EMBVER-BDRABCZUK-648E7C808A66 - README ``--output`` row default.
+* REQ-EMBVER-BDRABCZUK-648E7C808A66 - usage.md Stage 4 ``--output`` row default (moved from README,
+  TASK-DOCS-BDRABCZUK-84BE8AB6FC73).
 * REQ-EMBVER-BDRABCZUK-A8C00CDCC4BA - README has no unversioned champollion_V1 output path.
 * REQ-EMBVER-BDRABCZUK-8FAAE269F6A8 - README has no legacy ``{dataset}embeddings`` directory.
 * REQ-EMBVER-BDRABCZUK-9701F325E029 - README combine source is versioned region_embeddings.
@@ -92,7 +93,7 @@ class TestReadmeEmbeddingsOutputDefault:
     """REQ-EMBVER-BDRABCZUK-648E7C808A66."""
 
     def test_output_row_states_versioned_region_embeddings_default(self):
-        section = md_section(read_text(README), r"\d+\.\s+Generate Embeddings\s*")
+        section = md_section(read_text(USAGE), r"Stage 4\b[^\n]*")
         rows = [ln for ln in section.splitlines() if re.match(r"^\|\s*`--output`\s*\|", ln)]
         assert len(rows) == 1, f"expected one `--output` row in the embeddings options table, found {rows}"
         assert re.search(re.escape(DEFAULT_OUTPUT_TEMPLATE) + r"/?", rows[0]), (

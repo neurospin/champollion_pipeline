@@ -6,7 +6,8 @@ subfolder), keeps ``--masks-version`` as a deprecated alias, defaults ``--masks`
 to the model version, refuses a ``--masks``/model-version mismatch unless
 ``--allow-version-mismatch`` is given, checks a local model set against its
 ``model_set.json`` marker and writes ``provenance.json`` next to the region
-embeddings. Section "5. Generate Embeddings" of ``README.md`` must say so.
+embeddings. The Stage 4 section of ``docs/usage.md`` must say so (moved from README.md section
+"5. Generate Embeddings" by TASK-DOCS-BDRABCZUK-84BE8AB6FC73).
 
 Every check reads the facts from the live code (the ``GenerateEmbeddings``
 parser, ``MODEL_SET_FILE_NAME``, ``PROVENANCE_FILE_NAME``, ``ModelSet`` fields
@@ -41,7 +42,7 @@ from champollion_pipeline.generate_embeddings import (
 )
 
 PROJECT_ROOT = Path(__file__).resolve().parents[1]
-README = PROJECT_ROOT / "README.md"
+USAGE = PROJECT_ROOT / "docs" / "usage.md"
 
 VERSION_OPTIONS = ("--model-version", "--masks-version", "--allow-version-mismatch")
 
@@ -52,14 +53,14 @@ def _read(path: Path) -> str:
 
 
 def _embeddings_section() -> str:
-    """Text of README section '## 5. Generate Embeddings', up to the next '##' heading."""
-    m = re.search(r"^##\s+5\.\s+Generate Embeddings\s*$(.*?)(?=^##\s|\Z)", _read(README), re.MULTILINE | re.DOTALL)
-    assert m, "README.md has no '## 5. Generate Embeddings' section"
+    """Text of the docs/usage.md section '## Stage 4 ...', up to the next '##' heading."""
+    m = re.search(r"^##\s+Stage 4\b[^\n]*$(.*?)(?=^##\s|\Z)", _read(USAGE), re.MULTILINE | re.DOTALL)
+    assert m, "docs/usage.md has no '## Stage 4' section"
     return m.group(1)
 
 
 def _options_rows() -> dict[str, str]:
-    """Map the first-cell ``--flag`` of each row of section 5's 'Option' tables to the whole row."""
+    """Map the first-cell ``--flag`` of each row of the Stage 4 section's 'Option' tables to the whole row."""
     rows: dict[str, str] = {}
     in_table = False
     for line in _embeddings_section().splitlines():
@@ -75,16 +76,16 @@ def _options_rows() -> dict[str, str]:
             flag = re.search(r"--[A-Za-z][A-Za-z0-9_-]*", first)
             if flag:
                 rows[flag.group(0)] = stripped
-    assert rows, "section 5 has no '| Option |' table rows (scope helper broken?)"
+    assert rows, "Stage 4 section has no '| Option |' table rows (scope helper broken?)"
     return rows
 
 
 def _subsection(name: str) -> str:
-    """Text of the first '###' subsection of section 5 whose heading contains ``name``."""
+    """Text of the first '###' subsection of the Stage 4 section whose heading contains ``name``."""
     m = re.search(
         rf"^###\s+[^\n]*{re.escape(name)}[^\n]*$(.*?)(?=^###?\s|\Z)", _embeddings_section(), re.MULTILINE | re.DOTALL
     )
-    assert m, f"section 5 of README.md has no '###' subsection whose heading names {name}"
+    assert m, f"Stage 4 section of docs/usage.md has no '###' subsection whose heading names {name}"
     return m.group(1)
 
 
@@ -104,7 +105,7 @@ class TestReadmeVersionOptionRows:
     @pytest.mark.parametrize("option", VERSION_OPTIONS)
     def test_version_option_has_row(self, option):
         assert option in _parser_options(), f"{option} is no longer a generate_embeddings option"
-        assert option in _options_rows(), f"README section 5 options table has no row for {option}"
+        assert option in _options_rows(), f"docs/usage.md Stage 4 options table has no row for {option}"
 
 
 @pytest.mark.smoke
@@ -113,7 +114,7 @@ class TestReadmeMasksVersionRow:
 
     def test_row_states_deprecated_alias_of_model_version(self):
         row = _options_rows().get("--masks-version")
-        assert row, "README section 5 options table has no --masks-version row"
+        assert row, "docs/usage.md Stage 4 options table has no --masks-version row"
         assert re.search(r"\bdeprecated\b", row, re.IGNORECASE), f"--masks-version row does not say deprecated: {row}"
         assert re.search(r"\balias\b", row, re.IGNORECASE), f"--masks-version row does not say alias: {row}"
         assert "--model-version" in row, f"--masks-version row does not name --model-version: {row}"

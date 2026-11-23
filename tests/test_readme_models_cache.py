@@ -11,6 +11,9 @@ Behaviour documented (read from the code, WIP 5f00c94):
 * ``main.py`` ``DatasetConfig.models_cache`` (YAML key ``dataset.models_cache``,
   default ``None``) is forwarded as ``--models-cache``.
 
+The README.md section 5 text moved to the Stage 4 section of docs/usage.md (TASK-DOCS-BDRABCZUK-84BE8AB6FC73);
+the first four Requirements below name that place since. The stale-path guard stays on README.md.
+
 Requirements pinned here (one test per requirement):
 
 * REQ-DATASETS-BDRABCZUK-591B1EC86494 - the section 5 option table has a ``--models-cache`` row
@@ -23,7 +26,7 @@ Requirements pinned here (one test per requirement):
 * REQ-DATASETS-BDRABCZUK-6BC4F1FFE744 - README.md has no stale
   ``data/{dataset}/derivatives/champollion_V1/models_cache`` path.
 
-README.md is read as plain text: no package import, no Sphinx build, no network.
+README.md and docs/usage.md are read as plain text: no package import, no Sphinx build, no network.
 """
 
 from __future__ import annotations
@@ -36,8 +39,9 @@ import pytest
 PROJECT_ROOT = Path(__file__).resolve().parents[1]
 
 README = PROJECT_ROOT / "README.md"
+USAGE = PROJECT_ROOT / "docs" / "usage.md"
 
-EMBEDDINGS_SECTION_HEADING = r"\d+\.\s+Generate Embeddings"
+EMBEDDINGS_SECTION_HEADING = r"Stage 4\b[^\n]*"
 CACHE_PATH_RE = re.compile(r"\{datasets_root\}/derivatives/champollion_V1/models_cache/?(?![A-Za-z0-9_])")
 STALE_CACHE_PATH = "data/{dataset}/derivatives/champollion_V1/models_cache"
 OPTION_NAME = "--models-cache"
@@ -51,12 +55,12 @@ def _read(path: Path) -> str:
 def _section(text: str, heading_regex: str) -> str:
     """Body of the ``## <heading>`` section, up to the next level-2 heading."""
     m = re.search(rf"^##\s+{heading_regex}\s*$(.*?)(?=^##\s|\Z)", text, re.MULTILINE | re.DOTALL)
-    assert m, f"no '## {heading_regex}' section found in README.md"
+    assert m, f"no '## {heading_regex}' section found in docs/usage.md"
     return m.group(1)
 
 
 def _embeddings_section() -> str:
-    return _section(_read(README), EMBEDDINGS_SECTION_HEADING)
+    return _section(_read(USAGE), EMBEDDINGS_SECTION_HEADING)
 
 
 def _cells(line: str) -> list[str]:
@@ -85,10 +89,10 @@ def _option_table_rows(section: str) -> list[list[str]]:
 def _models_cache_row_description() -> str:
     """Description cell of the ``--models-cache`` row of the section 5 option table."""
     rows = _option_table_rows(_embeddings_section())
-    assert rows, "README.md section '5. Generate Embeddings' has no table whose header row starts with 'Option'"
+    assert rows, "docs/usage.md section 'Stage 4' has no table whose header row starts with 'Option'"
     matches = [r for r in rows if r[0].strip("`").split()[0:1] == [OPTION_NAME]]
     assert len(matches) == 1, (
-        f"README.md section 5 option table must contain exactly one '{OPTION_NAME}' row; "
+        f"docs/usage.md Stage 4 option table must contain exactly one '{OPTION_NAME}' row; "
         f"option cells found: {[r[0] for r in rows]}"
     )
     return " | ".join(matches[0][1:])
@@ -98,7 +102,7 @@ def _model_sources_prose() -> str:
     """Text of the ``### Model sources`` subsection before its collapsible ``<details>`` option table."""
     section = _embeddings_section()
     m = re.search(r"^###\s+Model sources\s*$(.*?)(?=^#{1,3}\s|\Z)", section, re.MULTILINE | re.DOTALL)
-    assert m, "README.md section '5. Generate Embeddings' has no '### Model sources' subsection"
+    assert m, "docs/usage.md section 'Stage 4' has no '### Model sources' subsection"
     return m.group(1).split("<details>", 1)[0]
 
 
@@ -109,7 +113,7 @@ class TestReadmeModelsCacheOptionRow:
     def test_option_table_row_states_default(self):
         description = _models_cache_row_description()
         assert CACHE_PATH_RE.search(description), (
-            f"README.md section 5 '{OPTION_NAME}' row must state the default directory "
+            f"docs/usage.md Stage 4 '{OPTION_NAME}' row must state the default directory "
             f"{{datasets_root}}/derivatives/champollion_V1/models_cache/; description: {description!r}"
         )
 
@@ -121,7 +125,7 @@ class TestReadmeModelsCacheConfigKey:
     def test_option_row_names_config_key(self):
         description = _models_cache_row_description()
         assert re.search(r"(?<![\w.])dataset\.models_cache(?!\w)", description), (
-            f"README.md section 5 '{OPTION_NAME}' row must name the pipeline config key dataset.models_cache; "
+            f"docs/usage.md Stage 4 '{OPTION_NAME}' row must name the pipeline config key dataset.models_cache; "
             f"description: {description!r}"
         )
 
@@ -135,7 +139,7 @@ class TestReadmeModelsCacheRelativePath:
         assert re.search(r"\brelative\b", description, re.IGNORECASE) and re.search(
             r"\bcurrent working directory\b", description, re.IGNORECASE
         ), (
-            f"README.md section 5 '{OPTION_NAME}' row must state that a relative path resolves against the "
+            f"docs/usage.md Stage 4 '{OPTION_NAME}' row must state that a relative path resolves against the "
             f"current working directory; description: {description!r}"
         )
 
@@ -147,7 +151,7 @@ class TestReadmeModelSourcesCachePath:
     def test_model_sources_states_default_cache_dir(self):
         prose = _model_sources_prose()
         assert CACHE_PATH_RE.search(prose), (
-            "README.md 'Model sources' subsection (before its option table) must state "
+            "docs/usage.md 'Model sources' subsection (before its option table) must state "
             "{datasets_root}/derivatives/champollion_V1/models_cache/ as the default directory of downloaded models"
         )
 
