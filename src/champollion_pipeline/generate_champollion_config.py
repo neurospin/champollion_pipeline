@@ -10,12 +10,14 @@ dataset_localization YAML elsewhere (e.g. a writable path in read-only
 container environments).  ``--champollion_loc`` is read-only by default.
 """
 
+import argparse
 import glob
 import json
 import logging
 import os
 from datetime import datetime
 from os.path import abspath, dirname, exists, isfile, join
+from typing import NamedTuple
 
 import numpy as np
 import yaml
@@ -29,15 +31,23 @@ from champollion_pipeline.derivatives_layout import (
     compute_run_log_path,
 )
 from champollion_pipeline.process_setup import init_pipeline_process
-from champollion_pipeline.utils.cortical_tiles_config import INPUT_TYPES_DEFAULT
+from champollion_pipeline.utils.cortical_tiles_config import INPUT_TYPES_DEFAULT, compute_versioned_crops_dir
 from champollion_pipeline.utils.lib import DERIVATIVES_FOLDER, find_dataset_folder
 from champollion_pipeline.utils.qc_report import (
     CROP_KIND_MASK,
     REASON_SEPARATOR,
     fetch_crop_qc_rows,
+    fetch_grouped_crop_qc_rows,
     log_input_qc_exclusions,
     write_qc_tsv,
     write_run_qc_tsv,
+)
+from champollion_pipeline.utils.region_masks import (
+    REGION_MASKS_OPTION,
+    add_region_masks_option,
+    find_unmapped_region_models,
+    refuse_masks_with_region_masks,
+    split_region_model_name,
 )
 from champollion_pipeline.utils.resource_copy import replace_with_writable_copy
 
@@ -55,6 +65,12 @@ OUTPUT_QC_FILENAME = "output_qc.tsv"
 DATASET_FOLDER_KEY = "dataset_folder"
 DATASET_FOLDER_TOKEN = "${dataset_folder}"
 CONFIG_SIDES = ("left", "right")
+CROP_SIDES = {"left": "L", "right": "R"}  # hemisphere -> crop file side letter
+CROPS_TEMPLATE_PATH = "TESTXX/crops/2mm"
+_EXTERNAL_CROPS_WITH_MAP_ERROR = (
+    f"--external_crops cannot be given together with {REGION_MASKS_OPTION}: the map names a crops/<version>/2mm "
+    "folder of the dataset derivatives for each region model name; drop --external_crops or the map"
+)
 CONFIG_PATH_KEYS = (
     "numpy_all",
     "subjects_all",
@@ -76,6 +92,31 @@ def _list_region_folders(crop_path: str) -> list[str]:
     if not os.path.isdir(crop_path):
         return []
     return sorted(name for name in os.listdir(crop_path) if os.path.isdir(join(crop_path, name)))
+
+
+class ConfiguredModel(NamedTuple):
+    """A region model name of the --region-masks map whose region has a folder in its Mask version crops dir."""
+
+    name: str  # region model name, e.g. SC-sylv_left
+    version: str  # Mask version the map gives it
+    crops_dir: str  # <dataset derivatives>/crops/<version>/2mm
+    region: str  # Sulcal region folder name, e.g. S.C.-sylv.
+    side: str  # crop file side letter, L or R
+
+
+def _list_crop_path_model_names(crop_path: str) -> list[str]:
+    """Region model names of the region folders of crop_path: sorted folders, then left and right."""
+    return [
+        compute_region_model_name(region, side) for region in _list_region_folders(crop_path) for side in CONFIG_SIDES
+    ]
+
+
+def _group_configured_models(configured: list[ConfiguredModel]) -> list[tuple[str, str, list[str]]]:
+    """Input QC groups (crops dir, side, regions sorted) of the configured models: by Mask version, then L, R."""
+    groups: dict[tuple[str, str, str], set[str]] = {}
+    for model in configured:
+        groups.setdefault((model.version, model.side, model.crops_dir), set()).add(model.region)
+    return [(crops_dir, side, sorted(regions)) for (_version, side, crops_dir), regions in sorted(groups.items())]
 
 
 def _read_yaml_mapping(path: str) -> dict | None:
@@ -119,15 +160,14 @@ def _compute_config_reasons(config_path: str, dataset_folder: str | None) -> lis
     return [*reasons, *_compute_mapping_reasons(mapping, dataset_folder)]
 
 
-def _fetch_output_qc_rows(crop_path: str, dataset_loc: str, localization_path: str) -> list[dict[str, object]]:
-    """One output QC row per region folder of crop_path and per side, check = region YAML file name."""
+def _fetch_output_qc_rows(model_names: list[str], dataset_loc: str, localization_path: str) -> list[dict[str, object]]:
+    """One output QC row per region model name, in input order, check = region YAML file name."""
     dataset_folder = _read_dataset_folder(localization_path)
     rows: list[dict[str, object]] = []
-    for region in _list_region_folders(crop_path):
-        for side in CONFIG_SIDES:
-            name = f"{compute_region_model_name(region, side)}.yaml"
-            reasons = _compute_config_reasons(join(dataset_loc, name), dataset_folder)
-            rows.append({"check": name, "qc": 0 if reasons else 1, "reason": REASON_SEPARATOR.join(reasons)})
+    for model_name in model_names:
+        name = f"{model_name}.yaml"
+        reasons = _compute_config_reasons(join(dataset_loc, name), dataset_folder)
+        rows.append({"check": name, "qc": 0 if reasons else 1, "reason": REASON_SEPARATOR.join(reasons)})
     return rows
 
 
@@ -184,6 +224,7 @@ class GenerateChampollionConfig(ScriptBuilder):
                 "--masks",
                 "Mask version tag (e.g. 'canonical_25'). Must match the value used when running run_cortical_tiles.",
                 default=DEFAULT_MASKS_VERSION,
+                type_=None,  # identity: argparse keeps the DeclaredMasksDefault mark of add_region_masks_option
             )
             .add_optional_argument(
                 "--localization",
@@ -193,6 +234,47 @@ class GenerateChampollionConfig(ScriptBuilder):
                 default="local",
             )
         )
+        add_region_masks_option(self)
+
+    def parse_args(self, args: list[str] | None = None) -> argparse.Namespace:
+        """Parse the command line; exit 2 for --masks or --external_crops beside --region-masks.
+
+        Afterwards args.masks is a plain str: the declared default when --masks was not given (the run label).
+        """
+        parsed = super().parse_args(args)
+        refuse_masks_with_region_masks(self.parser, self.args)
+        if self.args.region_mask_versions is not None and self.args.external_crops:
+            self.parser.error(_EXTERNAL_CROPS_WITH_MAP_ERROR)
+        return parsed
+
+    def _refuse_unmapped_region_models(self) -> None:
+        """Exit 2 naming each region model name of a region folder of crop_path that --region-masks leaves out."""
+        unmapped = find_unmapped_region_models(
+            self.args.region_mask_versions, _list_region_folders(self.args.crop_path)
+        )
+        if unmapped:
+            self.parser.error(
+                f"{REGION_MASKS_OPTION} gives no Mask version for {', '.join(unmapped)}, whose region folder lies "
+                f"in {self.args.crop_path}; add a NAME=VERSION pair for each"
+            )
+
+    def _list_configured_models(self, dataset_folder: str) -> list[ConfiguredModel]:
+        """The mapped region model names whose region has a folder in the crops dir of their Mask version.
+
+        Ordered by region, then L before R, as the region folders of crop_path are without a map.
+        """
+        derivatives = join(dataset_folder, self.args.dataset, "derivatives", DERIVATIVES_FOLDER)
+        configured = []
+        for name, version in self.args.region_mask_versions.items():
+            region, hemisphere = split_region_model_name(name)
+            crops_dir = compute_versioned_crops_dir(derivatives, version)
+            if os.path.isdir(join(crops_dir, region)):
+                configured.append(ConfiguredModel(name, version, crops_dir, region, CROP_SIDES[hemisphere]))
+        return sorted(configured, key=lambda model: (model.region, model.side))
+
+    def _compute_crops_template_path(self, version: str) -> str:
+        """Dataset-relative crops/<version>/2mm path that replaces TESTXX/crops/2mm in the template."""
+        return f"{self.args.dataset}/derivatives/{DERIVATIVES_FOLDER}/crops/{version}/2mm"
 
     def _get_crop_size(self, crop_dir: str, side: str) -> tuple[int, int, int] | None:
         """Return (sizeX, sizeY, sizeZ) from .npy shape if present, else from .minf.
@@ -220,6 +302,32 @@ class GenerateChampollionConfig(ScriptBuilder):
             return info["sizeX"], info["sizeY"], info["sizeZ"]
         return None
 
+    def _write_region_config(
+        self, template: str, crop_dir: str, crop_name: str, side: str, dataset_loc: str
+    ) -> str | None:
+        """Write the region dataset YAML of crop_name and side (L or R) from template; its path, None when skipped.
+
+        Skipped when crop_dir holds no crop array or .minf to read the crop size from.
+        """
+        size = self._get_crop_size(crop_dir, side)
+        if size is None:
+            return None
+        sx, sy, sz = size
+        dataset_name = compute_region_model_name(crop_name, "left" if side == "L" else "right")
+        filedata = (
+            template.replace("REPLACE_CROP_NAME", crop_name)
+            .replace("REPLACE_DATASET", dataset_name)
+            .replace("REPLACE_SIDE", side)
+            .replace("REPLACE_SIZEX", str(sx))
+            .replace("REPLACE_SIZEY", str(sy))
+            .replace("REPLACE_SIZEZ", str(sz))
+        )
+        result_file = join(dataset_loc, f"{dataset_name}.yaml")
+        with open(result_file, "w") as f:
+            f.write(filedata)
+        logger.output(f"Dataset config written: {result_file}")
+        return result_file
+
     def _create_dataset_configs(self, crop_path: str, dataset_loc: str, ref: str) -> None:
         """Inline replacement for create_dataset_config_files.py with .npy fallback."""
         crop_dirs = sorted(glob.glob(join(crop_path, "*")))
@@ -229,33 +337,35 @@ class GenerateChampollionConfig(ScriptBuilder):
                 continue
             crop_name = os.path.basename(crop_dir)
             for side in ("L", "R"):
-                size = self._get_crop_size(crop_dir, side)
-                if size is None:
+                if self._write_region_config(ref, crop_dir, crop_name, side, dataset_loc) is None:
                     skipped.append(f"{crop_name}/{side}")
-                    continue
-                sx, sy, sz = size
-                side_long = "left" if side == "L" else "right"
-                dataset_name = compute_region_model_name(crop_name, side_long)
-                filedata = (
-                    ref.replace("REPLACE_CROP_NAME", crop_name)
-                    .replace("REPLACE_DATASET", dataset_name)
-                    .replace("REPLACE_SIDE", side)
-                    .replace("REPLACE_SIZEX", str(sx))
-                    .replace("REPLACE_SIZEY", str(sy))
-                    .replace("REPLACE_SIZEZ", str(sz))
-                )
-                result_file = join(dataset_loc, f"{dataset_name}.yaml")
-                with open(result_file, "w") as f:
-                    f.write(filedata)
-                logger.output(f"Dataset config written: {result_file}")
         if skipped:
             logger.warning(f"Skipped {len(skipped)} sulci (no .minf or .npy found): {skipped}")
 
-    def _run_input_qc(self, configs_root: str) -> int:
-        """Write input_qc.tsv into configs_root; return 0, PARTIAL_STATUS or FAILED_STATUS."""
+    def _create_mapped_dataset_configs(self, configured: list[ConfiguredModel], dataset_loc: str) -> None:
+        """Write the region dataset YAML of each configured model from the packaged template and its crops dir."""
+        with open(join(_SCRIPT_DIR, "resources", "reference.yaml"), encoding="utf-8") as f:
+            template = f.read()
+        skipped = []
+        for model in configured:
+            ref = template.replace(CROPS_TEMPLATE_PATH, self._compute_crops_template_path(model.version))
+            crop_dir = join(model.crops_dir, model.region)
+            if self._write_region_config(ref, crop_dir, model.region, model.side, dataset_loc) is None:
+                skipped.append(model.name)
+        if skipped:
+            logger.warning(f"Skipped {len(skipped)} sulci (no .minf or .npy found): {skipped}")
+
+    def _run_input_qc(self, configs_root: str, configured: list[ConfiguredModel] | None = None) -> int:
+        """Write input_qc.tsv into configs_root; return 0, PARTIAL_STATUS or FAILED_STATUS.
+
+        With configured models (a --region-masks run), the crops of each in its own crops dir; else crop_path's.
+        """
         qc_path = join(configs_root, INPUT_QC_FILENAME)
         crop_path = self.args.crop_path
-        rows = fetch_crop_qc_rows(crop_path, _list_region_folders(crop_path), INPUT_QC_KINDS)
+        if configured is None:
+            rows = fetch_crop_qc_rows(crop_path, _list_region_folders(crop_path), INPUT_QC_KINDS)
+        else:
+            rows = fetch_grouped_crop_qc_rows(_group_configured_models(configured), INPUT_QC_KINDS)
         write_qc_tsv(qc_path, rows)
         n_excluded = log_input_qc_exclusions(rows, logger)
         if n_excluded == len(rows):
@@ -263,10 +373,23 @@ class GenerateChampollionConfig(ScriptBuilder):
             return FAILED_STATUS
         return PARTIAL_STATUS if n_excluded else 0
 
-    def _run_output_qc(self, configs_root: str, dataset_loc: str, localization_path: str) -> int:
-        """Write output_qc.tsv into configs_root; return 0, PARTIAL_STATUS or FAILED_STATUS."""
+    def _run_output_qc(
+        self,
+        configs_root: str,
+        dataset_loc: str,
+        localization_path: str,
+        configured: list[ConfiguredModel] | None = None,
+    ) -> int:
+        """Write output_qc.tsv into configs_root; return 0, PARTIAL_STATUS or FAILED_STATUS.
+
+        One row per configured model (a --region-masks run), else per region folder of crop_path and side.
+        """
         qc_path = join(configs_root, OUTPUT_QC_FILENAME)
-        rows = _fetch_output_qc_rows(self.args.crop_path, dataset_loc, localization_path)
+        if configured is None:
+            model_names = _list_crop_path_model_names(self.args.crop_path)
+        else:
+            model_names = [model.name for model in configured]
+        rows = _fetch_output_qc_rows(model_names, dataset_loc, localization_path)
         write_run_qc_tsv(qc_path, rows)
         return _report_output_qc(rows, qc_path)
 
@@ -310,6 +433,8 @@ class GenerateChampollionConfig(ScriptBuilder):
     def run(self):
         """Execute the champollion config generation script."""
         self._validate_inputs()
+        if self.args.region_mask_versions is not None:
+            self._refuse_unmapped_region_models()
 
         # Resolve champollion_loc to absolute path (read-only by default).
         champollion_loc = abspath(self.args.champollion_loc)
@@ -327,7 +452,8 @@ class GenerateChampollionConfig(ScriptBuilder):
         # Region YAMLs land at {configs_root}/dataset/{dataset}/ to match Hydra config-group layout.
         dataset_loc = join(configs_root, "dataset", self.args.dataset)
 
-        input_status = self._run_input_qc(configs_root)
+        configured = None if self.args.region_mask_versions is None else self._list_configured_models(dataset_folder)
+        input_status = self._run_input_qc(configs_root, configured)
         if input_status == FAILED_STATUS:
             return input_status
 
@@ -349,11 +475,11 @@ class GenerateChampollionConfig(ScriptBuilder):
                     #      dataset_folder = /external/shared_project
                     #      => relative = TEST01/path/to/crops/crops/2mm
                     relative_path = os.path.relpath(self.args.crop_path, dataset_folder)
-                    my_lines.append(line.replace("TESTXX/crops/2mm", relative_path))
+                    my_lines.append(line.replace(CROPS_TEMPLATE_PATH, relative_path))
                 else:
                     # Standard: use the known derivatives folder structure including mask version
-                    computed_path = f"{self.args.dataset}/derivatives/{DERIVATIVES_FOLDER}/crops/{self.args.masks}/2mm"
-                    my_lines.append(line.replace("TESTXX/crops/2mm", computed_path))
+                    computed_path = self._compute_crops_template_path(self.args.masks)
+                    my_lines.append(line.replace(CROPS_TEMPLATE_PATH, computed_path))
 
         with open(reference_yaml_dest, "w") as f:
             f.writelines(my_lines)
@@ -362,7 +488,10 @@ class GenerateChampollionConfig(ScriptBuilder):
 
         with open(reference_yaml_dest) as f:
             ref = f.read()
-        self._create_dataset_configs(self.args.crop_path, dataset_loc, ref)
+        if configured is None:
+            self._create_dataset_configs(self.args.crop_path, dataset_loc, ref)
+        else:
+            self._create_mapped_dataset_configs(configured, dataset_loc)
 
         # Write the dataset_localization YAML for the requested environment.
         localization_name = f"{self.args.localization}.yaml"
@@ -385,7 +514,7 @@ class GenerateChampollionConfig(ScriptBuilder):
                 f"(only used for regions not found in {configs_root}); consider deleting them."
             )
 
-        output_status = self._run_output_qc(configs_root, dataset_loc, localization_path)
+        output_status = self._run_output_qc(configs_root, dataset_loc, localization_path, configured)
         return output_status or input_status  # input_status is 0 or 3 here: 1 and 3 of the output QC win
 
 
