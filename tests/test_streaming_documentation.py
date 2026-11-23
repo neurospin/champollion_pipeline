@@ -21,7 +21,7 @@ ROOT = Path(__file__).resolve().parents[1]
 USAGE_MD = ROOT / "docs" / "usage.md"
 WORKFLOW_MD = ROOT / "docs" / "workflow.md"
 README_MD = ROOT / "README.md"
-MAIN_PY = ROOT / "main.py"
+CLI_PY = ROOT / "src" / "champollion_pipeline" / "cli.py"
 STREAMING_DIR = ROOT / "src" / "champollion_pipeline" / "streaming"
 
 SECTION_TITLE = "Streaming mode"
@@ -172,7 +172,7 @@ class TestUsageStreamingSection:
     def test_log_dir_bare_log(self, usage_section):
         """REQ: a bare --log gives ./.log/champollion_pipeline_<YYYYmmdd-HHMMSS>/ as the log directory."""
         section = usage_section()
-        name = _module_constant(MAIN_PY, "SCRIPT_NAME")
+        name = _module_constant(CLI_PY, "SCRIPT_NAME")
         expected = rf"\./\.log/{re.escape(name)}_<YYYYmmdd-HHMMSS>/?(?!\.log)"
         _assert_block(section, r"\bbare\b", expected, where=self.where)
 

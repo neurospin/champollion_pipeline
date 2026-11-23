@@ -25,13 +25,13 @@ from pathlib import Path
 import pytest
 import yaml
 
-MAIN_PY = Path(__file__).resolve().parent.parent / "main.py"
+CLI_PY = Path(__file__).resolve().parent.parent / "src" / "champollion_pipeline" / "cli.py"
 
 OTHER_MASKS_VERSION = "canonical_25"
 
 
 def _load_main_module():
-    spec = importlib.util.spec_from_file_location("_champollion_main_masks_version_under_test", MAIN_PY)
+    spec = importlib.util.spec_from_file_location("_champollion_main_masks_version_under_test", CLI_PY)
     module = importlib.util.module_from_spec(spec)
     spec.loader.exec_module(module)
     return module

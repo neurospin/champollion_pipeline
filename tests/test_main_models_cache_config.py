@@ -47,7 +47,7 @@ import yaml
 from champollion_pipeline.generate_embeddings import GenerateEmbeddings
 from tests.main_stage_helpers import embeddings_stage_argv, option_values
 
-MAIN_PY = Path(__file__).resolve().parent.parent / "main.py"
+CLI_PY = Path(__file__).resolve().parent.parent / "src" / "champollion_pipeline" / "cli.py"
 
 MODELS_CACHE_OPTION = "--models-cache"
 ABSOLUTE_MODELS_CACHE = "/scratch/user/champollion_models_cache"
@@ -62,7 +62,7 @@ REQ_NO_FORWARD = "REQ-DATASETS-BDRABCZUK-770A696B10A0"
 
 
 def _load_main_module():
-    spec = importlib.util.spec_from_file_location("_champollion_main_models_cache_config_under_test", MAIN_PY)
+    spec = importlib.util.spec_from_file_location("_champollion_main_models_cache_config_under_test", CLI_PY)
     module = importlib.util.module_from_spec(spec)
     spec.loader.exec_module(module)
     return module

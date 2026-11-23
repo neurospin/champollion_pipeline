@@ -37,6 +37,7 @@ import pytest
 import yaml
 
 MAIN_PY = Path(__file__).resolve().parent.parent / "main.py"
+CLI_PY = MAIN_PY.parent / "src" / "champollion_pipeline" / "cli.py"
 CONFIG_MODULE = "champollion_pipeline.config"
 CONFIG_NAMES = ("DatasetConfig", "PipelineConfig", "ConfigLoader")
 
@@ -215,7 +216,7 @@ dataset:
 
 
 def _load_main_module():
-    spec = importlib.util.spec_from_file_location("_champollion_main_config_module_under_test", MAIN_PY)
+    spec = importlib.util.spec_from_file_location("_champollion_main_config_module_under_test", CLI_PY)
     module = importlib.util.module_from_spec(spec)
     spec.loader.exec_module(module)
     return module

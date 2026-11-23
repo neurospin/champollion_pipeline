@@ -24,7 +24,7 @@ import pytest
 
 from tests.log_assertions import LOG, OUTPUT, print_call_lines
 
-MAIN_PY = Path(__file__).resolve().parent.parent / "main.py"
+CLI_PY = Path(__file__).resolve().parent.parent / "src" / "champollion_pipeline" / "cli.py"
 STREAMING_RUNNER = "champollion_pipeline.streaming.runner"
 
 
@@ -42,7 +42,7 @@ class _NoRunOrchestrator:
 
 @pytest.fixture
 def main_module(monkeypatch):
-    spec = importlib.util.spec_from_file_location("_champollion_main_logging_under_test", MAIN_PY)
+    spec = importlib.util.spec_from_file_location("_champollion_main_logging_under_test", CLI_PY)
     module = importlib.util.module_from_spec(spec)
     spec.loader.exec_module(module)
     monkeypatch.setattr(module, "check_for_updates", lambda: None)
@@ -125,4 +125,4 @@ def test_parallel_runner_import_failure_logged_at_error(main_module, monkeypatch
 
 
 def test_main_py_has_no_print_call():
-    assert print_call_lines(ast.parse(MAIN_PY.read_text())) == []
+    assert print_call_lines(ast.parse(CLI_PY.read_text())) == []

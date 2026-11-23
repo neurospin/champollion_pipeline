@@ -1,24 +1,27 @@
 """Shared helpers of the main.py stage tests.
 
-main.py lives at the repo root, not in the installed package, so each test module loads it by
-file path under its own private module name. The stage helpers replace the script class in its
+The orchestrator of main.py lives in src/champollion_pipeline/cli.py (TASK-CLICMD-BDRABCZUK-0FD3652CD077;
+main.py is a thin shim). Each test module loads cli.py by file path under its own private module name,
+so module-level patches stay private to that test module. The stage helpers replace the script class in its
 own module by a MagicMock, run the stage and return the argv handed to ``parse_args``.
 """
 
 import dataclasses
 import importlib.util
 import logging
+import sys
 from pathlib import Path
 from unittest.mock import MagicMock, patch
 
 from champollion_pipeline.utils.input_kind import InputKind, detect_input_kind
 
-MAIN_PY = Path(__file__).resolve().parent.parent / "main.py"
+REPO_ROOT = Path(__file__).resolve().parent.parent
+CLI_PY = REPO_ROOT / "src" / "champollion_pipeline" / "cli.py"
 
 
 def load_main_module(module_name):
-    """Load main.py under the private name ``module_name``."""
-    spec = importlib.util.spec_from_file_location(module_name, MAIN_PY)
+    """Load the orchestrator module cli.py under the private name ``module_name``."""
+    spec = importlib.util.spec_from_file_location(module_name, CLI_PY)
     module = importlib.util.module_from_spec(spec)
     spec.loader.exec_module(module)
     return module
@@ -109,6 +112,30 @@ def stub_main_setup(module, monkeypatch):
     monkeypatch.setattr("champollion_utils.script_builder.init_process", lambda *a, **k: logging.getLogger())
     monkeypatch.setattr("champollion_utils.script_builder.check_for_updates", lambda *a, **k: None)
     return module
+
+
+def stub_script_entry_point(monkeypatch, module, script_class, argv):
+    """Prepare an in-process run of a script entry point; return the list each run() call is appended to.
+
+    ``script_class.run`` becomes a stub returning 0; the update check, the process-wide logging setup of
+    ScriptBuilder and the module's own ``init_pipeline_process`` / ``detach_frozen_root_handlers`` (when it
+    has them) become no-ops; ``sys.argv`` becomes ``argv``. Used by the --log tests of the console scripts
+    and of the src/ scripts.
+    """
+    calls = []
+
+    def _fake_run(self):
+        calls.append(self)
+        return 0
+
+    monkeypatch.setattr(script_class, "run", _fake_run)
+    monkeypatch.setattr("champollion_utils.script_builder.check_for_updates", lambda *a, **k: None)
+    monkeypatch.setattr("champollion_utils.script_builder.init_process", lambda *a, **k: None)
+    for setup_name in ("init_pipeline_process", "detach_frozen_root_handlers"):
+        if hasattr(module, setup_name):
+            monkeypatch.setattr(module, setup_name, lambda *a, **k: None)
+    monkeypatch.setattr(sys, "argv", list(argv))
+    return calls
 
 
 def record_logged_before_run(caplog, level, prefix):

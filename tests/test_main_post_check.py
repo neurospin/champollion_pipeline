@@ -26,7 +26,7 @@ from tests.log_assertions import OUTPUT
 
 pytestmark = pytest.mark.unit  # noqa: V107
 
-MAIN_PY = Path(__file__).resolve().parent.parent / "main.py"
+CLI_PY = Path(__file__).resolve().parent.parent / "src" / "champollion_pipeline" / "cli.py"
 
 STAGE = "run_cortical_tiles"
 POST_CHECK_PREFIX = f"Post-check {STAGE}:"
@@ -37,7 +37,7 @@ REPORT_ERROR = "output folder vanished during the post-check"
 
 @pytest.fixture
 def main_module():
-    spec = importlib.util.spec_from_file_location("_champollion_main_post_check_under_test", MAIN_PY)
+    spec = importlib.util.spec_from_file_location("_champollion_main_post_check_under_test", CLI_PY)
     module = importlib.util.module_from_spec(spec)
     spec.loader.exec_module(module)
     return module

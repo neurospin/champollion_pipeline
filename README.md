@@ -549,6 +549,7 @@ A bare `--log` writes it to the script's default folder, in a file named `<stage
 | `champollion-prune` | `<dataset>/derivatives/.log` |
 | `champollion-purge` | `<dataset>/derivatives/.log` |
 | `champollion-labelling-qc` | `.log` next to the output TSV |
+| `champollion-pipeline` | `./.log` |
 | `generate_masks.py` | `<--output_dir>/.log` |
 
 A bare `--log` placed just before a positional argument takes that argument as its PATH: pass `--log=PATH`,
@@ -566,7 +567,7 @@ The terminal still shows the same output, unchanged: the run log is a copy.
 `main.py` runs the stages in-process: with a bare `--log`, each stage writes its own run log to that stage's
 default folder above.
 
-`main.py --log=DIR` writes one run log per stage, `DIR/<stage>_<YYYYmmdd-HHMMSS>.log`.
+`main.py --log=DIR` and `champollion-pipeline --log=DIR` write one run log per stage, `DIR/<stage>_<YYYYmmdd-HHMMSS>.log`.
 
 In a pipeline config file, the top-level key `log:` does the same (`null`: no run log, `""`: each stage's
 default folder, a path: that directory); the command line wins over the config.
@@ -583,6 +584,7 @@ champollion_pipeline/
 ├── reference_data/             # NOT shipped (gitignored) — pre-trained UMAP models go here, obtained separately
 ├── src/
 │   └── champollion_pipeline/   # Installable Python package (entry points: champollion-*)
+│       ├── cli.py                   # Pipeline orchestrator and command line (champollion-pipeline; main.py runs it)
 │       ├── generate_morphologist_graphs.py
 │       ├── run_cortical_tiles.py
 │       ├── derivatives_layout.py
@@ -624,6 +626,7 @@ Installing the package provides these entry points, declared in
 | `champollion-prune` | `prune_failed_subjects.py` | Maintenance — delete cortical_tiles outputs for QC-failing subjects |
 | `champollion-purge` | `purge_subject.py` | Maintenance — delete all cortical_tiles derivatives for one subject |
 | `champollion-labelling-qc` | `generate_labelling_qc.py` | QC — flag subjects whose Morphologist labelled graphs (e.g. `deepcnn_session_auto`) are missing, so they will be left out of the whole-brain output |
+| `champollion-pipeline` | `cli.py` | Pipeline — run the enabled stages in order, with the options of `python main.py` |
 
 `generate_masks.py` also ships in the package but declares no console script.
 

@@ -26,7 +26,7 @@ import pytest
 from champollion_pipeline.derivatives_layout import DEFAULT_MASKS_VERSION
 from champollion_pipeline.generate_snapshots import GenerateSnapshots
 
-MAIN_PY = Path(__file__).resolve().parent.parent / "main.py"
+CLI_PY = Path(__file__).resolve().parent.parent / "src" / "champollion_pipeline" / "cli.py"
 DATASETS_ROOT = "/data/MYDATASET"
 DEFAULT_MASKS = DEFAULT_MASKS_VERSION
 OTHER_MASKS = "canonical_25"  # a Mask version other than the default
@@ -34,7 +34,7 @@ LOGGER = logging.getLogger("test_main_embver_snapshots_dir")
 
 
 def _load_main_module():
-    spec = importlib.util.spec_from_file_location("_champollion_main_embver_snapshots_dir_under_test", MAIN_PY)
+    spec = importlib.util.spec_from_file_location("_champollion_main_embver_snapshots_dir_under_test", CLI_PY)
     module = importlib.util.module_from_spec(spec)
     spec.loader.exec_module(module)
     return module

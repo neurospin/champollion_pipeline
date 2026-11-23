@@ -24,7 +24,7 @@ from champollion_pipeline.file_indexer.btree import BTree
 
 pytestmark = pytest.mark.unit  # noqa: V107
 
-MAIN_PY = Path(__file__).resolve().parent.parent / "main.py"
+CLI_PY = Path(__file__).resolve().parent.parent / "src" / "champollion_pipeline" / "cli.py"
 
 DATASET = "DS"
 MASKS = "canonical_25"
@@ -54,7 +54,7 @@ SNAPSHOT_FILES = ["sub-01/sulcal_graph.png", "umap.png"]
 
 @pytest.fixture
 def main_module():
-    spec = importlib.util.spec_from_file_location("_champollion_main_stage_indexes_under_test", MAIN_PY)
+    spec = importlib.util.spec_from_file_location("_champollion_main_stage_indexes_under_test", CLI_PY)
     module = importlib.util.module_from_spec(spec)
     spec.loader.exec_module(module)
     return module
@@ -405,7 +405,7 @@ def _from_file_indexer(path: Path) -> list[str]:
 
 def test_only_the_default_adapter_is_imported_from_file_indexer():
     """REQ R2: main.py imports the default adapter from file_indexer and nothing else; _stage_base.py nothing."""
-    stage_base = MAIN_PY.parent / "src" / "champollion_pipeline" / "_stage_base.py"
+    stage_base = CLI_PY.parent / "_stage_base.py"
 
-    assert _from_file_indexer(MAIN_PY) == ["FileIndexStageIndexer"]
+    assert _from_file_indexer(CLI_PY) == ["FileIndexStageIndexer"]
     assert _from_file_indexer(stage_base) == []
