@@ -179,15 +179,15 @@ Two loss functions are supported (configured via `mode`):
 
 ### Inference (`generate_embeddings.py` / `src/generate_embeddings.py`)
 
-1. Loads each region's trained model from the Lightning checkpoint `epoch=N-step=*.ckpt` (N = `--checkpoint-epoch`, default 80, 0-based) under `logs/lightning_logs/version_*/checkpoints/`, from a HuggingFace repo, local directory or archive; as an interim stand-in, `logs/best_model_weights.pt` is used for a region lacking that checkpoint, with a WARNING.
+1. Finds the trained models of the models path: one entry per model directory, each with a **model id**, the folder path between its region folder and the model folder (empty when the model sits directly in the region folder). Loads each region's trained model from the Lightning checkpoint `epoch=N-step=*.ckpt` (N = `--checkpoint-epoch`, default 80, 0-based) under `logs/lightning_logs/version_*/checkpoints/`, from a HuggingFace repo, local directory or archive; as an interim stand-in, `logs/best_model_weights.pt` is used for a region lacking that checkpoint, with a WARNING.
 2. Instantiates `DataModule_Evaluation` — same `.npy` loading, no augmentation, full dataset.
 3. Runs a forward pass through the **backbone only** (projection head is discarded).
 4. Saves one `full_embeddings.csv` per region/hemisphere:
    - Rows: subjects (identified by the `_subject.csv` IDs)
    - Columns: `dim1 … dimD` where `D = backbone_output_size`
 
-The pipeline runs **56 inference passes** (28 regions × 2 hemispheres), one per trained model fold.
-`put_together_embeddings.py` then collects all 56 CSVs into a single output directory.
+The pipeline runs one inference pass per trained model directory: **56 passes** (28 regions × 2 hemispheres) for the default model set with one model per region. A region holding two or more models gets one file per model id, in `<region>/<model id>/`.
+`put_together_embeddings.py` then collects the CSVs into the output directory, one folder per model id when the source holds model ids.
 
 ---
 
