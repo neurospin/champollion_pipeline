@@ -154,6 +154,20 @@ Then add `--parallel`, which passes `--swf` to Morphologist:
 pixi run champollion-morphologist /data/myproject/sourcedata /data/myproject/ --parallel
 ```
 
+<details>
+<summary>All options</summary>
+
+| Option | Argument | Default | Effect |
+|---|---|---|---|
+| `--parallel` | - | off: subjects run one after the other | Pass `--swf` to Morphologist: soma-workflow schedules the subjects in parallel |
+| `--enable-sulcal-recognition` | - | off: no sulcal recognition | Run Morphologist's sulcal recognition, which labels the graphs; adds 10-20 min per subject and is not needed by the embeddings pipeline |
+| `--bids` | - | off | Input is BIDS-named: morphologist-cli gets subject `sub-<label>` and, as acquisition folder, the file name text between `sub-<label>` and `_T1w` (`default_acquisition` when none) |
+| `--log` | `PATH` (optional) | none: no run log | Copy the run output (stdout, stderr, child processes) into a run-log file at `PATH`; a bare `--log` writes it in the stage's default folder (see [Run logs](#run-logs)) |
+| `--profile` | `DIR` | none: no profiling | Profile this run and its Python children into `DIR` (same as `CHAMPOLLION_PROFILE=DIR`) |
+| `--profile-mode` | `cpu` or `light` | `cpu` | Profiling mode; requires `--profile` |
+
+</details>
+
 ## Stage 2 — Extract Sulcal Region Crops
 
 Extract standardized 3D patches around 28 sulcal regions per hemisphere using *cortical_tiles*:
@@ -161,11 +175,13 @@ Extract standardized 3D patches around 28 sulcal regions per hemisphere using *c
 ```bash
 #    /data/myproject/derivatives/morphologist-6.0: morphologist subjects dir (read-only); pass the subjects/ folder of an existing tree that has one
 #    /data/myproject/derivatives/: derivatives root; crops land at {root}/cortical_tiles-2026/crops/{masks_version}/2mm/
+#    --masks canonical_25: mask version (default canonical_corrected_26_1); the later stages below use canonical_25 too
 pixi run champollion-cortical-tiles \
     /data/myproject/derivatives/morphologist-6.0 \
     /data/myproject/derivatives/ \
     --path_to_graph "t1mri/default_acquisition/*/folds/3.1" \
-    --path_sk_with_hull "t1mri/default_acquisition/default_analysis/segmentation"
+    --path_sk_with_hull "t1mri/default_acquisition/default_analysis/segmentation" \
+    --masks canonical_25
 ```
 
 - **First argument** — directory containing one folder per subject (the folder stage 1 writes, `derivatives/morphologist-6.0/`, or the `subjects/` folder of an existing tree that has one). This path may be read-only (e.g. a shared NFS database); the script never writes to it.
@@ -230,20 +246,25 @@ Datasets whose crops were built before the `skel_seed` key existed used clock-se
 <details>
 <summary>All options</summary>
 
-| Option | Description |
-|--------|-------------|
-| `--path_to_graph` | **Required.** Glob pattern to `.arg` graph files, relative to the subjects dir. |
-| `--path_sk_with_hull` | **Required.** Skeleton-with-hull sub-path, relative to the subjects dir. |
-| `--sk_qc_path` | Path to QC TSV file |
-| `--sk_qc_input_only` | Limit the input QC to the subjects of the input: an id of the `--sk_qc_path` file with no input subject folder gets no `input_qc.tsv` row. For a run on part of the cohort the file covers. |
-| `--njobs` | Number of CPU cores (default: auto) |
-| `--region-file` | Accepted but currently has no effect (dead code upstream) — do not rely on it. |
-| `--input-types` | Input types to generate: `skeleton` and/or `foldlabel`. Default: `skeleton foldlabel`. |
-| `--masks` | Mask version tag; crops are read from `<datasets_root>/derivatives/<cortical_version>/crops/<masks>/2mm`. See the `--masks` row in the embeddings options table for the default |
-| `--regions` | Restrict to specific sulcal regions (space-separated) |
-| `--skel-seed` | Skeleton seed for the 2 mm re-skeletonization. Without the option, the `skel_seed` key of `{output}/pipeline_loop_2mm.json` sets the seed. Pipeline config: `dataset.skel_seed`; null (the default) leaves the `pipeline_loop_2mm.json` value in effect. |
-| `--labelling_session` | Morphologist labelling session whose labelled graphs locate the ventricle for whole-brain removal (e.g. `0_auto`). Default: per subject, the first of `deepcnn_session_auto` and `default_session_auto` that holds a labelled graph. |
-| `--overwrite` | Regenerate crops even if crops for the requested mask version already exist; without it the run keeps crops holding `crops_complete.marker` and regenerates crops without it, with a warning. Also removes legacy unversioned `crops/2mm/` crops when they conflict with versioned ones. |
+| Option | Argument | Default | Effect |
+|---|---|---|---|
+| `--path_to_graph` | `PATTERN` | none: required | **Required.** Glob pattern to `.arg` graph files, relative to the subjects dir; `*` matches a variable path segment. |
+| `--path_sk_with_hull` | `SUBPATH` | none: required | **Required.** Skeleton-with-hull sub-path, relative to the subjects dir. |
+| `--sk_qc_path` | `PATH` | none: every subject is processed | Path to QC TSV file (`participant_id` and `qc` columns, see [QC File](#qc-file)); subjects with `qc` 0 are skipped |
+| `--sk_qc_input_only` | - | off | Limit the input QC to the subjects of the input: an id of the `--sk_qc_path` file with no input subject folder gets no `input_qc.tsv` row. For a run on part of the cohort the file covers. |
+| `--njobs` | `N` | the CPU count minus 2, between 1 and 22 | Number of CPU cores allowed to use; a value at or above the CPU count logs a warning |
+| `--region-file` | `PATH` | none | Accepted but currently has no effect (dead code upstream) — do not rely on it. |
+| `--input-types` | `skeleton` and/or `foldlabel` | `skeleton foldlabel` | Input types to generate (one or more, space-separated). |
+| `--masks` | `VERSION` | `canonical_corrected_26_1` | Mask version tag; overrides `masks_version` in the pipeline JSON config, so crops are written to `{output}/cortical_tiles-2026/crops/<masks>/2mm/` (see [Mask versions](#mask-versions)) |
+| `--regions` | `REGION ...` | all 28 regions | Restrict to specific sulcal regions (space-separated) |
+| `--skel-seed` | `SEED` (integer) | none: the `skel_seed` key of `{output}/pipeline_loop_2mm.json` (42 in the shipped template) | Skeleton seed for the 2 mm re-skeletonization. Without the option, the `skel_seed` key of `{output}/pipeline_loop_2mm.json` sets the seed. Pipeline config: `dataset.skel_seed`; null (the default) leaves the `pipeline_loop_2mm.json` value in effect. |
+| `--labelling_session` | `SESSION` | per subject, the first of `deepcnn_session_auto` and `default_session_auto` that holds a labelled graph | Morphologist labelling session whose labelled graphs locate the ventricle for whole-brain removal (e.g. `0_auto`), for all subjects. |
+| `--overwrite` | - | off | Regenerate crops even if crops for the requested mask version already exist; without it the run keeps crops holding `crops_complete.marker` and regenerates crops without it, with a warning. Also removes legacy unversioned `crops/2mm/` crops when they conflict with versioned ones. |
+| `--bids` | - | off | Input is BIDS-named (`sub-`, `ses-`, `run-` prefixed files); passed on to the pipeline JSON config and to the whole-brain ventricle removal |
+| `--allow-prefix-ids` | - | off: the run is refused | Run even when one input subject ID strictly prefixes another (e.g. `sub-1` and `sub-10`), with a warning instead of refusing; cortical_tiles may then give a subject the ICBM2009c transform of the other. Temporary: removed once cortical_tiles fixes its `{subject}*/` glob |
+| `--log` | `PATH` (optional) | none: no run log | Copy the run output (stdout, stderr, child processes) into a run-log file at `PATH`; a bare `--log` writes it in the stage's default folder (see [Run logs](#run-logs)) |
+| `--profile` | `DIR` | none: no profiling | Profile this run and its Python children into `DIR` (same as `CHAMPOLLION_PROFILE=DIR`) |
+| `--profile-mode` | `cpu` or `light` | `cpu` | Profiling mode; requires `--profile` |
 
 </details>
 
@@ -293,12 +314,18 @@ pixi run champollion-config \
 <details>
 <summary>All options</summary>
 
-| Option | Description |
-|--------|-------------|
-| `--champollion_loc` | Path to champollion_V1 checkout (default: `external/champollion_V1`). Read only by default — never written to unless `--output` / `--external-config` point inside it. |
-| `--output` | Configs root; region YAMLs land at `{output}/dataset/{dataset}/`. Default: `<D>/<dataset>/derivatives/champollion_V1/configs`. |
-| `--external_crops` | Use the exact crop path instead of assuming the standard derivatives layout. |
-| `--external-config` | Where to write `local.yaml`: a directory (file lands at `{dir}/dataset_localization/{localization}.yaml`) or a file path. Default: `{configs root}/dataset_localization/`. |
+| Option | Argument | Default | Effect |
+|---|---|---|---|
+| `--dataset` | `NAME` | none: required | **Required.** Name of the dataset, used in the YAML files and their paths. |
+| `--champollion_loc` | `PATH` | `external/champollion_V1` (in the pipeline checkout) | Path to champollion_V1 checkout. Read only by default — never written to unless `--output` / `--external-config` point inside it. |
+| `--output` | `DIR` | `<D>/<dataset>/derivatives/champollion_V1/configs`, `<D>` being the parent of the `<dataset>` directory in `crop_path` | Configs root; region YAMLs land at `{output}/dataset/{dataset}/`. |
+| `--external_crops` | - | off | Use the exact crop path instead of assuming the standard derivatives layout; `--dataset` still names the config files. |
+| `--external-config` | `PATH` | `{configs root}/dataset_localization/` | Where to write `local.yaml`: a directory (file lands at `{dir}/dataset_localization/{localization}.yaml`) or a file path. |
+| `--masks` | `VERSION` | `canonical_corrected_26_1` | Mask version tag; must match the value used in stage 2 (see [Mask versions](#mask-versions)) |
+| `--localization` | `NAME` | `local` | Name of the `dataset_localization` preset to write (e.g. `local`, `jean-zay`); must match the value `champollion-train` uses |
+| `--log` | `PATH` (optional) | none: no run log | Copy the run output (stdout, stderr, child processes) into a run-log file at `PATH`; a bare `--log` writes it in the stage's default folder (see [Run logs](#run-logs)) |
+| `--profile` | `DIR` | none: no profiling | Profile this run and its Python children into `DIR` (same as `CHAMPOLLION_PROFILE=DIR`) |
+| `--profile-mode` | `cpu` or `light` | `cpu` | Profiling mode; requires `--profile` |
 
 </details>
 
@@ -308,7 +335,7 @@ Run the pre-trained Champollion encoders across every region fold found under `m
 
 ```bash
 #    neurospin/Champollion_V1: model source: HF repo ID, local path, or archive
-#    /data/myproject/: dataset root (parent of derivatives/); subjects list defaults to {datasets_root}/participants.tsv
+#    /data/myproject/: dataset root (parent of derivatives/); each region's subjects list is read from the mask/ folder next to its crops
 #    --masks canonical_25: crops mask version (must match stage 2)
 pixi run champollion-embeddings \
     neurospin/Champollion_V1 \
@@ -390,25 +417,28 @@ In a pipeline Config file the cache directory is the key `dataset.models_cache`,
 <details>
 <summary>All options</summary>
 
-| Option | Description |
-|--------|-------------|
-| `--model-version` | Model set to use: the subfolder downloaded from Hugging Face (e.g. `canonical_25`). With a local `models_path` nothing is downloaded, but the value still sets the `--masks` default and is checked against `--masks`. |
-| `--masks-version` | Deprecated alias of `--model-version` (same value); prints a FutureWarning. Giving both with different values exits with status 2. |
-| `--masks` | Cortical tiles mask version used as the crops subdirectory: crops are read from `<datasets_root>/derivatives/<cortical_version>/crops/<masks>/2mm`. Default: the `--model-version` value when given; else, when `models_path` is a local folder, that folder's name if it is a known Mask version (otherwise exit 2 with one ERROR, pass `--masks`); `canonical_corrected_26_1` only when `models_path` is not a local directory. |
-| `--allow-version-mismatch` | Run when `--masks` differs from `--model-version`, or from the `masks` of a local `model_set.json`, with a warning instead of exiting with status 2. |
-| `--regions` | Restrict to specific region names (space-separated). Default: all regions found in `models_path`. |
-| `--output` | Output base directory override. Default: `{datasets_root}/derivatives/champollion_V1/{masks}/region_embeddings/`. |
-| `--subjects` | Path to subjects CSV with a `Subject` column. Default: `{datasets_root}/participants.tsv`. |
-| `--cpu` | Force CPU usage (disable CUDA) |
-| `--checkpoint-epoch` | Training epoch N (0-based) of the Lightning checkpoint evaluated for each region (default: `80`). Repeatable: a bare `N` sets the default epoch (at most one), `<id>=N` sets the epoch of the models with that model id (see "Models of one region"). Pipeline config: `dataset.checkpoint_epoch`, `dataset.checkpoint_epochs`. |
-| `--per-model-folders` | Write the embeddings of each model with a model id to the folder `<region>/<model id>/`, even a single model of its region (by default only a region holding two or more models does). Pipeline config: `dataset.per_model_folders`. |
-| `--overwrite` | Recompute embeddings that already exist on disk |
-| `--no-cache` | Force re-extraction of the archive (ignore cache) |
-| `--models-cache` | Directory for downloaded and extracted models. Default: `{datasets_root}/derivatives/champollion_V1/models_cache/`. A relative path resolves against the current working directory. Pipeline config: `dataset.models_cache`. |
-| `--run-cka` | Run CKA coherence test after embeddings |
-| `--cortical_version` | Override the cortical tiles derivatives folder name (default: `cortical_tiles-2026`); crops are read from `<datasets_root>/derivatives/<cortical_version>/crops/<masks>/2mm` |
-| `--legacy` | Shorthand for `--cortical_version deep_folding-2025` (for older datasets) |
-| `--profiling` | Enable Python profiling (cProfile) |
+| Option | Argument | Default | Effect |
+|---|---|---|---|
+| `--model-version` | `VERSION` | none: the models of `models_path` as given | Model set to use: the subfolder downloaded from Hugging Face (e.g. `canonical_25`). With a local `models_path` nothing is downloaded, but the value still sets the `--masks` default and is checked against `--masks`. |
+| `--masks-version` | `VERSION` | none | Deprecated alias of `--model-version` (same value); prints a FutureWarning. Giving both with different values exits with status 2. |
+| `--masks` | `VERSION` | the `--model-version` value; else the name of a local `models_path` folder; else `canonical_corrected_26_1` | Cortical tiles mask version used as the crops subdirectory: crops are read from `<datasets_root>/derivatives/<cortical_version>/crops/<masks>/2mm`. Default: the `--model-version` value when given; else, when `models_path` is a local folder, that folder's name if it is a known Mask version (otherwise exit 2 with one ERROR, pass `--masks`); `canonical_corrected_26_1` only when `models_path` is not a local directory. |
+| `--allow-version-mismatch` | - | off: a mismatch exits with status 2 | Run when `--masks` differs from `--model-version`, or from the `masks` of a local `model_set.json`, with a warning instead of exiting with status 2. |
+| `--regions` | `REGION ...` | all regions found in `models_path` | Restrict to specific region names (space-separated, e.g. `SCsylv_left FIPFIPPoCinf_right`). |
+| `--output` | `DIR` | `{datasets_root}/derivatives/champollion_V1/{masks}/region_embeddings/` | Output base directory override. |
+| `--subjects` | `PATH` | none | Deprecated and ignored (a warning is printed): each region's subjects file is read from the `Lskeleton_subject.csv` or `Rskeleton_subject.csv` file of the `mask/` folder next to its crops. |
+| `--cpu` | - | off: CUDA when available | Force CPU usage (disable CUDA) |
+| `--checkpoint-epoch` | `[ID=]N` (repeatable) | `80` | Training epoch N (0-based) of the Lightning checkpoint evaluated for each region. Repeatable: a bare `N` sets the default epoch (at most one), `<id>=N` sets the epoch of the models with that model id (see "Models of one region"). Pipeline config: `dataset.checkpoint_epoch`, `dataset.checkpoint_epochs`. |
+| `--per-model-folders` | - | off | Write the embeddings of each model with a model id to the folder `<region>/<model id>/`, even a single model of its region (by default only a region holding two or more models does). Pipeline config: `dataset.per_model_folders`. |
+| `--overwrite` | - | off: existing embeddings are kept | Recompute embeddings that already exist on disk |
+| `--no-cache` | - | off: the cache is reused | Force re-extraction of the archive (ignore cache) |
+| `--models-cache` | `DIR` | `{datasets_root}/derivatives/champollion_V1/models_cache/` | Directory for downloaded and extracted models. A relative path resolves against the current working directory. Pipeline config: `dataset.models_cache`. |
+| `--run-cka` | - | off | Run CKA coherence test after embeddings |
+| `--cortical_version` | `NAME` | `cortical_tiles-2026` | Override the cortical tiles derivatives folder name; crops are read from `<datasets_root>/derivatives/<cortical_version>/crops/<masks>/2mm` |
+| `--legacy` | - | off | Shorthand for `--cortical_version deep_folding-2025` (for older datasets) |
+| `--profiling` | - | off | Enable Python profiling (cProfile) |
+| `--log` | `PATH` (optional) | none: no run log | Copy the run output (stdout, stderr, child processes) into a run-log file at `PATH`; a bare `--log` writes it in the stage's default folder (see [Run logs](#run-logs)) |
+| `--profile` | `DIR` | none: no profiling | Profile this run and its Python children into `DIR` (same as `CHAMPOLLION_PROFILE=DIR`) |
+| `--profile-mode` | `cpu` or `light` | `cpu` | Profiling mode; requires `--profile` |
 
 </details>
 
@@ -480,6 +510,20 @@ pixi run champollion-combine \
 ls /data/myproject/derivatives/champollion_V1/canonical_25/embeddings/*.csv | wc -l
 ```
 
+<details>
+<summary>All options</summary>
+
+| Option | Argument | Default | Effect |
+|---|---|---|---|
+| `--output_path` | `DIR` | none: required | **Required.** Folder where the combined embeddings are written: `{output_path}/{region}_embeddings.csv`, or `<output_path>/<model id>/<region>_embeddings.csv` per model id |
+| `--model` | `ID` | none: every model id found gets its own folder | Model id to combine: only `<output_path>/<model id>/` is written; an id matching no model id stops the run with an error |
+| `--regions` | `REGION ...` | the 28 default regions in both hemispheres | Region model names to check and collect (space-separated, e.g. `SC-sylv_left SC-sylv_right`) |
+| `--log` | `PATH` (optional) | none: no run log | Copy the run output (stdout, stderr, child processes) into a run-log file at `PATH`; a bare `--log` writes it in the stage's default folder (see [Run logs](#run-logs)) |
+| `--profile` | `DIR` | none: no profiling | Profile this run and its Python children into `DIR` (same as `CHAMPOLLION_PROFILE=DIR`) |
+| `--profile-mode` | `cpu` or `light` | `cpu` | Profiling mode; requires `--profile` |
+
+</details>
+
 ## Stage 6 — Generate Visualization Snapshots
 
 Generate visualizations: sulcal graph meshes, cortical tile masks, and UMAP scatter plots projecting your subjects onto a pre-trained reference embedding space.
@@ -548,22 +592,28 @@ pixi run champollion-snapshots \
 <details>
 <summary>All options</summary>
 
-| Option | Description |
-|--------|-------------|
-| `--morphologist_dir` | Path to Morphologist output (for sulcal graph snapshots) |
-| `--subject` | Subject folder name (default: first subject found) |
-| `--acquisition` | Acquisition label when a subject has multiple segmentations |
-| `--cortical_tiles_dir` | Path to `crops/{masks_version}/2mm/` (for tiles mask snapshots) |
-| `--embeddings_dir` | Path to combined embeddings (for UMAP scatter plots) |
-| `--reference_data_dir` | Path to pre-trained UMAP models and reference coordinates (not shipped in the repo, gitignored — obtain separately) |
-| `--umap_region` | Comma-separated region name(s) to plot |
-| `--output_dir` | Directory to save snapshot images |
-| `--sulcal-only` / `--tiles-only` / `--umap-only` | Generate only one snapshot type |
-| `--width` / `--height` | Snapshot dimensions (default: 800×600) |
-| `--tiles_level` | Cortical tiles level to visualize |
-| `--champollion_data_root` | Directory containing `mask/2mm/regions/meshes/` for tile snapshots (default: cortical_tiles config, overridable via `CHAMPOLLION_DATA_ROOT`). Pipeline config: `dataset.champollion_data_root`. |
-| `--labelling_session` | Morphologist labelling session whose labelled graph the sulcal snapshot uses (e.g. `deepcnn_session_auto`). Default: per hemisphere, the first of `deepcnn_session_auto` and `default_session_auto` that holds one of its graphs. A hemisphere with no graph in the given session keeps all its graphs. Pipeline config: `dataset.labelling_session`. |
-| `--model` | Model id folder of `--embeddings_dir` that the UMAP snapshots render; required when it holds two or more model id folders. |
+| Option | Argument | Default | Effect |
+|---|---|---|---|
+| `--morphologist_dir` | `DIR` | none | Path to Morphologist output (for sulcal graph snapshots) |
+| `--subject` | `NAME` | the first subject found | Subject folder name to render (e.g. `sub_0001`) |
+| `--acquisition` | `NAME` | the first acquisition found, with a warning when a subject has several | Acquisition label when a subject has multiple segmentations (e.g. `wk30`, `wk40`) |
+| `--cortical_tiles_dir` | `DIR` | none | Path to `crops/{masks_version}/2mm/` (for tiles mask snapshots) |
+| `--embeddings_dir` | `DIR` | none | Path to combined embeddings (for UMAP scatter plots) |
+| `--reference_data_dir` | `DIR` | none: the UMAP step is skipped with one warning | Path to pre-trained UMAP models and reference coordinates (not shipped in the repo, gitignored — obtain separately) |
+| `--umap_region` | `REGION[,REGION...]` | all regions with an available embedding CSV and a pre-trained model | Comma-separated region name(s) to plot (e.g. `FColl-SRh,S.Or.`) |
+| `--output_dir` | `DIR` | none: required | **Required.** Directory to save snapshot images |
+| `--sulcal-only` | - | off | Generate only the sulcal graph snapshots |
+| `--tiles-only` | - | off | Generate only the cortical tiles snapshots |
+| `--umap-only` | - | off | Generate only the UMAP scatter plots |
+| `--width` | `PIXELS` | `800` | Snapshot width |
+| `--height` | `PIXELS` | `600` | Snapshot height |
+| `--tiles_level` | `LEVEL` (0-3) | `1` | Cortical tiles level to visualize: the region threshold level |
+| `--champollion_data_root` | `DIR` | the cortical_tiles config, overridable via `CHAMPOLLION_DATA_ROOT` | Directory containing `mask/2mm/regions/meshes/` for tile snapshots. Pipeline config: `dataset.champollion_data_root`. |
+| `--labelling_session` | `SESSION` | per hemisphere, the first of `deepcnn_session_auto` and `default_session_auto` that holds one of its graphs | Morphologist labelling session whose labelled graph the sulcal snapshot uses (e.g. `deepcnn_session_auto`). A hemisphere with no graph in the given session keeps all its graphs. Pipeline config: `dataset.labelling_session`. |
+| `--model` | `ID` | none: a flat folder or the only model id folder | Model id folder of `--embeddings_dir` that the UMAP snapshots render; required when it holds two or more model id folders. |
+| `--log` | `PATH` (optional) | none: no run log | Copy the run output (stdout, stderr, child processes) into a run-log file at `PATH`; a bare `--log` writes it in the stage's default folder (see [Run logs](#run-logs)) |
+| `--profile` | `DIR` | none: no profiling | Profile this run and its Python children into `DIR` (same as `CHAMPOLLION_PROFILE=DIR`) |
+| `--profile-mode` | `cpu` or `light` | `cpu` | Profiling mode; requires `--profile` |
 
 </details>
 
