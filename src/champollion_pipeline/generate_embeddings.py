@@ -44,11 +44,9 @@ from champollion_pipeline.models.checkpoint import (
 from champollion_pipeline.models.embeddings_qc import (
     EMBEDDINGS_FILENAME,
     OUTPUT_QC_FILENAME,
-    compute_crops_by_side,
     compute_excluded_subjects,
     compute_region_side,
     fetch_named_files_qc_rows,
-    fetch_region_model_qc_rows,
     read_model_width,
     remove_subject_rows,
     write_model_widths,
@@ -61,6 +59,16 @@ from champollion_pipeline.models.fetch import ModelFetchStrategy as ModelFetchSt
 from champollion_pipeline.models.fetch import RemoteArchiveStrategy as RemoteArchiveStrategy
 from champollion_pipeline.models.fetch import fetch_model_set
 from champollion_pipeline.models.model_run import ModelRun, ModelRunRefused, resolve_model_run
+from champollion_pipeline.models.region_crops import (
+    compute_map_provenance,
+    compute_region_crops_dir,
+    fetch_input_qc_rows,
+    find_crop_dir,
+    get_region_mask_versions,
+    refuse_legacy_with_map,
+    refuse_unmapped_regions,
+    refuse_unnamed_models_folder,
+)
 from champollion_pipeline.models.version_options import (
     check_local_model_set,
     check_version_mismatch,
@@ -72,6 +80,7 @@ from champollion_pipeline.process_setup import init_pipeline_process
 from champollion_pipeline.utils.lib import CORTICAL_TILES_VERSION
 from champollion_pipeline.utils.pipeline_commit import read_pipeline_commit
 from champollion_pipeline.utils.qc_report import log_qc_exclusions, read_qc_tsv, write_qc_tsv
+from champollion_pipeline.utils.region_masks import add_region_masks_option, refuse_masks_with_region_masks
 
 PROVENANCE_FILE_NAME = "provenance.json"
 INPUT_QC_FILENAME = "input_qc.tsv"
@@ -200,6 +209,7 @@ class GenerateEmbeddings(ScriptBuilder):
                 default=None,
             )
         )
+        add_region_masks_option(self)
         self._models_source: dict | None = None
         self._excluded_subjects: frozenset[str] = frozenset()
         self._run: ModelRun | None = None
@@ -252,12 +262,16 @@ class GenerateEmbeddings(ScriptBuilder):
         return compute_models_cache_dir(self.args.datasets_root)
 
     def parse_args(self, args: list[str] | None = None) -> argparse.Namespace:
-        """Parse args, then resolve the deprecated --masks-version alias into model_version."""
+        """Parse args, refuse --masks or --legacy beside --region-masks, then resolve the model and mask versions."""
         parsed = super().parse_args(args)
+        refuse_masks_with_region_masks(self.parser, self.args)
+        refuse_legacy_with_map(self.args, self.parser)
         resolve_model_version_alias(self.args, self.parser)
+        refuse_unnamed_models_folder(self.args, self.parser)
         resolve_masks_default(self.args, self.parser)
         check_version_mismatch(self.args, self.parser)
-        check_local_model_set(self.args, self.parser)
+        if get_region_mask_versions(self.args) is None:
+            check_local_model_set(self.args, self.parser)
         return parsed
 
     def fetch_models(self, models_path):
@@ -290,6 +304,7 @@ class GenerateEmbeddings(ScriptBuilder):
             model_version = getattr(self.args, "model_version", None)
         return {
             "masks": self.args.masks,
+            **compute_map_provenance(self.args),
             "model_version": model_version,
             "checkpoint_epoch": self.args.checkpoint_epoch,
             "models_source": self._models_source,
@@ -398,6 +413,7 @@ class GenerateEmbeddings(ScriptBuilder):
         self._run = None
         cka_files = None
         try:
+            refuse_unmapped_regions(self.args, self.parser, self._get_run)
             input_status = self._run_input_qc(crops_2mm_dir, output_base)
             if input_status == FAILED_STATUS:
                 return input_status
@@ -421,22 +437,8 @@ class GenerateEmbeddings(ScriptBuilder):
         return result or output_status or input_status
 
     def _find_crop_dir(self, crops_2mm_dir: str, region_model_name: str) -> str:
-        """Map a model region name back to its crop directory name.
-
-        Model dirs have dots stripped: crop 'SC-sylv.' → model 'SCsylv_left'.
-        Search for a crop dir where dirname.replace('.', '') matches the base name.
-        """
-        base = region_model_name
-        if base.endswith("_left"):
-            base = base[:-5]
-        elif base.endswith("_right"):
-            base = base[:-6]
-
-        if exists(crops_2mm_dir):
-            for dname in sorted(os.listdir(crops_2mm_dir)):
-                if os.path.isdir(join(crops_2mm_dir, dname)) and dname.replace(".", "") == base:
-                    return dname
-        return base
+        """The crop directory name of a model region name (models.region_crops.find_crop_dir)."""
+        return find_crop_dir(crops_2mm_dir, region_model_name)
 
     def _get_run(self) -> ModelRun:
         """The models of the run, resolved once per run; a refused models tree or epoch id exits 2."""
@@ -455,8 +457,8 @@ class GenerateEmbeddings(ScriptBuilder):
     def _run_input_qc(self, crops_2mm_dir: str, output_base: str) -> int:
         """Write <output_base>/input_qc.tsv, keep its qc 0 subjects; return the status of _report_qc_rows."""
         regions = dict.fromkeys(entry.region for entry in self._get_run().entries)
-        crops = {region: self._find_crop_dir(crops_2mm_dir, region) for region in regions}
-        rows = fetch_region_model_qc_rows(crops_2mm_dir, compute_crops_by_side(crops))
+        derivatives = self._get_derivatives_folder()
+        rows = fetch_input_qc_rows(self.args, derivatives, crops_2mm_dir, regions, self._find_crop_dir)
         self._excluded_subjects = compute_excluded_subjects(rows)
         return self._report_qc_rows(rows, join(output_base, INPUT_QC_FILENAME), "input")
 
@@ -511,8 +513,8 @@ class GenerateEmbeddings(ScriptBuilder):
             # Machine-read by champollion_sulcal_mcp (FOLD_RE): one record per model directory.
             logger.trace(f"Fold {fold}/{n_models}: {label}")
             side = compute_region_side(region)
-            crop_name = self._find_crop_dir(crops_2mm_dir, region)
-            mask_dir = join(crops_2mm_dir, crop_name, "mask")
+            crops_dir = compute_region_crops_dir(self.args, self._get_derivatives_folder(), crops_2mm_dir, region)
+            mask_dir = join(crops_dir, self._find_crop_dir(crops_dir, region), "mask")
             skels_path = join(mask_dir, f"{side}skeleton.npy")
             subjects_path = join(mask_dir, f"{side}skeleton_subject.csv")
             saving_path = join(folders[model_path], EMBEDDINGS_FILENAME)
