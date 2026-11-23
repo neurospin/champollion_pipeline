@@ -539,6 +539,7 @@ pixi run champollion-snapshots \
 | `--width` / `--height` | Snapshot dimensions (default: 800×600) |
 | `--tiles_level` | Cortical tiles level to visualize |
 | `--champollion_data_root` | Directory containing `mask/2mm/regions/meshes/` for tile snapshots (default: cortical_tiles config, overridable via `CHAMPOLLION_DATA_ROOT`). Pipeline config: `dataset.champollion_data_root`. |
+| `--labelling_session` | Morphologist labelling session whose labelled graph the sulcal snapshot uses (e.g. `deepcnn_session_auto`). Default: per hemisphere, the first of `deepcnn_session_auto` and `default_session_auto` that holds one of its graphs. A hemisphere with no graph in the given session keeps all its graphs. Pipeline config: `dataset.labelling_session`. |
 
 </details>
 
