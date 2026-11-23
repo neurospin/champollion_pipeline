@@ -277,9 +277,11 @@ Create the YAML configuration files that link your dataset's crop paths to the C
 ```bash
 #    /data/myproject/derivatives/cortical_tiles-2026/crops/canonical_25/2mm: path to 2mm crops (stage 2 output)
 #    --dataset myproject: dataset name used in YAML and paths
+#    --masks canonical_25: crops mask version (must match stage 2)
 pixi run champollion-config \
     /data/myproject/derivatives/cortical_tiles-2026/crops/canonical_25/2mm \
-    --dataset myproject
+    --dataset myproject \
+    --masks canonical_25
 ```
 
 By default, YAMLs are written to `/data/myproject/derivatives/champollion_V1/configs/` — the dataset's own derivatives tree. Pass `--output <dir>` to choose a different configs root; region YAMLs then land at `{output}/dataset/{dataset}/`. Use `--config-dir <dir>` in `champollion-train` when the configs root is not the default.
