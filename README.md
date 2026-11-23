@@ -591,6 +591,7 @@ champollion_pipeline/
 ├── src/
 │   └── champollion_pipeline/   # Installable Python package (entry points: champollion-*)
 │       ├── cli.py                   # Pipeline orchestrator and command line (champollion-pipeline)
+│       ├── pipeline_stages.py       # The six pipeline stage classes run by champollion-pipeline, and their path helpers
 │       ├── generate_morphologist_graphs.py
 │       ├── run_cortical_tiles.py
 │       ├── derivatives_layout.py

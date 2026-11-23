@@ -7,19 +7,21 @@ subprocess. The "needs none" checks set ``sys.modules[<package>] = None``: any i
 cortical_tiles or champollion then raises ImportError, as in a pixi environment that lacks the
 package. The "imports none" checks load main.py with the toolchain available and list what it added.
 
-The stage check patches each script class where it is defined, then runs the stage with
-``run_script`` replaced, so no real script runs.
+The stage check takes each stage class from champollion_pipeline.pipeline_stages (the module that defines
+them since the cli.py split, TASK-CODE-BDRABCZUK-D457E2861B14), patches each script class where it is defined
+after that module has loaded, then runs the stage with ``run_script`` replaced, so no real script runs.
 
 main.py lives at the repo root, not in the installed package, so it is loaded by file path under
 a private module name.
 
 Requirements: REQ-LAZYIMPORT-BDRABCZUK-D386EDA5EB60 (main.py loads without the toolchain),
 REQ-LAZYIMPORT-BDRABCZUK-6B66567F41E8 (a --config YAML file loads without the toolchain),
-REQ-LAZYIMPORT-BDRABCZUK-20C1DF840EFE (stages take the script class from its module during execute),
+REQ-LAZYIMPORT-BDRABCZUK-20C1DF840EFE (pipeline_stages stages take the script class from its module during execute),
 REQ-LAZYIMPORT-BDRABCZUK-C85B2829CDA2 (loading main.py adds no toolchain module to sys.modules),
 REQ-STREAMING-BDRABCZUK-DB02C2CD6A1C (main.py imports the streaming runner only in streaming mode).
 """
 
+import importlib
 import json
 import logging
 import os
@@ -39,6 +41,7 @@ TOOLCHAIN_PACKAGES = ("soma", "cortical_tiles", "champollion")
 STREAMING_RUNNER = "champollion_pipeline.streaming.runner"
 PROBE_MODELS_PATH = "/probe/models"
 PROBE_MASKS_VERSION = "probe_masks"
+STAGES_MODULE = "champollion_pipeline.pipeline_stages"
 STAGE_SCRIPT_CLASSES = {
     "GenerateMorphologistGraphsStage": "champollion_pipeline.generate_morphologist_graphs.GenerateMorphologistGraphs",
     "RunCorticalTilesStage": "champollion_pipeline.run_cortical_tiles.RunCorticalTiles",
@@ -135,9 +138,9 @@ def test_main_load_leaves_streaming_runner_unimported():
 
 @pytest.mark.parametrize(("stage_class_name", "script_class_path"), STAGE_SCRIPT_CLASSES.items())
 def test_stage_execute_takes_script_class_from_defining_module(stage_class_name, script_class_path):
-    """REQ-LAZYIMPORT-BDRABCZUK-20C1DF840EFE: a class replaced after main.py loaded is the one execute uses."""
+    """REQ-LAZYIMPORT-BDRABCZUK-20C1DF840EFE: a class replaced after pipeline_stages loaded is the one execute uses."""
     main_module = load_main_module("_champollion_main_lazy_imports_under_test")
-    stage_cls = getattr(main_module, stage_class_name)
+    stage_cls = getattr(importlib.import_module(STAGES_MODULE), stage_class_name)
     stage = stage_cls(stage_class_name, stage_paths_config(main_module), logging.getLogger("test_main_lazy_imports"))
     with patch(script_class_path) as script_cls, patch.object(stage, "run_script", return_value=0):
         result = stage.execute()
