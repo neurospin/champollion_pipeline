@@ -19,6 +19,7 @@ the argument parser and the config can import the other modules cheaply.
 | `epoch_spec.py` | Parses the `--checkpoint-epoch` values and gives each model id its epoch; pure functions, no I/O. |
 | `fetch.py` | The model set fetch strategies (local path, Hugging Face, remote archive, interactive fallback) and the order they are tried in. |
 | `model_run.py` | The models of one stage 4 run: discovery, the epoch of each model, output folders and provenance entries. |
+| `region_crops.py` | The crops folder of each region model of a stage 4 run under `--region-masks`: the crop directory of a region model name, the map checks (`--legacy`, a local models folder not named after a Mask version, a region model the map leaves out), the crops directory of each region, the input QC rows and the `region_mask_versions` provenance entry. |
 | `version_options.py` | Parse-time checks of the model version options (`--model-version`, `--masks`) and the mask version of each region model. |
 
 ## Entry points
