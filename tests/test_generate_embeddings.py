@@ -1007,8 +1007,8 @@ class TestEmbeddingsLogging:
         with patch("champollion_pipeline.generate_embeddings.uses_best_weights_stand_in", return_value=True):
             _run_regions(script, tmp_path)
 
-        record = pipeline_caplog.assert_logged(logging.WARNING, "SC-sylv_left")
-        assert record.name == LOGGER_NAME
+        records = [r for r in pipeline_caplog.records if (r.name, r.levelno) == (LOGGER_NAME, logging.WARNING)]
+        assert any("SC-sylv_left" in r.getMessage() for r in records), [r.getMessage() for r in records]
 
     def test_failed_region_logged_at_fail(self, tmp_path, pipeline_caplog):
         script = _region_script(tmp_path, ["SC-sylv_left"])

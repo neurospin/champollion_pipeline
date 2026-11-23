@@ -11,9 +11,15 @@ The per-region Mask version map reaches the stage on the command line, as the --
 the shared option (champollion_pipeline.utils.region_masks): run_stage() formats it with format_region_masks.
 
 Each class names its Requirement by title (``alm get <id>``).
+
+The models folder is named after FOLDER_VERSION, which the per-region Mask version resolver reads as the Mask version of
+every region model it finds no PROVENANCE.csv row for. A run whose map (or --masks) names another version for a region
+model writes a PROVENANCE.csv row naming that version (write_models_provenance), so the stage does not refuse the run
+as a mismatch between the crops and the model (TASK-MODELVER-BDRABCZUK-86405DAD28CE).
 """
 
 import json
+import logging
 import os
 import re
 from pathlib import Path
@@ -22,6 +28,8 @@ from unittest.mock import patch
 import pytest
 
 from champollion_pipeline.generate_embeddings import PROVENANCE_FILE_NAME, GenerateEmbeddings
+from champollion_pipeline.models.version_options import PROVENANCE_FILE_NAME as MODELS_PROVENANCE_FILE_NAME
+from champollion_pipeline.models.version_options import PROVENANCE_REGION_COLUMN, PROVENANCE_VERSION_COLUMN
 from champollion_pipeline.utils.lib import CORTICAL_TILES_VERSION
 from champollion_pipeline.utils.qc_report import read_qc_tsv
 from champollion_pipeline.utils.region_masks import REGION_MASKS_OPTION, format_region_masks
@@ -37,6 +45,7 @@ UNNAMED_FOLDER = "my_models"
 SC_LEFT = "SC-sylv_left"
 STS_LEFT = "STs_left"
 STS_RIGHT = "STs_right"
+FOREIGN_REGION = "NOTAREGION_left"
 CROP_OF = {SC_LEFT: "S.C.-sylv.", STS_LEFT: "S.T.s.", STS_RIGHT: "S.T.s."}
 SIDE_OF = {SC_LEFT: "L", STS_LEFT: "L", STS_RIGHT: "R"}
 COHORT = ("sub-01", "sub-02")
@@ -143,9 +152,19 @@ def lay_flat_models(root: Path, regions) -> dict[str, Path]:
     return {region: make_model(root / FOLDER_VERSION, region) for region in regions}
 
 
+def write_models_provenance(root: Path, versions: dict[str, str]) -> None:
+    """Write root/FOLDER_VERSION/PROVENANCE.csv with one row per region model name of ``versions``, naming its Mask
+    version, so the per-region Mask version resolver gives each region model the version the run reads crops of."""
+    rows = "".join(f"{region},{version}\n" for region, version in sorted(versions.items()))
+    header = f"{PROVENANCE_REGION_COLUMN},{PROVENANCE_VERSION_COLUMN}\n"
+    (root / FOLDER_VERSION / MODELS_PROVENANCE_FILE_NAME).write_text(header + rows)
+
+
 def run_mapped(root: Path, versions: dict[str, str]) -> tuple[dict[str, Path], RecordingEvaluate]:
-    """Run the stage with map ``versions`` over flat models of its region model names, crops in both versions."""
+    """Run the stage with map ``versions`` over flat models of its region model names, crops in both versions; the
+    models' PROVENANCE.csv names the mapped versions."""
     models = lay_flat_models(root, versions)
+    write_models_provenance(root, versions)
     lay_crops(root, FOLDER_VERSION, models)
     lay_crops(root, OTHER_VERSION, models)
     status, evaluate = run_stage(root, versions=versions)
@@ -192,6 +211,7 @@ class TestEvaluateReadsTheMappedVersionCrops:
     def test_each_model_id_of_a_region_reads_the_region_version_folder(self, tmp_path):
         first = make_model(tmp_path / FOLDER_VERSION, STS_RIGHT, "run_1")
         second = make_model(tmp_path / FOLDER_VERSION, STS_RIGHT, "run_2")
+        write_models_provenance(tmp_path, {STS_RIGHT: OTHER_VERSION})
         lay_crops(tmp_path, FOLDER_VERSION, (STS_RIGHT,))
         lay_crops(tmp_path, OTHER_VERSION, (STS_RIGHT,))
 
@@ -216,20 +236,24 @@ class TestInputQcChecksTheMappedVersionCrops:
         return {row["participant_id"]: row["qc"] for row in read_qc_tsv(path)}
 
     def test_crops_only_in_the_mapped_version_folder_pass_the_input_qc(self, tmp_path):
-        lay_flat_models(tmp_path, (SC_LEFT, STS_RIGHT))
+        versions = {SC_LEFT: FOLDER_VERSION, STS_RIGHT: OTHER_VERSION}
+        lay_flat_models(tmp_path, versions)
+        write_models_provenance(tmp_path, versions)
         lay_crops(tmp_path, FOLDER_VERSION, (SC_LEFT,))
         lay_crops(tmp_path, OTHER_VERSION, (STS_RIGHT,))
 
-        status, _evaluate = run_stage(tmp_path, versions={SC_LEFT: FOLDER_VERSION, STS_RIGHT: OTHER_VERSION})
+        status, _evaluate = run_stage(tmp_path, versions=versions)
 
         assert self.qc_values(tmp_path) == dict.fromkeys(COHORT, 1)
         assert status == 0, status
 
     def test_crops_only_in_the_masks_folder_fail_the_input_qc_of_a_region_mapped_elsewhere(self, tmp_path):
-        lay_flat_models(tmp_path, (SC_LEFT, STS_RIGHT))
+        versions = {SC_LEFT: FOLDER_VERSION, STS_RIGHT: OTHER_VERSION}
+        lay_flat_models(tmp_path, versions)
+        write_models_provenance(tmp_path, versions)
         lay_crops(tmp_path, FOLDER_VERSION, (SC_LEFT, STS_RIGHT))
 
-        status, evaluate = run_stage(tmp_path, versions={SC_LEFT: FOLDER_VERSION, STS_RIGHT: OTHER_VERSION})
+        status, evaluate = run_stage(tmp_path, versions=versions)
 
         assert self.qc_values(tmp_path) == dict.fromkeys(COHORT, 0)
         assert evaluate.commands == []
@@ -246,6 +270,7 @@ class TestNoMapReadsTheMasksFolder:
     )
     def test_each_region_model_reads_the_masks_folder(self, tmp_path, masks_args, masks):
         models = lay_flat_models(tmp_path, (SC_LEFT, STS_LEFT, STS_RIGHT))
+        write_models_provenance(tmp_path, dict.fromkeys(models, masks))
         lay_crops(tmp_path, FOLDER_VERSION, models)
         lay_crops(tmp_path, OTHER_VERSION, models)
 
@@ -271,6 +296,28 @@ class TestUnmappedRegionModelExits2:
 
         assert status == USAGE_ERROR, status
         assert STS_RIGHT in error_line(capsys.readouterr().err)
+        assert not (tmp_path / "out" / INPUT_QC_FILE).exists()
+        assert evaluate.commands == []
+
+    def test_a_foreign_region_folder_warns_at_parse_then_exits_2_naming_it_before_the_input_qc(
+        self, tmp_path, capsys, pipeline_caplog
+    ):
+        """REQ-MODELVER-BDRABCZUK-3AE63A554F2A then REQ-MODELVER-BDRABCZUK-386C6BFFA544 on one run (user answer
+        2026-11-23 ~22:47): a region folder named none of the 56 region model names is reported once as unresolved at
+        parse time, then the map, which cannot name it, makes the stage exit 2 naming it before the input QC."""
+        lay_flat_models(tmp_path, (SC_LEFT, FOREIGN_REGION))
+        lay_crops(tmp_path, FOLDER_VERSION, (SC_LEFT,))
+
+        status, evaluate = run_stage(tmp_path, versions={SC_LEFT: FOLDER_VERSION})
+
+        warnings_naming = [
+            record.getMessage()
+            for record in pipeline_caplog.records
+            if record.levelno == logging.WARNING and FOREIGN_REGION in record.getMessage()
+        ]
+        assert len(warnings_naming) == 1, warnings_naming
+        assert status == USAGE_ERROR, status
+        assert FOREIGN_REGION in error_line(capsys.readouterr().err)
         assert not (tmp_path / "out" / INPUT_QC_FILE).exists()
         assert evaluate.commands == []
 
