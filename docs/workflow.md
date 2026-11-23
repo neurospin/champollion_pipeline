@@ -197,7 +197,9 @@ The pipeline runs one inference pass per trained model directory: **56 passes** 
 producer/consumer run over scans rather than a sequence of stages.
 
 - Producers: each producer worker runs cortical_tiles for one scan, in a `spawn` process pool of `--n-workers`
-  processes; it writes the scan's `tiles_complete.json` completion marker.
+  processes; it writes the scan's `tiles_complete.json` completion marker. The worker has an optional Morphologist
+  step that runs first when it is given a raw scan; the streaming runner passes no raw scan, so a streaming run
+  skips that step and executes cortical_tiles only.
 - Dataset config: the config is generated once per run, from the crops root of the first OK or SKIPPED scan.
 - Consumer: one consumer process keeps a single `EmbeddingEngine` resident for the whole run, so the models are
   loaded once, not once per scan.

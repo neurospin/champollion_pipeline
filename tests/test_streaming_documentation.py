@@ -312,6 +312,26 @@ class TestWorkflowStreamingSection:
         section = workflow_section()
         _assert_block(section, r"\bcombine", r"\bonce\b", r"\bafter\b", r"\bconsumer\b", where=self.where)
 
+    def test_optional_morphologist_step(self, workflow_section):
+        """REQ: the runner passes no raw scan, so a streaming run skips the worker's optional Morphologist step.
+
+        Describes the 1.0.0 code: ``streaming/worker.py`` runs Morphologist only for a given raw scan and
+        ``streaming/runner.py`` submits ``run_scan_worker`` without one. The runner name is checked against the
+        source, so a runner that starts passing a raw scan turns this test red until the docs follow.
+        """
+        section = workflow_section()
+        runner_src = (STREAMING_DIR / "runner.py").read_text(encoding="utf-8")
+        assert "raw_scan" not in runner_src, "streaming/runner.py now names raw_scan: update docs/workflow.md"
+        _assert_block(
+            section,
+            r"Morphologist",
+            r"\braw scans?\b",
+            r"\brunner\b",
+            r"\boptional\b",
+            r"\b(?:no|not|never|without|skips?)\b",
+            where=self.where,
+        )
+
 
 # --------------------------------------------------------------------------- #
 # README.md
