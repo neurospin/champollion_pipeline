@@ -13,7 +13,23 @@ Cortical sulci — the folds of the brain surface — vary in shape across indiv
 
 ## Quick start
 
-Here is the minimal happy path to generate embeddings from a pre-trained model — replace placeholders '/data/myproject' with your actual paths:
+Run the whole pipeline with one command — replace the placeholder paths with your own:
+
+```bash
+# <input>: a folder of T1 MRI files (nested folders included) or of Morphologist outputs
+# <output>: the dataset root, where the derivatives are written (optional: inferred from <input>)
+pixi run champollion-pipeline /data/myproject/sourcedata /data/myproject/
+```
+
+`champollion-pipeline` infers every other path of the Dataset from `<input>` and runs the enabled stages in order, with no Config file.
+Common options: `--stages` selects the stages to run, `--embeddings-only` limits the run to the embeddings,
+`--mode streaming` runs inference scan by scan, `--env <file>` reads the secrets and root paths from a file, and
+`--log` writes a run log; `champollion-pipeline --help` lists every option.
+See [Running champollion-pipeline without a Config file](docs/usage.md#running-champollion-pipeline-without-a-config-file).
+
+### Advanced: running stages one by one
+
+Each stage also has its own command. Here is the minimal happy path to generate embeddings from a pre-trained model, stage by stage — replace placeholders '/data/myproject' with your actual paths:
 
 ```bash
 # 1. Generate Morphologist sulcal graphs (requires BrainVISA — skip if you already have .arg files)
@@ -74,13 +90,13 @@ pixi run champollion-snapshots \
 
 The sections below explain each step in detail.
 
-`main.py` itself needs no Config file: `python main.py <input>` infers the paths of the Dataset from one input path, a folder of T1 files (nested folders included) or of Morphologist outputs.
-Every PipelineConfig and Dataset field has an optional argument (`--<field-name>`), and `--env` reads the secrets and root paths from a file; see [Running main.py without a Config file](docs/usage.md#running-mainpy-without-a-config-file).
-Each run writes `replay_<timestamp>.yaml` in its logs folder, and `python main.py --config <that file>` rebuilds the
+Each run writes `replay_<timestamp>.yaml` in its logs folder, and `champollion-pipeline --config <that file>` rebuilds the
 run's PipelineConfig; the secret `dataset.hf_token` is never written. See [Replay config](docs/usage.md#replay-config).
 
-For inference on many scans, `python main.py --mode streaming --config my_pipeline.yaml` runs cortical_tiles and
+For inference on many scans, `champollion-pipeline --mode streaming --config my_pipeline.yaml` runs cortical_tiles and
 the embeddings scan by scan, with one resident model; see [Streaming mode](docs/usage.md#streaming-mode).
+
+The `main.py` file at the repository root remains as a backward-compatible shim of `champollion-pipeline`.
 
 ---
 
@@ -564,10 +580,10 @@ It ends with a footer giving the exit code and the elapsed time.
 
 The terminal still shows the same output, unchanged: the run log is a copy.
 
-`main.py` runs the stages in-process: with a bare `--log`, each stage writes its own run log to that stage's
+`champollion-pipeline` runs the stages in-process: with a bare `--log`, each stage writes its own run log to that stage's
 default folder above.
 
-`main.py --log=DIR` and `champollion-pipeline --log=DIR` write one run log per stage, `DIR/<stage>_<YYYYmmdd-HHMMSS>.log`.
+`champollion-pipeline --log=DIR` writes one run log per stage, `DIR/<stage>_<YYYYmmdd-HHMMSS>.log`.
 
 In a pipeline config file, the top-level key `log:` does the same (`null`: no run log, `""`: each stage's
 default folder, a path: that directory); the command line wins over the config.
@@ -584,7 +600,7 @@ champollion_pipeline/
 ├── reference_data/             # NOT shipped (gitignored) — pre-trained UMAP models go here, obtained separately
 ├── src/
 │   └── champollion_pipeline/   # Installable Python package (entry points: champollion-*)
-│       ├── cli.py                   # Pipeline orchestrator and command line (champollion-pipeline; main.py runs it)
+│       ├── cli.py                   # Pipeline orchestrator and command line (champollion-pipeline)
 │       ├── generate_morphologist_graphs.py
 │       ├── run_cortical_tiles.py
 │       ├── derivatives_layout.py
@@ -598,12 +614,12 @@ champollion_pipeline/
 │       ├── prune_failed_subjects.py
 │       ├── purge_subject.py
 │       ├── profile_report.py        # Aggregates a --profile run dir into report.json (pixi run profile-report)
-│       ├── input_kind_choice.py     # Asks or stops on an ambiguous main.py input (--input-kind)
+│       ├── input_kind_choice.py     # Asks or stops on an ambiguous champollion-pipeline input (--input-kind)
 │       ├── process_setup.py
-│       ├── cli_options.py           # Registry of main.py arguments, one per config field
-│       ├── env_file.py              # Reads main.py --env files and CHAMPOLLION_* variables (python-dotenv)
-│       ├── replay_config.py         # Writes the replay config of a main.py run into its logs folder (main.py --config replays it)
-│       ├── _stage_base.py           # Template base class of main.py's pipeline stages
+│       ├── cli_options.py           # Registry of champollion-pipeline arguments, one per config field
+│       ├── env_file.py              # Reads champollion-pipeline --env files and CHAMPOLLION_* variables (python-dotenv)
+│       ├── replay_config.py         # Writes the replay config of a champollion-pipeline run into its logs folder (--config replays it)
+│       ├── _stage_base.py           # Template base class of the pipeline stages of champollion-pipeline
 │       └── generate_labelling_qc.py
 ├── data/                       # Created by install-all; not committed
 └── pixi.toml
@@ -626,7 +642,7 @@ Installing the package provides these entry points, declared in
 | `champollion-prune` | `prune_failed_subjects.py` | Maintenance — delete cortical_tiles outputs for QC-failing subjects |
 | `champollion-purge` | `purge_subject.py` | Maintenance — delete all cortical_tiles derivatives for one subject |
 | `champollion-labelling-qc` | `generate_labelling_qc.py` | QC — flag subjects whose Morphologist labelled graphs (e.g. `deepcnn_session_auto`) are missing, so they will be left out of the whole-brain output |
-| `champollion-pipeline` | `cli.py` | Pipeline — run the enabled stages in order, with the options of `python main.py` |
+| `champollion-pipeline` | `cli.py` | Pipeline — run the enabled stages in order, with one option per config field |
 
 `generate_masks.py` also ships in the package but declares no console script.
 

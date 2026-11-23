@@ -88,13 +88,13 @@ A bare `--log` writes `<stage>_<YYYYmmdd-HHMMSS>.log` in the stage's default fol
 A bare `--log` placed just before a positional argument takes that argument as its PATH: use `--log=PATH`, or put a
 bare `--log` last.
 
-## Running main.py without a Config file
+## Running champollion-pipeline without a Config file
 
-`python main.py <input> [<output>]` is the nominal run. It needs no Config file: `<input>` (or `--input-path`) is the one
+`champollion-pipeline <input> [<output>]` is the nominal run. It needs no Config file: `<input>` (or `--input-path`) is the one
 required path, and every other path of the PipelineConfig is inferred from it. A sequential run with an input path and no `--config` enables every
 stage unless `--stages` names some.
 
-What the input path holds decides the run. `main.py` reads it up to its first T1 file:
+What the input path holds decides the run. `champollion-pipeline` reads it up to its first T1 file:
 
 - T1 files: `.nii` or `.nii.gz` files, at any depth, so nested T1 folders work. Folders named `derivatives`, `qc` and
   `t1mri` are not searched for T1 files, and below a `sub-*` folder a `sub-*` file must end in `_T1w`. The Dataset root
@@ -103,7 +103,7 @@ What the input path holds decides the run. `main.py` reads it up to its first T1
   subjects folder is found in the tree (see [Morphologist trees](#morphologist-trees)), and the Dataset root is the
   parent of the nearest `derivatives` folder above that subjects folder.
 - Neither kind (or not a folder): the run logs one error and exits with code 1.
-- Both kinds, or T1 files below a folder named `sourcedata`: at a terminal `main.py` asks which kind to use; without
+- Both kinds, or T1 files below a folder named `sourcedata`: at a terminal `champollion-pipeline` asks which kind to use; without
   one it exits with code 1 and names `--input-kind t1` and `--input-kind morphologist`. Pass `--input-kind` to
   answer in advance (the replay config keeps it).
 - Several subjects folders in one Morphologist input: the same prompt, or an error naming the folders; pass the one
@@ -114,7 +114,7 @@ the inferred one. Two forms that name different paths stop the run with code 2. 
 cannot be inferred (a single subject, or a subjects folder below no `derivatives` folder) gives a warning that names
 `--datasets-root`.
 
-From the Dataset root and the input, `main.py` fills the fields that are still unset, among them
+From the Dataset root and the input, `champollion-pipeline` fills the fields that are still unset, among them
 `dataset.morphologist_graphs`, `cortical_tiles_output`, `crops_path`, `embeddings_path`, `snapshots_path`,
 `outputs_path`, `path_to_graph` and `path_sk_with_hull`, and it names the Dataset after the root folder. `models_path`
 and `sk_qc_path` are never inferred.
@@ -122,7 +122,7 @@ and `sk_qc_path` are never inferred.
 ### An argument for every config field
 
 Every PipelineConfig and Dataset field has an optional argument, named after the field with dashes: `--njobs`,
-`--masks-version`, `--embeddings-only`, `--reference-data-path`, `--mode`, `--n-workers` and so on (`python main.py
+`--masks-version`, `--embeddings-only`, `--reference-data-path`, `--mode`, `--n-workers` and so on (`champollion-pipeline
 --help` lists them all). Exceptions: `name` is `--dataset-name`, `profile_dir` is `--profile`, and the Dataset
 `input_path` and `datasets_root` also have the `INPUT` and `OUTPUT` forms above. A flag is `--x` or `--no-x`, a list
 takes several values, and `--stages` replaces the whole selection. A field given on the command line wins over the
@@ -155,23 +155,23 @@ Two layouts of a Morphologist tree are read:
 The subjects folder is the folder whose children are the subject folders: `morphologist-6.0` in the first layout,
 `subjects` in the second. A subject folder holds `t1mri`, or `ses-*/t1mri` with sessions. A folder named `qc` beside
 the subject folders is read as a subject only when it holds a `t1mri` folder, and a folder starting with a dot never is.
-Give `<input>` as the tree root, the subjects folder or the `morphologist-6.0` folder: `main.py` finds the subjects
+Give `<input>` as the tree root, the subjects folder or the `morphologist-6.0` folder: `champollion-pipeline` finds the subjects
 folder, or takes `--morphologist-graphs`. When `path_to_graph` is unset, it is read from the subjects' graph folders
 (`t1mri/<acquisition>/<analysis>/folds/<version>`); graphs in several such folders stop the inference with a warning
 that names `--path-to-graph`.
 
 ## Replay config
 
-A Config file is an option, not a requirement (see [Running main.py without a Config file](#running-mainpy-without-a-config-file)).
+A Config file is an option, not a requirement (see [Running champollion-pipeline without a Config file](#running-champollion-pipeline-without-a-config-file)).
 
-Every `main.py` run writes its effective PipelineConfig to `replay_<YYYYmmdd-HHMMSS>.yaml` in the run's logs folder
+Every `champollion-pipeline` run writes its effective PipelineConfig to `replay_<YYYYmmdd-HHMMSS>.yaml` in the run's logs folder
 (`log_dir` when set, else `<outputs_path>/logs`). The run is a sequential run, a streaming run or a `--dry-run`.
 The file merges the command line, the inference and the `--config` YAML, with path fields made absolute.
 
 To run the same configuration again, pass the replay file as the only argument:
 
 ```bash
-python main.py --config <logs folder>/replay_<YYYYmmdd-HHMMSS>.yaml
+champollion-pipeline --config <logs folder>/replay_<YYYYmmdd-HHMMSS>.yaml
 ```
 
 The replay file leaves out four fields: `root_path`, `dependencies`, `dataset.config_path` and `dataset.hf_token`. The
@@ -183,12 +183,12 @@ path and the error, and the run goes on.
 
 ## Streaming mode
 
-`main.py --mode streaming` runs inference scan by scan instead of stage by stage: each scan's crops are extracted
+`champollion-pipeline --mode streaming` runs inference scan by scan instead of stage by stage: each scan's crops are extracted
 while earlier scans are already being embedded. It only computes embeddings with existing models; training stays a
 batch run.
 
 ```bash
-python main.py --mode streaming --config my_pipeline.yaml --n-workers 8 --log
+champollion-pipeline --mode streaming --config my_pipeline.yaml --n-workers 8 --log
 ```
 
 The configuration must set `dataset.embeddings_only: true`; without it the run logs an error and exits with code 1
@@ -197,8 +197,8 @@ before any scan is read.
 A non-empty `dataset.embeddings_path` is refused: the run exits with code 1, since streaming always writes the
 versioned default embeddings folder.
 
-A Config file is not needed: `python main.py <input> [<output>] --mode streaming --embeddings-only` infers the paths
-from a Morphologist input as in [Running main.py without a Config file](#running-mainpy-without-a-config-file), and
+A Config file is not needed: `champollion-pipeline <input> [<output>] --mode streaming --embeddings-only` infers the paths
+from a Morphologist input as in [Running champollion-pipeline without a Config file](#running-champollion-pipeline-without-a-config-file), and
 the replay config of the run is written as for any run.
 
 The subjects directory read is `dataset.morphologist_graphs`, else the folder found in `dataset.input_path`, else
@@ -215,7 +215,7 @@ Options:
 Logs. The log directory is chosen in this order:
 
 - with `--log DIR`, DIR is the streaming log directory;
-- a bare `--log` gives `./.log/champollion_pipeline_<YYYYmmdd-HHMMSS>/`, next to main.py's own run log of the same
+- a bare `--log` gives `./.log/champollion_pipeline_<YYYYmmdd-HHMMSS>/`, next to the run log of the same
   name;
 - without `--log`, the YAML `log` value, else `log_dir`, else `<outputs_path>/logs`.
 

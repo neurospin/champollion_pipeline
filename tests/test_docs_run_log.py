@@ -214,7 +214,7 @@ class TestReadmeRunLogMainBare:
     """REQ-RUNLOG-BDRABCZUK-184CD12DF56E."""
 
     def test_section_documents_main_bare_log(self):
-        assert _has_paragraph(_run_logs_section(README), r"\bmain\.py\b", r"\bbare --log\b", r"\bstage\b")
+        assert _has_paragraph(_run_logs_section(README), r"\bchampollion-pipeline\b", r"\bbare --log\b", r"\bstage\b")
 
 
 class TestReadmeRunLogMainDir:
@@ -222,7 +222,9 @@ class TestReadmeRunLogMainDir:
 
     def test_section_documents_main_log_dir(self):
         section = _run_logs_section(README)
-        assert "main.py --log=DIR" in section, "README 'Run logs' section shows no main.py --log=DIR"
+        assert "champollion-pipeline --log=DIR" in section, (
+            "README 'Run logs' section shows no champollion-pipeline --log=DIR"
+        )
         assert f"DIR/{FILE_NAME_PATTERN}" in section, "README 'Run logs' section does not state DIR/<stage>_<ts>.log"
 
 

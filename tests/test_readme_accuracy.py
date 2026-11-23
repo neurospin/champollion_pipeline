@@ -154,12 +154,14 @@ class TestProjectWebsiteLink:
 
 
 def _quickstart_block() -> str:
-    """The single fenced ``bash`` block under the top-level ``## Quick start`` heading."""
+    """The fenced ``bash`` block of the Advanced subsection of the top-level ``## Quick start`` section."""
     text = _read(README)
     after = re.search(r"^##\s+Quick start\s*$(.*?)(?=^##\s)", text, re.MULTILINE | re.DOTALL)
     assert after, "README.md has no '## Quick start' section"
-    block = re.search(r"```bash\n(.*?)```", after.group(1), re.DOTALL)
-    assert block, "the 'Quick start' section contains no fenced bash block"
+    advanced = re.search(r"^###\s+Advanced[^\n]*$(.*)", after.group(1), re.MULTILINE | re.DOTALL)
+    assert advanced, "the 'Quick start' section has no '### Advanced' subsection (stage-by-stage commands)"
+    block = re.search(r"```bash\n(.*?)```", advanced.group(1), re.DOTALL)
+    assert block, "the Advanced subsection of 'Quick start' contains no fenced bash block"
     return block.group(1)
 
 
