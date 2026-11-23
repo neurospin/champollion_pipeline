@@ -136,3 +136,91 @@ def stage_details(section: str) -> re.Match:
         f"expected exactly one <details> element holding the per-stage champollion-* commands, found {len(found)}"
     )
     return found[0]
+
+
+# Module READMEs (``src/champollion_pipeline/**/README.md``): the format shared by the
+# ``tests/test_docs_module_readmes*.py`` guards (a level-1 title, then the level-2 sections below).
+MODULE_README_SECTIONS = ["Purpose", "Files", "Entry points", "See also"]
+MD_FENCE_RE = re.compile(r"^\s*(```|~~~)")
+MD_HEADING_RE = re.compile(r"^(#{1,6})\s+(.*?)\s*#*\s*$")
+MD_SEPARATOR_CELL_RE = re.compile(r"^:?-{3,}:?$")
+
+
+def md_prose_lines(text: str) -> list[str]:
+    """Lines of ``text`` outside fenced code blocks."""
+    lines: list[str] = []
+    in_fence = False
+    for line in text.splitlines():
+        if MD_FENCE_RE.match(line):
+            in_fence = not in_fence
+            continue
+        if not in_fence:
+            lines.append(line)
+    return lines
+
+
+def md_headings(text: str) -> list[tuple[int, str]]:
+    """``(level, title)`` of each Markdown heading outside fenced code blocks."""
+    found = []
+    for line in md_prose_lines(text):
+        m = MD_HEADING_RE.match(line)
+        if m:
+            found.append((len(m.group(1)), m.group(2)))
+    return found
+
+
+def md_section_lines(text: str, title: str, *, prose_only: bool = True) -> list[str]:
+    """Lines of the level-2 section ``title``, up to the next level-1 or level-2 heading.
+
+    With ``prose_only`` (the default) fenced code blocks are left out; otherwise their lines are kept,
+    so a command shown in a code block still counts as named.
+    """
+    body: list[str] = []
+    inside = found = in_fence = False
+    for line in text.splitlines():
+        if MD_FENCE_RE.match(line):
+            in_fence = not in_fence
+            continue
+        m = None if in_fence else MD_HEADING_RE.match(line)
+        if m and len(m.group(1)) <= 2:
+            inside = len(m.group(1)) == 2 and m.group(2) == title
+            found = found or inside
+            continue
+        if inside and not (in_fence and prose_only):
+            body.append(line)
+    assert found, f"no '## {title}' section found"
+    return body
+
+
+def md_cell_text(cell: str) -> str:
+    """Plain text of a table cell: Markdown links reduced to their text, backticks dropped."""
+    cell = re.sub(r"\[([^\]]*)\]\([^)]*\)", r"\1", cell)
+    return cell.replace("`", "").strip()
+
+
+def module_readme_files_rows(text: str) -> list[list[str]]:
+    """Body rows (cells as plain text) of the table in the Files section; header and separator dropped."""
+    rows = []
+    for line in md_section_lines(text, "Files"):
+        stripped = line.strip()
+        if not stripped.startswith("|"):
+            continue
+        cells = [md_cell_text(c) for c in stripped.strip("|").split("|")]
+        if all(MD_SEPARATOR_CELL_RE.match(c) for c in cells if c):
+            continue
+        rows.append(cells)
+    assert rows, "the Files section holds no Markdown table"
+    return rows[1:]
+
+
+def assert_module_readme_layout(text: str, name: str) -> None:
+    """Assert ``text`` holds one level-1 title, first, then exactly the ``MODULE_README_SECTIONS`` in order."""
+    headings = md_headings(text)
+    assert headings, f"{name}/README.md has no heading"
+    assert headings[0][0] == 1, f"{name}/README.md does not open with a level-1 title: {headings[0]}"
+    level_one = [t for lvl, t in headings if lvl == 1]
+    assert len(level_one) == 1, f"{name}/README.md has {len(level_one)} level-1 headings: {level_one}"
+    level_two = [t for lvl, t in headings if lvl == 2]
+    assert level_two == MODULE_README_SECTIONS, (
+        f"{name}/README.md level-2 sections are {level_two}, expected {MODULE_README_SECTIONS}"
+    )

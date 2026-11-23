@@ -11,6 +11,7 @@ listing at test time, so a file added later (``models/region_crops.py``) is chec
 The module-README format (shared with the top-level package README Task M1 and the utilities Task M3,
 restated here by user decision): a level-1 title, then the level-2 sections ``Purpose``, ``Files``
 (a table, one row per file), ``Entry points`` and ``See also`` (relative links to ``docs/*.md``).
+The format helpers live in ``tests/docs_test_helpers.py`` (user decision 2026-11-23).
 
 Requirements pinned here (one test each):
 
@@ -33,85 +34,26 @@ from pathlib import Path
 
 import pytest
 
-from tests.docs_test_helpers import read_text
+from tests.docs_test_helpers import (
+    assert_module_readme_layout,
+    md_section_lines,
+    module_readme_files_rows,
+    read_text,
+)
 
 ROOT = Path(__file__).resolve().parents[1]
 PACKAGE = ROOT / "src" / "champollion_pipeline"
 DOCS = ROOT / "docs"
 DIRECTORIES = ["embedding_engine", "file_indexer", "models", "streaming"]
-SECTIONS = ["Purpose", "Files", "Entry points", "See also"]
 
-FENCE_RE = re.compile(r"^\s*(```|~~~)")
-HEADING_RE = re.compile(r"^(#{1,6})\s+(.*?)\s*#*\s*$")
 LINK_RE = re.compile(r"\[[^\]]*\]\(\s*<?([^)\s>]+)>?(?:\s+\"[^\"]*\")?\s*\)")
 BACKTICK_RE = re.compile(r"`([^`]+)`")
-SEPARATOR_CELL_RE = re.compile(r"^:?-{3,}:?$")
 
 parametrise_directories = pytest.mark.parametrize("directory", DIRECTORIES)
 
 
 def _readme(directory: str) -> str:
     return read_text(PACKAGE / directory / "README.md")
-
-
-def _prose_lines(text: str) -> list[str]:
-    """Lines of ``text`` outside fenced code blocks."""
-    lines: list[str] = []
-    in_fence = False
-    for line in text.splitlines():
-        if FENCE_RE.match(line):
-            in_fence = not in_fence
-            continue
-        if not in_fence:
-            lines.append(line)
-    return lines
-
-
-def _headings(text: str) -> list[tuple[int, str]]:
-    """``(level, title)`` of each Markdown heading outside fenced code blocks."""
-    found = []
-    for line in _prose_lines(text):
-        m = HEADING_RE.match(line)
-        if m:
-            found.append((len(m.group(1)), m.group(2)))
-    return found
-
-
-def _section(text: str, title: str) -> list[str]:
-    """Prose lines of the level-2 section ``title``, up to the next level-1 or level-2 heading."""
-    body: list[str] = []
-    inside = found = False
-    for line in _prose_lines(text):
-        m = HEADING_RE.match(line)
-        if m and len(m.group(1)) <= 2:
-            inside = len(m.group(1)) == 2 and m.group(2) == title
-            found = found or inside
-            continue
-        if inside:
-            body.append(line)
-    assert found, f"no '## {title}' section found"
-    return body
-
-
-def _cell_text(cell: str) -> str:
-    """Plain text of a table cell: Markdown links reduced to their text, backticks dropped."""
-    cell = re.sub(r"\[([^\]]*)\]\([^)]*\)", r"\1", cell)
-    return cell.replace("`", "").strip()
-
-
-def _files_rows(text: str) -> list[list[str]]:
-    """Body rows (cells as plain text) of the table in the Files section; header and separator dropped."""
-    rows = []
-    for line in _section(text, "Files"):
-        stripped = line.strip()
-        if not stripped.startswith("|"):
-            continue
-        cells = [_cell_text(c) for c in stripped.strip("|").split("|")]
-        if all(SEPARATOR_CELL_RE.match(c) for c in cells if c):
-            continue
-        rows.append(cells)
-    assert rows, "the Files section holds no Markdown table"
-    return rows[1:]
 
 
 def _listed_files(directory: str) -> set[str]:
@@ -144,23 +86,17 @@ def _last_segment(name: str) -> str:
 
 
 def _entry_point_names(text: str) -> list[str]:
-    return [m.group(1) for line in _section(text, "Entry points") for m in BACKTICK_RE.finditer(line)]
+    return [m.group(1) for line in md_section_lines(text, "Entry points") for m in BACKTICK_RE.finditer(line)]
 
 
 @parametrise_directories
 def test_module_readme_has_title_and_sections(directory):
-    headings = _headings(_readme(directory))
-    assert headings, f"{directory}/README.md has no heading"
-    assert headings[0][0] == 1, f"{directory}/README.md does not open with a level-1 title: {headings[0]}"
-    level_one = [t for lvl, t in headings if lvl == 1]
-    assert len(level_one) == 1, f"{directory}/README.md has {len(level_one)} level-1 headings: {level_one}"
-    level_two = [t for lvl, t in headings if lvl == 2]
-    assert level_two == SECTIONS, f"{directory}/README.md level-2 sections are {level_two}, expected {SECTIONS}"
+    assert_module_readme_layout(_readme(directory), directory)
 
 
 @parametrise_directories
 def test_module_readme_files_table_names_each_file(directory):
-    rows = _files_rows(_readme(directory))
+    rows = module_readme_files_rows(_readme(directory))
     named = [r[0] for r in rows]
     missing = sorted(_listed_files(directory) - set(named))
     assert not missing, f"{directory}/README.md Files table has no row for: {missing}"
@@ -172,7 +108,7 @@ def test_module_readme_files_table_names_each_file(directory):
 
 @parametrise_directories
 def test_module_readme_files_table_has_no_stale_row(directory):
-    named = {r[0] for r in _files_rows(_readme(directory))}
+    named = {r[0] for r in module_readme_files_rows(_readme(directory))}
     stale = sorted(named - _listed_files(directory))
     assert not stale, f"{directory}/README.md Files table names files absent from the directory: {stale}"
 
@@ -199,7 +135,7 @@ def test_module_readme_entry_points_exist(directory):
 @parametrise_directories
 def test_module_readme_see_also_links_resolve(directory):
     readme_dir = PACKAGE / directory
-    targets = [m.group(1) for line in _section(_readme(directory), "See also") for m in LINK_RE.finditer(line)]
+    targets = [m.group(1) for line in md_section_lines(_readme(directory), "See also") for m in LINK_RE.finditer(line)]
     relative = [t for t in targets if not re.match(r"^[a-z][a-z0-9+.-]*:", t) and not t.startswith("#")]
     assert relative, f"{directory}/README.md See also holds no relative link (links: {targets})"
     resolved = {t: (readme_dir / t.split("#", 1)[0]).resolve() for t in relative}
