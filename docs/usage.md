@@ -48,7 +48,7 @@ both in the Option column; a list option takes one or more values.
 | `--data-path` | `DATA_PATH` | empty; without `--config`: `<checkout>/data` | `data_path` | Data folder; without `--config` and without a Dataset root, the Dataset root is `<data_path>/<dataset name>` |
 | `--models-path` | `MODELS_PATH` | empty; without `--config`: `<checkout>/models` | `models_path` | Local models folder, archive or Hugging Face repo id that stage 4 and streaming mode embed with, unless `dataset.hf_enabled` is true |
 | `--outputs-path` | `OUTPUTS_PATH` | empty; without `--config`: `<checkout>/outputs`; config-less input run: `<Dataset root>/derivatives/champollion_V1` | `outputs_path` | Pipeline output folder: its `logs` folder holds `pipeline.log` and the replay file when `log_dir` is empty; streaming mode writes there |
-| `--champollion-v1-path` | `CHAMPOLLION_V1_PATH` | empty; without `--config`: `<checkout>/external/champollion_V1` | `champollion_v1_path` | Path of the champollion_V1 checkout; kept in the Config file, no stage reads it |
+| `--champollion-v1-path` | `CHAMPOLLION_V1_PATH` | empty; without `--config`: `<checkout>/external/champollion_V1` | `champollion_v1_path` | Path of the champollion_V1 checkout; Config file field, read by no stage and not by champollion-train; kept so existing YAML files load |
 | `--stages` | `STAGE [STAGE ...]`, each one of `generate_morphologist_graphs`, `run_cortical_tiles`, `generate_champollion_config`, `generate_embeddings`, `put_together_embeddings`, `generate_snapshots` | `generate_embeddings` only; config-less input run: all six | `stages` | Run only the named stages, in dependency order; the stages it does not name are turned off |
 | `--mode` | `{sequential,streaming}` | `sequential` | `mode` | `sequential` runs stage by stage; `streaming` runs inference scan by scan (see [Streaming mode](#streaming-mode)) |
 | `--n-workers` | `N` | `0`: one worker per CPU | `n_workers` | Streaming mode only: number of producer worker processes |
@@ -64,8 +64,8 @@ both in the Option column; a list option takes one or more values.
 | `--dataset-name` | `DATASET_NAME` | `example_dataset`; config-less input run: the Dataset root's folder name | `dataset.name` | Dataset name, given to stage 3 |
 | `--dataset-localization` | `DATASET_LOCALIZATION` | `local` | `dataset.dataset_localization` | Training setting kept in the Config file; no stage of `champollion-pipeline` reads it |
 | `--datasets-root` | `DATASETS_ROOT` | empty; without `--config`: `<data_path>/<dataset name>`; config-less input run: inferred from `INPUT` | `dataset.datasets_root` | Dataset root that holds `derivatives/`; every inferred output path sits below it |
-| `--datasets` | `DATASETS [DATASETS ...]` | `example` | `dataset.datasets` | Training setting kept in the Config file; no stage reads it |
-| `--labels` | `LABELS [LABELS ...]` | `Sex` | `dataset.labels` | Training setting kept in the Config file; no stage reads it |
+| `--datasets` | `DATASETS [DATASETS ...]` | `example` | `dataset.datasets` | Config file field, read by no stage and not by champollion-train; kept so existing YAML files load |
+| `--labels` | `LABELS [LABELS ...]` | `Sex` | `dataset.labels` | Config file field, read by no stage and not by champollion-train; kept so existing YAML files load |
 | `--input-path` | `INPUT_PATH` | empty: no input path | `dataset.input_path` | Same as `INPUT` |
 | `--input-kind` | `INPUT_KIND`: `t1` or `morphologist` | none: detected from the input | `dataset.input_kind` | Answer the input kind question in advance: `t1` (T1 files) or `morphologist` (Morphologist outputs, stage 1 skipped); any other value exits with status 1 |
 | `--morphologist-graphs` | `MORPHOLOGIST_GRAPHS` | empty: inferred (the subjects folder of the input, or the one stage 1 writes) | `dataset.morphologist_graphs` | Subjects folder of the Morphologist graphs that stage 2 and streaming mode read |
@@ -81,20 +81,20 @@ both in the Option column; a list option takes one or more values.
 | `--labelling-session` | `LABELLING_SESSION` | empty: stage 2 picks the session per subject | `dataset.labelling_session` | Morphologist labelling session that stages 2 and 6 read |
 | `--model` | `MODEL` | empty: every model id | `dataset.model` | Model id that stages 5 and 6 keep |
 | `--regions` | `REGIONS [REGIONS ...]` | empty: all 56 regions | `dataset.regions` | Regions that stages 2, 4 and 5 process |
-| `--classifier-name` | `CLASSIFIER_NAME` | `svm` | `dataset.classifier_name` | Training setting kept in the Config file; no stage reads it |
+| `--classifier-name` | `CLASSIFIER_NAME` | `svm` | `dataset.classifier_name` | Config file field, read by no stage and not by champollion-train; kept so existing YAML files load |
 | `--overwrite`, `--no-overwrite` | - | `false` | `dataset.overwrite` | On: stage 4 overwrites existing embeddings |
 | `--embeddings-only`, `--no-embeddings-only` | - | `false` | `dataset.embeddings_only` | On: inference only, no training; streaming mode requires it |
 | `--checkpoint-epoch` | `CHECKPOINT_EPOCH` | `80` | `dataset.checkpoint_epoch` | Checkpoint epoch of the models in stage 4 |
 | `--checkpoint-epochs` | `CHECKPOINT_EPOCHS [CHECKPOINT_EPOCHS ...]` | empty | `dataset.checkpoint_epochs` | One `<id>=N` entry per model id: the checkpoint epoch of that model id in stage 4 |
 | `--per-model-folders`, `--no-per-model-folders` | - | `false` | `dataset.per_model_folders` | On: stage 4 writes one output folder per model id, even for a single model |
 | `--models-cache` | `MODELS_CACHE` | none: `<Dataset root>/derivatives/champollion_V1/models_cache` | `dataset.models_cache` | Cache folder of the downloaded and extracted models of stage 4 |
-| `--subsets` | `SUBSETS [SUBSETS ...]` | `full` | `dataset.subsets` | Training setting kept in the Config file; no stage reads it |
-| `--epochs` | `EPOCHS [EPOCHS ...]` | one unset epoch | `dataset.epochs` | Training setting kept in the Config file; no stage reads it |
-| `--split` | `SPLIT` | `random` | `dataset.split` | Training setting kept in the Config file; no stage reads it |
-| `--cv` | `CV` | `5` | `dataset.cv` | Training setting kept in the Config file; no stage reads it |
-| `--splits-basedir` | `SPLITS_BASEDIR` | none | `dataset.splits_basedir` | Training setting kept in the Config file; no stage reads it |
-| `--idx-region-evaluation` | `IDX_REGION_EVALUATION` | none | `dataset.idx_region_evaluation` | Training setting kept in the Config file; no stage reads it |
-| `--short-name` | `SHORT_NAME` | `eval` | `dataset.short_name` | Training setting kept in the Config file; no stage reads it |
+| `--subsets` | `SUBSETS [SUBSETS ...]` | `full` | `dataset.subsets` | Config file field, read by no stage and not by champollion-train; kept so existing YAML files load |
+| `--epochs` | `EPOCHS [EPOCHS ...]` | one unset epoch | `dataset.epochs` | Config file field, read by no stage and not by champollion-train; kept so existing YAML files load |
+| `--split` | `SPLIT` | `random` | `dataset.split` | Config file field, read by no stage and not by champollion-train; kept so existing YAML files load |
+| `--cv` | `CV` | `5` | `dataset.cv` | Config file field, read by no stage and not by champollion-train; kept so existing YAML files load |
+| `--splits-basedir` | `SPLITS_BASEDIR` | none | `dataset.splits_basedir` | Config file field, read by no stage and not by champollion-train; kept so existing YAML files load |
+| `--idx-region-evaluation` | `IDX_REGION_EVALUATION` | none | `dataset.idx_region_evaluation` | Config file field, read by no stage and not by champollion-train; kept so existing YAML files load |
+| `--short-name` | `SHORT_NAME` | `eval` | `dataset.short_name` | Config file field, read by no stage and not by champollion-train; kept so existing YAML files load |
 | `--hf-enabled`, `--no-hf-enabled` | - | `false` | `dataset.hf_enabled` | On: stage 4 takes its models from the Hugging Face repo `dataset.hf_repo_id` (token `HF_TOKEN`, see `--env`) instead of `models_path` |
 | `--hf-repo-id` | `HF_REPO_ID` | none | `dataset.hf_repo_id` | Hugging Face repo id of the models; required when `dataset.hf_enabled` is true |
 | `--cpu`, `--no-cpu` | - | `false` | `dataset.cpu` | On: stage 4 runs on the CPU, CUDA off |

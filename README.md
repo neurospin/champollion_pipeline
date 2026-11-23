@@ -64,7 +64,7 @@ repository's root; OUTPUT is the dataset root (the second positional argument, o
 | `--dataset-name` | `DATASET_NAME` | name of the dataset root folder | Dataset name, used in the generated Champollion configuration |
 | `--outputs-path` | `OUTPUTS_PATH` | `OUTPUT/derivatives/champollion_V1` | Champollion output folder; the pipeline log folder defaults to its `logs/` |
 | `--models-path` | `MODELS_PATH` | `<repo>/models` | Local models folder, used when Hugging Face download is off |
-| `--champollion-v1-path` | `CHAMPOLLION_V1_PATH` | `<repo>/external/champollion_V1` | Path of the champollion_V1 checkout; kept in the configuration, read by no stage |
+| `--champollion-v1-path` | `CHAMPOLLION_V1_PATH` | `<repo>/external/champollion_V1` | Path of the champollion_V1 checkout; Config file field, read by no stage and not by champollion-train; kept so existing YAML files load |
 | `--morphologist-graphs` | `MORPHOLOGIST_GRAPHS` | `OUTPUT/derivatives/morphologist-6.0` | Morphologist subjects folder read by stage 2 |
 | `--path-to-graph` | `PATH_TO_GRAPH` | `t1mri/default_acquisition/default_analysis/folds/3.3/base` | Folder of the sulcal graphs below each subject |
 | `--path-sk-with-hull` | `PATH_SK_WITH_HULL` | `t1mri/default_acquisition/default_analysis/segmentation` | Folder of the skeletons with hull below each subject |
@@ -93,16 +93,16 @@ repository's root; OUTPUT is the dataset root (the second positional argument, o
 | `--reference-data-path` | `REFERENCE_DATA_PATH` | none (UMAP snapshots skipped) | UMAP reference data folder of the snapshots |
 | `--champollion-data-root` | `CHAMPOLLION_DATA_ROOT` | `CHAMPOLLION_DATA_ROOT` variable | Champollion data root passed to the snapshots |
 | `--dataset-localization` | `DATASET_LOCALIZATION` | `local` | Name of the champollion_V1 dataset localization file used in streaming mode |
-| `--datasets` | `DATASETS [DATASETS ...]` | `example` | Configuration file field; read by no stage |
-| `--labels` | `LABELS [LABELS ...]` | `Sex` | Configuration file field; read by no stage |
-| `--classifier-name` | `CLASSIFIER_NAME` | `svm` | Configuration file field; read by no stage |
-| `--subsets` | `SUBSETS [SUBSETS ...]` | `full` | Configuration file field; read by no stage |
-| `--epochs` | `EPOCHS [EPOCHS ...]` | none | Configuration file field; read by no stage |
-| `--split` | `SPLIT` | `random` | Configuration file field; read by no stage |
-| `--cv` | `CV` | `5` | Configuration file field; read by no stage |
-| `--splits-basedir` | `SPLITS_BASEDIR` | none | Configuration file field; read by no stage |
-| `--idx-region-evaluation` | `IDX_REGION_EVALUATION` | none | Configuration file field; read by no stage |
-| `--short-name` | `SHORT_NAME` | `eval` | Configuration file field; read by no stage |
+| `--datasets` | `DATASETS [DATASETS ...]` | `example` | Config file field, read by no stage and not by champollion-train; kept so existing YAML files load |
+| `--labels` | `LABELS [LABELS ...]` | `Sex` | Config file field, read by no stage and not by champollion-train; kept so existing YAML files load |
+| `--classifier-name` | `CLASSIFIER_NAME` | `svm` | Config file field, read by no stage and not by champollion-train; kept so existing YAML files load |
+| `--subsets` | `SUBSETS [SUBSETS ...]` | `full` | Config file field, read by no stage and not by champollion-train; kept so existing YAML files load |
+| `--epochs` | `EPOCHS [EPOCHS ...]` | none | Config file field, read by no stage and not by champollion-train; kept so existing YAML files load |
+| `--split` | `SPLIT` | `random` | Config file field, read by no stage and not by champollion-train; kept so existing YAML files load |
+| `--cv` | `CV` | `5` | Config file field, read by no stage and not by champollion-train; kept so existing YAML files load |
+| `--splits-basedir` | `SPLITS_BASEDIR` | none | Config file field, read by no stage and not by champollion-train; kept so existing YAML files load |
+| `--idx-region-evaluation` | `IDX_REGION_EVALUATION` | none | Config file field, read by no stage and not by champollion-train; kept so existing YAML files load |
+| `--short-name` | `SHORT_NAME` | `eval` | Config file field, read by no stage and not by champollion-train; kept so existing YAML files load |
 
 </details>
 
