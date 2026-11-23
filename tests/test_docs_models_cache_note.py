@@ -32,6 +32,8 @@ from pathlib import Path
 
 import pytest
 
+from tests.docs_test_helpers import bash_blocks, strip_comment
+
 PROJECT_ROOT = Path(__file__).resolve().parents[1]
 
 README = PROJECT_ROOT / "README.md"
@@ -88,26 +90,14 @@ def _models_cache_note() -> str:
     return matches[0][1]
 
 
-def _bash_blocks(text: str) -> list[str]:
-    """Bodies of every fenced ``bash`` code block."""
-    return re.findall(r"```bash\n(.*?)```", text, re.DOTALL)
-
-
-def _strip_comment(line: str) -> str:
-    """Drop a shell comment: a whole comment line, or a `` # ...`` tail after whitespace."""
-    if line.lstrip().startswith("#"):
-        return ""
-    return re.sub(r"\s+#.*$", "", line)
-
-
 def _command_invocations(text: str, command: str) -> list[list[str]]:
     """Argument tokens of every ``command`` invocation in the fenced bash blocks of ``text``."""
     found: list[list[str]] = []
-    for block in _bash_blocks(text):
+    for block in bash_blocks(text):
         logical: list[str] = []
         current = ""
         for raw in block.splitlines():
-            line = _strip_comment(raw).rstrip()
+            line = strip_comment(raw).rstrip()
             if line.endswith("\\"):
                 current += line[:-1] + " "
                 continue
