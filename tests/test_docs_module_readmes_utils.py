@@ -7,6 +7,7 @@ Run by hand (``verify_ignore`` skips ``tests/test_docs_*.py``):
 The module README format (title, Purpose, Files, Entry points, See also) is owned by
 TASK-DOCS-BDRABCZUK-8B4AD3315AFA (M1, ``tests/test_docs_module_readmes.py``); this Task restates it
 in its own Requirements and test (user decision, REPLAN 2026-11-23: parallelise the docs).
+The Markdown section helpers live in ``tests/docs_test_helpers.py`` (user decision 2026-11-23).
 
 Requirements pinned here (one test each):
 
@@ -35,7 +36,7 @@ import pytest
 import tomllib
 
 from compare_sulcal.cli import Compare
-from tests.docs_test_helpers import read_text
+from tests.docs_test_helpers import md_prose_lines, md_section_lines, read_text
 
 ROOT = Path(__file__).resolve().parents[1]
 SRC = ROOT / "src"
@@ -59,14 +60,8 @@ def _readme(key: str) -> str:
 
 
 def _section(text: str, heading: str) -> str:
-    """Body of the ``## <heading>`` section (to the next level-2 heading or the end)."""
-    m = re.search(rf"^##\s+{re.escape(heading)}\s*$(.*?)(?=^##\s|\Z)", text, re.MULTILINE | re.DOTALL)
-    assert m, f"no '## {heading}' section found"
-    return m.group(1)
-
-
-def _strip_code_blocks(text: str) -> str:
-    return re.sub(r"```.*?```", "", text, flags=re.DOTALL)
+    """Body of the ``## <heading>`` section, code block lines included (a command shown in one counts)."""
+    return "\n".join(md_section_lines(text, heading, prose_only=False))
 
 
 def _directory_files(directory: Path) -> set[str]:
@@ -89,7 +84,7 @@ def _table_rows(section: str) -> list[list[str]]:
 def _relative_links(text: str) -> list[str]:
     """Link targets that are paths in the repository (no URL scheme, no pure in-page anchor)."""
     targets = []
-    for target in LINK_RE.findall(_strip_code_blocks(text)):
+    for target in LINK_RE.findall("\n".join(md_prose_lines(text))):
         if re.match(r"^[a-zA-Z][a-zA-Z0-9+.-]*:", target) or target.startswith("#"):
             continue
         targets.append(target.split("#", 1)[0])
