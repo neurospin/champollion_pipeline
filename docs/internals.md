@@ -12,15 +12,22 @@ All `src/` scripts subclass `ScriptBuilder` from `champollion_utils.script_build
 
 ## Module map
 
+Each entry point is a console script declared under `[project.scripts]` in
+`pyproject.toml`; it calls the `main` function of the module on its row.
+
 | Module | Stage | Entry point |
 |--------|-------|-------------|
-| `generate_morphologist_graphs` | 1 | `pixi run morphologist` |
-| `run_cortical_tiles` | 2 | `pixi run cortical-tiles` |
-| `generate_champollion_config` | 3 | `pixi run champollion-config` |
-| `generate_embeddings` | 4 | `pixi run embeddings` |
-| `put_together_embeddings` | 5 | `pixi run combine` |
-| `generate_snapshots` | 6 | `pixi run snapshots` |
-| `train_champollion` | — | `pixi run train` |
+| `cli` | 1–6 (launcher) | `champollion-pipeline` |
+| `generate_morphologist_graphs` | 1 | `champollion-morphologist` |
+| `run_cortical_tiles` | 2 | `champollion-cortical-tiles` |
+| `generate_champollion_config` | 3 | `champollion-config` |
+| `generate_embeddings` | 4 | `champollion-embeddings` |
+| `put_together_embeddings` | 5 | `champollion-combine` |
+| `generate_snapshots` | 6 | `champollion-snapshots` |
+| `train_champollion` | — | `champollion-train` |
+| `generate_labelling_qc` | — (tool) | `champollion-labelling-qc` |
+| `prune_failed_subjects` | — (tool) | `champollion-prune` |
+| `purge_subject` | — (tool) | `champollion-purge` |
 
 ## Path conventions
 
