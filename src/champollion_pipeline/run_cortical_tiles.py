@@ -19,21 +19,19 @@ the correct labelled masks are used during region extraction.
 import argparse
 import csv
 import glob
-import json
 import logging
 import os
 import re
-import shutil
 import sys
 import tempfile
 from collections.abc import Callable
-from contextlib import suppress
 from datetime import datetime
 from os.path import abspath, dirname, exists, isdir, join
 
 import numpy as np
 from champollion_utils.script_builder import ScriptBuilder
 from cortical_tiles.brainvisa import add_left_and_right_volumes, remove_ventricle
+from cortical_tiles.brainvisa.utils.crop_subjects import EmptyCropError, exclude_empty_crops
 from cortical_tiles.brainvisa.utils.skip_list import (
     SKIP_LIST_FILENAME,
     SKIP_SIDES,
@@ -44,24 +42,44 @@ from cortical_tiles.brainvisa.utils.skip_list import (
 from joblib import cpu_count
 from soma import aims
 
-from champollion_pipeline.derivatives_layout import DEFAULT_MASKS_VERSION, compute_run_log_path
+from champollion_pipeline.derivatives_layout import compute_run_log_path
 from champollion_pipeline.generate_labelling_qc import REASON_NO_SESSION_DIR, fetch_subject_row
 from champollion_pipeline.generate_masks import _REGIONS_DEFAULT
 from champollion_pipeline.process_setup import init_pipeline_process
 from champollion_pipeline.utils.cortical_tiles_config import (
     INPUT_TYPES_DEFAULT,
+    CorticalTilesConfig,
     CorticalTilesConfigFactory,
+    CropPass,
+    check_version_crops,
+    compute_crop_targets,
+    compute_missing_hemispheres,
     compute_versioned_crops_dir,
-    versioned_crops_exist,
+    merge_skip_lists,
+    migrate_legacy_crops,
+    plan_crop_passes,
+    plan_unmapped_crop,
+    read_marker_names,
+    remove_marker,
+    write_crop_config,
+    write_marker_names,
 )
 from champollion_pipeline.utils.lib import DERIVATIVES_FOLDER, LABELLING_SESSION_CANDIDATES
 from champollion_pipeline.utils.qc_report import (
     CROP_KIND_MASK,
+    CROP_MASK_FOLDER,
     REASON_SEPARATOR,
     fetch_crop_qc_rows,
+    fetch_grouped_crop_qc_rows,
     read_qc_tsv,
     replace_missing_crop_reasons,
     write_qc_tsv,
+)
+from champollion_pipeline.utils.region_masks import (
+    REGION_MASKS_OPTION,
+    add_region_masks_option,
+    find_unmapped_region_models,
+    refuse_masks_with_region_masks,
 )
 from champollion_pipeline.utils.resource_copy import grants_no_write, replace_with_writable_copy
 from champollion_pipeline.utils.skeleton_qc import compute_skeleton_reasons, save_config_skel_qc, save_crop_qc
@@ -97,8 +115,8 @@ REASON_EXCLUDED_BY_SK_QC = "excluded_by_sk_qc"
 REASON_NO_SUBJECT_FOLDER = "no_subject_folder"
 REASON_INVALID_SK_QC = "invalid_sk_qc_file"
 OUTPUT_QC_FILENAME = "output_qc.tsv"
-CROP_MARKER_FILENAME = "crops_complete.marker"
 CROP_STATUS_PARTIAL = 3  # generate_sulcal_regions.py: some subjects skipped, at least one left
+SkipLists = dict[str, list[SkipEntry]]  # side -> skip-list entries
 
 
 class _ExplicitLabellingSession(argparse.Action):
@@ -415,7 +433,17 @@ class RunCorticalTiles(ScriptBuilder):
                 "transform of the other. Temporary: removed once cortical_tiles fixes its {subject}*/ glob.",
             )
         )
+        add_region_masks_option(self)
         self.parser.set_defaults(labelling_session_explicit=False)
+
+    def parse_args(self, args: list[str] | None = None) -> argparse.Namespace:
+        """Parse; exit 2 on --masks beside --region-masks, or on a hemisphere of the run the map gives no version."""
+        parsed = super().parse_args(args)
+        refuse_masks_with_region_masks(self.parser, self.args)
+        missing = find_unmapped_region_models(self.args.region_mask_versions or {}, self._list_run_regions())
+        if self.args.region_mask_versions is not None and missing:
+            self.parser.error(f"{REGION_MASKS_OPTION} gives no Mask version to {', '.join(missing)}")
+        return parsed
 
     # TEMPORARY (DEF-CORTILES-BDRABCZUK-8A44DAD7F312, -9C7D2B9265BC)
     def _check_subject_ids(self, input_abs: str, output_abs: str) -> bool:
@@ -475,72 +503,52 @@ class RunCorticalTiles(ScriptBuilder):
         return True
 
     def _preflight_check(self, output_abs: str, config_path: str) -> bool:
-        """Check for existing crops and migrate legacy flat structure if needed.
+        """Migrate legacy crops, then check the requested version's crops: False (no crop step) on a legacy
+        conflict or, without --overwrite, on a marker listing each hemisphere of the run (path without a map)."""
+        ((version, wanted),) = self._compute_crop_targets().items()
+        return self._migrate_legacy_crops(output_abs, config_path) and bool(
+            self._check_version_crops(output_abs, version, wanted)
+        )
 
-        Returns False (caller should skip the crop step), without --overwrite, when the crops of the requested
-        mask version hold the completion marker or legacy crops conflict with them. Crops with no marker give True.
-        """
-        existing_cfg = CorticalTilesConfigFactory.from_pipeline_json(config_path)
-        requested_cfg = CorticalTilesConfigFactory.from_args(self.args)
-
-        vox_str = f"{int(requested_cfg.out_voxel_size)}mm"
-        derivatives_abs = join(output_abs, DERIVATIVES_FOLDER)
-
-        # Migrate legacy crops written before versioned path was introduced.
-        # Old structure: crops/2mm/  →  New structure: crops/{masks_version}/2mm/
-        legacy_crops = join(derivatives_abs, "crops", vox_str)
-        if isdir(legacy_crops) and existing_cfg is not None:
-            old_version = existing_cfg.masks_version
-            target = join(derivatives_abs, "crops", old_version, vox_str)
-            if not isdir(target):
-                logger.trace(f"Migrating legacy crops to versioned path: crops/{old_version}/...")
-                shutil.move(legacy_crops, target)
-            else:
-                if not self.args.overwrite:
-                    logger.error(
-                        f"Legacy crops found at crops/{vox_str}/ but versioned crops already exist "
-                        f"at crops/{old_version}/{vox_str}/. Please resolve manually or use --overwrite "
-                        "to remove both and regenerate."
-                    )
-                    return False
-                logger.warning(
-                    f"--overwrite: removing legacy crops/{vox_str}/ and existing crops/{old_version}/{vox_str}/..."
-                )
-                shutil.rmtree(legacy_crops)
-                shutil.rmtree(target)
-
-        if versioned_crops_exist(derivatives_abs, requested_cfg.masks_version, requested_cfg.out_voxel_size):
-            if self.args.overwrite:
-                logger.warning(f"Overwriting existing crops for '{requested_cfg.masks_version}'.")
-            elif exists(self._compute_crop_marker_path(output_abs)):
-                logger.warning(
-                    f"Crops for mask version '{requested_cfg.masks_version}' already exist. "
-                    "Use --overwrite to regenerate."
-                )
-                return False
-            else:
-                logger.warning(
-                    f"Crops for mask version '{requested_cfg.masks_version}' hold no {CROP_MARKER_FILENAME}: "
-                    "not complete, regenerating them."
-                )
-        return True
-
-    def _compute_requested_crops_dir(self, output_abs: str) -> str:
-        """Crops folder of the requested masks version and voxel size."""
-        requested_cfg = CorticalTilesConfigFactory.from_args(self.args)
+    def _check_version_crops(self, output_abs: str, version: str, wanted: list[str]) -> list[str]:
+        """Names of ``wanted`` to crop with ``version`` (check_version_crops in the run's derivatives folder)."""
+        crops = CorticalTilesConfig(version, CorticalTilesConfigFactory.from_args(self.args).out_voxel_size)
         derivatives = join(output_abs, DERIVATIVES_FOLDER)
-        return compute_versioned_crops_dir(derivatives, requested_cfg.masks_version, requested_cfg.out_voxel_size)
+        return check_version_crops(derivatives, crops, wanted, self.args.overwrite, logger)
 
-    def _compute_crop_marker_path(self, output_abs: str) -> str:
-        """Path of the completion marker in the requested crops folder."""
-        return join(self._compute_requested_crops_dir(output_abs), CROP_MARKER_FILENAME)
+    def _migrate_legacy_crops(self, output_abs: str, config_path: str) -> bool:
+        """Move crops/<vox>/, written before the versioned path, under its masks version; False on a conflict."""
+        vox_str = f"{int(CorticalTilesConfigFactory.from_args(self.args).out_voxel_size)}mm"
+        derivatives_abs = join(output_abs, DERIVATIVES_FOLDER)
+        return migrate_legacy_crops(config_path, derivatives_abs, vox_str, self.args.overwrite, logger)
 
-    def _write_crop_marker(self, output_abs: str) -> None:
-        """Lay the empty completion marker in the requested crops folder."""
-        marker_path = self._compute_crop_marker_path(output_abs)
-        os.makedirs(dirname(marker_path), exist_ok=True)
-        with open(marker_path, "w"):
-            pass
+    def _list_run_regions(self) -> list[str]:
+        """Sulcal regions of the run: --regions, else the 28."""
+        return list(self.args.regions or _REGIONS_DEFAULT)
+
+    def _compute_crop_targets(self) -> dict[str, list[str]]:
+        """Mask version -> region model names of the run cropped with it (the requested version without a map)."""
+        masks = CorticalTilesConfigFactory.from_args(self.args).masks_version
+        return compute_crop_targets(self.args.region_mask_versions, masks, self._list_run_regions())
+
+    def _compute_crops_dir(self, output_abs: str, version: str) -> str:
+        """Crops folder of ``version`` at the run's voxel size."""
+        voxel_size = CorticalTilesConfigFactory.from_args(self.args).out_voxel_size
+        return compute_versioned_crops_dir(join(output_abs, DERIVATIVES_FOLDER), version, voxel_size)
+
+    def _plan_crops(self, output_abs: str, config_path: str) -> dict[str, list[str]] | None:
+        """Mask version -> region model names this run crops with it; None when the crop step is skipped."""
+        targets = self._compute_crop_targets()
+        if self.args.region_mask_versions is None:
+            if not self._preflight_check(output_abs, config_path):
+                return None
+            ((version, wanted),) = targets.items()
+            prior = read_marker_names(self._compute_crops_dir(output_abs, version))
+            return {version: compute_missing_hemispheres(wanted, prior, self.args.overwrite) or wanted}
+        if not self._migrate_legacy_crops(output_abs, config_path):
+            return None
+        to_crop = {version: self._check_version_crops(output_abs, version, names) for version, names in targets.items()}
+        return to_crop if any(to_crop.values()) else None
 
     def _write_transform_qc(self, output_abs: str) -> None:
         """Write <derivatives>/transform_qc.tsv and log one summary record (warning when a subject is flagged)."""
@@ -608,10 +616,10 @@ class RunCorticalTiles(ScriptBuilder):
         """Crop kinds the output QC checks: the input types, then mask."""
         return [*self._list_input_types(), CROP_KIND_MASK]
 
-    def _read_skip_lists(self, output_abs: str) -> dict[str, list[SkipEntry]]:
+    def _read_skip_lists(self, output_abs: str) -> SkipLists:
         """Entries of the skip list of each side; a list its reader refuses gives one ERROR and no entry."""
         derivatives = join(output_abs, DERIVATIVES_FOLDER)
-        skips: dict[str, list[SkipEntry]] = {}
+        skips: SkipLists = {}
         for side in SKIP_SIDES:
             try:
                 skips[side] = load_skip_entries(derivatives, side)
@@ -621,7 +629,7 @@ class RunCorticalTiles(ScriptBuilder):
                 skips[side] = []
         return skips
 
-    def _log_skip_summary(self, skips: dict[str, list[SkipEntry]]) -> None:
+    def _log_skip_summary(self, skips: SkipLists) -> None:
         """Log one ERROR record per side and step holding an entry, naming its sorted skipped subjects once each."""
         for side, entries in skips.items():
             subjects_per_step: dict[str, set[str]] = {}
@@ -630,14 +638,23 @@ class RunCorticalTiles(ScriptBuilder):
             for step, subjects in subjects_per_step.items():
                 logger.error(f"side {side} step {step} skipped subjects: {', '.join(sorted(subjects))}")
 
-    def _write_output_qc(self, output_abs: str, skips: dict[str, list[SkipEntry]]) -> tuple[str, bool]:
-        """Write output_qc.tsv, one record per qc 0 row; return its path and whether a subject passed."""
+    def _write_output_qc(self, output_abs: str, skips: SkipLists) -> tuple[str, bool]:
+        """Write output_qc.tsv (a hemisphere read in its Mask version's folder), one record per qc 0 row; return
+        its path and whether a subject passed."""
         derivatives = join(output_abs, DERIVATIVES_FOLDER)
-        crops_dir = self._compute_requested_crops_dir(output_abs)
         input_records = read_qc_tsv(join(derivatives, INPUT_QC_FILENAME))
         subjects = [str(record["participant_id"]) for record in input_records if record["qc"] == 1]
-        regions = self.args.regions or _REGIONS_DEFAULT
-        crop_rows = fetch_crop_qc_rows(crops_dir, regions, self._list_crop_kinds(), subjects, self.args.bids)
+        regions, kinds = self._list_run_regions(), self._list_crop_kinds()
+        if self.args.region_mask_versions is None:
+            (version,) = self._compute_crop_targets()
+            crops_dir = self._compute_crops_dir(output_abs, version)
+            crop_rows = fetch_crop_qc_rows(crops_dir, regions, kinds, subjects, self.args.bids)
+        else:
+            groups = [
+                (self._compute_crops_dir(output_abs, crop.version), crop.side, crop.regions)
+                for crop in plan_crop_passes(self._compute_crop_targets(), regions)
+            ]
+            crop_rows = fetch_grouped_crop_qc_rows(groups, kinds, subjects, self.args.bids)
         rows = replace_missing_crop_reasons(crop_rows, skips, self.args.bids)
         qc_path = join(derivatives, OUTPUT_QC_FILENAME)
         write_qc_tsv(qc_path, rows)
@@ -647,18 +664,16 @@ class RunCorticalTiles(ScriptBuilder):
         return qc_path, any(row["qc"] == 1 for row in rows)
 
     def _apply_output_qc(
-        self, output_abs: str, status: int, skips: dict[str, list[SkipEntry]], has_crop_step: bool = False
+        self, output_abs: str, status: int, skips: SkipLists, markers: dict[str, frozenset[str]] | None = None
     ) -> int:
-        """Run the output QC: 1 with a FAIL record when no subject passed it, else ``status``.
-
-        After a crop step (``has_crop_step``), a subject passing it lays the marker, whatever ``status`` is.
-        """
+        """Run the output QC: 1 with a FAIL record when no subject passed it, else ``status``; a subject passing
+        it writes ``markers`` (Mask version -> names listed), whatever ``status`` is."""
         qc_path, has_complete_subject = self._write_output_qc(output_abs, skips)
         if not has_complete_subject:
             logger.fail(f"no subject passed the output QC, see {qc_path}")
             return 1
-        if has_crop_step:
-            self._write_crop_marker(output_abs)
+        for version, names in (markers or {}).items():
+            write_marker_names(self._compute_crops_dir(output_abs, version), names)
         return status
 
     def _generate_mask_npys(self, output_abs: str) -> None:
@@ -691,8 +706,10 @@ class RunCorticalTiles(ScriptBuilder):
             datetime.now().astimezone(),
         )
 
-    def _build_crop_command(self, script_path: str, sk_qc_abs: str) -> list[str]:
-        """Command line of generate_sulcal_regions.py for this run."""
+    def _build_crop_command(
+        self, script_path: str, sk_qc_abs: str, crop_pass: CropPass | None = None, regions: list[str] | None = None
+    ) -> list[str]:
+        """Command line of generate_sulcal_regions.py: the run's (-r ``regions`` if given), or a crop pass's."""
         cmd = [
             sys.executable,
             script_path,
@@ -706,8 +723,11 @@ class RunCorticalTiles(ScriptBuilder):
             str(self.args.njobs),
         ]
 
-        if self.args.regions:
-            cmd.extend(["-r", *self.args.regions])
+        regions = list(crop_pass.regions) if crop_pass else regions or self.args.regions
+        if regions:
+            cmd.extend(["-r", *regions])
+        if crop_pass:
+            cmd.extend(["-i", crop_pass.side, "--masks", crop_pass.version])
 
         if sk_qc_abs:
             cmd.extend(["--sk_qc_path", sk_qc_abs])
@@ -718,30 +738,43 @@ class RunCorticalTiles(ScriptBuilder):
         cmd.extend(["-y", *self._list_input_types()])
         return cmd
 
-    def _write_crop_config(self, config_file_path: str, input_abs: str, sk_qc_abs: str) -> None:
-        """Set the run's paths and options in the pipeline JSON config, when it exists."""
-        # Set graphs_dir and output_dir in the pipeline JSON config.
-        # generate_sulcal_regions.py derives both from path_dataset (-d arg)
-        # when they are "$local". Since -d is now the subjects dir (not the
-        # dataset root), we set them explicitly so outputs land in the right place.
-        if not exists(config_file_path):
+    def _run_crop_passes(
+        self, script_path: str, sk_qc_abs: str, output_abs: str, to_crop: dict[str, list[str]]
+    ) -> tuple[int, SkipLists, dict[str, frozenset[str]]]:
+        """Delete the marker of each version to crop, run the crop subprocess(es) (one without a map, one per crop
+        pass with one, up to a status outside (0, 3)), then drop empty-crop subjects; return the crop status, merged
+        skip lists and, per version cropped, the names its marker lists after a passed output QC."""
+        # Before the first crop subprocess: a run stopping in any pass leaves no marker listing a name it crops.
+        priors = {v: remove_marker(self._compute_crops_dir(output_abs, v)) for v, names in to_crop.items() if names}
+        script_dir = dirname(script_path)  # the script runs from its own directory
+        if self.args.region_mask_versions is None:
+            ((version, names),) = to_crop.items()
+            regions, cropped = plan_unmapped_crop(names, self._list_run_regions())
+            cmd = self._build_crop_command(script_path, sk_qc_abs, regions=regions)
+            result = self.execute_command(cmd, shell=False, cwd=script_dir)
+            return result, self._read_skip_lists(output_abs), {version: priors[version].union(cropped)}
+        merged, done, status = {}, [], 0  # skip lists, crop passes run, crop status
+        for crop_pass in plan_crop_passes(to_crop, self._list_run_regions()):
+            cmd = self._build_crop_command(script_path, sk_qc_abs, crop_pass)
+            result = self.execute_command(cmd, shell=False, cwd=script_dir)
+            done.append(crop_pass)
+            merge_skip_lists(merged, self._read_skip_lists(output_abs))
+            status = max(status, result) if result in (0, CROP_STATUS_PARTIAL) else result
+            if status not in (0, CROP_STATUS_PARTIAL):
+                break
+        self._exclude_empty_crops(output_abs, done, merged)
+        return status, merged, {version: prior.union(to_crop[version]) for version, prior in priors.items()}
+
+    def _exclude_empty_crops(self, output_abs: str, passes: list[CropPass], skips: SkipLists) -> None:
+        """Drop each subject a skip list holds for an empty skeleton crop from the crops of every pass run."""
+        empty = EmptyCropError.__name__
+        dropped = sorted({entry.subject for entries in skips.values() for entry in entries if entry.exc_type == empty})
+        if not dropped:
             return
-        with open(config_file_path) as f:
-            config = json.load(f)
-        config["graphs_dir"] = input_abs
-        config["output_dir"] = join(abspath(self.args.output), DERIVATIVES_FOLDER)
-        config["brain_regions_json"] = abspath(
-            join(dirname(__file__), "resources", "sulci_regions_champollion_V1.json")
-        )
-        config["path_to_graph"] = self.args.path_to_graph
-        config["path_to_skeleton_with_hull"] = self.args.path_sk_with_hull
-        config["masks_version"] = self.args.masks if self.args.masks else DEFAULT_MASKS_VERSION
-        config["skel_qc_path"] = sk_qc_abs
-        if self.args.bids:
-            config["bids"] = True
-        config.pop("skip_distbottom", None)
-        with open(config_file_path, "w") as f:
-            json.dump(config, f, indent=3)
+        for crop_pass in passes:
+            crops_dir = self._compute_crops_dir(output_abs, crop_pass.version)
+            region_dirs = [join(crops_dir, region, CROP_MASK_FOLDER) for region in crop_pass.regions]
+            exclude_empty_crops(region_dirs, dropped, [crop_pass.side])
 
     def run(self):
         """Execute the cortical_tiles script."""
@@ -767,7 +800,8 @@ class RunCorticalTiles(ScriptBuilder):
 
         config_file_path: str = join(output_abs, "pipeline_loop_2mm.json")
 
-        if not self._preflight_check(output_abs, config_file_path):
+        to_crop = self._plan_crops(output_abs, config_file_path)
+        if to_crop is None:
             save_config_skel_qc(config_file_path, crop_qc_abs)
             status = self._apply_output_qc(output_abs, 0, self._read_skip_lists(output_abs))
             return compute_end_status(status, crop_qc_abs)
@@ -782,44 +816,22 @@ class RunCorticalTiles(ScriptBuilder):
             replace_with_writable_copy(source_config, config_file_path)
 
         crop_sk_qc = crop_qc_abs or sk_qc_abs
-        self._write_crop_config(config_file_path, input_abs, crop_sk_qc)
+        derivatives_abs = join(output_abs, DERIVATIVES_FOLDER)
+        write_crop_config(config_file_path, input_abs, derivatives_abs, self.args, crop_sk_qc)
 
-        # Prepare njobs
         if self.args.njobs is None:
             self.args.njobs = max(1, min(22, cpu_count() - 2))
 
         if self.args.njobs >= cpu_count():
             logger.warning(f"{self.args.njobs} jobs requested but only {cpu_count()} cores available.")
 
-        # Build command to run cortical_tiles script directly
-        # Get absolute paths
-        script_path = abspath(
-            join(
-                dirname(__file__),
-                "..",
-                "..",
-                "external",
-                "cortical_tiles",
-                "cortical_tiles",
-                "brainvisa",
-                "generate_sulcal_regions.py",
-            )
-        )
+        brainvisa_dir = join(dirname(__file__), "..", "..", "external", "cortical_tiles", "cortical_tiles", "brainvisa")
+        script_path = abspath(join(brainvisa_dir, "generate_sulcal_regions.py"))
 
-        # The script runs from its own directory (subprocess cwd)
-        script_dir = dirname(script_path)
-
-        cmd = self._build_crop_command(script_path, crop_sk_qc)
-
-        with suppress(FileNotFoundError):  # not exists(): tests mock it
-            os.remove(self._compute_crop_marker_path(output_abs))
-
-        result = self.execute_command(cmd, shell=False, cwd=script_dir)
-
+        result, skips, markers = self._run_crop_passes(script_path, crop_sk_qc, output_abs, to_crop)
         if result not in (0, CROP_STATUS_PARTIAL):
             return result
 
-        skips = self._read_skip_lists(output_abs)
         if result == CROP_STATUS_PARTIAL:
             self._log_skip_summary(skips)
 
@@ -827,7 +839,7 @@ class RunCorticalTiles(ScriptBuilder):
         self._generate_mask_npys(output_abs)
 
         status = self._run_whole_brain(input_abs, output_abs, result)
-        return compute_end_status(self._apply_output_qc(output_abs, status, skips, has_crop_step=True), crop_qc_abs)
+        return compute_end_status(self._apply_output_qc(output_abs, status, skips, markers), crop_qc_abs)
 
     def _run_whole_brain(self, input_abs: str, output_abs: str, crop_status: int) -> int:
         """Fuse the L+R skeletons, then strip the ventricle from the fused volume; return the stage status so far.
