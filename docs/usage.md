@@ -188,7 +188,11 @@ pixi run champollion-cortical-tiles \
 - **Second argument** — derivatives parent directory. Crops are written to `{output}/cortical_tiles-2026/crops/{masks_version}/2mm/` (`{masks_version}` defaults to `canonical_corrected_26_1`, see [Mask versions](#mask-versions)).
 - **`--path_to_graph` / `--path_sk_with_hull`** — required; there is no default, since the sub-path under a subject's Morphologist output depends on your acquisition/analysis naming.
 
-`--path_to_graph` supports wildcards (`*`) for variable path segments (e.g. an acquisition or analysis label that differs per subject).
+`--path_to_graph` supports wildcards (`*`) for variable path segments (e.g. an acquisition or analysis label that differs per subject); `*` is the only wildcard, other glob characters are taken literally.
+
+Without `--bids`, Stage 2 requires `--path_to_graph`, read with `*` as a wildcard, to match exactly one folder per subject. `{output}/cortical_tiles-2026/labelling_qc.tsv` holds one row per subject with a fused whole-brain volume; a subject whose `--path_to_graph` matches no folder or two or more folders gets qc 0 there and is left out of the whole-brain output, with one warning naming it: `--path_to_graph '<pattern>' matches no folder for <ids>`, or `--path_to_graph '<pattern>' matches several folders for <ids> (ambiguous, not guessed)`. Leaving a subject out of the whole-brain output for a `--path_to_graph` match other than exactly one folder does not change the exit status of Stage 2. The crops are another matter: a subject matching no folder has no graph, so its crops are skipped too and the stage reports a partial run (exit status 3); a subject matching two or more folders keeps the crops cortical_tiles builds from one of them.
+
+With `--bids`, Stage 2 requires `--path_to_graph` to match exactly one folder under the subject folder (the volume id up to its first `_`) whose `ses-`, `acq-` and `run-` labels, appended to the subject label, equal the volume id: for the volume id `sub-01_ses-1`, `--path_to_graph "*/anat/graph"` selects `ses-1/anat/graph` and never `ses-2/anat/graph`. Labels outside the subject folder do not count.
 
 **Verify** that 28 sulcal region folders were created:
 
@@ -198,7 +202,7 @@ ls /data/myproject/derivatives/cortical_tiles-2026/crops/canonical_25/2mm
 
 ### Whole-brain volume
 
-After the per-region crops, the same run fuses the left and right hemisphere skeletons into a single whole-brain volume and strips the ventricle from it. The result is written to `{output}/cortical_tiles-2026/whole_brain/F/` (one volume per subject). The ventricle is located from each subject's labelled Morphologist graph. By default the session is chosen per subject: the first of `deepcnn_session_auto` and `default_session_auto` that holds a labelled graph; `--labelling_session` forces one session for all subjects. Subjects with no labelled graph in the session(s) searched (sulcal recognition is required: typically Morphologist was run without it) are left out of the whole-brain output with one warning naming them; their crops are unaffected and the stage still exits 0.
+After the per-region crops, the same run fuses the left and right hemisphere skeletons into a single whole-brain volume and strips the ventricle from it. The result is written to `{output}/cortical_tiles-2026/whole_brain/F/` (one volume per subject). The ventricle is located from each subject's labelled Morphologist graph. By default the session is chosen per subject: the first of `deepcnn_session_auto` and `default_session_auto` that holds a labelled graph; `--labelling_session` forces one session for all subjects. Subjects with no labelled graph in the session(s) searched (sulcal recognition is required: typically Morphologist was run without it) are left out of the whole-brain output with one warning naming them. Their crops are unaffected, and leaving them out does not change the exit status of Stage 2: it stays the one the crops give (0, or 3 for a partial run).
 
 If crop generation fails (the cortical_tiles subprocess exits with a non-zero code), the command returns that code immediately: mask `.npy` generation and whole-brain fusion are skipped for that run, so no whole-brain volume is built from incomplete hemisphere data.
 
