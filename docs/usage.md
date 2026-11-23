@@ -41,6 +41,21 @@ pixi run champollion-embeddings \
     --masks canonical_25
 ```
 
+A models path holding two or more models of one region (model folders below the region folder, as in "Models of one region" in the README) is embedded in one run, with one output per model id: `<output>/<region>/<model id>/full_embeddings.csv`. `--per-model-folders` gives that folder to a single model too, and `--checkpoint-epoch <id>=N` sets the epoch of one model id:
+
+```bash
+#    neurospin/Champollion_V1: models path; use a local folder to embed several models of one region
+pixi run champollion-embeddings \
+    neurospin/Champollion_V1 \
+    /data/myproject/ \
+    --masks canonical_25 \
+    --per-model-folders \
+    --checkpoint-epoch 80 \
+    --checkpoint-epoch run_b=60
+```
+
+In a pipeline Config file the same settings are the keys `dataset.per_model_folders` (boolean) and `dataset.checkpoint_epochs` (a list of `<id>=N` strings); `dataset.model` restricts the combine stage to one model id. `champollion-pipeline` passes them on to stages 4 and 5.
+
 Downloaded and extracted models are cached in `{datasets_root}/derivatives/champollion_V1/models_cache/` by default.
 Pass `--models-cache PATH` to keep the cache elsewhere, for instance outside a read-only dataset tree; a relative
 `PATH` resolves against the current working directory. In a pipeline Config file the same setting is the key
@@ -54,6 +69,15 @@ pixi run champollion-combine \
     --output_path /data/myproject/derivatives/champollion_V1/canonical_25/embeddings/
 ```
 
+With model ids in the source, each model id is combined to `<output_path>/<model id>/`; `--model <id>` combines only that model id:
+
+```bash
+pixi run champollion-combine \
+    /data/myproject/derivatives/champollion_V1/canonical_25/region_embeddings/ \
+    --output_path /data/myproject/derivatives/champollion_V1/canonical_25/embeddings/ \
+    --model run_b
+```
+
 ## Stage 6 — Generate Visualization Snapshots
 
 ```bash
@@ -61,6 +85,16 @@ pixi run champollion-snapshots \
     --embeddings_dir /data/myproject/derivatives/champollion_V1/canonical_25/embeddings/ \
     --reference_data_dir reference_data/ \
     --output_dir /data/myproject/derivatives/champollion_V1/canonical_25/snapshots/
+```
+
+With one folder per model id in `--embeddings_dir`, `--model <id>` chooses the model id folder to render; without it two or more model id folders are refused:
+
+```bash
+pixi run champollion-snapshots \
+    --embeddings_dir /data/myproject/derivatives/champollion_V1/canonical_25/embeddings/ \
+    --reference_data_dir reference_data/ \
+    --output_dir /data/myproject/derivatives/champollion_V1/canonical_25/snapshots/ \
+    --model run_b
 ```
 
 ## Run logs
@@ -229,6 +263,8 @@ Resume. Rerunning the same command picks up where the last run stopped:
 
 Exit code. The run exits with code 1 when at least one scan ends FAILED (worker or consumer), when the inputs are
 refused, or when the combine fails; it exits with code 0 when no scan ends FAILED and the combine succeeds.
+
+Models. The resident engine embeds each model of the models path, as in stage 4, and writes one output per model id (`full_embeddings.csv` in `<region>/<model id>/` for a region holding two or more models, else in `<region>/`); the combine step then writes one combined folder per model id.
 
 Limits: inference only (no training); no Morphologist stage; the consumer gives up after 7200 s without a newly ready
 scan.

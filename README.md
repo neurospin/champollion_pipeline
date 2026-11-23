@@ -368,6 +368,28 @@ A region holding neither `logs/best_model_weights.pt` nor the epoch-N checkpoint
 
 The `--use_last_checkpoint` option has been removed: `champollion-embeddings` exits with status 2 when given it. In an existing pipeline configuration file, the keys `dataset.use_last_checkpoint` and `dataset.use_best_model` are ignored with a warning.
 
+### Models of one region
+
+A models path can hold the folders of two or more trained models of one region, for example several training runs of `SC-sylv_left`. Each model gets a **model id**: the folder path between the region folder and the model folder. The region folder is the nearest folder at or above the model folder, below `models_path`, whose name ends in `_left` or `_right`. A model folder that is itself a region folder, or that has no such folder above it, has an empty model id.
+
+```
+<models_path>/<Region>_<side>/<name>/logs/...     model id = <name>
+<models_path>/<Region>_<side>/<a>/<b>/logs/...    model id = <a>/<b>
+<models_path>/<Region>_<side>/logs/...            model id empty (one model per region)
+```
+
+The alternative layout keeps one model per region folder and uses one models_path per variant: run the stage once for each models_path, with a distinct `--output` for each.
+
+Two models of one region with the same model id are refused: the run stops with an error naming both model folders.
+
+One run embeds every model and writes one file per model. A region holding two or more models, or any run with `--per-model-folders`, writes each file with a model id to:
+
+```
+<output>/<region>/<model id>/full_embeddings.csv
+```
+
+A region holding one model, without `--per-model-folders`, keeps the flat `<output>/<region>/full_embeddings.csv`. `--regions` and `--overwrite` apply to each model. Pass `--checkpoint-epoch <id>=N` to set the epoch of one model id; the other models keep the default epoch, and an id matching no model stops the run with an error listing the known model ids.
+
 ### Model sources
 
 You can point to different model sources:
@@ -394,7 +416,8 @@ Downloaded and extracted models are cached in `{datasets_root}/derivatives/champ
 | `--output` | Output base directory override. Default: `{datasets_root}/derivatives/champollion_V1/{masks}/region_embeddings/`. |
 | `--subjects` | Path to subjects CSV with a `Subject` column. Default: `{datasets_root}/participants.tsv`. |
 | `--cpu` | Force CPU usage (disable CUDA) |
-| `--checkpoint-epoch` | Training epoch N (0-based) of the Lightning checkpoint evaluated for each region (default: `80`). Pipeline config: `dataset.checkpoint_epoch`. |
+| `--checkpoint-epoch` | Training epoch N (0-based) of the Lightning checkpoint evaluated for each region (default: `80`). Repeatable: a bare `N` sets the default epoch (at most one), `<id>=N` sets the epoch of the models with that model id (see "Models of one region"). Pipeline config: `dataset.checkpoint_epoch`, `dataset.checkpoint_epochs`. |
+| `--per-model-folders` | Write the embeddings of each model with a model id to the folder `<region>/<model id>/`, even a single model of its region (by default only a region holding two or more models does). Pipeline config: `dataset.per_model_folders`. |
 | `--overwrite` | Recompute embeddings that already exist on disk |
 | `--no-cache` | Force re-extraction of the archive (ignore cache) |
 | `--models-cache` | Directory for downloaded and extracted models. Default: `{datasets_root}/derivatives/champollion_V1/models_cache/`. A relative path resolves against the current working directory. Pipeline config: `dataset.models_cache`. |
@@ -428,8 +451,9 @@ Each run writes `provenance.json` next to the per-region outputs (in the `--outp
 
 - `masks`: the crops mask version used;
 - `model_version`: from the model set's `model_set.json` when present, else `--model-version`;
-- `checkpoint_epoch`: the `--checkpoint-epoch` used;
+- `checkpoint_epoch`: the `--checkpoint-epoch` default epoch used;
 - `models_source`: where the models came from (local path, Hugging Face repo and subfolder, or archive URL);
+- `models`: written only when the run holds two or more models of one region or uses `--per-model-folders`; a list with one object per model, with the keys `region`, `model_id`, `checkpoint_epoch` (the epoch of that model) and `weights_source` (the weights file used, `null` when the model has none);
 - `pipeline_commit`: the HEAD commit of the repository rooted at the pipeline code directory, else the commit in that directory's `COMMIT` file, else `null`; never the commit of an enclosing repository.
 
 ### Excluding `models_cache/` from dataset sync and archives
@@ -458,6 +482,8 @@ pixi run champollion-combine \
 ```
 
 This copies each region's `full_embeddings.csv` to `{output_path}/{region}_embeddings.csv`.
+
+When the embeddings step output holds model ids (see "Models of one region"), each model id is combined to `<output_path>/<model id>/<region>_embeddings.csv`, and a region holding one model is copied into the folder of each model id. Add `--model <id>` to combine only the named model id, which writes only `<output_path>/<id>/`; an id matching no model id stops the run with an error. A region folder holding `full_embeddings.csv` beside model id folders is refused.
 
 **Verify** the CSV files were created (one per region):
 
@@ -495,6 +521,8 @@ pixi run champollion-snapshots \
 ```
 
 Use `--sulcal-only`, `--tiles-only`, or `--umap-only` to generate only one snapshot type.
+
+When `--embeddings_dir` holds one folder per model id (the step 6 output for several models), add `--model <id>` to choose the model id folder `<embeddings_dir>/<id>` that the UMAP snapshots render. Without `--model`, a flat folder or the only model id folder is used; two or more model id folders are refused with an error naming each one.
 
 ### UMAP Visualization
 
