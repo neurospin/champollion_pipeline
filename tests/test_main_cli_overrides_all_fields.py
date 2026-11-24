@@ -41,6 +41,10 @@ STAGE_PICKED = "run_cortical_tiles"
 # input_kind cases need an input holding the chosen kind: KIND_INPUT holds a T1 file and one Morphologist graph.
 KIND_INPUT = "kind-input"
 KIND_INPUT_GRAPHS = Path("derivatives/morphologist-6.0/sub-01/t1mri/default_acquisition/default_analysis/folds/3.1")
+# region_masks takes NAME=VERSION entries: champollion-pipeline exits 2 on any other text (REQ-MODELVER-BDRABCZUK-
+# 9273939CFE5A, TASK-MODELVER-BDRABCZUK-6C6C79B0F6DE), so its cases are valid per-region Mask version maps.
+REGION_MASKS_CLI = ["SC-sylv_left=canonical_25", "SC-sylv_right=canonical_25"]
+REGION_MASKS_YAML = ["SOr_left=canonical_corrected_26_1"]
 
 
 @dataclasses.dataclass
@@ -123,7 +127,7 @@ def _yaml_field_value(written: dict, row: ConfigArgument):
 
 
 def _named_field_case(row: ConfigArgument, current) -> tuple[list[str], object] | None:
-    """Arguments and value for a field whose values are a fixed set of words, or None for any other field."""
+    """Arguments and value for a field whose values are a fixed set of words or a map, or None for any other field."""
     if row.field_name == "mode":
         target = STREAMING if current != STREAMING else "sequential"
         return [row.flag, target], target
@@ -133,6 +137,8 @@ def _named_field_case(row: ConfigArgument, current) -> tuple[list[str], object] 
     if row.field_name == "input_kind":
         target = "t1" if current != "t1" else "morphologist"
         return [row.flag, target, "--input-path", KIND_INPUT], target
+    if row.field_name == "region_masks":
+        return [row.flag, *REGION_MASKS_CLI], list(REGION_MASKS_CLI)
     return None
 
 
@@ -169,6 +175,8 @@ def _yaml_value(field_name: str, kind: ArgumentKind | None, default):
         return "WARNING"
     if field_name == "input_kind":
         return "morphologist"
+    if field_name == "region_masks":
+        return list(REGION_MASKS_YAML)
     if kind is ArgumentKind.FLAG:
         return not default
     if kind is ArgumentKind.INTEGER:

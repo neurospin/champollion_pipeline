@@ -66,7 +66,12 @@ from champollion_pipeline.input_kind_choice import (
     choose_input_kind,
     choose_subjects_folder,
 )
-from champollion_pipeline.path_inference import AmbiguousGraphFolders, DatasetRootNotInferable, infer_paths
+from champollion_pipeline.path_inference import (
+    AmbiguousGraphFolders,
+    DatasetRootNotInferable,
+    infer_paths,
+    refresh_version_paths,
+)
 from champollion_pipeline.pipeline_stages import _HF_REPO_ID_REQUIRED as _HF_REPO_ID_REQUIRED
 from champollion_pipeline.pipeline_stages import (
     GenerateChampollionConfigStage,
@@ -87,12 +92,14 @@ from champollion_pipeline.pipeline_stages import _compute_stage4_crops_dir as _c
 from champollion_pipeline.pipeline_stages import _scoped_env as _scoped_env
 from champollion_pipeline.process_setup import init_pipeline_process
 from champollion_pipeline.replay_config import write_replay_config
+from champollion_pipeline.run_masks import RegionMasksError, RunMasks, parse_given_region_masks, resolve_run_masks
 from champollion_pipeline.streaming import StreamingSettings
 from champollion_pipeline.utils.cortical_tiles_config import compute_versioned_crops_dir as compute_versioned_crops_dir
 from champollion_pipeline.utils.input_kind import InputKind
 from champollion_pipeline.utils.input_kind import stage1_subjects_dir as stage1_subjects_dir
 from champollion_pipeline.utils.lib import DERIVATIVES_FOLDER as DERIVATIVES_FOLDER
 from champollion_pipeline.utils.lib import find_dataset_folder as find_dataset_folder
+from champollion_pipeline.utils.region_masks import REGION_MASKS_OPTION, format_region_masks
 from champollion_pipeline.utils.skeleton_qc import SKELETON_SIDES as SKELETON_SIDES
 from champollion_pipeline.utils.skeleton_qc import compute_skeleton_pattern as compute_skeleton_pattern
 
@@ -498,6 +505,47 @@ def _infer_configless_paths(config: PipelineConfig, kind: InputKind, args: argpa
     return config
 
 
+def _check_given_masks(config: PipelineConfig, args: argparse.Namespace) -> None:
+    """Refuse --region-masks beside --masks-version, let --masks-version clear a Config file map, check the map.
+
+    Runs in both modes, before any stage and any resolver call. Raises ArgumentConflictError naming both options, or
+    RegionMasksError naming the faulty value (one ERROR record, exit 2, in run()).
+    """
+    if args.region_masks is not None and args.masks_version is not None:
+        raise ArgumentConflictError(
+            f"{REGION_MASKS_OPTION} cannot be given together with --masks-version: the map names the Mask version "
+            "of each region model name; drop one of them"
+        )
+    if args.masks_version is not None:
+        config.dataset.region_masks = []
+    parse_given_region_masks(config.dataset.region_masks)
+
+
+def _resolve_run_masks(config: PipelineConfig, args: argparse.Namespace) -> RunMasks:
+    """The run's RunMasks: a Mask version is given by --masks-version or a Config file masks_version without a map.
+
+    A Config file region_masks list that is empty (the replay of a --masks run) is no map. The stage 4 models source
+    is computed on every sequential run, a given map run included, so its "Stage 4 models source" line is logged here
+    and again by stage 4 (accepted). resolve_run_masks' RegionMasksError (a mixed given map on Hugging Face, a partial
+    local model set) reaches run(): one ERROR record, exit 2, before the replay file is written.
+    """
+    dataset = config.dataset
+    keys = ConfigLoader.read_dataset_keys(args.config) if args.config else frozenset()
+    is_version_given = args.masks_version is not None or ("masks_version" in keys and not dataset.region_masks)
+    models_source = _compute_models_source(config) or None
+    return resolve_run_masks(dataset, is_version_given=is_version_given, models_source=models_source)
+
+
+def _apply_run_masks(config: PipelineConfig, run_masks: RunMasks, *, inferred: bool) -> None:
+    """Set the run's map and label on config.dataset; re-key the inferred version paths when the label changed."""
+    dataset = config.dataset
+    dataset.region_masks = format_region_masks(run_masks.region_masks) if run_masks.region_masks else []
+    previous = dataset.masks_version
+    dataset.masks_version = run_masks.label
+    if inferred and run_masks.label != previous:
+        refresh_version_paths(config, previous)
+
+
 class ChampollionPipeline(ScriptBuilder):
     """main.py as a ScriptBuilder script: the shared run log, profiling and process setup."""
 
@@ -558,13 +606,14 @@ class ChampollionPipeline(ScriptBuilder):
         return self
 
     def run(self) -> int:
-        """Run the pipeline; InputChoiceError (status 1), ArgumentConflictError, EnvFileError (2): one ERROR record."""
+        """Run the pipeline; InputChoiceError (status 1), ArgumentConflictError, EnvFileError, RegionMasksError (2):
+        one ERROR record."""
         try:
             return self._run_pipeline(self.args)
         except InputChoiceError as error:
             logger.error(str(error))
             return 1
-        except (ArgumentConflictError, EnvFileError) as error:
+        except (ArgumentConflictError, EnvFileError, RegionMasksError) as error:
             logger.error(str(error))
             return _USAGE_ERROR_STATUS
 
@@ -582,6 +631,7 @@ class ChampollionPipeline(ScriptBuilder):
         apply_env_values(config, env_values)
         _apply_cli_overrides(config, args, from_default=not args.config)
         check_input_kind_value(config.dataset)
+        _check_given_masks(config, args)
         _start_config_profiling(config, args)
         if config.mode == "streaming":
             return _run_streaming_mode(config, args, run_log_path=self._run_log_path)
@@ -591,6 +641,9 @@ class ChampollionPipeline(ScriptBuilder):
         kind = _apply_input_kind(config)
         if configless_input:
             config = _infer_configless_paths(config, kind, args)
+        run_masks = _resolve_run_masks(config, args)
+        # The mismatch and unresolved checks of TASK-MODELVER-BDRABCZUK-3B2E4833B088 read run_masks here.
+        _apply_run_masks(config, run_masks, inferred=configless_input)
         write_replay_config(config)
         return PipelineOrchestrator(config).run()
 
