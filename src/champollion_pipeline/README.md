@@ -37,6 +37,7 @@ Subpackages, each with its own README:
 | `generate_morphologist_graphs.py` | Stage 1 script: runs BrainVISA Morphologist on raw T1 scans to make the sulcal graphs. |
 | `generate_snapshots.py` | Stage 6 script: renders the sulcal mesh, the region map on the ICBM152 template and the UMAP scatter plot (headless Anatomist). |
 | `input_kind_choice.py` | Decides how the input path is read (T1 files or Morphologist outputs): detection, the `input_kind` field, a terminal prompt or a stop. |
+| `mask_version_checks.py` | The run's Mask versions checked against the local model set before stage 1 (no single Mask version for a processed region model name; a given Mask version or map differing from the set's). Pure core. |
 | `path_inference.py` | Fills every unset path field of a config from the one input path and its kind, through `derivatives_layout.py`. |
 | `pipeline_stages.py` | The six stage classes `cli.py` runs, one per stage script, and the paths each stage passes to its script. |
 | `process_setup.py` | Per-process logging setup: removes the root handlers champollion_V1 and cortical_tiles install, then installs the champollion_utils handlers. |

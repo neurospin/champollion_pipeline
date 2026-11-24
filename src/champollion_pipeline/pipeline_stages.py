@@ -309,6 +309,8 @@ class GenerateEmbeddingsStage(PipelineStage):
             args.append("--per-model-folders")
         if dataset.models_cache is not None:
             args.append(f"--models-cache={dataset.models_cache}")
+        if dataset.allow_version_mismatch:
+            args.append("--allow-version-mismatch")
         if dataset.regions:
             args.extend(["--regions", *compute_region_model_names(dataset.regions)])
         args.extend(_compute_region_masks_args(dataset))

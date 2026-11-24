@@ -48,6 +48,10 @@ _ALLOW_PREFIX_IDS_HELP = (
     "TEMPORARY: let cortical_tiles run when a subject ID is a strict prefix "
     "of another (e.g. sub-1 and sub-10); its transforms may then be wrong."
 )
+_ALLOW_VERSION_MISMATCH_HELP = (
+    "Run on when the given Mask version or per-region map differs from the local model set's; logs one WARNING per "
+    "region model name and forwards the flag to stage 4"
+)
 _MODE_HELP = (
     "Execution mode: 'sequential' (default, stage-centric batch) or "
     "'streaming' (scan-centric parallel, one worker per scan). "
@@ -140,6 +144,7 @@ _FIELD_OPTIONS = {
     "verbose": {"help": "Enable verbose output"},
     "bids": {"help": _BIDS_HELP},
     "allow_prefix_ids": {"help": _ALLOW_PREFIX_IDS_HELP},
+    "allow_version_mismatch": {"help": _ALLOW_VERSION_MISMATCH_HELP},
     "mode": {"choices": ("sequential", "streaming"), "help": _MODE_HELP},
     "n_workers": {
         "metavar": "N",

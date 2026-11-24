@@ -95,6 +95,9 @@ class DatasetConfig:
     # TEMPORARY: let run_cortical_tiles accept subject IDs that are strict prefixes of others
     allow_prefix_ids: bool = False
 
+    # Run on when the given Mask version or per-region map differs from the local model set's; forwarded to stage 4
+    allow_version_mismatch: bool = False
+
     # Snapshots parameters
     snapshots_path: str = ""
     reference_data_path: str = ""  # noqa: V107 - YAML config field

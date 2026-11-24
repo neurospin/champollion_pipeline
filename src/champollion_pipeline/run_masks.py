@@ -56,8 +56,8 @@ class RunMasks:
     label: the run's dataset.masks_version, naming the champollion_V1/<label> folders.
     origin: ORIGIN_MAP, ORIGIN_VERSION, ORIGIN_RESOLVED or ORIGIN_DEFAULT.
     source: the local model set the resolver read, None when it read none.
-    entries: the resolver's entries over that set ({} on a given map or without a local set); read by the mismatch
-        and unresolved checks of TASK-MODELVER-BDRABCZUK-3B2E4833B088.
+    entries: the resolver's entries over that set, for every origin with a local, non-Hugging Face source ({}
+        without one); read by the mismatch and unresolved checks of mask_version_checks.
     """
 
     region_masks: Mapping[str, str] | None
@@ -159,7 +159,9 @@ def resolve_run_masks(dataset: DatasetConfig, *, is_version_given: bool, models_
                 "set; the stage 4 models source " + (models_source or "hf_enabled") + " is Hugging Face, whose "
                 "subfolders each hold one Mask version: pass --models-path <local model set folder>"
             )
-        result = RunMasks(given, compute_run_label(given), ORIGIN_MAP, None)
+        source = _compute_local_source(dataset, models_source)
+        entries = resolve_region_mask_versions(source) if source is not None else {}
+        result = RunMasks(given, compute_run_label(given), ORIGIN_MAP, source, entries)
     else:
         result = _resolve_without_map(dataset, is_version_given, models_source)
     assert result.region_masks is None or result.label == compute_run_label(result.region_masks), (
@@ -168,10 +170,15 @@ def resolve_run_masks(dataset: DatasetConfig, *, is_version_given: bool, models_
     return result
 
 
+def _compute_local_source(dataset: DatasetConfig, models_source: str | None) -> str | None:
+    """models_source when it is a local directory and dataset.hf_enabled is false, else None."""
+    is_local = bool(models_source) and not dataset.hf_enabled and os.path.isdir(models_source)
+    return models_source if is_local else None
+
+
 def _resolve_without_map(dataset: DatasetConfig, is_version_given: bool, models_source: str | None) -> RunMasks:
     """Steps 2 to 7 of resolve_run_masks: no map was given."""
-    is_local = bool(models_source) and not dataset.hf_enabled and os.path.isdir(models_source)
-    source = models_source if is_local else None
+    source = _compute_local_source(dataset, models_source)
     if not is_version_given and source is not None:
         missing = find_missing_region_models(source, dataset.regions)
         if missing:
