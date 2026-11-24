@@ -46,7 +46,7 @@ both in the Option column; a list option takes one or more values.
 | `--generate-config` | `OUTPUT_PATH` | none: run the pipeline | - | Write a Config file template, with the other options applied, to `OUTPUT_PATH` and exit with status 0 without running a stage |
 | `--dry-run` | - | off | - | Streaming mode only: list the scans that would run and process none |
 | `--data-path` | `DATA_PATH` | empty; without `--config`: `<checkout>/data` | `data_path` | Data folder; without `--config` and without a Dataset root, the Dataset root is `<data_path>/<dataset name>` |
-| `--models-path` | `MODELS_PATH` | empty; without `--config`: `<checkout>/models` | `models_path` | Local models folder, archive or Hugging Face repo id that stage 4 and streaming mode embed with, unless `dataset.hf_enabled` is true |
+| `--models-path` | `MODELS_PATH` | empty: the stage 4 model source order (Model sources) | `models_path` | Local models folder, archive or Hugging Face repo id that stage 4 and streaming mode embed with, unless `dataset.hf_enabled` is true |
 | `--outputs-path` | `OUTPUTS_PATH` | empty; without `--config`: `<checkout>/outputs`; config-less input run: `<Dataset root>/derivatives/champollion_V1` | `outputs_path` | Pipeline output folder: its `logs` folder holds `pipeline.log` and the replay file when `log_dir` is empty; streaming mode writes there |
 | `--champollion-v1-path` | `CHAMPOLLION_V1_PATH` | empty; without `--config`: `<checkout>/external/champollion_V1` | `champollion_v1_path` | Path of the champollion_V1 checkout; Config file field, read by no stage and not by champollion-train; kept so existing YAML files load |
 | `--stages` | `STAGE [STAGE ...]`, each one of `generate_morphologist_graphs`, `run_cortical_tiles`, `generate_champollion_config`, `generate_embeddings`, `put_together_embeddings`, `generate_snapshots` | `generate_embeddings` only; config-less input run: all six | `stages` | Run only the named stages, in dependency order; the stages it does not name are turned off |
@@ -409,6 +409,8 @@ One run embeds every model and writes one file per model. A region holding two o
 A region holding one model, without `--per-model-folders`, keeps the flat `<output>/<region>/full_embeddings.csv`. `--regions` and `--overwrite` apply to each model. Pass `--checkpoint-epoch <id>=N` to set the epoch of one model id; the other models keep the default epoch, and an id matching no model stops the run with an error listing the known model ids.
 
 ### Model sources
+
+`champollion-pipeline` takes its stage 4 model set from the first source of this order: (1) `--models-path` (or `models_path` in the `--config` file), used as given: a path that does not exist is an error, with no download; (2) `<root_path>/models`, the models folder of the checkout; (3) the entry `<models_cache>/Champollion_V1_<masks>/<masks>` that an earlier download left in the models cache folder, reused with no network access; (4) the Hugging Face repository `neurospin/Champollion_V1`, model set `--masks`, downloaded into the models cache folder. The source taken is logged at OUTPUT level.
 
 You can point to different model sources:
 

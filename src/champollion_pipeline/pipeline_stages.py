@@ -19,10 +19,12 @@ from champollion_pipeline.config import DatasetConfig, PipelineConfig
 from champollion_pipeline.derivatives_layout import (
     compute_champollion_configs_root,
     compute_combined_embeddings_dir,
+    compute_models_cache_dir,
     compute_region_embeddings_dir,
     compute_region_model_names,
     compute_snapshots_dir,
 )
+from champollion_pipeline.models.fetch import HF_FALLBACK_REPO_ID, resolve_models_source
 from champollion_pipeline.utils.cortical_tiles_config import compute_versioned_crops_dir
 from champollion_pipeline.utils.input_kind import stage1_subjects_dir
 from champollion_pipeline.utils.lib import DERIVATIVES_FOLDER, find_dataset_folder
@@ -206,10 +208,21 @@ def _scoped_env(name: str, value: str | None) -> Iterator[None]:
             os.environ[name] = previous
 
 
+def _compute_models_cache(dataset: DatasetConfig) -> str:
+    """The models cache root stage 4 uses: abspath(dataset.models_cache) when set, else the dataset-tree default."""
+    if dataset.models_cache is not None:
+        return os.path.abspath(dataset.models_cache)
+    return compute_models_cache_dir(dataset.datasets_root)
+
+
 def _compute_models_source(config: PipelineConfig) -> str:
-    """Models source of the embeddings: the Hugging Face repo id when enabled, else the local models path."""
+    """Models source of the embeddings: the Hugging Face repo id when enabled, else the models source cascade."""
     dataset = config.dataset
-    return dataset.hf_repo_id if dataset.hf_enabled else str(config.models_path)
+    if dataset.hf_enabled:
+        return dataset.hf_repo_id
+    return resolve_models_source(
+        str(config.models_path), config.root_path, _compute_models_cache(dataset), dataset.masks_version
+    )
 
 
 class GenerateEmbeddingsStage(PipelineStage):
@@ -218,6 +231,7 @@ class GenerateEmbeddingsStage(PipelineStage):
     progress_message = "Generating embeddings and training classifiers..."
     success_message = "Embeddings generated"
     failure_message = "Embedding generation failed"
+    _models_source: str | None = None
 
     def validate(self) -> bool:
         """Validate that the model source is usable."""
@@ -226,6 +240,8 @@ class GenerateEmbeddingsStage(PipelineStage):
             if not dataset.hf_repo_id:
                 self.logger.error(_HF_REPO_ID_REQUIRED)
                 return False
+            return True
+        if not self.config.models_path:
             return True
         models_path = Path(self.config.models_path)
         if not models_path.exists():
@@ -246,9 +262,9 @@ class GenerateEmbeddingsStage(PipelineStage):
 
     def build_args(self) -> list[str]:
         dataset = self.config.dataset
-        models_path = _compute_models_source(self.config)
+        self._models_source = _compute_models_source(self.config)
         args = [
-            models_path,
+            self._models_source,
             dataset.datasets_root,
             f"--masks={dataset.masks_version}",
             f"--model-version={dataset.masks_version}",
@@ -278,7 +294,19 @@ class GenerateEmbeddingsStage(PipelineStage):
         dataset = self.config.dataset
         hf_token = dataset.hf_token if dataset.hf_enabled else None
         with _scoped_env("HF_TOKEN", hf_token):
-            return script.run()
+            status = script.run()
+        if status != 0 and self._used_hf_fallback():
+            self.logger.error(
+                f"Stage 4 could not obtain the model set from Hugging Face {HF_FALLBACK_REPO_ID} (no "
+                f"{os.path.join(self.config.root_path, 'models')}, no entry in the models cache "
+                f"{_compute_models_cache(dataset)}); pass --models-path <folder> to use a local model set"
+            )
+        return status
+
+    def _used_hf_fallback(self) -> bool:
+        """True when build_args took the Hugging Face repository as the last step of the models source cascade."""
+        dataset = self.config.dataset
+        return not dataset.hf_enabled and not self.config.models_path and self._models_source == HF_FALLBACK_REPO_ID
 
     def subject_input_dir(self) -> str | None:
         return existing_dir(_compute_stage4_crops_dir(self.config.dataset))

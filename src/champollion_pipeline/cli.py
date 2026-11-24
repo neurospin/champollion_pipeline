@@ -309,7 +309,6 @@ def create_default_config() -> PipelineConfig:
     config = PipelineConfig(
         root_path=str(root_path),
         data_path=str(root_path / "data"),
-        models_path=str(root_path / "models"),
         outputs_path=str(root_path / "outputs"),
         champollion_v1_path=str(root_path / "external" / "champollion_V1"),
     )
