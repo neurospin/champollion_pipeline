@@ -2,7 +2,7 @@
 
 import importlib
 
-__version__ = "0.2.36"
+__version__ = "1.0.0"
 
 # Stage classes are exported lazily (PEP 562): importing the package, or a
 # toolchain-free submodule such as config, loads none of soma, cortical_tiles
