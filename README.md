@@ -75,6 +75,7 @@ repository's root; OUTPUT is the dataset root (the second positional argument, o
 | `--labelling-session` | `LABELLING_SESSION` | chosen per subject | Labelling session read by cortical_tiles and the snapshots |
 | `--bids`, `--no-bids` | - | off | Input follows the BIDS layout (`subjects/sub-*/ses-*/...`); passed to cortical_tiles |
 | `--allow-prefix-ids`, `--no-allow-prefix-ids` | - | off | Temporary: let cortical_tiles run when a subject ID is a strict prefix of another; its transforms may be wrong |
+| `--allow-version-mismatch`, `--no-allow-version-mismatch` | - | off: a mismatch exits with status 2 | Run on when the given Mask version or per-region map differs from the local model set's: one WARNING per region model name, and the flag is passed to stage 4 |
 | `--masks-version` | `MASKS_VERSION` | `canonical_corrected_26_1` | Mask version of the crops, embeddings and snapshots (`canonical_25` or `canonical_corrected_26_1`) |
 | `--region-masks` | `REGION_MASKS [REGION_MASKS ...]` | none: read from a local model set | Mask version of each region model, as `NAME=VERSION` entries (e.g. `SC-sylv_left=canonical_25`), passed to stages 2, 3 and 4 instead of `--masks-version`; not with `--masks-version` |
 | `--crops-path` | `CROPS_PATH` | inferred below `OUTPUT/derivatives` | 2mm crops folder read by stages 3 and 4 |
@@ -286,6 +287,7 @@ champollion_pipeline/
 │       ├── env_file.py              # Reads champollion-pipeline --env files and CHAMPOLLION_* variables (python-dotenv)
 │       ├── replay_config.py         # Writes the replay config of a champollion-pipeline run into its logs folder (--config replays it)
 │       ├── run_masks.py             # Resolves the run's per-region Mask version map once before stage 1 (--region-masks)
+│       ├── mask_version_checks.py   # Stops champollion-pipeline before stage 1 when a Mask version contradicts the local model set (--allow-version-mismatch)
 │       ├── _stage_base.py           # Template base class of the pipeline stages of champollion-pipeline
 │       └── generate_labelling_qc.py
 ├── data/                       # Created by install-all; not committed
