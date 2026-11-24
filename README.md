@@ -76,6 +76,7 @@ repository's root; OUTPUT is the dataset root (the second positional argument, o
 | `--bids`, `--no-bids` | - | off | Input follows the BIDS layout (`subjects/sub-*/ses-*/...`); passed to cortical_tiles |
 | `--allow-prefix-ids`, `--no-allow-prefix-ids` | - | off | Temporary: let cortical_tiles run when a subject ID is a strict prefix of another; its transforms may be wrong |
 | `--masks-version` | `MASKS_VERSION` | `canonical_corrected_26_1` | Mask version of the crops, embeddings and snapshots (`canonical_25` or `canonical_corrected_26_1`) |
+| `--region-masks` | `REGION_MASKS [REGION_MASKS ...]` | none: read from a local model set | Mask version of each region model, as `NAME=VERSION` entries (e.g. `SC-sylv_left=canonical_25`), passed to stages 2, 3 and 4 instead of `--masks-version`; not with `--masks-version` |
 | `--crops-path` | `CROPS_PATH` | inferred below `OUTPUT/derivatives` | 2mm crops folder read by stages 3 and 4 |
 | `--regions` | `REGIONS [REGIONS ...]` | all 56 regions | Regions to crop and embed |
 | `--embeddings-path` | `EMBEDDINGS_PATH` | `OUTPUT/derivatives/champollion_V1/<masks-version>/region_embeddings` | Per-region embeddings folder (stage 4 output, stage 5 input) |
@@ -284,6 +285,7 @@ champollion_pipeline/
 │       ├── cli_options.py           # Registry of champollion-pipeline arguments, one per config field
 │       ├── env_file.py              # Reads champollion-pipeline --env files and CHAMPOLLION_* variables (python-dotenv)
 │       ├── replay_config.py         # Writes the replay config of a champollion-pipeline run into its logs folder (--config replays it)
+│       ├── run_masks.py             # Resolves the run's per-region Mask version map once before stage 1 (--region-masks)
 │       ├── _stage_base.py           # Template base class of the pipeline stages of champollion-pipeline
 │       └── generate_labelling_qc.py
 ├── data/                       # Created by install-all; not committed

@@ -51,6 +51,8 @@ class DatasetConfig:
     path_sk_with_hull: str = "t1mri/default_acquisition/default_analysis/segmentation"
     sk_qc_path: str = ""
     masks_version: str = DEFAULT_MASKS_VERSION
+    # NAME=VERSION entries, one Mask version per region model name: stages 2 to 4 get them as --region-masks, no --masks
+    region_masks: list[str] = field(default_factory=list)
     skel_seed: int | None = None  # None: the skel_seed in <derivatives>/pipeline_loop_2mm.json
     labelling_session: str = ""  # "": run_cortical_tiles picks the session per subject
     model: str = ""  # "": combine every model id; else only that model id (put_together_embeddings --model)
@@ -167,6 +169,17 @@ class ConfigLoader:
             config_dict = yaml.safe_load(f)
 
         return ConfigLoader._dict_to_config(config_dict)
+
+    @staticmethod
+    def read_dataset_keys(config_path: str) -> frozenset[str]:
+        """The keys of the dataset mapping of the YAML file at config_path, as written; empty when it has none.
+
+        Tells a value the file gives (masks_version, region_masks) from a DatasetConfig default.
+        """
+        with open(config_path) as f:
+            config_dict = yaml.safe_load(f)
+        dataset_dict = config_dict.get("dataset") if isinstance(config_dict, dict) else None
+        return frozenset(dataset_dict) if isinstance(dataset_dict, dict) else frozenset()
 
     @staticmethod
     def _dict_to_config(config_dict: dict) -> PipelineConfig:

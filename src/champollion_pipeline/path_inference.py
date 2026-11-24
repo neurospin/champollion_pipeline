@@ -46,6 +46,7 @@ from champollion_pipeline.derivatives_layout import (
     compute_region_embeddings_dir,
     compute_snapshots_dir,
 )
+from champollion_pipeline.run_masks import compute_crops_versions
 from champollion_pipeline.utils.cortical_tiles_config import compute_versioned_crops_dir
 from champollion_pipeline.utils.input_kind import InputKind, resolve_subjects_dir, stage1_subjects_dir
 from champollion_pipeline.utils.lib import DERIVATIVES_FOLDER
@@ -117,6 +118,24 @@ def infer_paths(config: PipelineConfig, input_path: str, kind: InputKind) -> Pip
         _infer_morphologist_paths(result.dataset, input_path)
     _infer_derived_paths(result)
     return result
+
+
+def refresh_version_paths(config: PipelineConfig, previous_masks_version: str) -> None:
+    """Re-derive, in place, the crops, embeddings and snapshots paths inferred from previous_masks_version.
+
+    Each of crops_path, embeddings_path and snapshots_path equal to the value _infer_derived_paths derives from
+    previous_masks_version is derived again from dataset.masks_version (crops_path from the first Mask version whose
+    crops the run reads, compute_crops_versions); any other value (given by the user) is left as is. O(56).
+    """
+    dataset = config.dataset
+    root = dataset.datasets_root
+    tiles = os.path.join(root, DERIVATIVES_DIRNAME, DERIVATIVES_FOLDER)
+    if dataset.crops_path == compute_versioned_crops_dir(tiles, previous_masks_version):
+        dataset.crops_path = compute_versioned_crops_dir(tiles, compute_crops_versions(dataset)[0])
+    if dataset.embeddings_path == compute_region_embeddings_dir(root, previous_masks_version):
+        dataset.embeddings_path = compute_region_embeddings_dir(root, dataset.masks_version)
+    if dataset.snapshots_path == compute_snapshots_dir(root, previous_masks_version):
+        dataset.snapshots_path = compute_snapshots_dir(root, dataset.masks_version)
 
 
 def _is_unset(dataset: DatasetConfig, name: str) -> bool:
