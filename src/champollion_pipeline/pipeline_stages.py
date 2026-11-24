@@ -17,21 +17,36 @@ from champollion_utils.script_builder import ScriptBuilder
 from champollion_pipeline._stage_base import PipelineStage, StageResult, existing_dir
 from champollion_pipeline.config import DatasetConfig, PipelineConfig
 from champollion_pipeline.derivatives_layout import (
+    DEFAULT_MASKS_VERSION,
     compute_champollion_configs_root,
     compute_combined_embeddings_dir,
+    compute_models_cache_dir,
     compute_region_embeddings_dir,
     compute_region_model_names,
     compute_snapshots_dir,
 )
+from champollion_pipeline.models.fetch import HF_FALLBACK_REPO_ID, resolve_models_source
+from champollion_pipeline.run_masks import compute_crops_versions
 from champollion_pipeline.utils.cortical_tiles_config import compute_versioned_crops_dir
 from champollion_pipeline.utils.input_kind import stage1_subjects_dir
 from champollion_pipeline.utils.lib import DERIVATIVES_FOLDER, find_dataset_folder
+from champollion_pipeline.utils.region_masks import REGION_MASKS_OPTION
 from champollion_pipeline.utils.skeleton_qc import SKELETON_SIDES, compute_skeleton_pattern
 
 
 def _new_script(module_name: str, class_name: str) -> ScriptBuilder:
     """A fresh instance of class_name, looked up in module_name when called (importlib, never at module load)."""
     return getattr(importlib.import_module(module_name), class_name)()
+
+
+def _compute_masks_args(dataset: DatasetConfig) -> list[str]:
+    """Stage 2 and 3 --masks argument: --masks=<masks_version>, none on a map run (dataset.region_masks set)."""
+    return [] if dataset.region_masks else [f"--masks={dataset.masks_version}"]
+
+
+def _compute_region_masks_args(dataset: DatasetConfig) -> list[str]:
+    """--region-masks followed by the NAME=VERSION entries on a map run, else nothing; stages 2 to 4 put it last."""
+    return [REGION_MASKS_OPTION, *dataset.region_masks] if dataset.region_masks else []
 
 
 class GenerateMorphologistGraphsStage(PipelineStage):
@@ -96,7 +111,7 @@ class RunCorticalTilesStage(PipelineStage):
             f"--path_to_graph={self.config.dataset.path_to_graph}",
             f"--path_sk_with_hull={self.config.dataset.path_sk_with_hull}",
             f"--njobs={self.config.dataset.njobs}",
-            f"--masks={self.config.dataset.masks_version}",
+            *_compute_masks_args(self.config.dataset),
         ]
 
         if self.config.dataset.skel_seed is not None:
@@ -114,6 +129,7 @@ class RunCorticalTilesStage(PipelineStage):
 
         if self.config.dataset.regions:
             args.extend(["--regions", *self.config.dataset.regions])
+        args.extend(_compute_region_masks_args(self.config.dataset))
         return args
 
     def create_script(self) -> ScriptBuilder:
@@ -147,10 +163,12 @@ class GenerateChampollionConfigStage(PipelineStage):
         return True
 
     def build_args(self) -> list[str]:
+        dataset = self.config.dataset
         return [
-            str(self.config.dataset.crops_path),
-            f"--dataset={self.config.dataset.name}",
-            f"--masks={self.config.dataset.masks_version}",
+            str(dataset.crops_path),
+            f"--dataset={dataset.name}",
+            *_compute_masks_args(dataset),
+            *_compute_region_masks_args(dataset),
         ]
 
     def create_script(self) -> ScriptBuilder:
@@ -176,11 +194,18 @@ def _compute_configs_dir(dataset: DatasetConfig) -> str:
 
 
 def _compute_stage4_crops_dir(dataset: DatasetConfig) -> str:
-    """The 2mm crops folder generate_embeddings reads; "" without datasets_root. Pure, O(1)."""
+    """The 2mm crops folder generate_embeddings reads (on a map run, that of the map's first Mask version in
+    MASK_VERSIONS order); "" without datasets_root. Pure, O(56)."""
+    dirs = _compute_stage4_crops_dirs(dataset)
+    return dirs[0] if dirs else ""
+
+
+def _compute_stage4_crops_dirs(dataset: DatasetConfig) -> list[str]:
+    """The 2mm crops folder of each Mask version whose crops stage 4 reads; [] without datasets_root. Pure, O(56)."""
     if not dataset.datasets_root:
-        return ""
+        return []
     derivatives = os.path.join(dataset.datasets_root, "derivatives", DERIVATIVES_FOLDER)
-    return compute_versioned_crops_dir(derivatives, dataset.masks_version)
+    return [compute_versioned_crops_dir(derivatives, version) for version in compute_crops_versions(dataset)]
 
 
 _HF_REPO_ID_REQUIRED = "hf_enabled requires dataset.hf_repo_id"
@@ -206,10 +231,24 @@ def _scoped_env(name: str, value: str | None) -> Iterator[None]:
             os.environ[name] = previous
 
 
+def _compute_models_cache(dataset: DatasetConfig) -> str:
+    """The models cache root stage 4 uses: abspath(dataset.models_cache) when set, else the dataset-tree default."""
+    if dataset.models_cache is not None:
+        return os.path.abspath(dataset.models_cache)
+    return compute_models_cache_dir(dataset.datasets_root)
+
+
 def _compute_models_source(config: PipelineConfig) -> str:
-    """Models source of the embeddings: the Hugging Face repo id when enabled, else the local models path."""
+    """Models source of the embeddings: the Hugging Face repo id when enabled, else the models source cascade.
+
+    The cascade's models cache entry is keyed by masks_version, by DEFAULT_MASKS_VERSION on a map run (the key the map
+    was resolved with: the run label of a mixed map names no model set).
+    """
     dataset = config.dataset
-    return dataset.hf_repo_id if dataset.hf_enabled else str(config.models_path)
+    if dataset.hf_enabled:
+        return dataset.hf_repo_id
+    cache_key = DEFAULT_MASKS_VERSION if dataset.region_masks else dataset.masks_version
+    return resolve_models_source(str(config.models_path), config.root_path, _compute_models_cache(dataset), cache_key)
 
 
 class GenerateEmbeddingsStage(PipelineStage):
@@ -218,6 +257,7 @@ class GenerateEmbeddingsStage(PipelineStage):
     progress_message = "Generating embeddings and training classifiers..."
     success_message = "Embeddings generated"
     failure_message = "Embedding generation failed"
+    _models_source: str | None = None
 
     def validate(self) -> bool:
         """Validate that the model source is usable."""
@@ -226,6 +266,8 @@ class GenerateEmbeddingsStage(PipelineStage):
             if not dataset.hf_repo_id:
                 self.logger.error(_HF_REPO_ID_REQUIRED)
                 return False
+            return True
+        if not self.config.models_path:
             return True
         models_path = Path(self.config.models_path)
         if not models_path.exists():
@@ -246,11 +288,11 @@ class GenerateEmbeddingsStage(PipelineStage):
 
     def build_args(self) -> list[str]:
         dataset = self.config.dataset
-        models_path = _compute_models_source(self.config)
+        self._models_source = _compute_models_source(self.config)
         args = [
-            models_path,
+            self._models_source,
             dataset.datasets_root,
-            f"--masks={dataset.masks_version}",
+            *_compute_masks_args(dataset),
             f"--model-version={dataset.masks_version}",
         ]
 
@@ -267,8 +309,11 @@ class GenerateEmbeddingsStage(PipelineStage):
             args.append("--per-model-folders")
         if dataset.models_cache is not None:
             args.append(f"--models-cache={dataset.models_cache}")
+        if dataset.allow_version_mismatch:
+            args.append("--allow-version-mismatch")
         if dataset.regions:
             args.extend(["--regions", *compute_region_model_names(dataset.regions)])
+        args.extend(_compute_region_masks_args(dataset))
         return args
 
     def create_script(self) -> ScriptBuilder:
@@ -278,13 +323,27 @@ class GenerateEmbeddingsStage(PipelineStage):
         dataset = self.config.dataset
         hf_token = dataset.hf_token if dataset.hf_enabled else None
         with _scoped_env("HF_TOKEN", hf_token):
-            return script.run()
+            status = script.run()
+        if status != 0 and self._used_hf_fallback():
+            self.logger.error(
+                f"Stage 4 could not obtain the model set from Hugging Face {HF_FALLBACK_REPO_ID} (no "
+                f"{os.path.join(self.config.root_path, 'models')}, no entry in the models cache "
+                f"{_compute_models_cache(dataset)}); pass --models-path <folder> to use a local model set"
+            )
+        return status
+
+    def _used_hf_fallback(self) -> bool:
+        """True when build_args took the Hugging Face repository as the last step of the models source cascade."""
+        dataset = self.config.dataset
+        return not dataset.hf_enabled and not self.config.models_path and self._models_source == HF_FALLBACK_REPO_ID
 
     def subject_input_dir(self) -> str | None:
         return existing_dir(_compute_stage4_crops_dir(self.config.dataset))
 
     def index_input_dirs(self) -> list[str]:
-        return [d for d in (self.subject_input_dir(), _compute_configs_dir(self.config.dataset)) if d]
+        dataset = self.config.dataset
+        crops_dirs = [existing_dir(d) for d in _compute_stage4_crops_dirs(dataset)]
+        return [d for d in (*crops_dirs, _compute_configs_dir(dataset)) if d]
 
     def output_dir(self) -> str | None:
         return _compute_region_embeddings_source(self.config.dataset) or None

@@ -63,7 +63,7 @@ repository's root; OUTPUT is the dataset root (the second positional argument, o
 | `--data-path` | `DATA_PATH` | `<repo>/data` | Parent folder of the default dataset root |
 | `--dataset-name` | `DATASET_NAME` | name of the dataset root folder | Dataset name, used in the generated Champollion configuration |
 | `--outputs-path` | `OUTPUTS_PATH` | `OUTPUT/derivatives/champollion_V1` | Champollion output folder; the pipeline log folder defaults to its `logs/` |
-| `--models-path` | `MODELS_PATH` | `<repo>/models` | Local models folder, used when Hugging Face download is off |
+| `--models-path` | `MODELS_PATH` | empty: stage 4 model source order | Local models folder, used when Hugging Face download is off |
 | `--champollion-v1-path` | `CHAMPOLLION_V1_PATH` | `<repo>/external/champollion_V1` | Path of the champollion_V1 checkout; Config file field, read by no stage and not by champollion-train; kept so existing YAML files load |
 | `--morphologist-graphs` | `MORPHOLOGIST_GRAPHS` | `OUTPUT/derivatives/morphologist-6.0` | Morphologist subjects folder read by stage 2 |
 | `--path-to-graph` | `PATH_TO_GRAPH` | `t1mri/default_acquisition/default_analysis/folds/3.3/base` | Folder of the sulcal graphs below each subject |
@@ -75,7 +75,9 @@ repository's root; OUTPUT is the dataset root (the second positional argument, o
 | `--labelling-session` | `LABELLING_SESSION` | chosen per subject | Labelling session read by cortical_tiles and the snapshots |
 | `--bids`, `--no-bids` | - | off | Input follows the BIDS layout (`subjects/sub-*/ses-*/...`); passed to cortical_tiles |
 | `--allow-prefix-ids`, `--no-allow-prefix-ids` | - | off | Temporary: let cortical_tiles run when a subject ID is a strict prefix of another; its transforms may be wrong |
+| `--allow-version-mismatch`, `--no-allow-version-mismatch` | - | off: a mismatch exits with status 2 | Run on when the given Mask version or per-region map differs from the local model set's: one WARNING per region model name, and the flag is passed to stage 4 |
 | `--masks-version` | `MASKS_VERSION` | `canonical_corrected_26_1` | Mask version of the crops, embeddings and snapshots (`canonical_25` or `canonical_corrected_26_1`); without it, on a local model set (`--models-path`, Hugging Face off), stages 2, 3 and 4 use, for each region model name, the Mask version that the local model set names; the run exits with status 2 before any stage when that set lacks a model for a region model name the run processes or names no single Mask version for one, and when a given Mask version differs from the set's (unless `--allow-version-mismatch`) |
+| `--region-masks` | `REGION_MASKS [REGION_MASKS ...]` | none: read from a local model set | Mask version of each region model, as `NAME=VERSION` entries (e.g. `SC-sylv_left=canonical_25`), passed to stages 2, 3 and 4 instead of `--masks-version`; not with `--masks-version` |
 | `--crops-path` | `CROPS_PATH` | inferred below `OUTPUT/derivatives` | 2mm crops folder read by stages 3 and 4 |
 | `--regions` | `REGIONS [REGIONS ...]` | all 56 regions | Regions to crop and embed |
 | `--embeddings-path` | `EMBEDDINGS_PATH` | `OUTPUT/derivatives/champollion_V1/<masks-version>/region_embeddings` | Per-region embeddings folder (stage 4 output, stage 5 input) |
@@ -284,6 +286,8 @@ champollion_pipeline/
 │       ├── cli_options.py           # Registry of champollion-pipeline arguments, one per config field
 │       ├── env_file.py              # Reads champollion-pipeline --env files and CHAMPOLLION_* variables (python-dotenv)
 │       ├── replay_config.py         # Writes the replay config of a champollion-pipeline run into its logs folder (--config replays it)
+│       ├── run_masks.py             # Resolves the run's per-region Mask version map once before stage 1 (--region-masks)
+│       ├── mask_version_checks.py   # Stops champollion-pipeline before stage 1 when a Mask version contradicts the local model set (--allow-version-mismatch)
 │       ├── _stage_base.py           # Template base class of the pipeline stages of champollion-pipeline
 │       └── generate_labelling_qc.py
 ├── data/                       # Created by install-all; not committed

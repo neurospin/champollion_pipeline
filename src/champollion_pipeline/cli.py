@@ -66,7 +66,13 @@ from champollion_pipeline.input_kind_choice import (
     choose_input_kind,
     choose_subjects_folder,
 )
-from champollion_pipeline.path_inference import AmbiguousGraphFolders, DatasetRootNotInferable, infer_paths
+from champollion_pipeline.mask_version_checks import MaskVersionStop, check_run_masks, compute_run_region_names
+from champollion_pipeline.path_inference import (
+    AmbiguousGraphFolders,
+    DatasetRootNotInferable,
+    infer_paths,
+    refresh_version_paths,
+)
 from champollion_pipeline.pipeline_stages import _HF_REPO_ID_REQUIRED as _HF_REPO_ID_REQUIRED
 from champollion_pipeline.pipeline_stages import (
     GenerateChampollionConfigStage,
@@ -87,12 +93,14 @@ from champollion_pipeline.pipeline_stages import _compute_stage4_crops_dir as _c
 from champollion_pipeline.pipeline_stages import _scoped_env as _scoped_env
 from champollion_pipeline.process_setup import init_pipeline_process
 from champollion_pipeline.replay_config import write_replay_config
+from champollion_pipeline.run_masks import RegionMasksError, RunMasks, parse_given_region_masks, resolve_run_masks
 from champollion_pipeline.streaming import StreamingSettings
 from champollion_pipeline.utils.cortical_tiles_config import compute_versioned_crops_dir as compute_versioned_crops_dir
 from champollion_pipeline.utils.input_kind import InputKind
 from champollion_pipeline.utils.input_kind import stage1_subjects_dir as stage1_subjects_dir
 from champollion_pipeline.utils.lib import DERIVATIVES_FOLDER as DERIVATIVES_FOLDER
 from champollion_pipeline.utils.lib import find_dataset_folder as find_dataset_folder
+from champollion_pipeline.utils.region_masks import REGION_MASKS_OPTION, format_region_masks
 from champollion_pipeline.utils.skeleton_qc import SKELETON_SIDES as SKELETON_SIDES
 from champollion_pipeline.utils.skeleton_qc import compute_skeleton_pattern as compute_skeleton_pattern
 
@@ -102,6 +110,9 @@ logger = logging.getLogger("champollion_pipeline.main")
 _MORPHOLOGIST_STAGE = "generate_morphologist_graphs"
 # Exit status of a command-line usage error, as argparse uses.
 _USAGE_ERROR_STATUS = 2
+# Stage 4's Mask version checks: their logger, and the text of each accepted-mismatch WARNING record.
+_STAGE4_CHECKS_LOGGER = "champollion_pipeline.models.version_options"
+_STAGE4_ACCEPTED_TEXT = "running anyway (--allow-version-mismatch)"
 
 SCRIPT_NAME = "champollion_pipeline"
 SCRIPT_DESCRIPTION = "Champollion Pipeline Orchestrator"
@@ -309,7 +320,6 @@ def create_default_config() -> PipelineConfig:
     config = PipelineConfig(
         root_path=str(root_path),
         data_path=str(root_path / "data"),
-        models_path=str(root_path / "models"),
         outputs_path=str(root_path / "outputs"),
         champollion_v1_path=str(root_path / "external" / "champollion_V1"),
     )
@@ -499,6 +509,89 @@ def _infer_configless_paths(config: PipelineConfig, kind: InputKind, args: argpa
     return config
 
 
+def _check_given_masks(config: PipelineConfig, args: argparse.Namespace) -> bool:
+    """Refuse --region-masks beside --masks-version, let --masks-version clear a Config file map, check the map.
+
+    Runs in both modes, before any stage and any resolver call. Raises ArgumentConflictError naming both options, or
+    RegionMasksError naming the faulty value (one ERROR record, exit 2, in run()). Returns True when --masks-version
+    cleared a non-empty Config file map (the sequential branch then logs one INFO record naming the override).
+    """
+    if args.region_masks is not None and args.masks_version is not None:
+        raise ArgumentConflictError(
+            f"{REGION_MASKS_OPTION} cannot be given together with --masks-version: the map names the Mask version "
+            "of each region model name; drop one of them"
+        )
+    is_map_dropped = False
+    if args.masks_version is not None:
+        is_map_dropped = bool(config.dataset.region_masks)
+        config.dataset.region_masks = []
+    parse_given_region_masks(config.dataset.region_masks)
+    return is_map_dropped
+
+
+def _resolve_run_masks(config: PipelineConfig, args: argparse.Namespace) -> RunMasks:
+    """The run's RunMasks: a Mask version is given by --masks-version or a Config file masks_version without a map.
+
+    A Config file region_masks list that is empty (the replay of a --masks run) is no map. The stage 4 models source
+    is computed on every sequential run, a given map run included, so its "Stage 4 models source" line is logged here
+    and again by stage 4 (accepted). resolve_run_masks' RegionMasksError (a mixed given map on Hugging Face, a partial
+    local model set) reaches run(): one ERROR record, exit 2, before the replay file is written.
+    """
+    dataset = config.dataset
+    keys = ConfigLoader.read_dataset_keys(args.config) if args.config else frozenset()
+    is_version_given = args.masks_version is not None or ("masks_version" in keys and not dataset.region_masks)
+    models_source = _compute_models_source(config) or None
+    return resolve_run_masks(dataset, is_version_given=is_version_given, models_source=models_source)
+
+
+def _check_run_masks(config: PipelineConfig, run_masks: RunMasks) -> tuple[str, ...]:
+    """Check the run's Mask versions against the local model set; log one WARNING record per accepted mismatch.
+
+    MaskVersionStop (no single Mask version given none, or a mismatch without dataset.allow_version_mismatch) reaches
+    run(): one ERROR record, exit 2, before the replay file and any stage. Returns the WARNING texts logged.
+    """
+    names = compute_run_region_names(run_masks.source, config.dataset.regions) if run_masks.source else ()
+    texts = check_run_masks(run_masks, run_names=names, allow_mismatch=config.dataset.allow_version_mismatch)
+    for text in texts:
+        logger.warning(text)
+    return texts
+
+
+class _AcceptedMismatchFilter(logging.Filter):
+    """Drops stage 4's accepted-mismatch WARNING records: main.py already logged one per region model name."""
+
+    def filter(self, record: logging.LogRecord) -> bool:
+        return not (record.levelno == logging.WARNING and _STAGE4_ACCEPTED_TEXT in record.getMessage())
+
+
+@contextmanager
+def _silence_stage4_mismatch(active: bool) -> Iterator[None]:
+    """While active, stage 4's "running anyway (--allow-version-mismatch)" WARNING records are dropped; else nothing.
+
+    Scoped to the orchestrator run of a run whose accepted mismatches main.py logged before stage 1.
+    """
+    if not active:
+        yield
+        return
+    stage4_logger = logging.getLogger(_STAGE4_CHECKS_LOGGER)
+    record_filter = _AcceptedMismatchFilter()
+    stage4_logger.addFilter(record_filter)
+    try:
+        yield
+    finally:
+        stage4_logger.removeFilter(record_filter)
+
+
+def _apply_run_masks(config: PipelineConfig, run_masks: RunMasks, *, inferred: bool) -> None:
+    """Set the run's map and label on config.dataset; re-key the inferred version paths when the label changed."""
+    dataset = config.dataset
+    dataset.region_masks = format_region_masks(run_masks.region_masks) if run_masks.region_masks else []
+    previous = dataset.masks_version
+    dataset.masks_version = run_masks.label
+    if inferred and run_masks.label != previous:
+        refresh_version_paths(config, previous)
+
+
 class ChampollionPipeline(ScriptBuilder):
     """main.py as a ScriptBuilder script: the shared run log, profiling and process setup."""
 
@@ -559,13 +652,14 @@ class ChampollionPipeline(ScriptBuilder):
         return self
 
     def run(self) -> int:
-        """Run the pipeline; InputChoiceError (status 1), ArgumentConflictError, EnvFileError (2): one ERROR record."""
+        """Run the pipeline; InputChoiceError (status 1), ArgumentConflictError, EnvFileError, RegionMasksError,
+        MaskVersionStop (2): one ERROR record."""
         try:
             return self._run_pipeline(self.args)
         except InputChoiceError as error:
             logger.error(str(error))
             return 1
-        except (ArgumentConflictError, EnvFileError) as error:
+        except (ArgumentConflictError, EnvFileError, RegionMasksError, MaskVersionStop) as error:
             logger.error(str(error))
             return _USAGE_ERROR_STATUS
 
@@ -583,6 +677,7 @@ class ChampollionPipeline(ScriptBuilder):
         apply_env_values(config, env_values)
         _apply_cli_overrides(config, args, from_default=not args.config)
         check_input_kind_value(config.dataset)
+        is_map_dropped = _check_given_masks(config, args)
         _start_config_profiling(config, args)
         if config.mode == "streaming":
             return _run_streaming_mode(config, args, run_log_path=self._run_log_path)
@@ -592,8 +687,17 @@ class ChampollionPipeline(ScriptBuilder):
         kind = _apply_input_kind(config)
         if configless_input:
             config = _infer_configless_paths(config, kind, args)
+        if is_map_dropped:
+            logger.info(
+                f"--masks-version {args.masks_version} given: the per-region Mask version map of the Config file "
+                f"{args.config} is dropped"
+            )
+        run_masks = _resolve_run_masks(config, args)
+        accepted = _check_run_masks(config, run_masks)
+        _apply_run_masks(config, run_masks, inferred=configless_input)
         write_replay_config(config)
-        return PipelineOrchestrator(config).run()
+        with _silence_stage4_mismatch(bool(accepted)):
+            return PipelineOrchestrator(config).run()
 
 
 def main() -> int:

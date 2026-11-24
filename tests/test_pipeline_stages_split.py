@@ -11,7 +11,8 @@ Requirements:
 REQ-CLISPLIT-BDRABCZUK-1BEA41BADEF3 (cli defines no PipelineStage subclass),
 REQ-CLISPLIT-BDRABCZUK-2A9646866292 (cli.py and pipeline_stages.py at most 1000 lines; budget cli_split_file_lines_max),
 REQ-CLISPLIT-BDRABCZUK-38095C750F40 (importing pipeline_stages adds no toolchain module),
-REQ-CLISPLIT-BDRABCZUK-A6FA35DCCAA2 (build_args equals the 5911c7a class's),
+REQ-CLISPLIT-BDRABCZUK-7ED02864B6B7 (build_args equals the 5911c7a class's when dataset.hf_enabled is true or
+  models_path is non-empty; supersedes A6FA35DCCAA2, narrowed by TASK-MODELSRC-BDRABCZUK-EFFEE1006BFE),
 REQ-CLISPLIT-BDRABCZUK-AFFE25E4DDE2 (output_dir equals the 5911c7a class's).
 """
 
@@ -142,12 +143,20 @@ def _outcome(stage_cls, name, config, method):
         return ("raised", type(error).__module__, type(error).__qualname__)
 
 
-def _assert_same_as_reference(reference, method):
+def _explicit_models_source(config):
+    """True when the stage 4 models source is explicit: Hugging Face enabled, or a non-empty models_path.
+
+    Otherwise the source follows the fallback cascade of REQ-MODELSRC-BDRABCZUK-74BDF84B5789, which 5911c7a lacks.
+    """
+    return bool(config.dataset.hf_enabled or config.models_path)
+
+
+def _assert_same_as_reference(reference, method, configs=None):
     new_module = importlib.import_module(NEW_MODULE)
     pairs = _stage_pairs(reference, new_module)
 
     @settings(max_examples=150, deadline=None, suppress_health_check=[HealthCheck.too_slow])
-    @given(config=pipeline_configs())
+    @given(config=configs if configs is not None else pipeline_configs())
     def check(config):
         for name, reference_cls, moved_cls in pairs:
             expected = _outcome(reference_cls, name, config, method)
@@ -187,8 +196,11 @@ def test_pipeline_stages_import_adds_no_toolchain_module():
 
 
 def test_stage_build_args_equal_reference(reference_cli):
-    """REQ-CLISPLIT-BDRABCZUK-A6FA35DCCAA2: each moved stage class builds the argv of its 5911c7a class."""
-    _assert_same_as_reference(reference_cli, "build_args")
+    """REQ-CLISPLIT-BDRABCZUK-7ED02864B6B7: each moved stage class builds the argv of its 5911c7a class.
+
+    Only configs whose models source is explicit (hf_enabled true or models_path non-empty) are compared.
+    """
+    _assert_same_as_reference(reference_cli, "build_args", pipeline_configs().filter(_explicit_models_source))
 
 
 def test_stage_output_dir_equal_reference(reference_cli):

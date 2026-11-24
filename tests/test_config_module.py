@@ -17,7 +17,11 @@ after skel_seed (REQ-WHOLEBRAIN-BDRABCZUK-3DBF0C9F422F), one dataset 'model' lin
 after bids (REQ-CORTILES-BDRABCZUK-A20F9F75095C, TEMPORARY: DEF-CORTILES-BDRABCZUK-8A44DAD7F312)
 and one dataset 'input_kind' line after input_path (TASK-INPUTKIND-BDRABCZUK-5ECD06E2023D),
 and the default dataset masks_version canonical_corrected_26_1 instead of canonical_25 (the default
-Mask version, TASK-MODELVER-BDRABCZUK-39D727185A86);
+Mask version, TASK-MODELVER-BDRABCZUK-39D727185A86), and one dataset 'region_masks' line after masks_version
+(the per-region Mask version map the replay file of a map run carries, REQ-MODELVER-BDRABCZUK-B2B453643BD4,
+TASK-MODELVER-BDRABCZUK-6C6C79B0F6DE; written as [] when empty), and one dataset 'allow_version_mismatch'
+line after allow_prefix_ids (TASK-MODELVER-BDRABCZUK-3B2E4833B088, user decision 2026-11-24: Config file field,
+default false; REQ-MODELVER-BDRABCZUK-2D6995B41B98);
 the serialiser must reproduce them
 byte for byte (REQ-REFACTOR-BDRABCZUK-B5835A3C130E, superseding -20D84DC86928, -B65FECA525EF, -679F9A49A534
 and -2636D42F82B1)
@@ -42,7 +46,7 @@ CONFIG_MODULE = "champollion_pipeline.config"
 CONFIG_NAMES = ("DatasetConfig", "PipelineConfig", "ConfigLoader")
 
 # Golden save_to_yaml output at cc8d67c (+ log, profile_dir, parallel, labelling_session, allow_prefix_ids,
-# input_kind lines; see docstring)
+# input_kind, region_masks, allow_version_mismatch lines; see docstring)
 # for PipelineConfig() with root_path="/opt/champollion".
 GOLDEN_DEFAULT_YAML = """\
 root_path: /opt/champollion
@@ -100,6 +104,7 @@ dataset:
   path_sk_with_hull: t1mri/default_acquisition/default_analysis/segmentation
   sk_qc_path: ''
   masks_version: canonical_corrected_26_1
+  region_masks: []
   skel_seed: null
   labelling_session: ''
   model: ''
@@ -126,13 +131,14 @@ dataset:
   cpu: false
   bids: false
   allow_prefix_ids: false
+  allow_version_mismatch: false
   snapshots_path: ''
   reference_data_path: ''
   champollion_data_root: null
 """
 
 # Golden save_to_yaml output at cc8d67c (+ log, profile_dir, parallel, labelling_session, allow_prefix_ids,
-# input_kind lines)
+# input_kind, region_masks, allow_version_mismatch lines)
 # for _custom_config().
 GOLDEN_CUSTOM_YAML = """\
 root_path: /opt/champollion
@@ -178,6 +184,9 @@ dataset:
   path_sk_with_hull: sk/path
   sk_qc_path: /qc.tsv
   masks_version: canonical_28
+  region_masks:
+  - SC-sylv_left=canonical_25
+  - SC-sylv_right=canonical_corrected_26_1
   skel_seed: 42
   labelling_session: 0_auto
   model: v2/run2
@@ -209,6 +218,7 @@ dataset:
   cpu: true
   bids: true
   allow_prefix_ids: true
+  allow_version_mismatch: true
   snapshots_path: /snap
   reference_data_path: /ref
   champollion_data_root: /root
@@ -257,6 +267,7 @@ _CUSTOM_DATASET_VALUES = {
     "path_sk_with_hull": "sk/path",
     "sk_qc_path": "/qc.tsv",
     "masks_version": "canonical_28",
+    "region_masks": ["SC-sylv_left=canonical_25", "SC-sylv_right=canonical_corrected_26_1"],
     "skel_seed": 42,
     "labelling_session": "0_auto",
     "model": "v2/run2",
@@ -281,6 +292,7 @@ _CUSTOM_DATASET_VALUES = {
     "cpu": True,
     "bids": True,
     "allow_prefix_ids": True,
+    "allow_version_mismatch": True,
     "snapshots_path": "/snap",
     "reference_data_path": "/ref",
     "champollion_data_root": "/root",

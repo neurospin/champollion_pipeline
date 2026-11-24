@@ -22,6 +22,8 @@ from champollion_pipeline.utils.archive import extract_archive, remove_stale_cac
 
 logger = logging.getLogger(__name__)
 
+HF_FALLBACK_REPO_ID = "neurospin/Champollion_V1"
+
 
 class ModelFetchStrategy(ABC):
     """Abstract base class for model fetching strategies."""
@@ -278,6 +280,46 @@ class InteractiveFallbackStrategy(ModelFetchStrategy):
     def _extract_archive(self, archive_path: str, extract_to: str) -> str:
         """Extract archive and return path to its top-level entry."""
         return extract_archive(archive_path, extract_to, top_level=True)
+
+
+def _cascade_entry(models_cache: str, masks: str) -> str:
+    """The folder HuggingFaceStrategy leaves for the model set masks: <models_cache>/Champollion_V1_<masks>/<masks>."""
+    repo_name = HF_FALLBACK_REPO_ID.split("/")[-1]
+    return join(models_cache, f"{repo_name}_{masks}", masks)
+
+
+def resolve_models_source(models_path: str, root_path: str, models_cache: str, masks: str) -> str:
+    """Return the stage 4 models source by the fallback cascade (TASK-MODELSRC-BDRABCZUK-EFFEE1006BFE).
+
+    Args:
+        models_path: explicit --models-path or config models_path; "" when not set.
+        root_path: the checkout root, whose models folder is the default local model set.
+        models_cache: the resolved models cache root of the dataset.
+        masks: the --masks model set name.
+
+    Returns:
+        models_path unchanged when non-empty (no existence check); else the first existing folder of
+        <root_path>/models and <models_cache>/Champollion_V1_<masks>/<masks>; else HF_FALLBACK_REPO_ID.
+
+    Complexity: O(1), at most two directory checks; no write, no network, no environment access.
+    """
+    local = [
+        ("default models folder", join(root_path, "models")),
+        ("models cache", _cascade_entry(models_cache, masks)),
+    ]
+    if models_path:
+        step, result = "--models-path", models_path
+    else:
+        step, result = next(
+            ((label, path) for label, path in local if os.path.isdir(path)),
+            ("Hugging Face fallback", HF_FALLBACK_REPO_ID),
+        )
+    assert models_path == "" or result == models_path, (
+        'models_source_cascade.resolve_models_source post: models_path == "" or result == models_path'
+    )
+    assert len(result) > 0, "models_source_cascade.resolve_models_source post: len(result) > 0"
+    logger.output(f"Stage 4 models source ({step}): {result}")
+    return result
 
 
 def fetch_model_set(models_path: str, extract_to: str, model_version: str | None, no_cache: bool) -> tuple[str, dict]:
