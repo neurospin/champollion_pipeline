@@ -75,7 +75,7 @@ repository's root; OUTPUT is the dataset root (the second positional argument, o
 | `--labelling-session` | `LABELLING_SESSION` | chosen per subject | Labelling session read by cortical_tiles and the snapshots |
 | `--bids`, `--no-bids` | - | off | Input follows the BIDS layout (`subjects/sub-*/ses-*/...`); passed to cortical_tiles |
 | `--allow-prefix-ids`, `--no-allow-prefix-ids` | - | off | Temporary: let cortical_tiles run when a subject ID is a strict prefix of another; its transforms may be wrong |
-| `--masks-version` | `MASKS_VERSION` | `canonical_corrected_26_1` | Mask version of the crops, embeddings and snapshots (`canonical_25` or `canonical_corrected_26_1`) |
+| `--masks-version` | `MASKS_VERSION` | `canonical_corrected_26_1` | Mask version of the crops, embeddings and snapshots (`canonical_25` or `canonical_corrected_26_1`); without it, on a local model set (`--models-path`, Hugging Face off), stages 2, 3 and 4 use, for each region model name, the Mask version that the local model set names; the run exits with status 2 before any stage when that set lacks a model for a region model name the run processes or names no single Mask version for one, and when a given Mask version differs from the set's (unless `--allow-version-mismatch`) |
 | `--crops-path` | `CROPS_PATH` | inferred below `OUTPUT/derivatives` | 2mm crops folder read by stages 3 and 4 |
 | `--regions` | `REGIONS [REGIONS ...]` | all 56 regions | Regions to crop and embed |
 | `--embeddings-path` | `EMBEDDINGS_PATH` | `OUTPUT/derivatives/champollion_V1/<masks-version>/region_embeddings` | Per-region embeddings folder (stage 4 output, stage 5 input) |

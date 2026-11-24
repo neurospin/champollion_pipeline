@@ -10,7 +10,7 @@ embeddings. The Stage 4 section of ``docs/usage.md`` must say so (moved from REA
 "5. Generate Embeddings" by TASK-DOCS-BDRABCZUK-84BE8AB6FC73).
 
 Every check reads the facts from the live code (the ``GenerateEmbeddings``
-parser, ``MODEL_SET_FILE_NAME``, ``PROVENANCE_FILE_NAME``, ``ModelSet`` fields
+parser, ``PROVENANCE_FILE_NAME``
 and the provenance dict ``generate_embeddings`` builds), never from hard-coded prose.
 
 Requirements pinned here (one test per requirement; the ``--masks`` row, REQ-MODELVER-BDRABCZUK-6A7EC2D5389F,
@@ -18,7 +18,8 @@ which supersedes 37B69C8D1B88, is pinned in tests/test_masks_default_corrected.p
 
 * REQ-MODELVER-BDRABCZUK-B431CAC3145D - options table rows for the version options.
 * REQ-MODELVER-BDRABCZUK-36B042A2A3EC - ``--masks-version`` row: deprecated alias of ``--model-version``.
-* REQ-MODELVER-BDRABCZUK-3389BCA1D219 - ``model_set.json`` subsection.
+* ``model_set.json`` subsection: moved to tests/test_usage_modelver_per_region.py with its superseding
+  Requirement (TASK-MODELVER-BDRABCZUK-6E24A08667F9), since tests/test_docs_*.py are outside the verify selection.
 * REQ-MODELVER-BDRABCZUK-CE3FBFAB1A03 - ``provenance.json`` subsection names every key.
 
 No network and no BrainVISA: the parser is only built (and, for the provenance
@@ -27,7 +28,6 @@ keys, parsed with a Hugging Face repo id that is never fetched).
 
 from __future__ import annotations
 
-import dataclasses
 import re
 from pathlib import Path
 
@@ -35,10 +35,8 @@ import pytest
 
 from champollion_pipeline import generate_embeddings as ge
 from champollion_pipeline.generate_embeddings import (
-    MODEL_SET_FILE_NAME,
     PROVENANCE_FILE_NAME,
     GenerateEmbeddings,
-    ModelSet,
 )
 
 PROJECT_ROOT = Path(__file__).resolve().parents[1]
@@ -118,27 +116,6 @@ class TestReadmeMasksVersionRow:
         assert re.search(r"\bdeprecated\b", row, re.IGNORECASE), f"--masks-version row does not say deprecated: {row}"
         assert re.search(r"\balias\b", row, re.IGNORECASE), f"--masks-version row does not say alias: {row}"
         assert "--model-version" in row, f"--masks-version row does not name --model-version: {row}"
-
-
-@pytest.mark.smoke
-class TestReadmeModelSetSubsection:
-    """REQ-MODELVER-BDRABCZUK-3389BCA1D219."""
-
-    def test_subsection_describes_marker(self):
-        body = _subsection(MODEL_SET_FILE_NAME)
-        required_keys = [f.name for f in dataclasses.fields(ModelSet) if f.default is dataclasses.MISSING]
-        missing = [k for k in required_keys if not _names_word(body, k)]
-        assert not missing, f"{MODEL_SET_FILE_NAME} subsection does not name the key(s) {missing}"
-        assert "--allow-version-mismatch" in _parser_options()
-        assert "--allow-version-mismatch" in body, (
-            f"{MODEL_SET_FILE_NAME} subsection does not name --allow-version-mismatch"
-        )
-        assert re.search(r"\bwarning\b", body, re.IGNORECASE), (
-            f"{MODEL_SET_FILE_NAME} subsection does not describe the warning for a local models_path without the marker"
-        )
-        assert "Hugging Face" in body, (
-            f"{MODEL_SET_FILE_NAME} subsection does not say a Hugging Face download writes it"
-        )
 
 
 @pytest.mark.smoke
