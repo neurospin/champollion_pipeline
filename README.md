@@ -63,7 +63,7 @@ repository's root; OUTPUT is the dataset root (the second positional argument, o
 | `--data-path` | `DATA_PATH` | `<repo>/data` | Parent folder of the default dataset root |
 | `--dataset-name` | `DATASET_NAME` | name of the dataset root folder | Dataset name, used in the generated Champollion configuration |
 | `--outputs-path` | `OUTPUTS_PATH` | `OUTPUT/derivatives/champollion_V1` | Champollion output folder; the pipeline log folder defaults to its `logs/` |
-| `--models-path` | `MODELS_PATH` | `<repo>/models` | Local models folder, used when Hugging Face download is off |
+| `--models-path` | `MODELS_PATH` | empty: stage 4 model source order | Local models folder, used when Hugging Face download is off |
 | `--champollion-v1-path` | `CHAMPOLLION_V1_PATH` | `<repo>/external/champollion_V1` | Path of the champollion_V1 checkout; Config file field, read by no stage and not by champollion-train; kept so existing YAML files load |
 | `--morphologist-graphs` | `MORPHOLOGIST_GRAPHS` | `OUTPUT/derivatives/morphologist-6.0` | Morphologist subjects folder read by stage 2 |
 | `--path-to-graph` | `PATH_TO_GRAPH` | `t1mri/default_acquisition/default_analysis/folds/3.3/base` | Folder of the sulcal graphs below each subject |
