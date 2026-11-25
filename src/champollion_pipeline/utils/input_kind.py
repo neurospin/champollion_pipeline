@@ -17,6 +17,45 @@ from champollion_pipeline.utils.subject_folders import SESSION_FOLDERS
 
 T1_SUFFIXES: tuple[str, ...] = (".nii.gz", ".nii")
 NON_T1_FOLDERS: frozenset[str] = frozenset({"derivatives", "qc", "t1mri"})
+DERIVED_VOLUME_FOLDER: str = "segmentation"
+DERIVED_VOLUME_SUFFIXES: tuple[str, ...] = (
+    "_brain",
+    "_skull_stripped",
+    "_nobias",
+    "_hfiltered",
+    "_variance",
+    "_edges",
+    "_voronoi",
+    "_whiteridge",
+    "_skeleton",
+    "_cortex",
+    "_grey_white",
+    "_gw_interface",
+    "_roots",
+    "_csf",
+)
+DERIVED_VOLUME_PREFIXES: tuple[str, ...] = (
+    "brain_",
+    "skull_stripped_",
+    "nobias_",
+    "hfiltered_",
+    "variance_",
+    "edges_",
+    "voronoi_",
+    "whiteridge_",
+    "Lskeleton_",
+    "Lcortex_",
+    "Lgrey_white_",
+    "Lgw_interface_",
+    "Lroots_",
+    "Lcsf_",
+    "Rskeleton_",
+    "Rcortex_",
+    "Rgrey_white_",
+    "Rgw_interface_",
+    "Rroots_",
+    "Rcsf_",
+)
 
 _GRAPH_FOLDER = "t1mri"
 _GRAPH_SUFFIX = ".arg"
@@ -25,6 +64,7 @@ _BIDS_T1_ENDING = "_T1w"
 _SOURCEDATA_FOLDER = "sourcedata"
 
 _Parts = tuple[str, ...]
+_Keep = Callable[[str, _Parts, str], bool]
 
 logger = logging.getLogger(__name__)
 
@@ -52,10 +92,11 @@ class InputKind(Enum):
 
 @dataclass(frozen=True)
 class InputScan:
-    """The first T1 file and the first Morphologist graph a walk reached, relative to the input."""
+    """The first T1 file, Morphologist graph and Morphologist derived volume a walk reached, relative to the input."""
 
     first_t1: str | None
     first_graph: str | None
+    first_derived: str | None = None
 
     @property
     def kind(self) -> InputKind:
@@ -140,14 +181,57 @@ def _can_hold_t1(parts: _Parts) -> bool:
     return NON_T1_FOLDERS.isdisjoint(parts)
 
 
+def _volume_stem(name: str) -> str | None:
+    """Return ``name`` without the first T1 suffix it ends with; None when it ends with none."""
+    suffix = next((suffix for suffix in T1_SUFFIXES if name.endswith(suffix)), None)
+    return None if suffix is None else name.removesuffix(suffix)
+
+
 def _is_t1_name(parts: _Parts, name: str) -> bool:
     """Return whether a file ``name`` in the folder at ``parts`` is named as a T1 file."""
-    suffix = next((suffix for suffix in T1_SUFFIXES if name.endswith(suffix)), None)
-    if suffix is None:
+    stem = _volume_stem(name)
+    if stem is None:
         return False
     if name.startswith(_BIDS_PREFIX) and any(part.startswith(_BIDS_PREFIX) for part in parts):
-        return name.removesuffix(suffix).endswith(_BIDS_T1_ENDING)
+        return stem.endswith(_BIDS_T1_ENDING)
     return True
+
+
+def is_derived_volume(folder_name: str, name: str) -> bool:
+    """Return whether a file ``name`` in a folder named ``folder_name`` is a Morphologist derived volume.
+
+    A volume (a T1 suffix) is derived when its folder is named segmentation, or when its name, without that suffix,
+    ends with a member of DERIVED_VOLUME_SUFFIXES or starts with a member of DERIVED_VOLUME_PREFIXES. Names are compared
+    exactly, case kept. No I/O.
+    """
+    stem = _volume_stem(name)
+    if stem is None:
+        return False
+    return (
+        folder_name == DERIVED_VOLUME_FOLDER
+        or stem.endswith(DERIVED_VOLUME_SUFFIXES)
+        or stem.startswith(DERIVED_VOLUME_PREFIXES)
+    )
+
+
+def _root_name(path: str) -> str:
+    """Return the input's own folder name, as given (links not resolved)."""
+    return os.path.basename(os.path.abspath(path))
+
+
+def _own_folder(root_name: str, parts: _Parts) -> str:
+    """Return the name of the folder at ``parts``: its last part, or the input's own name ``root_name``."""
+    return parts[-1] if parts else root_name
+
+
+def _is_derived_file(root_name: str, parts: _Parts, name: str) -> bool:
+    """Return whether a file ``name`` in the folder at ``parts`` below an input named ``root_name`` is derived."""
+    return is_derived_volume(_own_folder(root_name, parts), name)
+
+
+def _is_t1_file(root_name: str, parts: _Parts, name: str) -> bool:
+    """Return whether a file ``name`` in the folder at ``parts`` is a T1 file: named as one and not derived."""
+    return _is_t1_name(parts, name) and not _is_derived_file(root_name, parts, name)
 
 
 def _is_graph(parts: _Parts, name: str) -> bool:
@@ -163,7 +247,9 @@ def scan_input(path: str) -> InputScan:
     """
     if not os.path.isdir(path):
         return InputScan(None, None)
+    root_name = _root_name(path)
     first_graph: str | None = None
+    first_derived: str | None = None
 
     def wanted(parts: _Parts) -> bool:
         return first_graph is None or _can_hold_t1(parts)
@@ -171,9 +257,11 @@ def scan_input(path: str) -> InputScan:
     for parts, name in _walk(path, wanted):
         if first_graph is None and _is_graph(parts, name):
             first_graph = os.path.join(*parts, name)
-        if _can_hold_t1(parts) and _is_t1_name(parts, name):
-            return InputScan(os.path.join(*parts, name), first_graph)
-    return InputScan(None, first_graph)
+        if first_derived is None and _is_derived_file(root_name, parts, name):
+            first_derived = os.path.join(*parts, name)
+        if _can_hold_t1(parts) and _is_t1_file(root_name, parts, name):
+            return InputScan(os.path.join(*parts, name), first_graph, first_derived)
+    return InputScan(None, first_graph, first_derived)
 
 
 def detect_input_kind(path: str) -> InputKind:
@@ -181,13 +269,24 @@ def detect_input_kind(path: str) -> InputKind:
     return scan_input(path).kind
 
 
-def find_t1_files(directory: str) -> list[str]:
-    """Return every T1 file of ``directory`` as a sorted list of relative paths, each as found on disk."""
+def _listed(directory: str, keep: _Keep) -> list[str]:
+    """Return the files ``keep`` accepts in the folders of ``directory`` that can hold a T1 file, sorted."""
     if not os.path.isdir(directory):
         return []
+    root_name = _root_name(directory)
     return sorted(
-        os.path.join(*parts, name) for parts, name in _walk(directory, _can_hold_t1) if _is_t1_name(parts, name)
+        os.path.join(*parts, name) for parts, name in _walk(directory, _can_hold_t1) if keep(root_name, parts, name)
     )
+
+
+def find_t1_files(directory: str) -> list[str]:
+    """Return every T1 file of ``directory`` as a sorted list of relative paths, each as found on disk."""
+    return _listed(directory, _is_t1_file)
+
+
+def derived_volumes(directory: str) -> list[str]:
+    """Return the Morphologist derived volumes find_t1_files leaves out of ``directory``, as a sorted list."""
+    return _listed(directory, _is_derived_file)
 
 
 def sourcedata_t1_files(input_dir: str) -> list[str]:

@@ -1,10 +1,12 @@
 """Choice of the kind main.py routes dataset.input_path as: detection, dataset.input_kind, a terminal prompt or a stop.
 
-Every stop is an InputChoiceError whose text is the one ERROR record main.py logs before it ends with exit status 1.
+Every stop is an InputChoiceError whose text is the one ERROR record main.py logs before it ends with the error's
+exit_status (1; 2 for DerivedVolumesOnly).
 Detection, the sourcedata filter and the subjects folder search stay in champollion_pipeline.utils.input_kind; this
 module only decides and asks.
 """
 
+import logging
 import sys
 
 from champollion_pipeline.config import DatasetConfig
@@ -12,6 +14,7 @@ from champollion_pipeline.utils.input_kind import (
     AmbiguousSubjectsFolders,
     InputKind,
     InputScan,
+    derived_volumes,
     resolve_subjects_dir,
     scan_input,
     sourcedata_t1_files,
@@ -22,9 +25,19 @@ INPUT_KINDS: tuple[str, ...] = (InputKind.T1.value, InputKind.MORPHOLOGIST.value
 _KIND_QUESTION = "Input kind (t1 or morphologist): "
 _FOLDER_QUESTION = "Subjects folder (one path as listed): "
 
+logger = logging.getLogger(__name__)
+
 
 class InputChoiceError(ValueError):
-    """main.py stops with exit status 1; str(error) is the ERROR message it logs."""
+    """The run stops with exit status exit_status; str(error) is the ERROR message it logs."""
+
+    exit_status: int = 1
+
+
+class DerivedVolumesOnly(InputChoiceError):
+    """The input holds Morphologist derived volumes and no T1 file or graph."""
+
+    exit_status = 2  # the usage-error status of cli (_USAGE_ERROR_STATUS)
 
 
 def check_input_kind_value(dataset: DatasetConfig) -> None:  # noqa: V103 - used by main.py
@@ -51,16 +64,22 @@ def choose_input_kind(dataset: DatasetConfig) -> InputKind | None:  # noqa: V103
         )
     scan = scan_input(input_path)
     if scan.kind is InputKind.NEITHER:
+        if scan.first_derived is not None:
+            raise DerivedVolumesOnly(_derived_only_text(input_path, scan.first_derived))
         raise InputChoiceError(
             f"{input_path} holds neither T1 files nor Morphologist outputs (or is not a folder); point --input-path "
             "at a folder holding one kind (--input-kind only chooses between kinds that are there)."
         )
+    kind = scan.kind
     if dataset.input_kind is None:
         answer = _undecided_kind(input_path, scan)
-        if answer is None:
-            return scan.kind
-        dataset.input_kind = answer
-    return _checked_kind(dataset, scan)
+        if answer is not None:
+            dataset.input_kind = answer
+    if dataset.input_kind is not None:
+        kind = _checked_kind(dataset, scan)
+    if kind is InputKind.T1 and scan.first_graph is None:
+        _warn_derived_volumes(input_path)
+    return kind
 
 
 def choose_subjects_folder(dataset: DatasetConfig) -> str | None:  # noqa: V103 - used by main.py
@@ -122,6 +141,27 @@ def _checked_kind(dataset: DatasetConfig, scan: InputScan) -> InputKind:
     if scan.first_graph is None and not _holds_subjects_folder(input_path):
         raise InputChoiceError(_no_subjects_folder_text(input_path, scan.first_t1))
     return InputKind.MORPHOLOGIST
+
+
+def _derived_only_text(input_path: str, first_derived: str) -> str:
+    return (
+        f"{input_path} holds Morphologist derived volumes (e.g. {first_derived}) and no T1 file or Morphologist "
+        "graph: it looks like a Morphologist output layout without its graphs (.arg). Point --input-path at the "
+        "folder holding the raw T1 files, or at the Morphologist subjects folder once its graphs exist."
+    )
+
+
+def _warn_derived_volumes(input_path: str) -> None:
+    """Log one WARNING with the number of derived volumes left out of the T1 file list, when there are any."""
+    found = derived_volumes(input_path)
+    if found:
+        logger.warning(
+            "%d Morphologist derived volumes below %s are left out of the T1 file list (a folder named "
+            "segmentation or a derived-volume name, e.g. %s).",
+            len(found),
+            input_path,
+            found[0],
+        )
 
 
 def _holds_subjects_folder(input_path: str) -> bool:
