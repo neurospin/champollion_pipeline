@@ -2,6 +2,9 @@
 
 Pure classification: what the pipeline does with the result is decided elsewhere. Detection, the T1 listing and the
 search for the Morphologist subjects folder share one lazy walk and one set of predicates, so they cannot drift.
+
+A .arg file anywhere below the input, outside dot folders, is a Morphologist graph whatever the folder names. T1 files
+below a folder named t1mri count only when the input holds no .arg file; below derivatives or qc they never count.
 """
 
 import fnmatch
@@ -57,7 +60,8 @@ DERIVED_VOLUME_PREFIXES: tuple[str, ...] = (
     "Rcsf_",
 )
 
-_GRAPH_FOLDER = "t1mri"
+_T1MRI_FOLDER = "t1mri"
+_NEVER_T1_FOLDERS: frozenset[str] = NON_T1_FOLDERS - {_T1MRI_FOLDER}
 _GRAPH_SUFFIX = ".arg"
 _BIDS_PREFIX = "sub-"
 _BIDS_T1_ENDING = "_T1w"
@@ -192,7 +196,11 @@ def _is_t1_name(parts: _Parts, name: str) -> bool:
     stem = _volume_stem(name)
     if stem is None:
         return False
-    if name.startswith(_BIDS_PREFIX) and any(part.startswith(_BIDS_PREFIX) for part in parts):
+    if (
+        name.startswith(_BIDS_PREFIX)
+        and _T1MRI_FOLDER not in parts
+        and any(part.startswith(_BIDS_PREFIX) for part in parts)
+    ):
         return stem.endswith(_BIDS_T1_ENDING)
     return True
 
@@ -234,34 +242,84 @@ def _is_t1_file(root_name: str, parts: _Parts, name: str) -> bool:
     return _is_t1_name(parts, name) and not _is_derived_file(root_name, parts, name)
 
 
-def _is_graph(parts: _Parts, name: str) -> bool:
-    """Return whether a file ``name`` in the folder at ``parts`` is a Morphologist graph."""
-    return _GRAPH_FOLDER in parts and name.endswith(_GRAPH_SUFFIX)
+def _in_t1mri_scope(parts: _Parts) -> bool:
+    """Return whether a folder at ``parts`` is below a t1mri folder and below no derivatives or qc folder.
+
+    A T1 file there counts only when the input holds no Morphologist graph.
+    """
+    return _T1MRI_FOLDER in parts and _NEVER_T1_FOLDERS.isdisjoint(parts)
+
+
+def _is_graph(name: str) -> bool:
+    """Return whether a file ``name`` is a Morphologist graph, whatever the folder names on its path."""
+    return name.endswith(_GRAPH_SUFFIX)
+
+
+def _is_subject_graph(parts: _Parts, name: str) -> bool:
+    """Return whether a file ``name`` in the folder at ``parts`` is a graph below a t1mri folder of its subject."""
+    return _T1MRI_FOLDER in parts and _is_graph(name)
+
+
+@dataclass
+class _ScanFindings:
+    """What a scan_input walk has reached so far, relative to the input.
+
+    ``first_t1`` is the first T1 file outside every NON_T1_FOLDERS folder, ``first_any_t1`` the first T1 file of that
+    scope or of the t1mri scope, in walk order.
+    """
+
+    first_t1: str | None = None
+    first_any_t1: str | None = None
+    first_graph: str | None = None
+    first_derived: str | None = None
+
+    def note(self, root_name: str, parts: _Parts, name: str) -> bool:
+        """Record one file; return whether a sure T1 file and a graph are both found."""
+        relative = os.path.join(*parts, name)
+        if self.first_graph is None and _is_graph(name):
+            self.first_graph = relative
+        if self.first_derived is None and _is_derived_file(root_name, parts, name):
+            self.first_derived = relative
+        if self.first_any_t1 is None or self.first_t1 is None:
+            self._note_t1(root_name, parts, name, relative)
+        return self.first_t1 is not None and self.first_graph is not None
+
+    def _note_t1(self, root_name: str, parts: _Parts, name: str, relative: str) -> None:
+        """Record ``relative`` as a T1 file of the sure scope or of the t1mri scope."""
+        sure = _can_hold_t1(parts)
+        if not (sure or _in_t1mri_scope(parts)) or not _is_t1_file(root_name, parts, name):
+            return
+        if self.first_any_t1 is None:
+            self.first_any_t1 = relative
+        if sure and self.first_t1 is None:
+            self.first_t1 = relative
+
+    def result(self) -> InputScan:
+        """Return the scan: with a graph, only sure T1 files count; without one, T1 files of either scope."""
+        if self.first_graph is not None:
+            return InputScan(self.first_t1, self.first_graph, self.first_derived)
+        return InputScan(self.first_any_t1, None, self.first_derived)
 
 
 def scan_input(path: str) -> InputScan:
-    """Walk ``path`` up to its first T1 file and return what the walk reached.
+    """Walk ``path`` until it holds a T1 file outside t1mri and a Morphologist graph, and return what it reached.
 
-    The walk stops there, so a T1 file with no graph does not prove that no graph exists. After the first graph, no
+    A .arg file anywhere is a graph. A T1 file below t1mri never stops the walk, since a later .arg voids it; so a
+    scan with no graph has read every folder, and its T1 file may come from either scope. After the first graph, no
     folder that cannot hold a T1 file is read.
     """
     if not os.path.isdir(path):
         return InputScan(None, None)
     root_name = _root_name(path)
-    first_graph: str | None = None
-    first_derived: str | None = None
+    findings = _ScanFindings()
 
     def wanted(parts: _Parts) -> bool:
-        return first_graph is None or _can_hold_t1(parts)
+        return findings.first_graph is None or _can_hold_t1(parts)
 
     for parts, name in _walk(path, wanted):
-        if first_graph is None and _is_graph(parts, name):
-            first_graph = os.path.join(*parts, name)
-        if first_derived is None and _is_derived_file(root_name, parts, name):
-            first_derived = os.path.join(*parts, name)
-        if _can_hold_t1(parts) and _is_t1_file(root_name, parts, name):
-            return InputScan(os.path.join(*parts, name), first_graph, first_derived)
-    return InputScan(None, first_graph, first_derived)
+        if findings.note(root_name, parts, name):
+            break
+    return findings.result()
 
 
 def detect_input_kind(path: str) -> InputKind:
@@ -270,17 +328,36 @@ def detect_input_kind(path: str) -> InputKind:
 
 
 def _listed(directory: str, keep: _Keep) -> list[str]:
-    """Return the files ``keep`` accepts in the folders of ``directory`` that can hold a T1 file, sorted."""
+    """Return the files ``keep`` accepts in the folders of ``directory`` that can hold a T1 file, sorted.
+
+    Folders below t1mri count only when ``directory`` holds no graph; derivatives and qc folders never count.
+    """
     if not os.path.isdir(directory):
         return []
     root_name = _root_name(directory)
-    return sorted(
-        os.path.join(*parts, name) for parts, name in _walk(directory, _can_hold_t1) if keep(root_name, parts, name)
-    )
+    graph_seen = False
+    sure: list[str] = []
+    t1mri: list[str] = []
+
+    def wanted(parts: _Parts) -> bool:
+        return not graph_seen or _can_hold_t1(parts)
+
+    for parts, name in _walk(directory, wanted):
+        graph_seen = graph_seen or _is_graph(name)
+        if not keep(root_name, parts, name):
+            continue
+        if _can_hold_t1(parts):
+            sure.append(os.path.join(*parts, name))
+        elif _in_t1mri_scope(parts):
+            t1mri.append(os.path.join(*parts, name))
+    return sorted(sure + ([] if graph_seen else t1mri))
 
 
 def find_t1_files(directory: str) -> list[str]:
-    """Return every T1 file of ``directory`` as a sorted list of relative paths, each as found on disk."""
+    """Return every T1 file of ``directory`` as a sorted list of relative paths, each as found on disk.
+
+    T1 files below a t1mri folder are listed only when ``directory`` holds no .arg file.
+    """
     return _listed(directory, _is_t1_file)
 
 
@@ -315,12 +392,12 @@ def _is_session(name: str) -> bool:
 def _leads_to_own_t1mri(parts: _Parts) -> bool:
     """Return whether a folder at ``parts`` is on the way to the input's own ``t1mri`` or ``ses-*/t1mri`` folder."""
     below_session = parts[1:] if _is_session(parts[0]) else parts
-    return not below_session or below_session[0] == _GRAPH_FOLDER
+    return not below_session or below_session[0] == _T1MRI_FOLDER
 
 
 def _subjects_folder(parts: _Parts) -> _Parts | None:
     """Return the subjects folder of a graph in the folder at ``parts``, None when the input itself is the subject."""
-    level = parts.index(_GRAPH_FOLDER) - 1
+    level = parts.index(_T1MRI_FOLDER) - 1
     if level >= 0 and _is_session(parts[level]):
         level -= 1
     return parts[:level] if level >= 0 else None
@@ -349,7 +426,7 @@ def resolve_subjects_dir(path: str) -> str | None:
         return not _at_or_below(parts, found)
 
     for parts, name in chain(_walk(path, _leads_to_own_t1mri), _walk(path, wanted)):
-        if not _is_graph(parts, name):
+        if not _is_subject_graph(parts, name):
             continue
         folder = _subjects_folder(parts)
         if folder is None:

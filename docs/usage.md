@@ -118,8 +118,8 @@ Every run writes its effective configuration to a replay file in the log folder 
 | Exit status | Meaning |
 |---|---|
 | `0` | Success: every enabled stage completed, or no stage was enabled, or `--generate-config` wrote its template, or `--help` printed the help |
-| `1` | Failure: a stage failed, the input was refused (neither kind, an unanswered kind question, a bad `dataset.input_kind`), a streaming guard stopped the run, or a streaming scan or combine failed |
-| `2` | Usage error: an unknown option or a bad value, two forms of one path naming different paths, or a `.env` file that is missing or holds a bad value |
+| `1` | Failure: a stage failed, the input was refused (an unanswered kind question, a bad `dataset.input_kind`), a streaming guard stopped the run, or a streaming scan or combine failed |
+| `2` | Usage error: an unknown option or a bad value, two forms of one path naming different paths, a `.env` file that is missing or holds a bad value, or an input holding neither kind (Morphologist derived volumes only included) |
 | `3` | Partial run, sequential mode only: no stage failed and at least one stage completed partially (some subjects skipped) |
 
 Streaming mode exits with status 0 or 1 only.
@@ -663,15 +663,19 @@ bare `--log` last.
 required path, and every other path of the PipelineConfig is inferred from it. A sequential run with an input path and no `--config` enables every
 stage unless `--stages` names some.
 
-What the input path holds decides the run. `champollion-pipeline` reads it up to its first T1 file:
+What the input path holds decides the run: `.arg` files first, else `.nii.gz` (or `.nii`) files.
+`champollion-pipeline` reads the input until it knows whether a `.arg` file exists, so a T1 input is read whole:
 
-- T1 files: `.nii` or `.nii.gz` files, at any depth, so nested T1 folders work. Folders named `derivatives`, `qc` and
-  `t1mri` are not searched for T1 files, and below a `sub-*` folder a `sub-*` file must end in `_T1w`. The Dataset root
-  (`dataset.datasets_root`) is the input path itself, and stage 1 writes the Morphologist outputs below it.
-- Morphologist outputs: a tree holding `.arg` graphs under `t1mri` folders. Stage 1 is skipped (one INFO line), the
-  subjects folder is found in the tree (see [Morphologist trees](#morphologist-trees)), and the Dataset root is the
-  parent of the nearest `derivatives` folder above that subjects folder.
-- Neither kind (or not a folder): the run logs one error and exits with code 1.
+- Morphologist outputs: any `.arg` file below the input, outside folders whose name starts with a dot, whatever the
+  folder names on its path. Stage 1 is skipped (one INFO line), the subjects folder is found in the tree (see
+  [Morphologist trees](#morphologist-trees)), and the Dataset root is the parent of the nearest `derivatives` folder
+  above that subjects folder.
+- T1 files: `.nii` or `.nii.gz` files, at any depth, so nested T1 folders work. Files below a folder named `t1mri`
+  count only when the input holds no `.arg` file; files below a folder named `derivatives` or `qc` never count.
+  Outside `t1mri`, below a `sub-*` folder a `sub-*` file must end in `_T1w`. Morphologist derived volumes are left
+  out. The Dataset root (`dataset.datasets_root`) is the input path itself, and stage 1 writes the Morphologist
+  outputs below it.
+- Neither kind (or not a folder): the run logs one error and exits with code 2.
 - Both kinds, or T1 files below a folder named `sourcedata`: at a terminal `champollion-pipeline` asks which kind to use; without
   one it exits with code 1 and names `--input-kind t1` and `--input-kind morphologist`. Pass `--input-kind` to
   answer in advance (the replay config keeps it).

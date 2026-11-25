@@ -15,6 +15,8 @@ from pathlib import Path
 
 import pytest
 
+from tests.input_kind_fixtures import read_folders  # noqa: F401 - fixture
+
 MODULE = "champollion_pipeline.utils.input_kind"
 GRAPH_FOLDER = "default_analysis/folds/3.1"
 HEAVY_PACKAGES = ("torch", "soma.aims", "numpy", "pandas")
@@ -75,20 +77,6 @@ class _ReversedListing:
 
     def __iter__(self) -> Iterator[os.DirEntry]:
         return iter(self._entries)
-
-
-@pytest.fixture
-def read_folders(monkeypatch) -> list[str]:
-    """Record, in read order, each folder passed to os.scandir."""
-    folders: list[str] = []
-    real_scandir = os.scandir
-
-    def recording_scandir(path="."):
-        folders.append(os.fspath(path))
-        return real_scandir(path)
-
-    monkeypatch.setattr(os, "scandir", recording_scandir)
-    return folders
 
 
 def _reverse_listings(monkeypatch) -> None:
@@ -305,13 +293,6 @@ def test_broken_symlink_is_no_t1(tmp_path):
     assert _t1_files(tmp_path) == []
 
 
-def test_arg_outside_t1mri_is_no_graph(tmp_path):
-    _touch(tmp_path, "sub-01/graphs/Lsub-01.arg")
-    _touch(tmp_path, "sub-01.nii.gz")
-
-    assert _kind(tmp_path) == "t1"
-
-
 def test_arg_in_dot_folder_is_no_graph(tmp_path):
     _morphologist_subject(tmp_path, "sub-01", ".snapshot/")
     _touch(tmp_path, "sub-01.nii.gz")
@@ -334,7 +315,15 @@ def test_detection_loads_no_heavy_package(tmp_path):
     assert _detect_in_new_process(tmp_path) == ["t1"]
 
 
-@pytest.mark.parametrize("relative", ["IXI002.nii", "sub-01/ses-V1/anat/sub-01_ses-V1_T1w.nii"])
+@pytest.mark.parametrize(
+    "relative",
+    [
+        "IXI002.nii",
+        "sub-01/ses-V1/anat/sub-01_ses-V1_T1w.nii",
+        # No .arg file: a file below t1mri is T1 input (REQ-ARGDISC-BDRABCZUK-1786F42F6CE1)
+        "IXI002/t1mri/default_acquisition/IXI002.nii",
+    ],
+)
 def test_nii_file_is_selected_like_nii_gz(tmp_path, relative):
     _touch(tmp_path, relative)
 
@@ -344,7 +333,6 @@ def test_nii_file_is_selected_like_nii_gz(tmp_path, relative):
 @pytest.mark.parametrize(
     "relative",
     [
-        "IXI002/t1mri/default_acquisition/IXI002.nii",
         "derivatives/cortical_tiles-2026/IXI002.nii",
         "qc/IXI002.nii",
         ".snapshot/IXI002.nii",
@@ -529,15 +517,6 @@ def test_scan_carries_detected_kind(tmp_path, files):
     assert _scan(tmp_path).kind is _module().detect_input_kind(str(tmp_path))
 
 
-def test_nothing_is_read_after_first_t1(tmp_path, read_folders):
-    _touch(tmp_path, "a/b/IXI002.nii.gz")
-    _touch(tmp_path, "a/c/IXI012.nii.gz")
-    _touch(tmp_path, "z/IXI013.nii.gz")
-
-    assert _kind(tmp_path) == "t1"
-    assert _relative(read_folders, tmp_path) == [".", "a", "a/b"]
-
-
 def test_graph_before_first_t1_reads_both(tmp_path):
     _morphologist_subject(tmp_path, "IXI002")
     _touch(tmp_path, "z.nii.gz")
@@ -545,23 +524,7 @@ def test_graph_before_first_t1_reads_both(tmp_path):
     assert _kind(tmp_path) == "both"
 
 
-@pytest.mark.parametrize(
-    ("t1", "prefix"),
-    [
-        ("a.nii.gz", ""),
-        ("data/IXI002.nii.gz", ""),
-        ("a.nii.gz", "z/derivatives/morphologist-6.0/"),
-    ],
-)
-def test_graph_after_first_t1_is_not_seen(tmp_path, t1, prefix):
-    _touch(tmp_path, t1)
-    _morphologist_subject(tmp_path, "zz", prefix)
-
-    assert _kind(tmp_path) == "t1"
-    assert _scan(tmp_path).first_graph is None
-
-
-def test_no_t1mri_folder_is_read_after_first_graph(tmp_path, read_folders):
+def test_no_t1mri_folder_is_read_after_first_graph(tmp_path, read_folders):  # noqa: F811 - imported fixture
     for subject in ("IXI002", "IXI012", "IXI013"):
         _morphologist_subject(tmp_path, subject)
 
@@ -660,7 +623,7 @@ def test_t1_in_sourcedata_reads_t1(tmp_path):
         (["a/b/notes.txt", "a/derivatives/notes.txt"], [".", "a", "a/derivatives", "a/b"]),
     ],
 )
-def test_derivatives_is_entered_first(tmp_path, read_folders, files, expected):
+def test_derivatives_is_entered_first(tmp_path, read_folders, files, expected):  # noqa: F811 - imported fixture
     for relative in files:
         _touch(tmp_path, relative)
 
