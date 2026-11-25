@@ -47,6 +47,8 @@ Subpackages, each with its own README:
 | `put_together_embeddings.py` | Stage 5 script: checks each region's `full_embeddings.csv` and collects them into one output folder. |
 | `replay_config.py` | Writes the effective config of a run to `replay_<timestamp>.yaml` in the logs folder, so `--config` can run it again. |
 | `run_cortical_tiles.py` | Stage 2 script: runs cortical_tiles on the Morphologist graphs to write the sulcal region crops. |
+| `run_cortical_tiles_inputs.py` | Stage 2 input side: subject listing, `--path_to_graph` resolution, the `--sk_qc_path` file, `input_qc.tsv` rows and the end status; re-exported by `run_cortical_tiles.py`. |
+| `run_cortical_tiles_whole_brain.py` | Stage 2 whole-brain volume: L+R skeleton fusion, labelling pre-check (`labelling_qc.tsv`) and ventricle removal; re-exported by `run_cortical_tiles.py`. |
 | `run_masks.py` | The run's per-region Mask version map, resolved once before stage 1 (given map, given Mask version, or the map read from a full local model set), and its run label naming the champollion_V1 output folders; refuses a mixed given map on a Hugging Face models source and a local model set missing a model the run needs. Pure core. |
 | `train_champollion.py` | Trains a champollion_V1 encoder for one sulcal region through champollion_V1's `train.py` with Hydra overrides. |
 
