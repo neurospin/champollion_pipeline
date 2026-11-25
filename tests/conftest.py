@@ -105,9 +105,10 @@ def _stub_stage2_skeletons(monkeypatch):
     if module is None:
         return
     write_input_qc = module.RunCorticalTiles._write_input_qc
+    list_input_subjects = importlib.import_module("champollion_pipeline.run_cortical_tiles_inputs").list_input_subjects
 
     def write_input_qc_on_skeletons(script, input_abs, *args, **kwargs):
-        for subject in module.list_input_subjects(input_abs):
+        for subject in list_input_subjects(input_abs):
             folder = Path(input_abs, subject, script.args.path_sk_with_hull.replace("*", "acquisition"))
             folder.mkdir(parents=True, exist_ok=True)
             for side in SIDES:

@@ -1,7 +1,7 @@
 """
 Guard for the split of src/champollion_pipeline/run_cortical_tiles.py into modules (TASK-CODE-BDRABCZUK-8B3DA5AC4B20,
 refactor, behaviour-preserving; user decision 2026-11-24: the new modules hold the code, run_cortical_tiles.py
-delegates and re-exports, so existing imports keep working).
+delegated and re-exported for one release; TASK-CODE-BDRABCZUK-8636CD45A953 removed the re-exports).
 
 The reference is src/champollion_pipeline/run_cortical_tiles.py at commit 3039b13 (byte-identical at WIP 52d7e16).
 Its module-level names are frozen in REFERENCE_NAMES below; the differential tests load that version with git show
@@ -9,7 +9,7 @@ and compare the moved helpers against it on generated arguments. Both pass on th
 
 Requirements:
 REQ-RCTSPLIT-BDRABCZUK-620928E02B39 (run_cortical_tiles.py at most 750 lines; budget run_cortical_tiles_source_lines),
-REQ-RCTSPLIT-BDRABCZUK-DE19F610E904 (each 3039b13 module-level name importable from run_cortical_tiles),
+REQ-RCTSPLIT-BDRABCZUK-113F898C51D3 (each 3039b13 module-level name importable from its defining module),
 REQ-RCTSPLIT-BDRABCZUK-C2EAC9EA65F3 (each listed helper returns the 3039b13 value for equal arguments).
 """
 
@@ -26,6 +26,8 @@ from hypothesis import given, settings
 from hypothesis import strategies as st
 
 import champollion_pipeline.run_cortical_tiles as current
+import champollion_pipeline.run_cortical_tiles_inputs as inputs
+import champollion_pipeline.run_cortical_tiles_whole_brain as whole_brain
 
 REPO_ROOT = Path(__file__).resolve().parent.parent
 SOURCE_PATH = "src/champollion_pipeline/run_cortical_tiles.py"
@@ -36,21 +38,23 @@ EXCLUSION_REASONS = ("no_graph_folder", "several_graph_folders", "no_labelled_gr
 FS_SETTINGS = settings(max_examples=40, deadline=None)
 
 # Functions, classes and constants defined at module level in run_cortical_tiles.py at commit 3039b13, in file order.
-REFERENCE_NAMES = (
+# Names run_cortical_tiles.py still defines, then the names that moved to run_cortical_tiles_inputs and
+# run_cortical_tiles_whole_brain (run_cortical_tiles no longer re-exports them).
+OWN_NAMES = (
     "logger",
     "LABELLING_SESSION_DEFAULT",
-    "WHOLE_BRAIN_SRC_FILENAME",
-    "WHOLE_BRAIN_OUT_FILENAME",
-    "GRAPH_WILDCARD",
-    "EXCLUDED_NO_GRAPH_FOLDER",
-    "EXCLUDED_SEVERAL_GRAPH_FOLDERS",
-    "EXCLUDED_NO_LABELLED_GRAPH",
-    "EXCLUSION_REASONS",
-    "LABELLING_QC_FILENAME",
-    "LABELLING_QC_EXTRA_COLUMNS",
     "PREFIX_PAIRS_SHOWN",
     "TRANSFORM_QC_FILENAME",
     "INPUT_QC_FILENAME",
+    "OUTPUT_QC_FILENAME",
+    "SkipLists",
+    "_ExplicitLabellingSession",
+    "ROOT_FORBIDDEN_SUBSTRINGS",
+    "RunCorticalTiles",
+    "main",
+)
+INPUTS_NAMES = (
+    "GRAPH_WILDCARD",
     "GRAPH_SIDES",
     "SK_QC_TSV_MARK",
     "REASON_MISSING_GRAPH_STEM",
@@ -58,18 +62,9 @@ REFERENCE_NAMES = (
     "REASON_EXCLUDED_BY_SK_QC",
     "REASON_NO_SUBJECT_FOLDER",
     "REASON_INVALID_SK_QC",
-    "OUTPUT_QC_FILENAME",
     "CROP_STATUS_PARTIAL",
-    "SkipLists",
-    "_ExplicitLabellingSession",
-    "ROOT_FORBIDDEN_SUBSTRINGS",
-    "list_side_volumes",
-    "call_whole_brain_step",
-    "labelled_session_dir",
-    "resolve_labelling_session",
     "resolve_graph_paths",
     "resolve_bids_graph_paths",
-    "fetch_labelling_qc_row",
     "list_input_subjects",
     "fetch_sk_qc_ids",
     "has_hemisphere_graph",
@@ -78,10 +73,24 @@ REFERENCE_NAMES = (
     "fetch_input_qc_rows",
     "find_dotted_ids",
     "find_prefix_id_pairs",
-    "exclusion_warning",
-    "RunCorticalTiles",
-    "main",
 )
+WHOLE_BRAIN_NAMES = (
+    "WHOLE_BRAIN_SRC_FILENAME",
+    "WHOLE_BRAIN_OUT_FILENAME",
+    "EXCLUDED_NO_GRAPH_FOLDER",
+    "EXCLUDED_SEVERAL_GRAPH_FOLDERS",
+    "EXCLUDED_NO_LABELLED_GRAPH",
+    "EXCLUSION_REASONS",
+    "LABELLING_QC_FILENAME",
+    "LABELLING_QC_EXTRA_COLUMNS",
+    "list_side_volumes",
+    "call_whole_brain_step",
+    "labelled_session_dir",
+    "resolve_labelling_session",
+    "fetch_labelling_qc_row",
+    "exclusion_warning",
+)
+REFERENCE_NAMES = OWN_NAMES + INPUTS_NAMES + WHOLE_BRAIN_NAMES
 
 ids = st.text(alphabet=string.ascii_letters + string.digits + "._-", min_size=1, max_size=8).filter(
     lambda name: name not in (".", "..")
@@ -120,21 +129,22 @@ def test_run_cortical_tiles_source_at_most_750_lines():
 
 
 def test_reference_module_names_importable():
-    """Each 3039b13 module-level name still resolves on champollion_pipeline.run_cortical_tiles."""
-    missing = [name for name in REFERENCE_NAMES if not hasattr(current, name)]
+    """Each 3039b13 module-level name resolves on the module that defines it now."""
+    homes = ((current, OWN_NAMES), (inputs, INPUTS_NAMES), (whole_brain, WHOLE_BRAIN_NAMES))
+    missing = [f"{module.__name__}.{name}" for module, group in homes for name in group if not hasattr(module, name)]
     assert len(set(REFERENCE_NAMES)) == 44
-    assert missing == [], f"names no longer importable from champollion_pipeline.run_cortical_tiles: {missing}"
+    assert missing == [], f"names not importable from the module that defines them: {missing}"
 
 
 @given(subject=ids, sk_qc=st.none() | st.dictionaries(ids, st.integers(0, 1), max_size=4), is_refused=st.booleans())
 def test_compute_sk_qc_reason_matches_reference(reference, subject, sk_qc, is_refused):
     expected = reference.compute_sk_qc_reason(subject, sk_qc, is_refused)
-    assert current.compute_sk_qc_reason(subject, sk_qc, is_refused) == expected
+    assert inputs.compute_sk_qc_reason(subject, sk_qc, is_refused) == expected
 
 
 @given(status=st.integers(-3, 10), crop_qc_abs=texts)
 def test_compute_end_status_matches_reference(reference, status, crop_qc_abs):
-    assert current.compute_end_status(status, crop_qc_abs) == reference.compute_end_status(status, crop_qc_abs)
+    assert inputs.compute_end_status(status, crop_qc_abs) == reference.compute_end_status(status, crop_qc_abs)
 
 
 @given(
@@ -144,13 +154,13 @@ def test_compute_end_status_matches_reference(reference, status, crop_qc_abs):
 )
 def test_exclusion_warning_matches_reference(reference, excluded, path_to_graph, candidates):
     expected = reference.exclusion_warning(excluded, path_to_graph, candidates)
-    assert current.exclusion_warning(excluded, path_to_graph, candidates) == expected
+    assert whole_brain.exclusion_warning(excluded, path_to_graph, candidates) == expected
 
 
 @given(morpho_dir=texts, path_to_graph=texts, subject=ids, session=ids, bids=st.booleans())
 def test_labelled_session_dir_matches_reference(reference, morpho_dir, path_to_graph, subject, session, bids):  # noqa: PLR0913 - one argument per generated value
     args = (morpho_dir, path_to_graph, subject, session, bids)
-    assert current.labelled_session_dir(*args) == reference.labelled_session_dir(*args)
+    assert whole_brain.labelled_session_dir(*args) == reference.labelled_session_dir(*args)
 
 
 @FS_SETTINGS
@@ -167,7 +177,7 @@ def test_list_side_volumes_matches_reference(reference, side, filename, suffixes
         for name in [f"{side}{filename}{suffix}.nii.gz" for suffix in suffixes] + others:
             Path(side_dir, name).touch()
         expected = reference.list_side_volumes(volumes_dir, filename, side)
-        assert current.list_side_volumes(volumes_dir, filename, side) == expected
+        assert whole_brain.list_side_volumes(volumes_dir, filename, side) == expected
 
 
 @FS_SETTINGS
@@ -175,7 +185,7 @@ def test_list_side_volumes_matches_reference(reference, side, filename, suffixes
 def test_find_dotted_ids_matches_reference(reference, names):
     with tempfile.TemporaryDirectory() as input_dir:
         _make_folders(input_dir, names)
-        assert current.find_dotted_ids(input_dir) == reference.find_dotted_ids(input_dir)
+        assert inputs.find_dotted_ids(input_dir) == reference.find_dotted_ids(input_dir)
 
 
 @FS_SETTINGS
@@ -183,4 +193,4 @@ def test_find_dotted_ids_matches_reference(reference, names):
 def test_find_prefix_id_pairs_matches_reference(reference, names):
     with tempfile.TemporaryDirectory() as input_dir:
         _make_folders(input_dir, names)
-        assert current.find_prefix_id_pairs(input_dir) == reference.find_prefix_id_pairs(input_dir)
+        assert inputs.find_prefix_id_pairs(input_dir) == reference.find_prefix_id_pairs(input_dir)

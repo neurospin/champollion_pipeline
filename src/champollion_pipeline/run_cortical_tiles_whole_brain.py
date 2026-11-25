@@ -3,7 +3,7 @@ Stage 2 whole-brain volume: fusion of the L and R skeletons, labelling pre-check
 ventricle removal. Fusion comes first, since remove_ventricle(F) reads the tree add_left_and_right_volumes
 wrote; src_dir is the crop subprocess's skeletons/<vox>/{L,R}, never input_abs (the Morphologist graphs
 directory, read-only); morpho_dir stays input_abs, where remove_ventricle locates the labelled graphs.
-The cortical_tiles steps come in as callables from run_cortical_tiles, which re-exports every moved name.
+The cortical_tiles steps come in as callables from run_cortical_tiles, no longer a re-export.
 """
 
 import argparse

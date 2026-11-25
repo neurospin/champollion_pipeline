@@ -17,12 +17,8 @@ from cortical_tiles.brainvisa.utils.skip_list import SKIP_LIST_FILENAME, SKIP_SI
 
 from champollion_pipeline.config import DatasetConfig
 from champollion_pipeline.generate_morphologist_graphs import GenerateMorphologistGraphs
-from champollion_pipeline.run_cortical_tiles import (
-    CROP_STATUS_PARTIAL,
-    INPUT_QC_FILENAME,
-    REASON_EXCLUDED_BY_SK_QC,
-    RunCorticalTiles,
-)
+from champollion_pipeline.run_cortical_tiles import INPUT_QC_FILENAME, RunCorticalTiles
+from champollion_pipeline.run_cortical_tiles_inputs import CROP_STATUS_PARTIAL, REASON_EXCLUDED_BY_SK_QC
 from champollion_pipeline.utils.lib import DERIVATIVES_FOLDER
 from champollion_pipeline.utils.qc_report import read_qc_tsv
 

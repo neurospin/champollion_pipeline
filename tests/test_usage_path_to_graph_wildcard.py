@@ -42,13 +42,13 @@ from unittest.mock import patch
 
 import pytest
 
-from champollion_pipeline.run_cortical_tiles import (
+from champollion_pipeline.run_cortical_tiles import RunCorticalTiles
+from champollion_pipeline.run_cortical_tiles_inputs import (
     CROP_STATUS_PARTIAL,
-    RunCorticalTiles,
-    fetch_labelling_qc_row,
     resolve_bids_graph_paths,
     resolve_graph_paths,
 )
+from champollion_pipeline.run_cortical_tiles_whole_brain import fetch_labelling_qc_row
 from champollion_pipeline.utils.lib import DERIVATIVES_FOLDER, LABELLING_SESSION_CANDIDATES
 from tests.docs_test_helpers import md_prose_lines, md_section, read_text
 

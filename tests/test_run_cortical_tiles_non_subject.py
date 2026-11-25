@@ -14,7 +14,7 @@ import os
 
 import pytest
 
-from champollion_pipeline.run_cortical_tiles import (
+from champollion_pipeline.run_cortical_tiles_inputs import (
     fetch_input_qc_rows,
     find_dotted_ids,
     find_prefix_id_pairs,
