@@ -1,6 +1,6 @@
 [workspace]
 name = "champollion"
-version = "1.0.0"
+version = "1.0.1"
 description = "Champollion pipeline with cortical_tiles, champollion_utils, and testing infrastructure"
 channels = ["https://brainvisa.info/neuro-forge", "conda-forge"]
 platforms = [

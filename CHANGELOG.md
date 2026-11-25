@@ -2,6 +2,18 @@
 
 ## [Unreleased]
 
+## [1.0.1] - 2026-11-25
+
+Hotfix for input detection. Folders holding Morphologist derived volumes (segmentation and similar files) but no
+sulcal graphs were wrongly picked up as T1 input, so the pipeline could run Morphologist on them.
+
+### Fixed
+
+- The input kind now follows one rule: a `.arg` file anywhere below the input means Morphologist output, otherwise
+  `.nii.gz` files are T1 images.
+- Derived volumes are no longer taken for T1 files. An input made only of derived volumes stops with exit status 2
+  before stage 1 runs, and derived volumes found beside T1 files raise one warning with their count.
+
 ## [1.0.0] - 2026-11-24
 
 1.0.0 turns the pipeline into one installed command, `champollion-pipeline <input> [<output>]`, that takes a folder of
