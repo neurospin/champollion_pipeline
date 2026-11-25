@@ -448,7 +448,7 @@ In a pipeline Config file the cache directory is the key `dataset.models_cache`,
 | `--run-cka` | - | off | Run CKA coherence test after embeddings |
 | `--cortical_version` | `NAME` | `cortical_tiles-2026` | Override the cortical tiles derivatives folder name; crops are read from `<datasets_root>/derivatives/<cortical_version>/crops/<masks>/2mm` |
 | `--legacy` | - | off | Shorthand for `--cortical_version deep_folding-2025` (for older datasets) |
-| `--profiling` | - | off | Enable Python profiling (cProfile) |
+| `--profiling` | - | off | Deprecated, removed in 2.0: use `--profile DIR` instead. Enables Python profiling (cProfile) of this process only |
 | `--log` | `PATH` (optional) | none: no run log | Copy the run output (stdout, stderr, child processes) into a run-log file at `PATH`; a bare `--log` writes it in the stage's default folder (see [Run logs](#run-logs)) |
 | `--profile` | `DIR` | none: no profiling | Profile this run and its Python children into `DIR` (same as `CHAMPOLLION_PROFILE=DIR`) |
 | `--profile-mode` | `cpu` or `light` | `cpu` | Profiling mode; requires `--profile` |

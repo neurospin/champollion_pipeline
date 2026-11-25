@@ -38,6 +38,7 @@ from champollion_pipeline.generate_embeddings import (
     PROVENANCE_FILE_NAME,
     GenerateEmbeddings,
 )
+from tests.usage_option_rows import option_table_rows
 
 PROJECT_ROOT = Path(__file__).resolve().parents[1]
 USAGE = PROJECT_ROOT / "docs" / "usage.md"
@@ -59,23 +60,7 @@ def _embeddings_section() -> str:
 
 def _options_rows() -> dict[str, str]:
     """Map the first-cell ``--flag`` of each row of the Stage 4 section's 'Option' tables to the whole row."""
-    rows: dict[str, str] = {}
-    in_table = False
-    for line in _embeddings_section().splitlines():
-        stripped = line.strip()
-        if not stripped.startswith("|"):
-            in_table = False
-            continue
-        if re.match(r"^\|\s*Option\s*\|", stripped):
-            in_table = True
-            continue
-        if in_table:
-            first = stripped.strip("|").split("|", 1)[0]
-            flag = re.search(r"--[A-Za-z][A-Za-z0-9_-]*", first)
-            if flag:
-                rows[flag.group(0)] = stripped
-    assert rows, "Stage 4 section has no '| Option |' table rows (scope helper broken?)"
-    return rows
+    return option_table_rows(_embeddings_section())
 
 
 def _subsection(name: str) -> str:
