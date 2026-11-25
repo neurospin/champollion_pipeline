@@ -29,7 +29,7 @@ MORPHOLOGIST_2021 = "derivatives/morphologist-2021"
 RUNNING_AS_ROOT = hasattr(os, "geteuid") and os.geteuid() == 0
 needs_permissions = pytest.mark.skipif(RUNNING_AS_ROOT, reason="root ignores directory permissions")
 # The functions built on the shared walk: an invariant of the walk holds for each.
-WALKERS = ("detect_input_kind", "find_t1_files", "resolve_subjects_dir")
+WALKERS = ("detect_input_kind", "find_t1_files", "derived_volumes", "resolve_subjects_dir")
 # Folder names every walker enters: find_t1_files rightly stays out of the folders that cannot hold a T1 file.
 WALKED_NAMES = st.from_regex(r"[a-z][a-z0-9_-]{0,8}", fullmatch=True).filter(
     lambda name: name not in {"derivatives", "qc", "t1mri"}

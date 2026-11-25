@@ -652,13 +652,13 @@ class ChampollionPipeline(ScriptBuilder):
         return self
 
     def run(self) -> int:
-        """Run the pipeline; InputChoiceError (status 1), ArgumentConflictError, EnvFileError, RegionMasksError,
-        MaskVersionStop (2): one ERROR record."""
+        """Run the pipeline; InputChoiceError (its exit_status: 1, DerivedVolumesOnly 2), ArgumentConflictError,
+        EnvFileError, RegionMasksError, MaskVersionStop (2): one ERROR record."""
         try:
             return self._run_pipeline(self.args)
         except InputChoiceError as error:
             logger.error(str(error))
-            return 1
+            return error.exit_status
         except (ArgumentConflictError, EnvFileError, RegionMasksError, MaskVersionStop) as error:
             logger.error(str(error))
             return _USAGE_ERROR_STATUS
