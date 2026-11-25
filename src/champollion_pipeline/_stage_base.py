@@ -18,6 +18,7 @@ from champollion_utils.script_builder import ScriptBuilder
 
 from champollion_pipeline.config import PipelineConfig
 from champollion_pipeline.derivatives_layout import RUN_LOG_TIMESTAMP_FORMAT
+from champollion_pipeline.utils.graph_item import GraphItem
 
 PARTIAL_STATUS = 3
 
@@ -40,6 +41,22 @@ class StageIndexer(Protocol):  # noqa: V102 - used by main.py
 
     def index_post(self, stage_name: str, output_dir: str) -> None:  # noqa: V105 - the port, called by main.py
         """Index the folder the stage wrote."""
+
+    def discover_graphs(self, folder: str) -> list[GraphItem]:  # noqa: V105 - the port, called by graph readers
+        """Return one item per Morphologist graph (.arg) below folder, in natural path order.
+
+        Backend-neutral: an item is a path relative to ``folder`` plus an attribute mapping; the attribute names and
+        rules belong to each adapter.
+
+        Args:
+            folder: Folder to search.
+
+        Returns:
+            The GraphItem of each graph.
+
+        Raises:
+            LooseGraphError: a ValueError, for a graph directly in a given folder not named sub-*.
+        """
 
 
 @dataclass

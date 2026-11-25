@@ -16,6 +16,7 @@ import glob
 import json
 import logging
 import os
+import re
 from collections import Counter
 from collections.abc import Callable
 from dataclasses import dataclass, field
@@ -25,6 +26,8 @@ from os.path import join, splitext
 import champollion_utils.logger  # noqa: F401 - installs the OUTPUT level helpers
 from champollion_utils.logger import OUTPUT
 
+from champollion_pipeline.utils.graph_item import GraphItem, LooseGraphError
+from champollion_pipeline.utils.input_kind import graph_files
 from champollion_pipeline.utils.subject_folders import list_morphologist_subjects
 
 from .btree import BTree
@@ -42,6 +45,13 @@ SUBJECT_PATTERN_WILDCARD = "*"
 _KEY_MAX_SUFFIX = "\U0010ffff"
 # Shown for the empty extension in the post-stage summary.
 NO_EXT_LABEL = "(no ext)"
+# Graph discovery: a labelled graph's own folder ends with one of these.
+_LABELLING_SET_ENDINGS = ("_auto", "_manual")
+# Graph discovery: hemisphere letters, as the first letter of a classic graph name.
+_SIDES = ("L", "R")
+# Graph discovery: the hemi-L / hemi-R entity of a graph name.
+_HEMI_ENTITY = re.compile(r"(?:^|_)hemi-([LR])(?=_|\.arg$)")
+_DIGIT_RUN = re.compile(r"([0-9]+)")
 
 
 def _check_relative(pattern: str) -> None:
@@ -370,3 +380,70 @@ class FileIndexStageIndexer:  # noqa: V102 - used by main.py
     def index_post(self, stage_name: str, output_dir: str) -> None:  # noqa: V105 - used by main.py
         """Index output_dir and log the post-stage summary."""
         build_output_report(output_dir, stage_name, save_index_to=self._index_path("post", stage_name)).log_summary()
+
+    def discover_graphs(self, folder: str) -> list[GraphItem]:  # noqa: V105 - the port, called by graph readers
+        """Return one item per graph (.arg) below folder, attributes read from names alone, in natural path order.
+
+        Each item's path is POSIX, relative to folder; its attributes are subject (nearest sub- folder, else the child
+        folder of folder), hemisphere (hemi-L/hemi-R entity, else a first letter L or R, else None) and labelling_set
+        (its own folder when named *_auto or *_manual, else None). No file is opened, no index written.
+
+        Raises:
+            NotADirectoryError: folder is not a folder.
+            LooseGraphError: a graph sits directly in folder and folder's name does not start with sub-.
+
+        Complexity: O(entries below folder) for the walk, O(n log n) for the sort.
+        """
+        if not os.path.isdir(folder):
+            raise NotADirectoryError(f"Graph discovery needs a folder, got {folder!r}")
+        root_name = os.path.basename(os.path.abspath(folder))
+        items = []
+        for parts, name in graph_files(folder):
+            if not parts and not root_name.startswith(BIDS_SUBJECT_PREFIX):
+                raise LooseGraphError(os.path.join(folder, name))
+            attributes = {
+                "subject": _subject(root_name, parts),
+                "hemisphere": _hemisphere(name),
+                "labelling_set": _labelling_set(root_name, parts),
+            }
+            items.append(GraphItem("/".join((*parts, name)), attributes))
+        result = sorted(items, key=lambda item: _natural_key(item.path))
+        assert len({x.path for x in result}) == len(result), (
+            "FileIndexStageIndexer.discover_graphs post: len(set(x.path for x in result)) == len(result)"
+        )
+        assert all(sorted(x.attributes) == ["hemisphere", "labelling_set", "subject"] for x in result), (
+            "FileIndexStageIndexer.discover_graphs post: attribute keys are hemisphere, labelling_set, subject"
+        )
+        assert all(x.attributes["hemisphere"] in (*_SIDES, None) for x in result), (
+            "FileIndexStageIndexer.discover_graphs post: hemisphere in L, R, None"
+        )
+        assert all(x.attributes["subject"] is not None for x in result), (
+            "FileIndexStageIndexer.discover_graphs post: subject is not None"
+        )
+        return result
+
+
+def _subject(root_name: str, parts: tuple[str, ...]) -> str:
+    """Name of the nearest sub- folder of (root_name, *parts); without one, the child folder parts[0]."""
+    subjects = [name for name in (root_name, *parts) if name.startswith(BIDS_SUBJECT_PREFIX)]
+    return subjects[-1] if subjects else parts[0]
+
+
+def _hemisphere(name: str) -> str | None:
+    """Letter of the hemi-L/hemi-R entity of a graph name, else its first letter when L or R, else None."""
+    match = _HEMI_ENTITY.search(name)
+    if match:
+        return match[1]
+    return name[0] if name[:1] in _SIDES else None
+
+
+def _labelling_set(root_name: str, parts: tuple[str, ...]) -> str | None:
+    """Name of the graph's own folder when it ends with _auto or _manual, else None."""
+    own = parts[-1] if parts else root_name
+    return own if own.endswith(_LABELLING_SET_ENDINGS) else None
+
+
+def _natural_key(path: str) -> tuple[tuple[str | int, ...], str]:
+    """Sort key comparing runs of digits as numbers; the plain path breaks ties, so the order is total."""
+    pieces = _DIGIT_RUN.split(path)
+    return (tuple(int(piece) if index % 2 else piece for index, piece in enumerate(pieces)), path)
