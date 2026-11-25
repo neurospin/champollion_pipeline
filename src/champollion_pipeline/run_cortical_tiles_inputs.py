@@ -2,7 +2,7 @@
 Stage 2 input listing and input QC: the subject folders of the input, the folders --path_to_graph
 matches (``*`` its only wildcard, BIDS volume ids through cortical_tiles' session_key), the --sk_qc_path
 file, the input_qc.tsv rows, the temporary subject-ID finders and the end status of the stage. Moved
-from run_cortical_tiles.py, which re-exports every name.
+from run_cortical_tiles.py, which no longer re-exports them.
 """
 
 import glob

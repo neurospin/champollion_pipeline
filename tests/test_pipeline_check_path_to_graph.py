@@ -27,11 +27,8 @@ from unittest.mock import patch
 
 import pytest
 
-from champollion_pipeline.run_cortical_tiles import (
-    REASON_MISSING_GRAPH_STEM,
-    REASON_SEPARATOR,
-    fetch_input_qc_rows,
-)
+from champollion_pipeline.run_cortical_tiles_inputs import REASON_MISSING_GRAPH_STEM, fetch_input_qc_rows
+from champollion_pipeline.utils.qc_report import REASON_SEPARATOR
 from tests.listing_helpers import file_system_listing_reversed
 from tests.log_assertions import OUTPUT
 

@@ -37,43 +37,17 @@ from champollion_pipeline.generate_masks import _REGIONS_DEFAULT
 from champollion_pipeline.process_setup import init_pipeline_process
 from champollion_pipeline.run_cortical_tiles_inputs import (
     CROP_STATUS_PARTIAL,
-    GRAPH_SIDES,
-    GRAPH_WILDCARD,
     REASON_EXCLUDED_BY_SK_QC,
-    REASON_INVALID_SK_QC,
-    REASON_MISSING_GRAPH_STEM,
-    REASON_NO_SUBJECT_FOLDER,
-    REASON_NOT_IN_SK_QC,
-    SK_QC_TSV_MARK,
     compute_end_status,
-    compute_sk_qc_reason,
     fetch_input_qc_rows,
     fetch_sk_qc_ids,
     find_dotted_ids,
     find_prefix_id_pairs,
-    has_hemisphere_graph,
-    list_input_subjects,
-    resolve_bids_graph_paths,
-    resolve_graph_paths,
 )
 from champollion_pipeline.run_cortical_tiles_whole_brain import (
-    EXCLUDED_NO_GRAPH_FOLDER,
-    EXCLUDED_NO_LABELLED_GRAPH,
-    EXCLUDED_SEVERAL_GRAPH_FOLDERS,
-    EXCLUSION_REASONS,
-    LABELLING_QC_EXTRA_COLUMNS,
-    LABELLING_QC_FILENAME,
-    WHOLE_BRAIN_OUT_FILENAME,
-    WHOLE_BRAIN_SRC_FILENAME,
-    call_whole_brain_step,
     compute_fusion_failure_status,
-    exclusion_warning,
-    fetch_labelling_qc_row,
     fuse_whole_brain,
-    labelled_session_dir,
-    list_side_volumes,
     remove_ventricle_whole_brain,
-    resolve_labelling_session,
 )
 from champollion_pipeline.utils.cortical_tiles_config import (
     INPUT_TYPES_DEFAULT,
@@ -97,7 +71,6 @@ from champollion_pipeline.utils.lib import DERIVATIVES_FOLDER, LABELLING_SESSION
 from champollion_pipeline.utils.qc_report import (
     CROP_KIND_MASK,
     CROP_MASK_FOLDER,
-    REASON_SEPARATOR,
     fetch_crop_qc_rows,
     fetch_grouped_crop_qc_rows,
     read_qc_tsv,
@@ -115,47 +88,6 @@ from champollion_pipeline.utils.skeleton_qc import save_config_skel_qc, save_cro
 from champollion_pipeline.utils.transform_qc import transform_qc_rows
 
 logger = logging.getLogger(__name__)
-
-# Re-exported for one release: the names moved to run_cortical_tiles_inputs and run_cortical_tiles_whole_brain,
-# and REASON_SEPARATOR, which tests import from here.
-__all__ = [
-    "CROP_STATUS_PARTIAL",
-    "EXCLUDED_NO_GRAPH_FOLDER",
-    "EXCLUDED_NO_LABELLED_GRAPH",
-    "EXCLUDED_SEVERAL_GRAPH_FOLDERS",
-    "EXCLUSION_REASONS",
-    "GRAPH_SIDES",
-    "GRAPH_WILDCARD",
-    "LABELLING_QC_EXTRA_COLUMNS",
-    "LABELLING_QC_FILENAME",
-    "REASON_EXCLUDED_BY_SK_QC",
-    "REASON_INVALID_SK_QC",
-    "REASON_MISSING_GRAPH_STEM",
-    "REASON_NOT_IN_SK_QC",
-    "REASON_NO_SUBJECT_FOLDER",
-    "REASON_SEPARATOR",
-    "SK_QC_TSV_MARK",
-    "WHOLE_BRAIN_OUT_FILENAME",
-    "WHOLE_BRAIN_SRC_FILENAME",
-    "RunCorticalTiles",
-    "call_whole_brain_step",
-    "compute_end_status",
-    "compute_sk_qc_reason",
-    "exclusion_warning",
-    "fetch_input_qc_rows",
-    "fetch_labelling_qc_row",
-    "fetch_sk_qc_ids",
-    "find_dotted_ids",
-    "find_prefix_id_pairs",
-    "has_hemisphere_graph",
-    "labelled_session_dir",
-    "list_input_subjects",
-    "list_side_volumes",
-    "main",
-    "resolve_bids_graph_paths",
-    "resolve_graph_paths",
-    "resolve_labelling_session",
-]
 
 LABELLING_SESSION_DEFAULT = LABELLING_SESSION_CANDIDATES[0]
 # TEMPORARY (DEF-CORTILES-BDRABCZUK-8A44DAD7F312): the prefix-ID guard below (and its flag, check and test file)
