@@ -84,6 +84,7 @@ from champollion_pipeline.utils.region_masks import add_region_masks_option, ref
 PROVENANCE_FILE_NAME = "provenance.json"
 INPUT_QC_FILENAME = "input_qc.tsv"
 FAILED_STATUS = 1
+_PROFILING_DEPRECATION = "--profiling is deprecated, removed in 2.0: use --profile DIR (or main.py --profile DIR)"
 
 logger = logging.getLogger(__name__)
 
@@ -334,6 +335,7 @@ class GenerateEmbeddings(ScriptBuilder):
         """Execute the embeddings pipeline script."""
         self._validate_inputs()
         if self.args.profiling:
+            warnings.warn(_PROFILING_DEPRECATION, FutureWarning, stacklevel=2)
             return self._run_with_profiling()
         return self._run_normal()
 
