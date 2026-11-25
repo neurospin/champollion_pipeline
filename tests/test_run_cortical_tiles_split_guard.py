@@ -12,15 +12,9 @@ REQ-CTSPLIT-BDRABCZUK-E1344F241964 (each test_run_cortical_tiles*.py file at mos
   run_cortical_tiles_test_file_lines_max).
 """
 
-import ast
-import json
-import os
-from collections import Counter
-from pathlib import Path
+from tests.split_guard import assert_each_name_defined_once, assert_files_within_limit
 
-TESTS_DIR = Path(__file__).resolve().parent
 SPLIT_GLOB = "test_run_cortical_tiles*.py"
-MAX_FILE_LINES = 1000
 MEASURE = "run_cortical_tiles_test_file_lines_max"
 
 # Class-qualified test function names of tests/test_run_cortical_tiles.py at commit 5c291de, in file order.
@@ -93,49 +87,11 @@ REFERENCE_TEST_NAMES = (
 )
 
 
-def _split_files():
-    return sorted(TESTS_DIR.glob(SPLIT_GLOB))
-
-
-def _is_test_function(node):
-    return isinstance(node, (ast.FunctionDef, ast.AsyncFunctionDef)) and node.name.startswith("test")
-
-
-def _is_test_class(node):
-    return isinstance(node, ast.ClassDef) and node.name.startswith("Test")
-
-
-def _node_test_names(node):
-    """Test names one top-level node defines: its own name, or its Test* class test methods, class-qualified."""
-    if _is_test_function(node):
-        return [node.name]
-    if _is_test_class(node):
-        return [f"{node.name}::{member.name}" for member in node.body if _is_test_function(member)]
-    return []
-
-
-def _defined_test_names(path):
-    """Module-level test functions and Test* class test methods of one file, class-qualified."""
-    tree = ast.parse(path.read_text(encoding="utf-8"))
-    return [name for node in tree.body for name in _node_test_names(node)]
-
-
 def test_reference_test_names_each_defined_once():
     """REQ-CTSPLIT-BDRABCZUK-5EFA5CDE7D87: each 5c291de test name is defined in exactly one split file."""
-    counts = Counter()
-    for path in _split_files():
-        counts.update(_defined_test_names(path))
-    wrong = {name: counts[name] for name in REFERENCE_TEST_NAMES if counts[name] != 1}
-    assert len(set(REFERENCE_TEST_NAMES)) == 65
-    assert wrong == {}, f"reference test names not defined exactly once: {wrong}"
+    assert_each_name_defined_once(REFERENCE_TEST_NAMES, 65, SPLIT_GLOB)
 
 
 def test_run_cortical_tiles_test_files_at_most_1000_lines():
     """REQ-CTSPLIT-BDRABCZUK-E1344F241964: each test_run_cortical_tiles*.py file has at most 1000 lines."""
-    counts = {path.name: len(path.read_text(encoding="utf-8").splitlines()) for path in _split_files()}
-    measures = os.environ.get("ALM_MEASURES")
-    if measures and counts:
-        with open(measures, "a", encoding="utf-8") as handle:
-            handle.write(json.dumps({MEASURE: max(counts.values())}) + "\n")
-    over = {name: lines for name, lines in counts.items() if lines > MAX_FILE_LINES}
-    assert over == {}, f"files over {MAX_FILE_LINES} lines: {over}"
+    assert_files_within_limit(SPLIT_GLOB, MEASURE)

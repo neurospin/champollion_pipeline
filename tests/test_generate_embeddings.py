@@ -1,43 +1,24 @@
 #!/usr/bin/env python3
 """
-Unit tests for generate_embeddings.py
+Unit tests for generate_embeddings.py: arguments, region model discovery, region names,
+per-region evaluate.py commands, the cortical version flags, the --regions filter,
+the HuggingFace fetch and the smoke tests.
+
+Set-up, run flow, profiling and pixi task paths are in test_generate_embeddings_script.py,
+log records in test_generate_embeddings_logging.py.
 """
 
-import ast
-import inspect
-import logging
 import os
-import pathlib
-import re
 import shutil
-from unittest.mock import MagicMock, patch
+from unittest.mock import patch
 
 import pytest
-import tomllib
 
-from champollion_pipeline import generate_embeddings as generate_embeddings_module
 from champollion_pipeline.generate_embeddings import GenerateEmbeddings, HuggingFaceStrategy
 from champollion_pipeline.models.checkpoint import find_region_model_dirs
 from champollion_pipeline.utils.lib import CORTICAL_TILES_VERSION
 from tests.embeddings_parse_helpers import MASKS_ARGS
-from tests.log_assertions import FAIL, LOG, OUTPUT, print_call_lines
-
-
-def make_region_logs(model_dir) -> None:
-    """Create model_dir/logs/ holding an epoch=80 checkpoint, so the region has weights to evaluate."""
-    ckpt_dir = model_dir / "logs" / "lightning_logs" / "version_0" / "checkpoints"
-    ckpt_dir.mkdir(parents=True)
-    (ckpt_dir / "epoch=80-step=1.ckpt").write_text("placeholder")
-
-
-class TestGenerateEmbeddingsInit:
-    """Test initialization."""
-
-    def test_init_creates_script(self):
-        """Test that script is initialized correctly."""
-        script = GenerateEmbeddings()
-        assert script.script_name == "generate_embeddings"
-        assert "embeddings" in script.description.lower()
+from tests.region_model_dirs import make_region_logs
 
 
 class TestGenerateEmbeddingsArguments:
@@ -339,95 +320,6 @@ class TestRegionNameResolution:
         assert cmd[cmd.index("-m") + 1].endswith(self.REGION)
 
 
-class TestRunMethod:
-    """Test the run method."""
-
-    def test_run_calls_run_per_region(self, tmp_path):
-        """run() delegates to _run_per_region."""
-        (tmp_path / "SC-sylv_left").mkdir()
-
-        script = GenerateEmbeddings()
-        script.parse_args([str(tmp_path), str(tmp_path), *MASKS_ARGS])
-
-        with (
-            patch.object(script, "fetch_models", return_value=str(tmp_path)),
-            patch.object(script, "_run_per_region", return_value=0) as mock_per,
-        ):
-            script.run()
-        mock_per.assert_called_once()
-
-    def test_run_returns_result(self, tmp_path):
-        """run() returns the value from _run_per_region."""
-        (tmp_path / "SC-sylv_left").mkdir()
-
-        script = GenerateEmbeddings()
-        script.parse_args([str(tmp_path), str(tmp_path), *MASKS_ARGS])
-
-        with (
-            patch.object(script, "fetch_models", return_value=str(tmp_path)),
-            patch.object(script, "_run_per_region", return_value=99),
-        ):
-            result = script.run()
-        assert result == 99
-
-
-class TestLegacyCropsPath:
-    """REQ-LEGACYPATH-01: --legacy reads crops from the flat deep_folding-2025/crops/2mm layout."""
-
-    def _captured_crops_dir(self, tmp_path, extra_args):
-        """Run run() with _run_per_region stubbed; return the crops_2mm_dir it received."""
-        models_dir = tmp_path / "models"
-        models_dir.mkdir()
-        datasets_root = tmp_path / "dataset"
-        datasets_root.mkdir()
-
-        script = GenerateEmbeddings()
-        script.parse_args([str(models_dir), str(datasets_root), *MASKS_ARGS, *extra_args])
-
-        with (
-            patch.object(script, "fetch_models", return_value=str(models_dir)),
-            patch.object(script, "_run_per_region", return_value=0) as mock_per,
-        ):
-            script.run()
-        mock_per.assert_called_once()
-        return mock_per.call_args.args[1], str(datasets_root)
-
-    def test_legacy_crops_dir_has_no_mask_version_segment(self, tmp_path):
-        crops_dir, root = self._captured_crops_dir(tmp_path, ["--legacy"])
-        assert crops_dir == os.path.join(root, "derivatives", "deep_folding-2025", "crops", "2mm")
-
-    def test_legacy_crops_dir_ignores_explicit_masks_option(self, tmp_path):
-        crops_dir, root = self._captured_crops_dir(tmp_path, ["--legacy", "--masks", "canonical_25"])
-        assert crops_dir == os.path.join(root, "derivatives", "deep_folding-2025", "crops", "2mm")
-
-    def test_non_legacy_crops_dir_keeps_mask_version_segment(self, tmp_path):
-        crops_dir, root = self._captured_crops_dir(tmp_path, [])
-        assert crops_dir == os.path.join(
-            root, "derivatives", f"cortical_tiles-{CORTICAL_TILES_VERSION}", "crops", "canonical_25", "2mm"
-        )
-
-
-@pytest.mark.integration
-class TestGenerateEmbeddingsIntegration:
-    """Integration tests."""
-
-    def test_full_workflow(self, tmp_path):
-        """Test complete workflow."""
-        (tmp_path / "SC-sylv_left").mkdir()
-
-        script = GenerateEmbeddings()
-        script.parse_args([str(tmp_path), str(tmp_path), *MASKS_ARGS, "--overwrite"])
-
-        with (
-            patch.object(script, "fetch_models", return_value=str(tmp_path)),
-            patch.object(script, "_run_per_region", return_value=0) as mock_run,
-        ):
-            result = script.run()
-
-        assert result == 0
-        mock_run.assert_called_once()
-
-
 class TestCorticalVersionFlags:
     """Tests for --cortical_version and --legacy flags."""
 
@@ -629,90 +521,6 @@ class TestRegionsFilter:
             mock_make.assert_not_called()
 
 
-class TestProfiling:
-    """Tests for --profiling / cProfile behavior."""
-
-    def test_run_dispatches_to_profiling_when_flag_set(self, temp_dir):
-        script = GenerateEmbeddings()
-        script.parse_args([temp_dir, temp_dir, *MASKS_ARGS, "--profiling"])
-
-        with (
-            patch.object(script, "_validate_inputs"),
-            patch.object(script, "_run_with_profiling", return_value=0) as mock_prof,
-        ):
-            script.run()
-            mock_prof.assert_called_once()
-
-    def test_run_dispatches_to_normal_without_profiling_flag(self, temp_dir):
-        script = GenerateEmbeddings()
-        script.parse_args([temp_dir, temp_dir, *MASKS_ARGS])
-
-        with (
-            patch.object(script, "_validate_inputs"),
-            patch.object(script, "_run_normal", return_value=0) as mock_normal,
-        ):
-            script.run()
-            mock_normal.assert_called_once()
-
-    def test_run_with_profiling_calls_run_normal(self, temp_dir):
-        script = GenerateEmbeddings()
-        script.parse_args([temp_dir, temp_dir, *MASKS_ARGS, "--profiling"])
-
-        with (
-            patch("champollion_pipeline.generate_embeddings.cProfile.Profile"),
-            patch("champollion_pipeline.generate_embeddings.pstats.Stats", return_value=MagicMock()),
-            patch.object(script, "_run_normal", return_value=42) as mock_normal,
-        ):
-            result = script._run_with_profiling()
-            mock_normal.assert_called_once()
-            assert result == 42
-
-    def test_run_with_profiling_dumps_profile_file(self, temp_dir):
-        script = GenerateEmbeddings()
-        script.parse_args([temp_dir, temp_dir, *MASKS_ARGS, "--profiling"])
-
-        mock_stats = MagicMock()
-
-        with (
-            patch("champollion_pipeline.generate_embeddings.cProfile.Profile"),
-            patch("champollion_pipeline.generate_embeddings.pstats.Stats", return_value=mock_stats),
-            patch.object(script, "_run_normal", return_value=0),
-        ):
-            script._run_with_profiling()
-            mock_stats.dump_stats.assert_called_once_with("embeddings_profile.prof")
-
-    def test_run_with_profiling_dumps_on_error(self, temp_dir):
-        script = GenerateEmbeddings()
-        script.parse_args([temp_dir, temp_dir, *MASKS_ARGS, "--profiling"])
-
-        mock_stats = MagicMock()
-
-        with (
-            patch("champollion_pipeline.generate_embeddings.cProfile.Profile"),
-            patch("champollion_pipeline.generate_embeddings.pstats.Stats", return_value=mock_stats),
-            patch.object(script, "_run_normal", side_effect=RuntimeError("boom")),
-        ):
-            with pytest.raises(RuntimeError):
-                script._run_with_profiling()
-            mock_stats.dump_stats.assert_called_once_with("embeddings_profile.prof")
-
-
-@pytest.mark.smoke
-class TestGenerateEmbeddingsSmoke:
-    """Smoke tests."""
-
-    def test_script_can_be_instantiated(self):
-        """Test that script can be created."""
-        script = GenerateEmbeddings()
-        assert script is not None
-
-    def test_script_has_run_method(self):
-        """Test that script has run method."""
-        script = GenerateEmbeddings()
-        assert hasattr(script, "run")
-        assert callable(script.run)
-
-
 @pytest.mark.unit
 class TestHuggingFaceStrategy:
     """Unit tests for HuggingFaceStrategy.fetch() — regression for snapshot_download bugs."""
@@ -762,58 +570,20 @@ class TestHuggingFaceStrategy:
         assert resolved == snapshot_root
 
 
-@pytest.mark.unit
-class TestPixiTaskPaths:
-    """REQ-PIXITASKS-01 — every pixi task invoking a `python3 src/...` script
-    must point at a file that actually exists.
+@pytest.mark.smoke
+class TestGenerateEmbeddingsSmoke:
+    """Smoke tests."""
 
-    Rather than hardcoding a handful of known task names (which silently stops
-    covering a task the moment it's renamed or a new one is added), this walks
-    the whole parsed ``pixi.toml`` — top-level ``[tasks]`` and every
-    ``[feature.<name>.tasks]`` table — and extracts every ``python3 src/...``
-    invocation automatically.
-    """
+    def test_script_can_be_instantiated(self):
+        """Test that script can be created."""
+        script = GenerateEmbeddings()
+        assert script is not None
 
-    @staticmethod
-    def _task_command(task):
-        """Return a task's shell command, whether it is a string or a table."""
-        if isinstance(task, str):
-            return task
-        if isinstance(task, dict):
-            return task.get("cmd", "")
-        raise TypeError(f"unexpected pixi task type: {type(task)!r}")
-
-    @classmethod
-    def _iter_task_commands(cls, pixi_config):
-        """Yield (location, task_name, command) for every task in pixi.toml."""
-        for task_name, task in pixi_config.get("tasks", {}).items():
-            yield "[tasks]", task_name, cls._task_command(task)
-        for feature_name, feature in pixi_config.get("feature", {}).items():
-            for task_name, task in feature.get("tasks", {}).items():
-                yield f"[feature.{feature_name}.tasks]", task_name, cls._task_command(task)
-
-    @classmethod
-    def _iter_src_script_paths(cls, pixi_config):
-        """Yield (location, task_name, rel_path) for every `python3 src/...py` invocation."""
-        pattern = re.compile(r"python3\s+(src/\S+\.py)")
-        for location, task_name, command in cls._iter_task_commands(pixi_config):
-            for rel_path in pattern.findall(command):
-                yield location, task_name, rel_path
-
-    def test_all_pixi_task_scripts_exist(self):
-
-        repo_root = pathlib.Path(__file__).parent.parent
-        with (repo_root / "pixi.toml").open("rb") as handle:
-            pixi_config = tomllib.load(handle)
-
-        checked = 0
-        for location, task_name, rel_path in self._iter_src_script_paths(pixi_config):
-            checked += 1
-            script = repo_root / rel_path
-            assert script.exists(), (
-                f"pixi task '{task_name}' under {location} points to '{rel_path}' which does not exist"
-            )
-        assert checked >= 5, "expected to find at least the known python3 src/... pixi tasks; parsing regressed"
+    def test_script_has_run_method(self):
+        """Test that script has run method."""
+        script = GenerateEmbeddings()
+        assert hasattr(script, "run")
+        assert callable(script.run)
 
 
 @pytest.mark.unit
@@ -884,214 +654,3 @@ class TestPerRegionSubjectsFile:
         cmds, mask_dir = self._run_and_collect_cmds(tmp_path)
         cmd = cmds["SC-sylv_right"]
         assert cmd[cmd.index("-i") + 1] == str(mask_dir / "Rskeleton_subject.csv")
-
-
-# --------------------------------------------------------------------------- #
-# LOGGING convention (TASK-LOGGING-BDRABCZUK-7132B94434A5)
-# --------------------------------------------------------------------------- #
-
-LOGGER_NAME = "champollion_pipeline.generate_embeddings"
-
-
-def _region_script(tmp_path, regions, *extra_args):
-    """A GenerateEmbeddings over tmp_path/models holding one epoch=80 region model directory per region."""
-    models_dir = tmp_path / "models"
-    for region in regions:
-        make_region_logs(models_dir / region)
-    script = GenerateEmbeddings()
-    script.args = script.parse_args([str(models_dir), str(tmp_path), *MASKS_ARGS, *extra_args])
-    return script
-
-
-def _run_regions(script, tmp_path, exit_code=0):
-    """Run _run_per_region with evaluate.py stubbed to return exit_code; return the stage status."""
-    with patch.object(script, "execute_command", return_value=exit_code):
-        return script._run_per_region(
-            evaluate_script="/eval.py",
-            crops_2mm_dir=str(tmp_path / "crops"),
-            output_base=str(tmp_path / "out"),
-        )
-
-
-class _FakeStats:
-    """pstats.Stats stand-in whose print_stats writes a fixed statistics header to its stream."""
-
-    HEADER = "   Ordered by: cumulative time"
-
-    def __init__(self, *_profilers, stream=None):
-        self.stream = stream
-
-    def sort_stats(self, *_keys):
-        return self
-
-    def dump_stats(self, _filename):
-        return None
-
-    def print_stats(self, *_restrictions):
-        self.stream.write(f"{self.HEADER}\n")
-        return self
-
-
-@pytest.mark.unit
-class TestEmbeddingsLogging:
-    """Stage messages go through the champollion_pipeline.generate_embeddings logger at the mapped levels.
-
-    REQ-LOGGING-BDRABCZUK-3244BE9D5C49: Fold <i>/<n> per region model directory at LOG.
-    REQ-LOGGING-BDRABCZUK-DF78FDBC9C1B: run start with the output directory at LOG.
-    REQ-LOGGING-BDRABCZUK-34DD57C23B5C: [SKIP] <region> at LOG.
-    REQ-LOGGING-BDRABCZUK-2364137F954D: weights file path of a region at LOG.
-    REQ-LOGGING-BDRABCZUK-82A9C5E4546A: best_model_weights.pt stand-in at WARNING.
-    REQ-LOGGING-BDRABCZUK-A32D0E63055B: failed region names at FAIL.
-    REQ-LOGGING-BDRABCZUK-7DB89B98D5DD: provenance.json path at OUTPUT.
-    REQ-LOGGING-BDRABCZUK-EF548A46DAEC: --cpu (CUDA_VISIBLE_DEVICES) at LOG.
-    REQ-LOGGING-BDRABCZUK-8A3FD0F22242: embeddings_profile.prof at OUTPUT.
-    REQ-LOGGING-BDRABCZUK-F40F6E961CA2: profiling statistics at OUTPUT.
-    REQ-LOGGING-BDRABCZUK-66706D8B409A: CKA output directory at LOG.
-    REQ-LOGGING-BDRABCZUK-5D9C1F31AEA1: CKA completion at OUTPUT.
-    REQ-LOGGING-BDRABCZUK-130243633649: CKA failure at WARNING.
-    REQ-LOGGING-BDRABCZUK-1952DEF1166A: no print() call in the module.
-    """
-
-    def test_fold_progress_logged_per_region_model(self, tmp_path, pipeline_caplog):
-        # champollion_sulcal_mcp reads "Fold N/M" from the stage output (runner.FOLD_RE).
-        script = _region_script(tmp_path, ["SC-sylv_left", "SC-sylv_right"])
-
-        _run_regions(script, tmp_path)
-
-        for fold in (1, 2):
-            record = pipeline_caplog.assert_fold_progress(fold, 2)
-            assert (record.name, record.levelno) == (LOGGER_NAME, LOG)
-
-    def test_fold_progress_logged_for_skipped_region(self, tmp_path, pipeline_caplog):
-        script = _region_script(tmp_path, ["SC-sylv_left", "SC-sylv_right"])
-        for region in ("SC-sylv_left", "SC-sylv_right"):
-            (tmp_path / "out" / region).mkdir(parents=True)
-            (tmp_path / "out" / region / "full_embeddings.csv").write_text("existing")
-
-        _run_regions(script, tmp_path)
-
-        for fold in (1, 2):
-            record = pipeline_caplog.assert_fold_progress(fold, 2)
-            assert (record.name, record.levelno) == (LOGGER_NAME, LOG)
-
-    def test_run_start_logged_with_output_directory(self, tmp_path, pipeline_caplog):
-        script = _region_script(tmp_path, ["SC-sylv_left"])
-
-        _run_regions(script, tmp_path)
-
-        record = pipeline_caplog.assert_logged(LOG, str(tmp_path / "out"))
-        assert record.name == LOGGER_NAME
-
-    def test_skipped_region_logged(self, tmp_path, pipeline_caplog):
-        script = _region_script(tmp_path, ["SC-sylv_left"])
-        (tmp_path / "out" / "SC-sylv_left").mkdir(parents=True)
-        (tmp_path / "out" / "SC-sylv_left" / "full_embeddings.csv").write_text("existing")
-
-        _run_regions(script, tmp_path)
-
-        record = pipeline_caplog.assert_logged(LOG, "[SKIP] SC-sylv_left")
-        assert record.name == LOGGER_NAME
-
-    def test_region_weights_logged(self, tmp_path, pipeline_caplog):
-        script = _region_script(tmp_path, ["SC-sylv_left"])
-        checkpoints = tmp_path / "models" / "SC-sylv_left" / "logs" / "lightning_logs" / "version_0" / "checkpoints"
-
-        _run_regions(script, tmp_path)
-
-        record = pipeline_caplog.assert_logged(LOG, str(checkpoints / "epoch=80-step=1.ckpt"))
-        assert record.name == LOGGER_NAME
-
-    def test_best_weights_stand_in_logged_as_warning(self, tmp_path, pipeline_caplog):
-        script = _region_script(tmp_path, ["SC-sylv_left"])
-
-        with patch("champollion_pipeline.generate_embeddings.uses_best_weights_stand_in", return_value=True):
-            _run_regions(script, tmp_path)
-
-        records = [r for r in pipeline_caplog.records if (r.name, r.levelno) == (LOGGER_NAME, logging.WARNING)]
-        assert any("SC-sylv_left" in r.getMessage() for r in records), [r.getMessage() for r in records]
-
-    def test_failed_region_logged_at_fail(self, tmp_path, pipeline_caplog):
-        script = _region_script(tmp_path, ["SC-sylv_left"])
-
-        assert _run_regions(script, tmp_path, exit_code=3) == 3
-
-        record = pipeline_caplog.assert_logged(FAIL, "SC-sylv_left")
-        assert record.name == LOGGER_NAME
-
-    def test_provenance_path_logged_at_output(self, tmp_path, pipeline_caplog):
-        script = GenerateEmbeddings()
-
-        path = script._write_provenance(str(tmp_path / "out"), {"masks": "canonical_25"})
-
-        record = pipeline_caplog.assert_logged(OUTPUT, path)
-        assert path == str(tmp_path / "out" / "provenance.json")
-        assert record.name == LOGGER_NAME
-
-    def test_cpu_mode_logged(self, tmp_path, monkeypatch, pipeline_caplog):
-        monkeypatch.delenv("CUDA_VISIBLE_DEVICES", raising=False)
-        script = GenerateEmbeddings()
-        script.parse_args([str(tmp_path), str(tmp_path), *MASKS_ARGS, "--cpu"])
-
-        with patch.object(script, "_run_pipeline", return_value=0):
-            script._run_normal()
-
-        record = pipeline_caplog.assert_logged(LOG, "CUDA_VISIBLE_DEVICES")
-        assert record.name == LOGGER_NAME
-
-    @staticmethod
-    def _run_profiled(temp_dir) -> None:
-        """Parse --profiling and run _run_with_profiling with the profiler and _run_normal mocked."""
-        script = GenerateEmbeddings()
-        script.parse_args([temp_dir, temp_dir, *MASKS_ARGS, "--profiling"])
-
-        with (
-            patch("champollion_pipeline.generate_embeddings.cProfile.Profile"),
-            patch("champollion_pipeline.generate_embeddings.pstats.Stats", _FakeStats),
-            patch.object(script, "_run_normal", return_value=0),
-        ):
-            script._run_with_profiling()
-
-    def test_profile_file_logged_at_output(self, temp_dir, pipeline_caplog):
-        self._run_profiled(temp_dir)
-        record = pipeline_caplog.assert_logged(OUTPUT, "embeddings_profile.prof")
-        assert record.name == LOGGER_NAME
-
-    def test_profile_statistics_logged_at_output(self, temp_dir, pipeline_caplog):
-        self._run_profiled(temp_dir)
-        record = pipeline_caplog.assert_logged(OUTPUT, _FakeStats.HEADER.strip())
-        assert record.name == LOGGER_NAME
-
-    def test_cka_output_directory_logged(self, tmp_path, pipeline_caplog):
-        script = GenerateEmbeddings()
-
-        with patch("champollion_pipeline.generate_embeddings.test_models_coherence_from_directory"):
-            script._run_cka_test(str(tmp_path / "embeddings"))
-
-        record = pipeline_caplog.assert_logged(LOG, str(tmp_path / "embeddings" / "cka_results"))
-        assert record.name == LOGGER_NAME
-
-    def test_cka_completion_logged_at_output(self, tmp_path, pipeline_caplog):
-        script = GenerateEmbeddings()
-
-        with patch("champollion_pipeline.generate_embeddings.test_models_coherence_from_directory"):
-            script._run_cka_test(str(tmp_path / "embeddings"))
-
-        record = pipeline_caplog.assert_logged(OUTPUT, "CKA coherence test completed")
-        assert record.name == LOGGER_NAME
-
-    def test_cka_failure_logged_at_warning(self, tmp_path, pipeline_caplog):
-        script = GenerateEmbeddings()
-
-        with patch(
-            "champollion_pipeline.generate_embeddings.test_models_coherence_from_directory",
-            side_effect=RuntimeError("CKA matrix is singular"),
-        ):
-            script._run_cka_test(str(tmp_path / "embeddings"))
-
-        record = pipeline_caplog.assert_logged(logging.WARNING, "CKA matrix is singular")
-        assert record.name == LOGGER_NAME
-
-    def test_module_has_no_print_call(self):
-        tree = ast.parse(inspect.getsource(generate_embeddings_module))
-
-        assert print_call_lines(tree) == []
