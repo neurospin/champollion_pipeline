@@ -1,7 +1,7 @@
 #!/usr/bin/env python3
 """
 Labelled-graph pre-check tests of the whole-brain step of run_cortical_tiles.py
-(moved out of test_run_cortical_tiles.py; the shared helpers are imported from it).
+(moved out of test_run_cortical_tiles.py; the shared helpers are imported from tests/whole_brain_step.py).
 """
 
 import logging
@@ -14,8 +14,11 @@ import pytest
 from champollion_pipeline.run_cortical_tiles import RunCorticalTiles
 from champollion_pipeline.utils.lib import DERIVATIVES_FOLDER
 from champollion_pipeline.utils.qc_report import read_qc_tsv
-from tests.stage2_layout import add_graphs
-from tests.test_run_cortical_tiles import (  # noqa: F401
+from tests.stage2_layout import (  # noqa: F401
+    _stub_whole_brain_functions,  # noqa: V103 - autouse fixture
+    add_graphs,
+)
+from tests.whole_brain_step import (
     _GRAPH_SUBPATH,
     _LOGGER_NAME,
     _WILDCARD_SESSION,
@@ -23,9 +26,8 @@ from tests.test_run_cortical_tiles import (  # noqa: F401
     _make_subject,
     _run_whole_brain_step,
     _run_wildcard_step,
-    _stub_whole_brain_functions,  # noqa: V103 - autouse fixture, as in the source module
 )
-from tests.test_run_cortical_tiles import (
+from tests.whole_brain_step import (
     _RemoveVentricleRecorder as _BaseVentricleRecorder,
 )
 

@@ -14,11 +14,13 @@ from unittest.mock import patch
 import pytest
 
 from champollion_pipeline.run_cortical_tiles import RunCorticalTiles
-from tests.stage2_layout import parsed_script, run_mocked, stage_dirs
-from tests.test_run_cortical_tiles import (  # noqa: F401
-    _LOGGER_NAME,
-    _stub_whole_brain_functions,  # noqa: V103 - autouse fixture, as in the source module
+from tests.stage2_layout import (  # noqa: F401
+    _stub_whole_brain_functions,  # noqa: V103 - autouse fixture
+    parsed_script,
+    run_mocked,
+    stage_dirs,
 )
+from tests.whole_brain_step import _LOGGER_NAME
 
 
 def _script_on_graphs(temp_dir, *extra_args):

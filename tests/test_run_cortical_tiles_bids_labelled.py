@@ -15,12 +15,12 @@ import pytest
 
 from champollion_pipeline.utils.lib import DERIVATIVES_FOLDER
 from champollion_pipeline.utils.qc_report import read_qc_tsv
-from tests.stage2_layout import add_graphs, add_labelled_sessions
-from tests.test_run_cortical_tiles import (  # noqa: F401
-    _make_skeletons,
-    _run_whole_brain_step,
-    _stub_whole_brain_functions,  # noqa: V103 - autouse fixture, as in the source module
+from tests.stage2_layout import (  # noqa: F401
+    _stub_whole_brain_functions,  # noqa: V103 - autouse fixture
+    add_graphs,
+    add_labelled_sessions,
 )
+from tests.whole_brain_step import _make_skeletons, _run_whole_brain_step
 
 pytestmark = pytest.mark.unit  # noqa: V107
 

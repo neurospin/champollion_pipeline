@@ -7,7 +7,7 @@ WARNING instead of one ERROR per subject (user decision 2026-11-19).
 
 import logging
 
-from tests.test_run_cortical_tiles import _stub_whole_brain_functions  # noqa: F401, V103 - autouse fixture
+from tests.stage2_layout import _stub_whole_brain_functions  # noqa: F401, V103 - autouse fixture
 from tests.test_run_cortical_tiles_labelling_qc import (
     _BOTH_SIDES,
     _labelling_qc_path,
