@@ -16,7 +16,7 @@ REQ-LOGGING-BDRABCZUK-B8918C62EB6A: the written mask .npy count is logged at OUT
 REQ-LOGGING-BDRABCZUK-12F726C73E22: no fused volume under F: WARNING with the skeleton source directory.
 (REQ-LOGGING-BDRABCZUK-AA4776030940, --njobs at or above the core count:
 tests/test_run_cortical_tiles_arguments.py.
-REQ-LABELSESSION-BDRABCZUK-56365C1DEE1F, the exclusion warning: tests/test_run_cortical_tiles.py.
+REQ-LABELSESSION-BDRABCZUK-56365C1DEE1F, the exclusion warning: tests/test_run_cortical_tiles_whole_brain.py.
 REQ-LOGGING-BDRABCZUK-C96C8DAAF703 and -22ABEF2F2CBD: tests/test_logging_convention.py, through
 LOG_CONVERTED_MODULES.)
 """
