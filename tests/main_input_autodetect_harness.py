@@ -198,7 +198,9 @@ def _single_subject_dataset(tmp_path: Path, t1_first: bool) -> Path:
     if t1_first:
         _write_t1(subject / "raw.nii.gz")
     scan = scan_input(str(subject))
-    assert (scan.first_graph is None) is t1_first
+    # REQ-ARGDISC-BDRABCZUK-80E144705B28 and -6731DADF9510: the walk finds the graph after a T1 file sorting first too
+    assert scan.first_graph is not None
+    assert scan.kind is (InputKind.BOTH if t1_first else InputKind.MORPHOLOGIST)
     assert resolve_subjects_dir(str(subject)) is None
     return subject
 
@@ -288,8 +290,8 @@ def _error_messages(pipeline_caplog) -> list[str]:
     return [record.getMessage() for record in pipeline_caplog.records if record.levelno >= logging.ERROR]
 
 
-def _assert_stopped(status, argv) -> None:
-    assert status == 1, f"main() exit status {status}, expected 1"
+def _assert_stopped(status, argv, expected: int = 1) -> None:
+    assert status == expected, f"main() exit status {status}, expected {expected}"
     assert not argv, f"stages ran before the stop: {sorted(argv)}"
 
 

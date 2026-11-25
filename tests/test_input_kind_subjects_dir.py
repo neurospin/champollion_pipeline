@@ -206,12 +206,14 @@ def test_session_level_is_no_subject_level(tmp_path, input_below_root):
 def test_t1_sorted_first_does_not_hide_graph(tmp_path, t1_file, subjects_folder):
     subjects_dir = tmp_path / subjects_folder
     _touch(tmp_path, t1_file)
-    _graph(subjects_dir, "zzz-subject")
+    graph = _graph(subjects_dir, "zzz-subject")
 
+    # REQ-ARGDISC-BDRABCZUK-80E144705B28: the only graph sorts after the first T1 file, so the input reads both
     scan = _module().scan_input(str(tmp_path))
-    assert scan.kind is _module().InputKind.T1
-    assert scan.first_graph is None
+    assert scan.kind is _module().InputKind.BOTH
+    assert scan.first_graph == os.path.relpath(graph, tmp_path)
 
+    # REQ-INPUTKIND-BDRABCZUK-542640BE44B3: the resolver still finds the subjects folder of that graph
     assert _resolve(tmp_path) == str(subjects_dir)
 
 
@@ -309,8 +311,10 @@ def test_t1_sorted_first_does_not_hide_ambiguity(tmp_path):
     _touch(tmp_path, "a.nii.gz")
     _graphs_in(tmp_path, ("zzz/tree_a", "zzz/tree_b"))
 
-    assert _module().scan_input(str(tmp_path)).kind is _module().InputKind.T1
+    # REQ-ARGDISC-BDRABCZUK-80E144705B28: the graphs sort after the first T1 file, so the input reads both
+    assert _module().scan_input(str(tmp_path)).kind is _module().InputKind.BOTH
 
+    # REQ-INPUTKIND-BDRABCZUK-313AEEB1E572: the two subjects folders stay an ambiguity for the resolver
     _ambiguity(tmp_path)
 
 

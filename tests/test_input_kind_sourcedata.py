@@ -59,6 +59,8 @@ def _has_sourcedata_folder(relative: str) -> bool:
         "sourcedata/IXI002.nii",
         "sourcedata/sub-01/ses-1/anat/sub-01_ses-1_T1w.nii.gz",
         "study/sourcedata/IXI002.nii.gz",
+        # No .arg file: a file below t1mri is T1 input (REQ-ARGDISC-BDRABCZUK-1786F42F6CE1)
+        "sourcedata/IXI002/t1mri/default_acquisition/IXI002.nii.gz",
     ],
 )
 def test_t1_below_sourcedata_is_returned(tmp_path, relative):
@@ -111,7 +113,6 @@ def test_input_inside_sourcedata_returns_none(tmp_path, input_folder, relative):
     [
         "sourcedata/derivatives/IXI002.nii.gz",
         "sourcedata/qc/IXI002.nii.gz",
-        "sourcedata/IXI002/t1mri/default_acquisition/IXI002.nii.gz",
         "sourcedata/.hidden/IXI002.nii.gz",
         "sourcedata/.IXI002.nii.gz",
         "sourcedata/sub-01/anat/sub-01_bold.nii.gz",

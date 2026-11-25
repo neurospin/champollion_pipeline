@@ -1,5 +1,6 @@
 """main.py without a terminal on an input holding neither kind, both kinds, sourcedata T1s or two Morphologist
-outputs: exit status 1 before any stage and a clear ERROR record.
+outputs: a stop before any stage (exit status 2 for neither kind, TASK-ARGDISC-BDRABCZUK-7F0CEB924F51; 1 otherwise)
+and a clear ERROR record.
 
 Split from tests/test_main_input_autodetect_ambiguous.py (TASK-INPUTKIND-BDRABCZUK-830F5595E185);
 behaviour TASK-INPUTKIND-BDRABCZUK-5ECD06E2023D.
@@ -41,10 +42,10 @@ def main_module(monkeypatch, tmp_path):
 
 
 @pytest.mark.unit
-def test_neither_kind_exits_1_before_any_stage(main_module, monkeypatch, tmp_path):
+def test_neither_kind_exits_2_before_any_stage(main_module, monkeypatch, tmp_path):
     _batch(monkeypatch)
     config = _stop_config(main_module, tmp_path, _empty_dataset(tmp_path))
-    _assert_stopped(*_run_stages(main_module, monkeypatch, config))
+    _assert_stopped(*_run_stages(main_module, monkeypatch, config), expected=2)
 
 
 @pytest.mark.unit

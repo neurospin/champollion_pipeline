@@ -1,7 +1,7 @@
 """Choice of the kind main.py routes dataset.input_path as: detection, dataset.input_kind, a terminal prompt or a stop.
 
 Every stop is an InputChoiceError whose text is the one ERROR record main.py logs before it ends with the error's
-exit_status (1; 2 for DerivedVolumesOnly).
+exit_status (1; 2 for NeitherInput and its subclass DerivedVolumesOnly).
 Detection, the sourcedata filter and the subjects folder search stay in champollion_pipeline.utils.input_kind; this
 module only decides and asks.
 """
@@ -34,10 +34,14 @@ class InputChoiceError(ValueError):
     exit_status: int = 1
 
 
-class DerivedVolumesOnly(InputChoiceError):
-    """The input holds Morphologist derived volumes and no T1 file or graph."""
+class NeitherInput(InputChoiceError):
+    """The input holds neither T1 files nor Morphologist graphs."""
 
     exit_status = 2  # the usage-error status of cli (_USAGE_ERROR_STATUS)
+
+
+class DerivedVolumesOnly(NeitherInput):
+    """The input holds Morphologist derived volumes and no T1 file or graph."""
 
 
 def check_input_kind_value(dataset: DatasetConfig) -> None:  # noqa: V103 - used by main.py
@@ -66,7 +70,7 @@ def choose_input_kind(dataset: DatasetConfig) -> InputKind | None:  # noqa: V103
     if scan.kind is InputKind.NEITHER:
         if scan.first_derived is not None:
             raise DerivedVolumesOnly(_derived_only_text(input_path, scan.first_derived))
-        raise InputChoiceError(
+        raise NeitherInput(
             f"{input_path} holds neither T1 files nor Morphologist outputs (or is not a folder); point --input-path "
             "at a folder holding one kind (--input-kind only chooses between kinds that are there)."
         )
@@ -138,7 +142,7 @@ def _checked_kind(dataset: DatasetConfig, scan: InputScan) -> InputKind:
                 f"({scan.first_graph}); use --input-kind morphologist or point --input-path at the T1 files."
             )
         return InputKind.T1
-    if scan.first_graph is None and not _holds_subjects_folder(input_path):
+    if scan.first_graph is None:
         raise InputChoiceError(_no_subjects_folder_text(input_path, scan.first_t1))
     return InputKind.MORPHOLOGIST
 
@@ -162,14 +166,6 @@ def _warn_derived_volumes(input_path: str) -> None:
             input_path,
             found[0],
         )
-
-
-def _holds_subjects_folder(input_path: str) -> bool:
-    """Whether a Morphologist subjects folder (one, or several) sits below input_path."""
-    try:
-        return resolve_subjects_dir(input_path) is not None
-    except AmbiguousSubjectsFolders:
-        return True
 
 
 def _no_subjects_folder_text(input_path: str, first_t1: str | None) -> str:

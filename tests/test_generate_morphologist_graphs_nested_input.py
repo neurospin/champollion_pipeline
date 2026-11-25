@@ -101,11 +101,17 @@ def test_nested_t1_file_is_returned_relative_to_input(dirs, relative_path):
                 BIDS_T1,
                 "derivatives/morphologist-6.0/t1.nii.gz",
                 "qc/t1.nii.gz",
-                "sub-02/t1mri/default_acquisition/t1.nii.gz",
             ],
             [],
             [BIDS_T1],
             id="non_t1_folders_left_out",
+        ),
+        pytest.param(
+            # No .arg file: a file below t1mri is T1 input (REQ-ARGDISC-BDRABCZUK-1786F42F6CE1)
+            [BIDS_T1, "sub-02/t1mri/default_acquisition/t1.nii.gz"],
+            [],
+            [BIDS_T1, "sub-02/t1mri/default_acquisition/t1.nii.gz"],
+            id="t1mri_without_graph_kept",
         ),
         pytest.param(
             [BIDS_T1, ".cache/t1.nii.gz", "sub-01/ses-V1/anat/.sub-01_ses-V1_T1w.nii.gz"],

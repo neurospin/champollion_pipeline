@@ -15,11 +15,11 @@ from pathlib import Path
 import pytest
 
 from champollion_pipeline.utils.input_kind import find_t1_files
+from tests.input_kind_fixtures import header_reads, main_module  # noqa: F401 - fixtures
 from tests.main_input_autodetect_harness import (
     STAGE1,
     _batch,
     _error_messages,
-    _main_module_under_test,
     _run_stages,
     _stop_config,
 )
@@ -49,10 +49,6 @@ CLI_SEGMENTATION = Path(CLI_SUBJECTS[0], "ses-1", "run-0", "ana-0", "segmentatio
 CLASSIC_SEGMENTATION = Path(CLASSIC_SUBJECTS[0], "t1mri", "default_acquisition", "default_analysis", "segmentation")
 MORPHOLOGIST_OUTPUT = "Morphologist output"
 INPUT_PATH_OPTION = "--input-path"
-HEADER_READERS = (
-    "champollion_pipeline.utils.nifti_check.check_nifti_input",
-    "champollion_pipeline.generate_morphologist_graphs.check_nifti_input",
-)
 
 
 def _touch(root: Path, *names: str) -> Path:
@@ -95,25 +91,6 @@ DERIVED_ONLY_INPUTS: dict[str, Callable[[Path], Path]] = {
     "suffix_subject": _suffix_subject,
     "classic_segmentation_folder": _classic_segmentation_folder,
 }
-
-
-@pytest.fixture
-def main_module(monkeypatch, tmp_path):
-    return _main_module_under_test(monkeypatch, tmp_path)
-
-
-@pytest.fixture
-def header_reads(monkeypatch) -> list[str]:
-    """Replace the NIfTI header reader where main.py and stage 1 reach it; return the paths it was asked to read."""
-    reads: list[str] = []
-
-    def record_read(path, *_args, **_kwargs):
-        reads.append(str(path))
-        return ()
-
-    for target in HEADER_READERS:
-        monkeypatch.setattr(target, record_read)
-    return reads
 
 
 def _derived_names(input_path: Path) -> list[str]:
@@ -171,7 +148,7 @@ def test_suffix_volumes_fixture_subject_has_empty_t1_list(tmp_path):
 
 @pytest.mark.unit
 @pytest.mark.parametrize("dataset", sorted(DERIVED_ONLY_INPUTS))
-def test_only_derived_volumes_end_with_exit_2_before_stage_1(main_module, monkeypatch, tmp_path, header_reads, dataset):
+def test_only_derived_volumes_end_with_exit_2_before_stage_1(main_module, monkeypatch, tmp_path, header_reads, dataset):  # noqa: F811 - imported fixture
     # REQ: derived volumes as the only .nii.gz/.nii files, no .arg: exit status 2, no stage runs, no header read
     _batch(monkeypatch)
     input_path = DERIVED_ONLY_INPUTS[dataset](tmp_path)
@@ -184,7 +161,11 @@ def test_only_derived_volumes_end_with_exit_2_before_stage_1(main_module, monkey
 @pytest.mark.unit
 @pytest.mark.parametrize("dataset", sorted(DERIVED_ONLY_INPUTS))
 def test_only_derived_volumes_log_one_error_naming_layout_and_option(
-    main_module, monkeypatch, tmp_path, pipeline_caplog, dataset
+    main_module,  # noqa: F811 - imported fixture
+    monkeypatch,
+    tmp_path,
+    pipeline_caplog,
+    dataset,
 ):
     # REQ: one ERROR record naming the input folder, the Morphologist output layout, one derived volume, --input-path
     _batch(monkeypatch)
@@ -213,7 +194,11 @@ MIXED_DERIVED = (
 
 @pytest.mark.unit
 def test_derived_volumes_beside_t1_files_log_one_warning_with_count(
-    main_module, monkeypatch, tmp_path, pipeline_caplog, header_reads
+    main_module,  # noqa: F811 - imported fixture
+    monkeypatch,
+    tmp_path,
+    pipeline_caplog,
+    header_reads,  # noqa: F811 - imported fixture
 ):
     # REQ: no .arg, T1 files and derived volumes: one WARNING record giving the number of derived volumes left out
     _batch(monkeypatch)

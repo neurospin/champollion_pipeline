@@ -103,14 +103,21 @@ def test_input_kind_morphologist_stage2_reads_resolved_folder(main_module, monke
 
 
 @pytest.mark.unit
-@pytest.mark.parametrize(
-    ("dataset", "kind"),
-    [("morphologist", "t1"), ("t1", "morphologist"), ("neither", "t1"), ("neither", "morphologist")],
-)
+@pytest.mark.parametrize(("dataset", "kind"), [("morphologist", "t1"), ("t1", "morphologist")])
 def test_missing_chosen_kind_exits_1(main_module, monkeypatch, tmp_path, dataset, kind):
+    # REQ-INPUTKIND-BDRABCZUK-2FD799B399EC: the input holds the other kind only
     _batch(monkeypatch)
     config = _stop_config(main_module, tmp_path, DATASETS[dataset](tmp_path))
     _assert_stopped(*_run_stages(main_module, monkeypatch, config, INPUT_KIND_OPTION, kind))
+
+
+@pytest.mark.unit
+@pytest.mark.parametrize("kind", KINDS)
+def test_neither_kind_with_chosen_kind_exits_2(main_module, monkeypatch, tmp_path, kind):
+    # REQ-ARGDISC-BDRABCZUK-9DCBD748B25F: a neither input stops with exit status 2 whatever dataset.input_kind names
+    _batch(monkeypatch)
+    config = _stop_config(main_module, tmp_path, DATASETS["neither"](tmp_path))
+    _assert_stopped(*_run_stages(main_module, monkeypatch, config, INPUT_KIND_OPTION, kind), expected=2)
 
 
 @pytest.mark.unit
