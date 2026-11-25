@@ -440,6 +440,31 @@ def resolve_subjects_dir(path: str) -> str | None:
     return candidates[0] if candidates else None
 
 
+def _every_folder(_parts: _Parts) -> bool:
+    """Return True: every folder is read."""
+    return True
+
+
+def graph_files(path: str) -> Iterator[tuple[_Parts, str]]:
+    """Yield ``(folder parts, file name)`` of each graph below ``path``, one at a time, in walk order.
+
+    The same walk as input-kind detection, so both always agree on which graphs exist: dot folders and dot-named files
+    are never reached, a folder link is followed unless it leads back onto its own search path, and an unreadable
+    folder or entry is logged and skipped. No file is opened.
+
+    Args:
+        path: Folder to search; anything else yields nothing.
+
+    Yields:
+        ``(folder parts, file name)`` of each .arg file, ``parts`` relative to ``path`` through links.
+
+    Complexity: O(entries below path).
+    """
+    if not os.path.isdir(path):
+        return
+    yield from ((parts, name) for parts, name in _walk(path, _every_folder) if _is_graph(name))
+
+
 def stage1_subjects_dir(output_root: str) -> str:
     """Return where stage 1 writes the subject directories below ``output_root``."""
     return os.path.join(output_root, DERIVATIVES_DIRNAME, MORPHOLOGIST_DERIVATIVES_FOLDER)

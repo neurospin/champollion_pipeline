@@ -14,6 +14,7 @@ import them; no module here runs on its own. Several modules use the standard li
 | `__init__.py` | Package marker. |
 | `archive.py` | Archive extraction and the extraction cache, used by the model fetch strategies. |
 | `cortical_tiles_config.py` | The cortical tiles config (Mask version, voxel size) and the versioned crops folder path. |
+| `graph_item.py` | The item of graph discovery (a relative path plus its attributes) and the error for a graph outside any subject folder. |
 | `input_kind.py` | Reads one input path as T1 files, Morphologist outputs, neither or both, and finds the subjects folder. |
 | `lib.py` | The derivatives folder name, the Morphologist labelling sessions searched, and `find_dataset_folder`. |
 | `nifti_check.py` | Header-level QC of one raw NIfTI input file, standard library only. |
