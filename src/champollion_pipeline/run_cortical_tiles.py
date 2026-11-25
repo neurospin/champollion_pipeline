@@ -20,11 +20,7 @@ import argparse
 import csv
 import glob
 import logging
-import os
-import re
 import sys
-import tempfile
-from collections.abc import Callable
 from datetime import datetime
 from os.path import abspath, dirname, exists, isdir, join
 
@@ -32,20 +28,53 @@ import numpy as np
 from champollion_utils.script_builder import ScriptBuilder
 from cortical_tiles.brainvisa import add_left_and_right_volumes, remove_ventricle
 from cortical_tiles.brainvisa.utils.crop_subjects import EmptyCropError, exclude_empty_crops
-from cortical_tiles.brainvisa.utils.skip_list import (
-    SKIP_LIST_FILENAME,
-    SKIP_SIDES,
-    SkipEntry,
-    load_skip_entries,
-    session_key,
-)
+from cortical_tiles.brainvisa.utils.skip_list import SKIP_LIST_FILENAME, SKIP_SIDES, SkipEntry, load_skip_entries
 from joblib import cpu_count
 from soma import aims
 
 from champollion_pipeline.derivatives_layout import compute_run_log_path
-from champollion_pipeline.generate_labelling_qc import REASON_NO_SESSION_DIR, fetch_subject_row
 from champollion_pipeline.generate_masks import _REGIONS_DEFAULT
 from champollion_pipeline.process_setup import init_pipeline_process
+from champollion_pipeline.run_cortical_tiles_inputs import (
+    CROP_STATUS_PARTIAL,
+    GRAPH_SIDES,
+    GRAPH_WILDCARD,
+    REASON_EXCLUDED_BY_SK_QC,
+    REASON_INVALID_SK_QC,
+    REASON_MISSING_GRAPH_STEM,
+    REASON_NO_SUBJECT_FOLDER,
+    REASON_NOT_IN_SK_QC,
+    SK_QC_TSV_MARK,
+    compute_end_status,
+    compute_sk_qc_reason,
+    fetch_input_qc_rows,
+    fetch_sk_qc_ids,
+    find_dotted_ids,
+    find_prefix_id_pairs,
+    has_hemisphere_graph,
+    list_input_subjects,
+    resolve_bids_graph_paths,
+    resolve_graph_paths,
+)
+from champollion_pipeline.run_cortical_tiles_whole_brain import (
+    EXCLUDED_NO_GRAPH_FOLDER,
+    EXCLUDED_NO_LABELLED_GRAPH,
+    EXCLUDED_SEVERAL_GRAPH_FOLDERS,
+    EXCLUSION_REASONS,
+    LABELLING_QC_EXTRA_COLUMNS,
+    LABELLING_QC_FILENAME,
+    WHOLE_BRAIN_OUT_FILENAME,
+    WHOLE_BRAIN_SRC_FILENAME,
+    call_whole_brain_step,
+    compute_fusion_failure_status,
+    exclusion_warning,
+    fetch_labelling_qc_row,
+    fuse_whole_brain,
+    labelled_session_dir,
+    list_side_volumes,
+    remove_ventricle_whole_brain,
+    resolve_labelling_session,
+)
 from champollion_pipeline.utils.cortical_tiles_config import (
     INPUT_TYPES_DEFAULT,
     CorticalTilesConfig,
@@ -82,24 +111,53 @@ from champollion_pipeline.utils.region_masks import (
     refuse_masks_with_region_masks,
 )
 from champollion_pipeline.utils.resource_copy import grants_no_write, replace_with_writable_copy
-from champollion_pipeline.utils.skeleton_qc import compute_skeleton_reasons, save_config_skel_qc, save_crop_qc
-from champollion_pipeline.utils.subject_folders import list_morphologist_subjects
-from champollion_pipeline.utils.subject_name import subject_name_problem
+from champollion_pipeline.utils.skeleton_qc import save_config_skel_qc, save_crop_qc
 from champollion_pipeline.utils.transform_qc import transform_qc_rows
 
 logger = logging.getLogger(__name__)
 
+# Re-exported for one release: the names moved to run_cortical_tiles_inputs and run_cortical_tiles_whole_brain,
+# and REASON_SEPARATOR, which tests import from here.
+__all__ = [
+    "CROP_STATUS_PARTIAL",
+    "EXCLUDED_NO_GRAPH_FOLDER",
+    "EXCLUDED_NO_LABELLED_GRAPH",
+    "EXCLUDED_SEVERAL_GRAPH_FOLDERS",
+    "EXCLUSION_REASONS",
+    "GRAPH_SIDES",
+    "GRAPH_WILDCARD",
+    "LABELLING_QC_EXTRA_COLUMNS",
+    "LABELLING_QC_FILENAME",
+    "REASON_EXCLUDED_BY_SK_QC",
+    "REASON_INVALID_SK_QC",
+    "REASON_MISSING_GRAPH_STEM",
+    "REASON_NOT_IN_SK_QC",
+    "REASON_NO_SUBJECT_FOLDER",
+    "REASON_SEPARATOR",
+    "SK_QC_TSV_MARK",
+    "WHOLE_BRAIN_OUT_FILENAME",
+    "WHOLE_BRAIN_SRC_FILENAME",
+    "RunCorticalTiles",
+    "call_whole_brain_step",
+    "compute_end_status",
+    "compute_sk_qc_reason",
+    "exclusion_warning",
+    "fetch_input_qc_rows",
+    "fetch_labelling_qc_row",
+    "fetch_sk_qc_ids",
+    "find_dotted_ids",
+    "find_prefix_id_pairs",
+    "has_hemisphere_graph",
+    "labelled_session_dir",
+    "list_input_subjects",
+    "list_side_volumes",
+    "main",
+    "resolve_bids_graph_paths",
+    "resolve_graph_paths",
+    "resolve_labelling_session",
+]
+
 LABELLING_SESSION_DEFAULT = LABELLING_SESSION_CANDIDATES[0]
-WHOLE_BRAIN_SRC_FILENAME = "resampled_skeleton"
-WHOLE_BRAIN_OUT_FILENAME = "skeleton_generated_without_ventricle_"  # upstream default, now passed explicitly
-GRAPH_WILDCARD = "*"  # the only wildcard read in --path_to_graph
-# Whole-brain exclusion reasons; tuple order is the clause order in the warning.
-EXCLUDED_NO_GRAPH_FOLDER = "no_graph_folder"  # non-BIDS: --path_to_graph matches no folder
-EXCLUDED_SEVERAL_GRAPH_FOLDERS = "several_graph_folders"  # non-BIDS: it matches two or more folders
-EXCLUDED_NO_LABELLED_GRAPH = "no_labelled_graph"  # graph folder found, no candidate session dir in it
-EXCLUSION_REASONS = (EXCLUDED_NO_GRAPH_FOLDER, EXCLUDED_SEVERAL_GRAPH_FOLDERS, EXCLUDED_NO_LABELLED_GRAPH)
-LABELLING_QC_FILENAME = "labelling_qc.tsv"
-LABELLING_QC_EXTRA_COLUMNS = ("labelled_L", "labelled_R")  # with write_qc_tsv: generate_labelling_qc.QC_COLUMNS
 # TEMPORARY (DEF-CORTILES-BDRABCZUK-8A44DAD7F312): the prefix-ID guard below (and its flag, check and test file)
 # goes once cortical_tiles stops globbing {subject}*/ in generate_ICBM2009c_transforms.py.
 PREFIX_PAIRS_SHOWN = 5  # prefix pairs named in the refusal or warning
@@ -107,15 +165,7 @@ PREFIX_PAIRS_SHOWN = 5  # prefix pairs named in the refusal or warning
 # transform is byte-identical to another subject's; goes with the prefix-ID guard.
 TRANSFORM_QC_FILENAME = "transform_qc.tsv"
 INPUT_QC_FILENAME = "input_qc.tsv"
-GRAPH_SIDES = ("L", "R")
-SK_QC_TSV_MARK = ".tsv"  # as cortical_tiles: tab-separated when the path contains it, else comma-separated
-REASON_MISSING_GRAPH_STEM = "missing_graph_"  # + side
-REASON_NOT_IN_SK_QC = "not_in_sk_qc_file"
-REASON_EXCLUDED_BY_SK_QC = "excluded_by_sk_qc"
-REASON_NO_SUBJECT_FOLDER = "no_subject_folder"
-REASON_INVALID_SK_QC = "invalid_sk_qc_file"
 OUTPUT_QC_FILENAME = "output_qc.tsv"
-CROP_STATUS_PARTIAL = 3  # generate_sulcal_regions.py: some subjects skipped, at least one left
 SkipLists = dict[str, list[SkipEntry]]  # side -> skip-list entries
 
 
@@ -128,235 +178,6 @@ class _ExplicitLabellingSession(argparse.Action):
 
 
 ROOT_FORBIDDEN_SUBSTRINGS = ("ses-", "acq-", "run-", "_cropped")
-
-
-def list_side_volumes(volumes_dir: str, filename: str, side: str = "F") -> dict[str, str]:
-    """Map each subject with a volume in <volumes_dir>/<side>/ to its absolute path.
-
-    The subject id is what follows ``<side><filename>`` in the file name, with one
-    leading ``_`` stripped (cortical_tiles' own subject-id rule). A missing folder gives {}.
-    """
-    side_dir = join(volumes_dir, side)
-    if not isdir(side_dir):
-        return {}
-    pattern = re.compile(rf"^{re.escape(side + filename)}(.*)\.nii\.gz$")
-    volumes = {}
-    for name in sorted(os.listdir(side_dir)):
-        match = pattern.match(name)
-        if match:
-            subject = match.group(1)
-            volumes[subject[1:] if subject.startswith("_") else subject] = abspath(join(side_dir, name))
-    return volumes
-
-
-def call_whole_brain_step(name: str, step: Callable[..., None], **kwargs: object) -> bool:
-    """Call ``step``; a raise gives one ERROR record with its traceback and False, a return True."""
-    try:
-        step(**kwargs)
-    except Exception:
-        logger.exception(f"whole-brain {name} raised")
-        return False
-    return True
-
-
-def labelled_session_dir(morpho_dir: str, path_to_graph: str, subject: str, session: str, bids: bool) -> str:
-    """Directory holding a subject's labelled graphs for one session.
-
-    ``path_to_graph`` is a resolved graph path (no ``*``); with BIDS names the
-    folder is the subject part of the id, as in cortical_tiles' get_labelled_graph.
-    """
-    folder = subject.partition("_")[0] if bids else subject
-    return join(morpho_dir, folder, path_to_graph, session)
-
-
-def resolve_labelling_session(
-    morpho_dir: str, path_to_graph: str, subject: str, candidates: tuple[str, ...], bids: bool
-) -> str | None:
-    """First candidate session whose labelled-graph directory exists for the subject, else None."""
-    for session in candidates:
-        if isdir(labelled_session_dir(morpho_dir, path_to_graph, subject, session, bids)):
-            return session
-    return None
-
-
-def resolve_graph_paths(morpho_dir: str, path_to_graph: str, subject: str) -> list[str]:
-    """Folders under ``<morpho_dir>/<subject>`` that path_to_graph matches.
-
-    ``*`` is the only wildcard (other glob characters are literal); each match is
-    returned relative to the subject folder. A subject id that is not a plain
-    folder name, or a path leaving the subject folder, matches nothing.
-    """
-    if subject_name_problem(subject):
-        return []
-    subject_dir = join(morpho_dir, subject)
-    pattern = GRAPH_WILDCARD.join(glob.escape(part) for part in path_to_graph.split(GRAPH_WILDCARD))
-    rels = set()
-    for match in glob.glob(join(glob.escape(subject_dir), pattern)):
-        if not isdir(match):
-            continue
-        rel = os.path.relpath(match, subject_dir)
-        if rel in (os.curdir, os.pardir) or rel.startswith(os.pardir + os.sep):
-            continue
-        rels.add(rel)
-    return sorted(rels)
-
-
-def resolve_bids_graph_paths(morpho_dir: str, path_to_graph: str, volume_id: str) -> list[str]:
-    """Folders of resolve_graph_paths for the subject of a BIDS volume id whose session_key is that id.
-
-    The subject is the id text before the first ``_``; cortical_tiles' session_key reads each folder
-    path relative to the subject folder, so a root path holding ses/acq/run text does not count.
-    """
-    subject = volume_id.partition("_")[0]
-    rels = resolve_graph_paths(morpho_dir, path_to_graph, subject)
-    return [rel for rel in rels if session_key(subject, rel, True) == volume_id]
-
-
-def fetch_labelling_qc_row(
-    morpho_dir: str, path_to_graph: str, subject: str, candidates: tuple[str, ...], bids: bool
-) -> dict[str, str]:
-    """labelling_qc.tsv row of a fused subject, at the graphs whole-brain ventricle removal reads.
-
-    ``*`` must match exactly one folder: with BIDS names, the one folder of the subject part of
-    the id whose session_key is the fused id. None or several gives qc 0 no_session_dir.
-    """
-    folder = subject.partition("_")[0] if bids else subject
-    resolve = resolve_bids_graph_paths if bids else resolve_graph_paths
-    graph_paths = resolve(morpho_dir, path_to_graph, subject)
-    if len(graph_paths) == 1:
-        return {**fetch_subject_row(morpho_dir, folder, graph_paths[0], candidates, False), "participant_id": subject}
-    return {
-        "participant_id": subject,
-        "qc": "0",
-        "labelled_L": "False",
-        "labelled_R": "False",
-        "reason": REASON_NO_SESSION_DIR,
-    }
-
-
-def list_input_subjects(input_dir: str) -> list[str]:
-    """Sorted subject folder names of ``input_dir``, by the shared rule; none for a non-directory."""
-    return list_morphologist_subjects(input_dir)
-
-
-def fetch_sk_qc_ids(path: str) -> dict[str, int]:
-    """Map each participant_id of a --sk_qc_path file to its qc.
-
-    The file is read as cortical_tiles reads it: tab-separated when the path contains .tsv, else
-    comma-separated. Raises OSError, ValueError or csv.Error on a file to refuse.
-    """
-    records = read_qc_tsv(path, delimiter="\t" if SK_QC_TSV_MARK in path else ",")
-    sk_qc = {str(record["participant_id"]): int(record["qc"]) for record in records}
-    if "" in sk_qc:
-        raise ValueError(f"{path}: empty participant_id")
-    return sk_qc
-
-
-def has_hemisphere_graph(input_abs: str, path_to_graph: str, subject: str, side: str) -> bool:
-    """True when a folder path_to_graph matches for ``subject`` holds a <side>*.arg file."""
-    for graph_path in resolve_graph_paths(input_abs, path_to_graph, subject):
-        pattern = join(glob.escape(join(input_abs, subject, graph_path)), f"{side}*.arg")
-        if any(os.path.isfile(match) for match in glob.glob(pattern)):
-            return True
-    return False
-
-
-def compute_sk_qc_reason(subject: str, sk_qc: dict[str, int] | None, is_refused: bool) -> str | None:
-    """Reason the --sk_qc_path file gives against ``subject``, None when it gives none."""
-    if is_refused:
-        return REASON_INVALID_SK_QC
-    if sk_qc is None:
-        return None
-    if subject not in sk_qc:
-        return REASON_NOT_IN_SK_QC
-    return REASON_EXCLUDED_BY_SK_QC if sk_qc[subject] == 0 else None
-
-
-def compute_end_status(status: int, crop_qc_abs: str) -> int:
-    """``status``, or CROP_STATUS_PARTIAL when a skeleton reason excluded a subject from a run that would return 0."""
-    return CROP_STATUS_PARTIAL if crop_qc_abs and status == 0 else status
-
-
-def fetch_input_qc_rows(  # noqa: PLR0913 - path_sk_with_hull optional, five-argument calls kept
-    input_abs: str,
-    path_to_graph: str,
-    sk_qc: dict[str, int] | None,
-    is_refused: bool,
-    is_input_only: bool,
-    path_sk_with_hull: str | None = None,
-) -> list[dict[str, object]]:
-    """input_qc.tsv rows: one per input subject folder, then, unless ``is_input_only``, the file ids with no folder.
-
-    Reasons in order: missing_graph_L, missing_graph_R, L then R skeleton (with path_sk_with_hull), the file reason.
-    """
-    subjects = list_input_subjects(input_abs)
-    rows: list[dict[str, object]] = []
-    for subject in subjects:
-        reasons = [
-            f"{REASON_MISSING_GRAPH_STEM}{side}"
-            for side in GRAPH_SIDES
-            if not has_hemisphere_graph(input_abs, path_to_graph, subject, side)
-        ]
-        if path_sk_with_hull is not None:
-            folders = resolve_graph_paths(input_abs, path_sk_with_hull, subject)
-            reasons += compute_skeleton_reasons(join(input_abs, subject), folders, aims.read)
-        sk_qc_reason = compute_sk_qc_reason(subject, sk_qc, is_refused)
-        if sk_qc_reason:
-            reasons.append(sk_qc_reason)
-        rows.append({"participant_id": subject, "qc": 0 if reasons else 1, "reason": REASON_SEPARATOR.join(reasons)})
-    if sk_qc is not None and not is_input_only:
-        rows.extend(
-            {"participant_id": subject, "qc": 0, "reason": REASON_NO_SUBJECT_FOLDER}
-            for subject in sorted(set(sk_qc) - set(subjects))
-        )
-    return rows
-
-
-# TEMPORARY (DEF-CORTILES-BDRABCZUK-9C7D2B9265BC)
-def find_dotted_ids(input_dir: str) -> list[str]:
-    """Sorted input subject IDs (the list_input_subjects names) that contain a dot; none for a non-directory."""
-    return [name for name in list_input_subjects(input_dir) if "." in name]
-
-
-# TEMPORARY (DEF-CORTILES-BDRABCZUK-8A44DAD7F312)
-def find_prefix_id_pairs(input_dir: str) -> list[tuple[str, str]]:
-    """Every (shorter, longer) pair of input subject IDs where one strictly prefixes the other, sorted.
-
-    Subject IDs are the list_input_subjects names of ``input_dir``, as cortical_tiles lists them
-    (with or without --bids). An input that is not a directory gives no pair.
-    """
-    names = list_input_subjects(input_dir)
-    pairs = []
-    for i, shorter in enumerate(names):
-        for longer in names[i + 1 :]:
-            if not longer.startswith(shorter):
-                break
-            pairs.append((shorter, longer))
-    return sorted(pairs)
-
-
-def exclusion_warning(excluded: dict[str, list[str]], path_to_graph: str, candidates: tuple[str, ...]) -> str:
-    """One-line warning naming the subjects left out of whole-brain removal, by reason."""
-    clause_for = {
-        EXCLUDED_NO_GRAPH_FOLDER: f"--path_to_graph {path_to_graph!r} matches no folder for {{ids}}",
-        EXCLUDED_SEVERAL_GRAPH_FOLDERS: (
-            f"--path_to_graph {path_to_graph!r} matches several folders for {{ids}} (ambiguous, not guessed)"
-        ),
-        EXCLUDED_NO_LABELLED_GRAPH: (
-            f"no labelled graph under {' or '.join(candidates)} for {{ids}} (run Morphologist with sulcal recognition)"
-        ),
-    }
-    clauses = [
-        clause_for[reason].format(ids=", ".join(sorted(excluded[reason])))
-        for reason in EXCLUSION_REASONS
-        if excluded.get(reason)
-    ]
-    n = sum(len(ids) for ids in excluded.values())
-    return (
-        f"{n} subject(s) excluded from whole-brain ventricle removal, which "
-        "requires sulcal recognition (one labelled graph per subject, found through --path_to_graph): "
-        f"{'; '.join(clauses)}."
-    )
 
 
 class RunCorticalTiles(ScriptBuilder):
@@ -567,24 +388,6 @@ class RunCorticalTiles(ScriptBuilder):
             )
         else:
             logger.output(f"transform QC: {len(rows)} subject(s), no byte-identical transform, see {qc_path}.")
-
-    def _write_labelling_qc(
-        self, subjects: list[str], input_abs: str, output_abs: str, candidates: tuple[str, ...]
-    ) -> tuple[str, list[str], bool]:
-        """Write labelling_qc.tsv, one ERROR per failing subject; return its path, the subjects with qc 1 and
-        whether no subject has a labelling session folder (every row no_session_dir: no ERROR is logged then,
-        the caller warns once)."""
-        rows = [
-            fetch_labelling_qc_row(input_abs, self.args.path_to_graph, subject, candidates, self.args.bids)
-            for subject in sorted(subjects)
-        ]
-        qc_path = join(output_abs, DERIVATIVES_FOLDER, LABELLING_QC_FILENAME)
-        write_qc_tsv(qc_path, rows, extra_columns=LABELLING_QC_EXTRA_COLUMNS)
-        has_no_labels = all(row["reason"] == REASON_NO_SESSION_DIR for row in rows)
-        for row in rows:
-            if row["qc"] == "0" and not has_no_labels:
-                logger.error(f"labelling QC excluded {row['participant_id']}: {row['reason']}")
-        return qc_path, [row["participant_id"] for row in rows if row["qc"] == "1"], has_no_labels
 
     def _write_input_qc(self, input_abs: str, output_abs: str, sk_qc_abs: str) -> tuple[str, bool, str]:
         """Write input_qc.tsv, one record per qc 0 row, and crop_qc.tsv; return path, a subject passed, crop_qc path."""
@@ -842,150 +645,24 @@ class RunCorticalTiles(ScriptBuilder):
         return compute_end_status(self._apply_output_qc(output_abs, status, skips, markers), crop_qc_abs)
 
     def _run_whole_brain(self, input_abs: str, output_abs: str, crop_status: int) -> int:
-        """Fuse the L+R skeletons, then strip the ventricle from the fused volume; return the stage status so far.
-
-        Runs after a complete or partial crop, alongside the per-region crops. Fusion comes first, since
-        remove_ventricle(F) reads from the exact <skeleton_src_dir>/F/ tree add_left_and_right_volumes just
-        wrote. Both steps always run; ``crop_status`` stands unless one of them failed.
-
-        src_dir must point at the actual L/R resampled skeletons that generate_sulcal_regions.py (the crop
-        subprocess) writes to {output}/cortical_tiles-{YEAR}/skeletons/{voxel_size}/{L,R}/ -- NOT input_abs
-        (the Morphologist graphs directory, which has no L/ or R/ subdirs and is read-only). morpho_dir stays
-        input_abs: remove_ventricle needs it separately to locate the labelled graphs used to strip the ventricle.
-        """
+        """Fuse the L+R skeletons, then strip the ventricle (run_cortical_tiles_whole_brain); return the status."""
         requested_cfg = CorticalTilesConfigFactory.from_args(self.args)
         vox_str = f"{int(requested_cfg.out_voxel_size)}mm"
         skeleton_src_dir = join(output_abs, DERIVATIVES_FOLDER, "skeletons", vox_str)
 
         is_fused = self._fuse_whole_brain(skeleton_src_dir)
         is_stripped = self._remove_ventricle_whole_brain(skeleton_src_dir, input_abs, output_abs)
-        return crop_status if is_fused and is_stripped else self._compute_fusion_failure_status(output_abs)
+        return crop_status if is_fused and is_stripped else compute_fusion_failure_status(output_abs)
 
     def _fuse_whole_brain(self, skeleton_src_dir: str) -> bool:
-        """Fuse the L and R skeletons; False when the call raises or a subject with both sides has no fused volume."""
-        is_done = call_whole_brain_step(
-            "fusion",
-            add_left_and_right_volumes.add_left_and_right_volumes,
-            src_dir=skeleton_src_dir,
-            parallel=True,
-            # Its own -1 default breaks on the string-only revalidation in
-            # get_number_subjects in the cortical_tiles brainvisa subjects utils,
-            # so pass "all" explicitly to route around that upstream quirk,
-            # which lives under external/ and is not ours to fix.
-            number_subjects="all",
-        )
-        left, right = (list_side_volumes(skeleton_src_dir, WHOLE_BRAIN_SRC_FILENAME, side) for side in GRAPH_SIDES)
-        fused = list_side_volumes(skeleton_src_dir, WHOLE_BRAIN_SRC_FILENAME)
-        lost = sorted((left.keys() & right.keys()) - fused.keys())
-        for subject in lost:
-            logger.error(f"whole-brain fusion left no volume for {subject}")
-        return is_done and not lost
-
-    def _compute_fusion_failure_status(self, output_abs: str) -> int:
-        """Status of a whole-brain failure: CROP_STATUS_PARTIAL when whole_brain/F holds a volume, else 1."""
-        whole_brain_dir = join(output_abs, DERIVATIVES_FOLDER, "whole_brain")
-        return CROP_STATUS_PARTIAL if list_side_volumes(whole_brain_dir, WHOLE_BRAIN_OUT_FILENAME) else 1
+        """Fuse the L and R skeletons (run_cortical_tiles_whole_brain.fuse_whole_brain)."""
+        return fuse_whole_brain(skeleton_src_dir, add_left_and_right_volumes.add_left_and_right_volumes)
 
     def _remove_ventricle_whole_brain(self, skeleton_src_dir: str, input_abs: str, output_abs: str) -> bool:
-        """Strip the ventricle from each fused volume, grouping subjects by labelling session.
-
-        remove_ventricle takes one labelling session per call and enumerates
-        subjects from <src_dir>/F/, so when subjects resolve to different
-        sessions (or some have none) each group gets a staged F/ of symlinks.
-        Without --bids, a ``*`` in path_to_graph is resolved per subject, so
-        groups are keyed by (session, graph path). Subjects that cannot be
-        resolved are left out with one warning. labelling_qc.tsv is written first;
-        with no qc 1 row, one warning names it and no volume is processed.
-        False when a call raises (later groups still run) or a qc 1 subject has
-        no whole_brain/F volume.
-        """
-        if self.args.labelling_session_explicit:
-            candidates = (self.args.labelling_session,)
-        else:
-            candidates = LABELLING_SESSION_CANDIDATES
-
-        fused = list_side_volumes(skeleton_src_dir, WHOLE_BRAIN_SRC_FILENAME)
-        if not fused:
-            logger.warning(f"No fused volume under {skeleton_src_dir}/F; whole-brain ventricle removal skipped.")
-            return True
-
-        qc_path, passed, has_no_labels = self._write_labelling_qc(list(fused), input_abs, output_abs, candidates)
-        groups, excluded = self._group_whole_brain_subjects(list(fused), input_abs, candidates)
-        exclusions = exclusion_warning(excluded, self.args.path_to_graph, candidates) if excluded else ""
-        if has_no_labels:
-            no_labels = (
-                f"Whole-brain volume left out: the Morphologist graphs carry no sulcal labels (no labelling session "
-                f"folder for any subject), see {qc_path}. Run stage 1 with --enable-sulcal-recognition to produce it."
-            )
-            logger.warning(f"{no_labels} {exclusions}".rstrip())
-            return True
-        if not passed:
-            left_out = f"Whole-brain volume left out: no subject passed the labelling pre-check, see {qc_path}."
-            logger.warning(f"{left_out} {exclusions}".rstrip())
-            return True
-        if exclusions:
-            logger.warning(exclusions)
-
-        whole_brain_dir = join(output_abs, DERIVATIVES_FOLDER, "whole_brain")
-
-        def call(src_dir: str, session: str, graph_path: str) -> bool:
-            return call_whole_brain_step(
-                "ventricle removal",
-                remove_ventricle.remove_ventricle,
-                side="F",
-                src_dir=src_dir,
-                morpho_dir=input_abs,
-                path_to_graph=graph_path,
-                # add_left_and_right_volumes' default output_filename
-                # ("resampled_skeleton") does not match remove_ventricle's
-                # default src_filename ("skeleton_generated_") -- pass it
-                # explicitly so remove_ventricle reads what was just fused.
-                src_filename=WHOLE_BRAIN_SRC_FILENAME,
-                output_filename=WHOLE_BRAIN_OUT_FILENAME,
-                parallel=True,
-                output_dir=whole_brain_dir,
-                transform_dir=join(output_abs, DERIVATIVES_FOLDER, "transforms"),
-                labelling_session=session,
-                bids=self.args.bids,
-            )
-
-        is_done = True
-        if len(groups) == 1 and not excluded:
-            is_done = call(skeleton_src_dir, *next(iter(groups)))
-        else:
-            for session, graph_path in sorted(groups, key=lambda key: (candidates.index(key[0]), key[1])):
-                with tempfile.TemporaryDirectory(prefix="whole_brain_") as staged:
-                    os.makedirs(join(staged, "F"))
-                    for subject in groups[(session, graph_path)]:
-                        os.symlink(fused[subject], join(staged, "F", os.path.basename(fused[subject])))
-                    is_done = call(staged, session, graph_path) and is_done
-
-        lost = sorted(set(passed) - list_side_volumes(whole_brain_dir, WHOLE_BRAIN_OUT_FILENAME).keys())
-        for subject in lost:
-            logger.error(f"whole-brain ventricle removal left no volume for {subject}")
-        return is_done and not lost
-
-    def _group_whole_brain_subjects(
-        self, subjects: list[str], input_abs: str, candidates: tuple[str, ...]
-    ) -> tuple[dict[tuple[str, str], list[str]], dict[str, list[str]]]:
-        """Group subjects by (labelling session, resolved graph path); sort the rest by exclusion reason."""
-        groups: dict[tuple[str, str], list[str]] = {}
-        excluded: dict[str, list[str]] = {}
-        for subject in subjects:
-            resolve = resolve_bids_graph_paths if self.args.bids else resolve_graph_paths
-            graph_paths = resolve(input_abs, self.args.path_to_graph, subject)
-            if not graph_paths:
-                excluded.setdefault(EXCLUDED_NO_GRAPH_FOLDER, []).append(subject)
-                continue
-            if len(graph_paths) > 1:
-                excluded.setdefault(EXCLUDED_SEVERAL_GRAPH_FOLDERS, []).append(subject)
-                continue
-            session = resolve_labelling_session(input_abs, graph_paths[0], subject, candidates, self.args.bids)
-            if session is None:
-                excluded.setdefault(EXCLUDED_NO_LABELLED_GRAPH, []).append(subject)
-            else:
-                groups.setdefault((session, graph_paths[0]), []).append(subject)
-        return groups, excluded
+        """Strip the ventricle from each fused volume (run_cortical_tiles_whole_brain.remove_ventricle_whole_brain)."""
+        return remove_ventricle_whole_brain(
+            self.args, skeleton_src_dir, input_abs, output_abs, remove_ventricle.remove_ventricle
+        )
 
 
 def main():

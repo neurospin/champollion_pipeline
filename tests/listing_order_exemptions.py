@@ -60,12 +60,12 @@ EXEMPTIONS: dict[tuple[str, str, str], str] = {
     ): "set union of the crop ids of each region",
     ("src/champollion_pipeline/prune_failed_subjects.py", "_crop_ids", "side_dir.iterdir()"): "fills a set",
     (
-        "src/champollion_pipeline/run_cortical_tiles.py",
+        "src/champollion_pipeline/run_cortical_tiles_inputs.py",
         "has_hemisphere_graph",
         "glob.glob(pattern)",
     ): "read through any(): a presence check",
     (
-        "src/champollion_pipeline/run_cortical_tiles.py",
+        "src/champollion_pipeline/run_cortical_tiles_inputs.py",
         "resolve_graph_paths",
         "glob.glob(join(glob.escape(subject_dir), pattern))",
     ): "fills a set; the folders are returned as sorted(rels)",
