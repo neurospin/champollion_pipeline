@@ -138,51 +138,41 @@ class TestFindSulcalGraphsSubjectLookup:
         assert "/wk30/" in graphs[0]
 
 
+LEFT = {"hemisphere": "L", "subject": "sub01"}
+RIGHT = {"hemisphere": "R", "subject": "sub01"}
+
+
+def _graph_beside_meshes(analysis, mesh_names, graph_name):
+    """Create the mesh files of ``analysis``/segmentation/mesh and the graph ``analysis``/folds/<graph_name>."""
+    mesh_dir = analysis / "segmentation" / "mesh"
+    mesh_dir.mkdir(parents=True)
+    for name in mesh_names:
+        (mesh_dir / name).touch()
+    graph = analysis / "folds" / graph_name
+    graph.parent.mkdir(parents=True)
+    graph.touch()
+    return str(graph)
+
+
 class TestFindWhiteMesh:
-    """Test find_white_mesh anchor resolution."""
+    """Test find_white_mesh: nearest folder above the graph holding a mesh, within the subject folder."""
 
-    def test_returns_none_without_a_known_anchor(self, tmp_path):
-        assert find_white_mesh(str(tmp_path / "a" / "b" / "Lsulci.arg")) is None
+    def test_returns_none_without_any_mesh(self, tmp_path):
+        assert find_white_mesh(str(tmp_path / "sub01" / "b" / "Lsulci.arg"), LEFT) is None
 
-    def test_default_acquisition_zero_anchor_is_accepted(self, tmp_path):
-        analysis = tmp_path / "t1mri" / "default_acquisition" / "0"
-        mesh_dir = analysis / "segmentation" / "mesh"
-        mesh_dir.mkdir(parents=True)
-        (mesh_dir / "sub01_Lwhite.gii").touch()
-        graph = analysis / "folds" / "Lsulci.arg"
-        graph.parent.mkdir(parents=True)
-        graph.touch()
-        assert find_white_mesh(str(graph)).endswith("sub01_Lwhite.gii")
-
-    def test_bare_zero_component_is_not_an_anchor(self, tmp_path):
-        graph = tmp_path / "0" / "folds" / "Lsulci.arg"
-        graph.parent.mkdir(parents=True)
-        graph.touch()
-        assert find_white_mesh(str(graph)) is None
-
-    def test_returns_none_when_mesh_dir_missing(self, tmp_path):
-        graph = tmp_path / "default_analysis" / "folds" / "Lsulci.arg"
-        graph.parent.mkdir(parents=True)
-        graph.touch()
-        assert find_white_mesh(str(graph)) is None
+    def test_mesh_beside_the_folds_folder_is_found(self, tmp_path):
+        analysis = tmp_path / "sub01" / "t1mri" / "default_acquisition" / "0"
+        graph = _graph_beside_meshes(analysis, ["sub01_Lwhite.gii"], "Lsulci.arg")
+        assert find_white_mesh(graph, LEFT).endswith("sub01_Lwhite.gii")
 
     def test_right_hemisphere_mesh_is_selected(self, tmp_path):
-        analysis = tmp_path / "default_analysis"
-        mesh_dir = analysis / "segmentation" / "mesh"
-        mesh_dir.mkdir(parents=True)
-        (mesh_dir / "sub01_Rwhite.gii").touch()
-        graph = analysis / "folds" / "Rsulci.arg"
-        graph.parent.mkdir(parents=True)
-        graph.touch()
-        assert find_white_mesh(str(graph)).endswith("_Rwhite.gii")
+        analysis = tmp_path / "sub01" / "default_analysis"
+        graph = _graph_beside_meshes(analysis, ["sub01_Lwhite.gii", "sub01_Rwhite.gii"], "Rsulci.arg")
+        assert find_white_mesh(graph, RIGHT).endswith("_Rwhite.gii")
 
     def test_returns_none_when_no_matching_mesh_file(self, tmp_path):
-        analysis = tmp_path / "default_analysis"
-        (analysis / "segmentation" / "mesh").mkdir(parents=True)
-        graph = analysis / "folds" / "Lsulci.arg"
-        graph.parent.mkdir(parents=True)
-        graph.touch()
-        assert find_white_mesh(str(graph)) is None
+        graph = _graph_beside_meshes(tmp_path / "sub01" / "default_analysis", [], "Lsulci.arg")
+        assert find_white_mesh(graph, LEFT) is None
 
 
 class TestFindCompletedRegions:
@@ -689,8 +679,9 @@ class TestRunSulcalStep:
             snaps = script._run_sulcal((800, 600))
         assert snaps[0].endswith("sulcal_graph_wk30_left.png")
 
-    def test_multiple_acquisitions_trigger_an_error(self, tmp_path, pipeline_caplog):
-        """REQ-PATTERNS-BDRABCZUK-BE886184ADEA: one ERROR record names the acquisitions."""
+    def test_multiple_acquisitions_render_the_first_and_log_the_others_at_info(self, tmp_path, pipeline_caplog):
+        """REQ-ARGDISC-BDRABCZUK-3A36B34AB8C8 (supersedes REQ-PATTERNS BE886184ADEA): the other graph is logged
+        at INFO and no ERROR is logged."""
         morpho = tmp_path / "morphologist"
         for acq in ("wk30", "wk40"):
             folds = morpho / "t1mri" / acq / "default_analysis" / "folds"
@@ -698,12 +689,12 @@ class TestRunSulcalStep:
             (folds / "Lsulci.arg").touch()
 
         script = self._script(tmp_path, ["--morphologist_dir", str(morpho)])
-        with patch.object(gs, "generate_sulcal_graph_snapshot", side_effect=lambda *a, **k: a[1]):
+        with patch.object(gs, "generate_sulcal_graph_snapshot", side_effect=lambda *a, **k: a[1]) as render:
             script._run_sulcal((800, 600))
-        naming = _records_at(pipeline_caplog, logging.ERROR, "wk30, wk40")
-        assert len(naming) == 1
-        assert "2 left graphs found" in naming[0].getMessage()
-        assert naming[0].name == "champollion_pipeline.generate_snapshots"
+        left_out = str(morpho / "t1mri" / "wk40" / "default_analysis" / "folds" / "Lsulci.arg")
+        naming = _records_at(pipeline_caplog, logging.INFO, left_out)
+        assert (render.call_count, len(naming), naming[0].name) == (1, 1, "champollion_pipeline.generate_snapshots")
+        assert not _records_at(pipeline_caplog, logging.ERROR, "")
 
     def test_sulcal_graph_count_is_logged_at_log(self, tmp_path, pipeline_caplog):
         """REQ-LOGGING-BDRABCZUK-509809CB8A89: the number of sulcal graphs found is logged at LOG."""

@@ -16,8 +16,10 @@ from collections.abc import Sequence
 
 from champollion_pipeline.snapshot_types.sulcal import (
     HEMISPHERES,
-    find_sulcal_graphs_by_hemi,
+    discover_sulcal_graphs,
+    find_sulcal_graph_items_by_hemi,
     find_white_mesh,
+    graph_path,
     list_sulcal_subjects,
 )
 from champollion_pipeline.snapshot_types.tiles import compute_region_graph_path, find_completed_regions
@@ -29,6 +31,7 @@ logger = logging.getLogger(__name__)
 QC_FILENAME = "input_qc.tsv"
 MISSING_WHITE_MESH_COLUMN = "missing_white_mesh"
 REASON_SEPARATOR = ";"
+NO_GRAPH_REASON = "no graph found"
 EMBEDDING_ID_COLUMN = "ID"
 _MASK_SKELETON_FILES = ("Lmask_skeleton.nii.gz", "Rmask_skeleton.nii.gz")
 
@@ -76,18 +79,34 @@ class SnapshotsInputQC:
         return path
 
 
-def check_sulcal_inputs(report, morphologist_dir, subject=None, acquisition=None) -> None:
-    """Record a missing sulcal graph per hemisphere (qc 0) and missing white meshes (column only)."""
-    for name in list_sulcal_subjects(morphologist_dir, subject):
+def check_sulcal_inputs(report, morphologist_dir, subject=None, acquisition=None, items=None) -> None:
+    """Record a missing sulcal graph per hemisphere (qc 0), missing white meshes (column only) and graph-less subjects.
+
+    ``items`` is the discover_graphs result when the caller holds it, else it is discovered now. With no subject and no
+    graph anywhere, one row for ``morphologist_dir`` holds the reason ``no graph found``. A subject name that no graph
+    carries as its subject attribute gets the same reason.
+    """
+    if items is None:
+        items = discover_sulcal_graphs(morphologist_dir)
+    names = list_sulcal_subjects(morphologist_dir, subject, items)
+    if not names:
+        report.add_reason(str(morphologist_dir), NO_GRAPH_REASON)
+        return
+    graphed = {item.attributes["subject"] for item in items}
+    for name in names:
         report.add_subject(name)
-        by_hemi = find_sulcal_graphs_by_hemi(morphologist_dir, name, acquisition)
+        if name not in graphed:
+            report.add_reason(name, NO_GRAPH_REASON)
+            continue
+        by_hemi = find_sulcal_graph_items_by_hemi(morphologist_dir, name, acquisition, items)
         missing_mesh = []
         for hemi in HEMISPHERES:
             if not by_hemi[hemi]:
                 report.add_reason(name, f"missing_sulcal_graph_{hemi}")
-            elif find_white_mesh(by_hemi[hemi][0]) is None:
+            elif find_white_mesh(graph_path(morphologist_dir, by_hemi[hemi][0]), by_hemi[hemi][0].attributes) is None:
                 missing_mesh.append(hemi)
-        report.set_missing_white_mesh(name, missing_mesh)
+        if missing_mesh:
+            report.set_missing_white_mesh(name, missing_mesh)
 
 
 def _is_finite(value) -> bool:

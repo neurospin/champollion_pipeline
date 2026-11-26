@@ -64,4 +64,4 @@ class TestFindWhiteMeshOrder:
         graph = _left_graph_with_meshes(tmp_path)
         expected = str(graph.parents[3] / "segmentation" / "mesh" / sorted(LEFT_MESHES)[0])
         with _listing_in(order):
-            assert find_white_mesh(str(graph)) == expected
+            assert find_white_mesh(str(graph), {"hemisphere": "L", "subject": SUBJECT}) == expected

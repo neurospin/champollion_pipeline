@@ -1,18 +1,22 @@
-"""Hemisphere of a sulcal graph from the leading side letter of its file name.
+"""Hemisphere of a sulcal graph from the hemisphere attribute of the graph discovery.
 
 Morphologist names a sulcal graph ``<L|R><subject>[_<session>].arg``
-(see generate_labelling_qc). The side is the first character of the file name,
-never a ``_r``/``right`` substring elsewhere in it (audit H4).
-TASK-PATTERNS-BDRABCZUK-C53583AE2653; requirements named per class.
-Synthetic file names and empty files only.
+(see generate_labelling_qc); discover_graphs reads the side from the hemi-L/hemi-R entity or the first character, never
+from a ``_r``/``right`` substring elsewhere in the name (audit H4).
+TASK-PATTERNS-BDRABCZUK-C53583AE2653, TASK-ARGDISC-BDRABCZUK-AACEA4B5776D (white mesh by attributes); requirements
+named per class. Synthetic file names and empty files only.
 """
 
 import logging
 
 import pytest
 
-from champollion_pipeline.generate_snapshots import _detect_hemi
-from champollion_pipeline.snapshot_types.sulcal import find_sulcal_graphs_by_hemi, find_white_mesh
+from champollion_pipeline.snapshot_types.sulcal import (
+    discover_sulcal_graphs,
+    find_sulcal_graphs_by_hemi,
+    find_white_mesh,
+    graph_path,
+)
 
 SUBJECT = "sub_r001"
 
@@ -41,23 +45,12 @@ def _both_meshes(graph_path):
     (mesh_dir / f"{SUBJECT}_Rwhite.gii").touch()
 
 
-class TestDetectHemi:
-    """REQ-PATTERNS-BDRABCZUK-FBD2685DECAC, -1511DE259EA2: side from the leading L/R only.
-
-    Moved from test_generate_snapshots_rendering.py (old cases sub_Rwhite/right_folds now read as no side).
-    """
-
-    @pytest.mark.parametrize("name", ["Rsulci.arg", "Rleft_folds.arg", *RIGHT_NAMES])
-    def test_right_is_detected(self, name):
-        assert _detect_hemi(f"/a/b/{name}") == "right"
-
-    @pytest.mark.parametrize("name", ["Lsulci.arg", "Lright_folds.arg", *LEFT_NAMES])
-    def test_left_is_detected(self, name):
-        assert _detect_hemi(f"/a/b/{name}") == "left"
-
-    @pytest.mark.parametrize("name", NO_SIDE_NAMES)
-    def test_no_side_letter_is_none(self, name):
-        assert _detect_hemi(f"/a/b/{name}") is None
+def _white_mesh(morphologist_dir, graph):
+    """find_white_mesh of ``graph`` with the attributes its discover_graphs item carries."""
+    (item,) = [
+        i for i in discover_sulcal_graphs(str(morphologist_dir)) if graph_path(str(morphologist_dir), i) == str(graph)
+    ]
+    return find_white_mesh(str(graph), item.attributes)
 
 
 class TestGroupingBySideLetter:
@@ -81,13 +74,13 @@ class TestWhiteMeshBySideLetter:
     def test_leading_l_selects_lwhite(self, tmp_path, name):
         graph = _graph(tmp_path, name)
         _both_meshes(graph)
-        assert find_white_mesh(str(graph)).endswith(f"{SUBJECT}_Lwhite.gii")
+        assert _white_mesh(tmp_path, graph).endswith(f"{SUBJECT}_Lwhite.gii")
 
     @pytest.mark.parametrize("name", RIGHT_NAMES)
     def test_leading_r_selects_rwhite(self, tmp_path, name):
         graph = _graph(tmp_path, name)
         _both_meshes(graph)
-        assert find_white_mesh(str(graph)).endswith(f"{SUBJECT}_Rwhite.gii")
+        assert _white_mesh(tmp_path, graph).endswith(f"{SUBJECT}_Rwhite.gii")
 
 
 class TestGraphWithoutSideLetter:
@@ -125,4 +118,4 @@ class TestGraphWithoutSideLetter:
         """REQ-PATTERNS-BDRABCZUK-80C80C99DA42."""
         graph = _graph(tmp_path, name)
         _both_meshes(graph)
-        assert find_white_mesh(str(graph)) is None
+        assert _white_mesh(tmp_path, graph) is None
