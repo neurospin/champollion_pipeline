@@ -31,6 +31,20 @@ def test_qc_folder_without_t1mri_is_no_scan_and_no_warning(tmp_path, caplog):
     assert [r for r in caplog.records if r.levelno == logging.WARNING] == []
 
 
+def test_qc_folder_with_t1mri_and_no_graph_is_no_scan_and_no_warning(tmp_path, caplog):
+    """REQ-INPUTKIND-BDRABCZUK-E2569E9B4669 (layout-free revision): a t1mri folder without a .arg file is no graph."""
+    _scan_dir(tmp_path, "sub-001").mkdir(parents=True)
+    (_scan_dir(tmp_path, "sub-001") / "Lsub-001.arg").write_text("x")
+    _scan_dir(tmp_path, "qc").mkdir(parents=True)
+    (tmp_path / "qc" / "report.tsv").write_text("x")
+    caplog.set_level(logging.DEBUG)
+
+    scans = SubjectEligibilityChecker(str(tmp_path), []).list_scans()
+
+    assert scans == [ScanId("sub-001", ACQ)]
+    assert [r for r in caplog.records if r.levelno == logging.WARNING] == []
+
+
 def test_subjects_come_from_the_shared_lister(tmp_path, monkeypatch):
     """REQ-INPUTKIND-BDRABCZUK-B98700AD6446: list_scans takes the subject folders from list_morphologist_subjects."""
     _scan_dir(tmp_path, "subB").mkdir(parents=True)

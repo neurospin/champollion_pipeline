@@ -28,7 +28,7 @@ from champollion_utils.logger import OUTPUT
 
 from champollion_pipeline.utils.graph_item import GraphItem, LooseGraphError
 from champollion_pipeline.utils.input_kind import graph_files
-from champollion_pipeline.utils.subject_folders import list_morphologist_subjects
+from champollion_pipeline.utils.subject_folders import find_graph_subject_folder, list_morphologist_subjects
 
 from .btree import BTree
 from .scan_id import ScanId
@@ -384,9 +384,10 @@ class FileIndexStageIndexer:  # noqa: V102 - used by main.py
     def discover_graphs(self, folder: str) -> list[GraphItem]:  # noqa: V105 - the port, called by graph readers
         """Return one item per graph (.arg) below folder, attributes read from names alone, in natural path order.
 
-        Each item's path is POSIX, relative to folder; its attributes are subject (nearest sub- folder, else the child
-        folder of folder), hemisphere (hemi-L/hemi-R entity, else a first letter L or R, else None) and labelling_set
-        (its own folder when named *_auto or *_manual, else None). No file is opened, no index written.
+        Each item's path is POSIX, relative to folder; its attributes are subject (name of the graph's subject folder
+        from find_graph_subject_folder, folder's own name when that is folder itself), hemisphere (hemi-L/hemi-R
+        entity, else a first letter L or R, else None) and labelling_set (its own folder when named *_auto or *_manual,
+        else None). No file is opened, no index written.
 
         Raises:
             NotADirectoryError: folder is not a folder.
@@ -399,10 +400,11 @@ class FileIndexStageIndexer:  # noqa: V102 - used by main.py
         root_name = os.path.basename(os.path.abspath(folder))
         items = []
         for parts, name in graph_files(folder):
-            if not parts and not root_name.startswith(BIDS_SUBJECT_PREFIX):
+            subject_folder = find_graph_subject_folder(root_name, parts, name)
+            if subject_folder is None:
                 raise LooseGraphError(os.path.join(folder, name))
             attributes = {
-                "subject": _subject(root_name, parts),
+                "subject": subject_folder[-1] if subject_folder else root_name,
                 "hemisphere": _hemisphere(name),
                 "labelling_set": _labelling_set(root_name, parts),
             }
@@ -421,12 +423,6 @@ class FileIndexStageIndexer:  # noqa: V102 - used by main.py
             "FileIndexStageIndexer.discover_graphs post: subject is not None"
         )
         return result
-
-
-def _subject(root_name: str, parts: tuple[str, ...]) -> str:
-    """Name of the nearest sub- folder of (root_name, *parts); without one, the child folder parts[0]."""
-    subjects = [name for name in (root_name, *parts) if name.startswith(BIDS_SUBJECT_PREFIX)]
-    return subjects[-1] if subjects else parts[0]
 
 
 def _hemisphere(name: str) -> str | None:

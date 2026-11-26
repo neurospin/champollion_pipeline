@@ -255,10 +255,16 @@ def _arg_outside_t1mri_input(root: Path) -> Path:
 
 @pytest.mark.parametrize(
     "build_input",
-    [_no_input, _file_input, _empty_input, _t1_input, _no_folds_input, _arg_outside_t1mri_input],
+    [_no_input, _file_input, _empty_input, _t1_input, _no_folds_input],
 )
 def test_no_graph_gives_none(tmp_path, build_input: Callable[[Path], Path]):
     assert _resolve(build_input(tmp_path)) is None
+
+
+def test_graph_outside_t1mri_gives_the_input(tmp_path):
+    # REQ-ARGDISC-BDRABCZUK-C916E5C55893 (layout-free, user decision 2026-11-26): a graph outside any t1mri folder
+    # counts; its subject folder IXI002, named after it (REQ-ARGDISC-BDRABCZUK-D8BACBE58917), sits in the input
+    assert _resolve(_arg_outside_t1mri_input(tmp_path)) == str(tmp_path)
 
 
 @pytest.mark.parametrize("graph_folder", [GRAPH_FOLDER, f"ses-1/{GRAPH_FOLDER}"])
@@ -269,28 +275,41 @@ def test_subject_folder_gives_none(tmp_path, graph_folder):
     assert _resolve(subject_dir) is None
 
 
-def test_no_folder_is_read_after_first_graph(tmp_path, read_folders):
-    for subject in ("IXI002", "IXI012", "IXI013"):
-        _graph(tmp_path, subject)
+def _subject_with_late_folder(subjects_dir: Path, subject: str) -> Path:
+    """Create ``subject`` with its graph, then a folder ``zzz`` sorted after its t1mri folder; return ``zzz``."""
+    _graph(subjects_dir, subject)
+    late = subjects_dir / subject / "zzz"
+    _touch(late, f"L{subject}.arg")
+    return late
+
+
+def test_no_folder_of_a_subject_is_read_after_its_first_graph(tmp_path, read_folders):
+    # REQ-INPUTKIND-BDRABCZUK-349F8B54068D (live revision: each subject folder below the input is left at its first
+    # graph). The walk goes on to the next subject folder: a graph there could make the input a subject folder
+    # (REQ-ARGDISC-BDRABCZUK-1E1A74720545), so the walk no longer stops below the whole subjects folder.
+    late = [_subject_with_late_folder(tmp_path, subject) for subject in ("IXI002", "IXI012")]
 
     assert _resolve(tmp_path) == str(tmp_path)
 
-    assert read_folders[-1] == str(tmp_path / "IXI002" / GRAPH_FOLDER)
+    assert str(tmp_path / "IXI012" / GRAPH_FOLDER) in read_folders
+    assert [folder for folder in late if str(folder) in read_folders] == []
 
 
-def test_each_subjects_folder_is_left_at_its_first_graph(tmp_path, read_folders):
+def test_each_subject_folder_is_left_at_its_first_graph(tmp_path, read_folders):
+    # REQ-INPUTKIND-BDRABCZUK-349F8B54068D (live revision): the rule holds per subject folder, in each subjects folder
     older = tmp_path / MORPHOLOGIST_2021 / "subjects"
     newer = tmp_path / MORPHOLOGIST_6
-    for subjects_dir, subjects in ((older, ("IXI002", "IXI012")), (newer, ("sub-01", "sub-02"))):
-        for subject in subjects:
-            _graph(subjects_dir, subject)
+    late = [
+        _subject_with_late_folder(subjects_dir, subject)
+        for subjects_dir, subjects in ((older, ("IXI002", "IXI012")), (newer, ("sub-01", "sub-02")))
+        for subject in subjects
+    ]
 
     _outcome(tmp_path)
 
-    assert str(older / "IXI002" / GRAPH_FOLDER) in read_folders
-    assert str(newer / "sub-01" / GRAPH_FOLDER) in read_folders
-    assert str(older / "IXI012") not in read_folders
-    assert str(newer / "sub-02") not in read_folders
+    for subjects_dir, subject in ((older, "IXI002"), (older, "IXI012"), (newer, "sub-01"), (newer, "sub-02")):
+        assert str(subjects_dir / subject / GRAPH_FOLDER) in read_folders
+    assert [folder for folder in late if str(folder) in read_folders] == []
 
 
 @pytest.mark.parametrize(

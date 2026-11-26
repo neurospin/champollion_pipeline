@@ -652,8 +652,9 @@ class ChampollionPipeline(ScriptBuilder):
         return self
 
     def run(self) -> int:
-        """Run the pipeline; InputChoiceError (its exit_status: 1; NeitherInput and its subclass DerivedVolumesOnly 2),
-        ArgumentConflictError, EnvFileError, RegionMasksError, MaskVersionStop (2): one ERROR record."""
+        """Run the pipeline; InputChoiceError (its exit_status: 1; NeitherInput, its subclass DerivedVolumesOnly and
+        LooseGraphInput 2), ArgumentConflictError, EnvFileError, RegionMasksError, MaskVersionStop (2): one ERROR
+        record."""
         try:
             return self._run_pipeline(self.args)
         except InputChoiceError as error:

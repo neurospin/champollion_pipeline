@@ -1,8 +1,8 @@
 """list_morphologist_subjects: which entries of a Morphologist subjects folder are subjects.
 
-The rule is narrow: a folder named exactly qc is left out only when it holds no t1mri folder, a dot-folder
-always is, and every other folder stays listed, so that a failed subject keeps its row in the input QC.
-Only t1mri directly in qc, or directly in one of its ses- folders, keeps qc listed.
+The rule is narrow: a folder named exactly qc is left out only when it holds no .arg file outside dot folders
+(REQ-ARGDISC-BDRABCZUK-8A14A3246F95, -372F95A73053), a dot-folder always is, and every other folder stays listed, so
+that a failed subject keeps its row in the input QC. A t1mri folder in qc without a graph no longer keeps qc listed.
 """
 
 import importlib
@@ -122,18 +122,20 @@ def test_t1mri_deeper_in_qc_is_left_out(subjects_dir, t1mri_folder):
     assert list_subjects(subjects_dir) == ["sub-001"]
 
 
-@pytest.mark.parametrize(
-    "t1mri_parent, with_graphs",
-    [("qc", True), ("qc/ses-1", True), ("qc", False)],
-    ids=["graphs", "session_graphs", "no_graph"],
-)
-def test_qc_folder_holding_t1mri_is_listed(subjects_dir, t1mri_parent, with_graphs):
-    if with_graphs:
-        add_graphs(subjects_dir / t1mri_parent, "qc")
-    else:
-        (subjects_dir / t1mri_parent / "t1mri").mkdir(parents=True)
+@pytest.mark.parametrize("t1mri_parent", ["qc", "qc/ses-1"], ids=["graphs", "session_graphs"])
+def test_qc_folder_holding_t1mri_is_listed(subjects_dir, t1mri_parent):
+    # REQ-ARGDISC-BDRABCZUK-372F95A73053: qc holding a .arg file is a subject
+    add_graphs(subjects_dir / t1mri_parent, "qc")
 
     assert list_subjects(subjects_dir) == ["qc", "sub-001"]
+
+
+@pytest.mark.parametrize("t1mri_parent", ["qc", "qc/ses-1"], ids=["t1mri", "session_t1mri"])
+def test_qc_folder_holding_t1mri_without_graph_is_left_out(subjects_dir, t1mri_parent):
+    # REQ-ARGDISC-BDRABCZUK-8A14A3246F95: was the no_graph case of the test above; a t1mri folder is no graph
+    (subjects_dir / t1mri_parent / "t1mri").mkdir(parents=True)
+
+    assert list_subjects(subjects_dir) == ["sub-001"]
 
 
 @pytest.mark.parametrize(

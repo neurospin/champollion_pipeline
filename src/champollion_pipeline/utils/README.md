@@ -23,7 +23,7 @@ import them; no module here runs on its own. Several modules use the standard li
 | `region_masks.py` | The `--region-masks` option: one Mask version per region model name, parsed and checked. |
 | `resource_copy.py` | A writable working copy of a packaged resource file. |
 | `skeleton_qc.py` | The skeleton check of the stage 2 input QC and the `crop_qc.tsv` file that keeps its exclusions out of the crop step. |
-| `subject_folders.py` | Which entries of a Morphologist subjects folder are subjects. |
+| `subject_folders.py` | Which entries of a Morphologist subjects folder are subjects. `find_graph_subject_folder` finds the subject folder of a graph from its path, `has_graph` tells whether a folder holds a graph, and `list_morphologist_subjects` lists the subjects. |
 | `subject_name.py` | Validates a subject name used to build per-subject paths. |
 | `transform_qc.py` | Transform QC rows of the crop stage (temporary, goes with the prefix-ID guard of `run_cortical_tiles.py`). |
 

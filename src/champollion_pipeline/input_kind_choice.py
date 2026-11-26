@@ -1,7 +1,7 @@
 """Choice of the kind main.py routes dataset.input_path as: detection, dataset.input_kind, a terminal prompt or a stop.
 
 Every stop is an InputChoiceError whose text is the one ERROR record main.py logs before it ends with the error's
-exit_status (1; 2 for NeitherInput and its subclass DerivedVolumesOnly).
+exit_status (1; 2 for NeitherInput, its subclass DerivedVolumesOnly, and LooseGraphInput).
 Detection, the sourcedata filter and the subjects folder search stay in champollion_pipeline.utils.input_kind; this
 module only decides and asks.
 """
@@ -10,6 +10,7 @@ import logging
 import sys
 
 from champollion_pipeline.config import DatasetConfig
+from champollion_pipeline.utils.graph_item import LooseGraphError
 from champollion_pipeline.utils.input_kind import (
     AmbiguousSubjectsFolders,
     InputKind,
@@ -42,6 +43,12 @@ class NeitherInput(InputChoiceError):
 
 class DerivedVolumesOnly(NeitherInput):
     """The input holds Morphologist derived volumes and no T1 file or graph."""
+
+
+class LooseGraphInput(InputChoiceError):
+    """A .arg file sits directly in an input whose name does not start with sub-; the text names that file."""
+
+    exit_status = 2  # the usage-error status of cli (_USAGE_ERROR_STATUS)
 
 
 def check_input_kind_value(dataset: DatasetConfig) -> None:  # noqa: V103 - used by main.py
@@ -89,12 +96,15 @@ def choose_input_kind(dataset: DatasetConfig) -> InputKind | None:  # noqa: V103
 def choose_subjects_folder(dataset: DatasetConfig) -> str | None:  # noqa: V103 - used by main.py
     """Return the subjects folder of a Morphologist dataset.input_path, as resolve_subjects_dir or a prompt gives it.
 
-    None only when input_kind is None and the input is itself one subject. Raises InputChoiceError for every stop.
+    None only when input_kind is None and the input is itself one subject. Raises InputChoiceError for every stop,
+    LooseGraphInput (exit status 2) for a .arg file loose in the input.
     """
     try:
         folder = resolve_subjects_dir(dataset.input_path)
     except AmbiguousSubjectsFolders as error:
         return _ask_subjects_folder(error)
+    except LooseGraphError as error:
+        raise LooseGraphInput(str(error)) from error
     if folder is None and dataset.input_kind == InputKind.MORPHOLOGIST.value:
         raise InputChoiceError(_no_subjects_folder_text(dataset.input_path, None))
     return folder
