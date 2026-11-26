@@ -1,6 +1,7 @@
 """Tests of the user decisions of 2026-11-10 on infer_paths.
 
-Q1: a Morphologist tree whose graphs sit in several graph folders is an error, never a pick. Q2: a Morphologist input
+Q1 (superseded 2026-11-26 by TASK-ARGDISC-BDRABCZUK-1601F53514C5, user rule "any .arg is a graph"): graphs in
+several graph folders are no error and no pick: path inference sets no graph folder path. Q2: a Morphologist input
 with no derivatives folder above it, or a single subject, gives no dataset root unless --datasets-root is set.
 Q3 and Q4: models_path and sk_qc_path come back as given.
 """
@@ -11,7 +12,7 @@ from pathlib import Path
 import pytest
 
 from champollion_pipeline.config import DatasetConfig, PipelineConfig
-from champollion_pipeline.path_inference import AmbiguousGraphFolders, DatasetRootNotInferable, infer_paths
+from champollion_pipeline.path_inference import DatasetRootNotInferable, infer_paths
 from champollion_pipeline.utils.input_kind import InputKind
 
 MORPHOLOGIST_6 = "derivatives/morphologist-6.0"
@@ -96,46 +97,15 @@ def _input(tmp_path: Path, kind: InputKind) -> Path:
     return _morphologist_root(tmp_path, {"s1": [GRAPHS], "s2": [GRAPHS]})
 
 
-@pytest.mark.parametrize(("folders", "bids", "listed"), SEVERAL_FOLDERS[:1])
-def test_several_graph_versions_raise(tmp_path: Path, folders: dict[str, list[str]], bids: bool, listed: str) -> None:
-    """Subjects whose graphs sit in two folds versions raise, the versions listed sorted whatever the listing order."""
-    root = _morphologist_root(tmp_path, folders)
-    with pytest.raises(AmbiguousGraphFolders) as caught:
-        infer_paths(PipelineConfig(dataset=DatasetConfig(bids=bids)), str(root), InputKind.MORPHOLOGIST)
-    assert isinstance(caught.value, ValueError)
-    assert listed in str(caught.value)
-
-
-@pytest.mark.parametrize(("folders", "bids", "listed"), SEVERAL_FOLDERS[1:2])
-def test_several_graph_acquisitions_raise(
-    tmp_path: Path, folders: dict[str, list[str]], bids: bool, listed: str
-) -> None:
-    """Without --bids, one folds version under two acquisition folders is two graph folders: it raises too."""
-    root = _morphologist_root(tmp_path, folders)
-    with pytest.raises(AmbiguousGraphFolders) as caught:
-        infer_paths(PipelineConfig(dataset=DatasetConfig(bids=bids)), str(root), InputKind.MORPHOLOGIST)
-    assert listed in str(caught.value)
-
-
-@pytest.mark.parametrize(("folders", "bids", "listed"), SEVERAL_FOLDERS[2:])
-def test_several_graph_versions_with_bids_raise(
-    tmp_path: Path, folders: dict[str, list[str]], bids: bool, listed: str
-) -> None:
-    """With --bids, two folds versions raise, the folders listed sorted with the acquisition as a wildcard."""
-    root = _morphologist_root(tmp_path, folders)
-    with pytest.raises(AmbiguousGraphFolders) as caught:
-        infer_paths(PipelineConfig(dataset=DatasetConfig(bids=bids)), str(root), InputKind.MORPHOLOGIST)
-    assert listed in str(caught.value)
-
-
 @pytest.mark.parametrize(("folders", "bids", "listed"), SEVERAL_FOLDERS)
-def test_several_graph_folders_name_path_to_graph(
+def test_several_graph_folders_set_no_graph_folder(
     tmp_path: Path, folders: dict[str, list[str]], bids: bool, listed: str
 ) -> None:
-    """The error tells the user which option picks one graph folder."""
+    """Subjects whose graphs sit in several folds versions or acquisitions, with or without --bids, raise nothing and
+    get no graph folder path: stage 2 finds the graphs by graph discovery (REQ-ARGDISC-BDRABCZUK-3CA4DDF7F6C7)."""
     root = _morphologist_root(tmp_path, folders)
-    with pytest.raises(AmbiguousGraphFolders, match="--path-to-graph"):
-        infer_paths(PipelineConfig(dataset=DatasetConfig(bids=bids)), str(root), InputKind.MORPHOLOGIST)
+    result = infer_paths(PipelineConfig(dataset=DatasetConfig(bids=bids)), str(root), InputKind.MORPHOLOGIST)
+    assert result.dataset.path_to_graph is None
 
 
 def test_root_not_inferable_without_derivatives(tmp_path: Path) -> None:
@@ -160,13 +130,12 @@ def test_root_not_inferable_names_datasets_root(tmp_path: Path, make_input: Call
 
 @pytest.mark.parametrize("make_input", NO_ROOT_INPUTS)
 def test_set_datasets_root_raises_no_root_error(tmp_path: Path, make_input: Callable[[Path], Path]) -> None:
-    """With --datasets-root set, the same inputs run; the graph folder is still read from a subjects folder."""
+    """With --datasets-root set, the same inputs run; the graph folder stays unset."""
     explicit = str(tmp_path / "given_root")
     config = PipelineConfig(dataset=DatasetConfig(datasets_root=explicit))
     result = infer_paths(config, str(make_input(tmp_path)), InputKind.MORPHOLOGIST)
     assert result.dataset.datasets_root == explicit
-    if make_input is _no_derivatives_input:
-        assert result.dataset.path_to_graph == GRAPHS
+    assert result.dataset.path_to_graph is None
 
 
 @pytest.mark.parametrize("kind", KINDS)

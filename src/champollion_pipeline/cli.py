@@ -67,12 +67,7 @@ from champollion_pipeline.input_kind_choice import (
     choose_subjects_folder,
 )
 from champollion_pipeline.mask_version_checks import MaskVersionStop, check_run_masks, compute_run_region_names
-from champollion_pipeline.path_inference import (
-    AmbiguousGraphFolders,
-    DatasetRootNotInferable,
-    infer_paths,
-    refresh_version_paths,
-)
+from champollion_pipeline.path_inference import DatasetRootNotInferable, infer_paths, refresh_version_paths
 from champollion_pipeline.pipeline_stages import _HF_REPO_ID_REQUIRED as _HF_REPO_ID_REQUIRED
 from champollion_pipeline.pipeline_stages import (
     GenerateChampollionConfigStage,
@@ -308,7 +303,7 @@ class PipelineOrchestrator:
 
 def _default_stage_indexer(config: PipelineConfig) -> StageIndexer:
     """The one place the sequential stages' indexer adapter is chosen."""
-    return FileIndexStageIndexer(config.outputs_path, config.dataset.bids, config.dataset.path_to_graph)
+    return FileIndexStageIndexer(config.outputs_path, config.dataset.bids, config.dataset.path_to_graph or "")
 
 
 # ====================== CLI Interface ======================
@@ -501,7 +496,7 @@ def _infer_configless_paths(config: PipelineConfig, kind: InputKind, args: argpa
     """Config-less run: unset paths inferred, dataset named after its root; no stop here, one WARNING at most."""
     try:
         config = infer_paths(config, config.dataset.input_path, kind)
-    except (DatasetRootNotInferable, AmbiguousGraphFolders) as error:
+    except DatasetRootNotInferable as error:
         logger.warning(f"Paths not inferred: {error}")
     root = config.dataset.datasets_root
     if args.dataset_name is None and root:

@@ -73,7 +73,7 @@ both in the Option column; a list option takes one or more values.
 | `--crops-path` | `CROPS_PATH` | empty; config-less input run: `<Dataset root>/derivatives/cortical_tiles-<year>/crops/<masks version>/2mm` | `dataset.crops_path` | Crops folder that stages 3 and 6 read |
 | `--embeddings-path` | `EMBEDDINGS_PATH` | empty: `<Dataset root>/derivatives/champollion_V1/<masks version>/region_embeddings` | `dataset.embeddings_path` | Per-region embeddings folder, written by stage 4 and read by stage 5; streaming mode refuses a non-empty value |
 | `--njobs` | `NJOBS` | `22` | `dataset.njobs` | Number of parallel jobs of stage 2 |
-| `--path-to-graph` | `PATH_TO_GRAPH` | `t1mri/default_acquisition/default_analysis/folds/3.3/base`; config-less input run: the folder stage 1 writes (T1 input) or the one read from the tree (Morphologist input) | `dataset.path_to_graph` | Graph folder below each subject, relative to the subject folder |
+| `--path-to-graph` | `PATH_TO_GRAPH` | `t1mri/default_acquisition/default_analysis/folds/3.3/base`; config-less input run: the folder stage 1 writes (T1 input) or none, graph discovery (Morphologist input) | `dataset.path_to_graph` | Graph folder below each subject, relative to the subject folder |
 | `--path-sk-with-hull` | `PATH_SK_WITH_HULL` | `t1mri/default_acquisition/default_analysis/segmentation`; config-less input run: the `segmentation` folder beside the graph folder | `dataset.path_sk_with_hull` | Folder of the skeleton-with-hull volumes below each subject, given to stage 2 |
 | `--sk-qc-path` | `SK_QC_PATH` | empty: no QC filter | `dataset.sk_qc_path` | QC TSV file (`participant_id`, `qc`) that stage 2 filters subjects with |
 | `--masks-version` | `MASKS_VERSION` | `canonical_corrected_26_1` | `dataset.masks_version` | Mask version of stages 2, 3 and 4; names the versioned output folders. Without it, on a local model set (`--models-path`, Hugging Face off), stages 2, 3 and 4 use, for each region model name, the Mask version that the local model set names (see the `model_set.json` subsection of Stage 4). The set must then hold a model for each region model name the run processes and name one Mask version for each, else the run exits with status 2 before any stage. A given Mask version, or a given `--region-masks` map, that differs from the local model set's exits with status 2 before any stage, unless `--allow-version-mismatch` is given (then one WARNING record per mismatching region model name and the run goes on) |
@@ -188,13 +188,14 @@ pixi run champollion-cortical-tiles \
 
 - **First argument** — directory containing one folder per subject (the folder stage 1 writes, `derivatives/morphologist-6.0/`, or the `subjects/` folder of an existing tree that has one). This path may be read-only (e.g. a shared NFS database); the script never writes to it.
 - **Second argument** — derivatives parent directory. Crops are written to `{output}/cortical_tiles-2026/crops/{masks_version}/2mm/` (`{masks_version}` defaults to `canonical_corrected_26_1`, see [Mask versions](#mask-versions)).
-- **`--path_to_graph` / `--path_sk_with_hull`** — required; there is no default, since the sub-path under a subject's Morphologist output depends on your acquisition/analysis naming.
+- **`--path_sk_with_hull`** — required; there is no default, since the sub-path under a subject's Morphologist output depends on your acquisition/analysis naming.
+- **`--path_to_graph`** — optional. Without it, stage 2 finds the graphs of each subject folder by graph discovery (any `.arg` file below the subject folder; a labelled graph is listed in preference to an unlabelled one, then the first in natural path order) and hands cortical_tiles a `--graphs` map. A subject folder holding graphs of several labelling sets stops the run with status 2 unless `--graph_label` names one.
 
 `--path_to_graph` supports wildcards (`*`) for variable path segments (e.g. an acquisition or analysis label that differs per subject); `*` is the only wildcard, other glob characters are taken literally.
 
-Without `--bids`, Stage 2 requires `--path_to_graph`, read with `*` as a wildcard, to match exactly one folder per subject. `{output}/cortical_tiles-2026/labelling_qc.tsv` holds one row per subject with a fused whole-brain volume; a subject whose `--path_to_graph` matches no folder or two or more folders gets qc 0 there and is left out of the whole-brain output, with one warning naming it: `--path_to_graph '<pattern>' matches no folder for <ids>`, or `--path_to_graph '<pattern>' matches several folders for <ids> (ambiguous, not guessed)`. Leaving a subject out of the whole-brain output for a `--path_to_graph` match other than exactly one folder does not change the exit status of Stage 2. The crops are another matter: a subject matching no folder has no graph, so its crops are skipped too and the stage reports a partial run (exit status 3); a subject matching two or more folders keeps the crops cortical_tiles builds from one of them.
+Given `--path_to_graph` and without `--bids`, Stage 2 requires it, read with `*` as a wildcard, to match exactly one folder per subject. `{output}/cortical_tiles-2026/labelling_qc.tsv` holds one row per subject with a fused whole-brain volume; a subject whose `--path_to_graph` matches no folder or two or more folders gets qc 0 there and is left out of the whole-brain output, with one warning naming it: `--path_to_graph '<pattern>' matches no folder for <ids>`, or `--path_to_graph '<pattern>' matches several folders for <ids> (ambiguous, not guessed)`. Leaving a subject out of the whole-brain output for a `--path_to_graph` match other than exactly one folder does not change the exit status of Stage 2. The crops are another matter: a subject matching no folder has no graph, so its crops are skipped too and the stage reports a partial run (exit status 3); a subject matching two or more folders keeps the crops cortical_tiles builds from one of them.
 
-With `--bids`, Stage 2 requires `--path_to_graph` to match exactly one folder under the subject folder (the volume id up to its first `_`) whose `ses-`, `acq-` and `run-` labels, appended to the subject label, equal the volume id: for the volume id `sub-01_ses-1`, `--path_to_graph "*/anat/graph"` selects `ses-1/anat/graph` and never `ses-2/anat/graph`. Labels outside the subject folder do not count.
+Given `--path_to_graph` and with `--bids`, Stage 2 requires it to match exactly one folder under the subject folder (the volume id up to its first `_`) whose `ses-`, `acq-` and `run-` labels, appended to the subject label, equal the volume id: for the volume id `sub-01_ses-1`, `--path_to_graph "*/anat/graph"` selects `ses-1/anat/graph` and never `ses-2/anat/graph`. Labels outside the subject folder do not count.
 
 **Verify** that 28 sulcal region folders were created:
 
@@ -254,7 +255,8 @@ Datasets whose crops were built before the `skel_seed` key existed used clock-se
 
 | Option | Argument | Default | Effect |
 |---|---|---|---|
-| `--path_to_graph` | `PATTERN` | none: required | **Required.** Glob pattern to `.arg` graph files, relative to the subjects dir; `*` matches a variable path segment. |
+| `--path_to_graph` | `PATTERN` | none: graph discovery | Optional. Glob pattern to `.arg` graph files, relative to the subjects dir; `*` matches a variable path segment. Without it, graphs are found by graph discovery. |
+| `--graph_label` | `LABEL` | none | Labelling set (for example `default_session_auto`) whose graphs graph discovery lists in preference. Without it, several labelling sets in a subject folder stop the run with status 2. |
 | `--path_sk_with_hull` | `SUBPATH` | none: required | **Required.** Skeleton-with-hull sub-path, relative to the subjects dir. |
 | `--sk_qc_path` | `PATH` | none: every subject is processed | Path to QC TSV file (`participant_id` and `qc` columns, see [QC File](#qc-file)); subjects with `qc` 0 are skipped |
 | `--sk_qc_input_only` | - | off | Limit the input QC to the subjects of the input: an id of the `--sk_qc_path` file with no input subject folder gets no `input_qc.tsv` row. For a run on part of the cohort the file covers. |
@@ -729,9 +731,8 @@ The subjects folder is the folder whose children are the subject folders: `morph
 `subjects` in the second. A subject folder holds `t1mri`, or `ses-*/t1mri` with sessions. A folder named `qc` beside
 the subject folders is read as a subject only when it holds a `t1mri` folder, and a folder starting with a dot never is.
 Give `<input>` as the tree root, the subjects folder or the `morphologist-6.0` folder: `champollion-pipeline` finds the subjects
-folder, or takes `--morphologist-graphs`. When `path_to_graph` is unset, it is read from the subjects' graph folders
-(`t1mri/<acquisition>/<analysis>/folds/<version>`); graphs in several such folders stop the inference with a warning
-that names `--path-to-graph`.
+folder, or takes `--morphologist-graphs`. For a Morphologist input, `path_to_graph` stays unset
+when none is given: stage 2 then finds the graphs by graph discovery, whatever the folder names.
 
 ## Replay config
 

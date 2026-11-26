@@ -120,7 +120,12 @@ def reference_cli(tmp_path_factory):
     if shown.returncode != 0:
         pytest.skip(f"reference commit {REFERENCE_COMMIT} not in this clone: {shown.stderr.strip()}")
     source = tmp_path_factory.mktemp("reference") / "cli_5911c7a.py"
-    source.write_text(shown.stdout, encoding="utf-8")
+    # 5911c7a imports AmbiguousGraphFolders, removed with the graph-folder rule (TASK-ARGDISC-BDRABCZUK-1601F53514C5);
+    # no stage class compared here uses it.
+    source.write_text(
+        shown.stdout.replace("AmbiguousGraphFolders, DatasetRootNotInferable", "DatasetRootNotInferable"),
+        encoding="utf-8",
+    )
     spec = importlib.util.spec_from_file_location(REFERENCE_MODULE, source)
     module = importlib.util.module_from_spec(spec)
     spec.loader.exec_module(module)

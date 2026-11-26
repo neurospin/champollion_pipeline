@@ -11,8 +11,6 @@ import os
 from collections.abc import Callable
 
 QC_FOLDER = "qc"
-T1MRI_FOLDER = "t1mri"
-SESSION_FOLDERS = "ses-*"
 SUBJECT_PREFIX = "sub-"
 GRAPH_SUFFIX = ".arg"
 SIDE_LETTERS: tuple[str, ...] = ("", "L", "R")

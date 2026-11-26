@@ -21,6 +21,8 @@ import csv
 import glob
 import logging
 import sys
+from collections.abc import Iterator
+from contextlib import contextmanager
 from datetime import datetime
 from os.path import abspath, dirname, exists, isdir, join
 
@@ -33,8 +35,16 @@ from joblib import cpu_count
 from soma import aims
 
 from champollion_pipeline.derivatives_layout import compute_run_log_path
+from champollion_pipeline.file_indexer.pipeline_checks import FileIndexStageIndexer
 from champollion_pipeline.generate_masks import _REGIONS_DEFAULT
 from champollion_pipeline.process_setup import init_pipeline_process
+from champollion_pipeline.run_cortical_tiles_graphs import (
+    GraphListing,
+    compute_several_sets_message,
+    list_subject_graphs,
+    log_unlabelled,
+    write_graphs_file,
+)
 from champollion_pipeline.run_cortical_tiles_inputs import (
     CROP_STATUS_PARTIAL,
     REASON_EXCLUDED_BY_SK_QC,
@@ -67,6 +77,7 @@ from champollion_pipeline.utils.cortical_tiles_config import (
     write_crop_config,
     write_marker_names,
 )
+from champollion_pipeline.utils.graph_item import LooseGraphError
 from champollion_pipeline.utils.lib import DERIVATIVES_FOLDER, LABELLING_SESSION_CANDIDATES
 from champollion_pipeline.utils.qc_report import (
     CROP_KIND_MASK,
@@ -110,6 +121,8 @@ class _ExplicitLabellingSession(argparse.Action):
 
 
 ROOT_FORBIDDEN_SUBSTRINGS = ("ses-", "acq-", "run-", "_cropped")
+EXIT_SEVERAL_LABELLING_SETS = 2  # cortical_tiles' own status for several labelling sets
+EXIT_LOOSE_GRAPH = 2  # a graph outside any subject folder: the entry layer maps LooseGraphError to status 2
 
 
 class RunCorticalTiles(ScriptBuilder):
@@ -129,8 +142,17 @@ class RunCorticalTiles(ScriptBuilder):
             )
             .add_argument("output", help="Absolute path to the generated sulcal regions from cortical_tiles.")
             .add_optional_argument("--region-file", "Absolute path to the user's sulcal region's configuration file.")
-            .add_required_argument(
-                "--path_to_graph", "Contains the sub-path that, for each subject, permits getting the sulcal graphs."
+            .add_optional_argument(
+                "--path_to_graph",
+                "Contains the sub-path that, for each subject, permits getting the sulcal graphs. "
+                "Without it, the graphs of each subject folder are found by graph discovery.",
+                default=None,
+            )
+            .add_optional_argument(
+                "--graph_label",
+                "Labelling set (e.g. 'default_session_auto') whose graphs graph discovery lists in preference. "
+                "Without it, a subject folder holding graphs of several labelling sets stops the run (status 2).",
+                default=None,
             )
             .add_required_argument("--path_sk_with_hull", "Contains the sub-path where to get the skeleton with hull.")
             .add_optional_argument("--sk_qc_path", "The path to the QC file if it exists.", default="")
@@ -188,6 +210,7 @@ class RunCorticalTiles(ScriptBuilder):
         )
         add_region_masks_option(self)
         self.parser.set_defaults(labelling_session_explicit=False)
+        self._graphs_file: str | None = None  # the --graphs file of the crop command (graph discovery runs only)
 
     def parse_args(self, args: list[str] | None = None) -> argparse.Namespace:
         """Parse; exit 2 on --masks beside --region-masks, or on a hemisphere of the run the map gives no version."""
@@ -321,8 +344,13 @@ class RunCorticalTiles(ScriptBuilder):
         else:
             logger.output(f"transform QC: {len(rows)} subject(s), no byte-identical transform, see {qc_path}.")
 
-    def _write_input_qc(self, input_abs: str, output_abs: str, sk_qc_abs: str) -> tuple[str, bool, str]:
-        """Write input_qc.tsv, one record per qc 0 row, and crop_qc.tsv; return path, a subject passed, crop_qc path."""
+    def _write_input_qc(
+        self, input_abs: str, output_abs: str, sk_qc_abs: str, graphs: GraphListing | None
+    ) -> tuple[str, bool, str]:
+        """Write input_qc.tsv, one record per qc 0 row, and crop_qc.tsv; return path, a subject passed, crop_qc path.
+
+        ``graphs``: the graph listing of a run without --path_to_graph, which the missing_graph_<side> reasons read.
+        """
         sk_qc = None
         is_refused = False
         if sk_qc_abs:
@@ -333,7 +361,7 @@ class RunCorticalTiles(ScriptBuilder):
                 is_refused = True
         args = self.args
         rows = fetch_input_qc_rows(
-            input_abs, args.path_to_graph, sk_qc, is_refused, args.sk_qc_input_only, args.path_sk_with_hull
+            input_abs, args.path_to_graph, sk_qc, is_refused, args.sk_qc_input_only, args.path_sk_with_hull, graphs
         )
         qc_path = join(output_abs, DERIVATIVES_FOLDER, INPUT_QC_FILENAME)
         write_qc_tsv(qc_path, rows)
@@ -450,8 +478,11 @@ class RunCorticalTiles(ScriptBuilder):
             script_path,
             "-d",
             abspath(self.args.output),
-            "--path_to_graph",
-            self.args.path_to_graph,
+            *(
+                ["--path_to_graph", self.args.path_to_graph]
+                if self._graphs_file is None
+                else ["--graphs", self._graphs_file]
+            ),
             "--path_sk_with_hull",
             self.args.path_sk_with_hull,
             "--njobs",
@@ -511,6 +542,43 @@ class RunCorticalTiles(ScriptBuilder):
             region_dirs = [join(crops_dir, region, CROP_MASK_FOLDER) for region in crop_pass.regions]
             exclude_empty_crops(region_dirs, dropped, [crop_pass.side])
 
+    def _list_graphs(self, input_abs: str) -> GraphListing | None:
+        """The graph listing of a run without --path_to_graph (None with it); one WARNING per unlabelled listing."""
+        if self.args.path_to_graph is not None:
+            return None
+        listing = list_subject_graphs(input_abs, self.args.graph_label, FileIndexStageIndexer("").discover_graphs)
+        log_unlabelled(listing)
+        return listing
+
+    def _prepare_graphs(self, input_abs: str) -> tuple[GraphListing | None, int | None]:
+        """The graph listing (None with --path_to_graph) and the status that stops the run before any crop command.
+
+        A graph outside any subject folder, or a subject folder with several labelling sets and no --graph_label,
+        stops it with status 2 after one ERROR record.
+        """
+        try:
+            graphs = self._list_graphs(input_abs)
+        except LooseGraphError as error:
+            logger.error(str(error))
+            return None, EXIT_LOOSE_GRAPH
+        if graphs is not None and graphs.several_sets:
+            logger.error(compute_several_sets_message(graphs))
+            return graphs, EXIT_SEVERAL_LABELLING_SETS
+        return graphs, None
+
+    @contextmanager
+    def _open_graphs_file(self, graphs: GraphListing | None) -> Iterator[None]:
+        """Within the block, the crop command carries a --graphs file holding the listing (none without one)."""
+        if graphs is None:
+            yield
+            return
+        with write_graphs_file(graphs.graphs) as path:
+            self._graphs_file = path
+            try:
+                yield
+            finally:
+                self._graphs_file = None
+
     def run(self):
         """Execute the cortical_tiles script."""
         logger.trace(f"input: {self.args.input}")
@@ -528,7 +596,11 @@ class RunCorticalTiles(ScriptBuilder):
         if not self._check_subject_ids(input_abs, output_abs):
             return 1
 
-        qc_path, has_usable_subject, crop_qc_abs = self._write_input_qc(input_abs, output_abs, sk_qc_abs)
+        graphs, stop_status = self._prepare_graphs(input_abs)
+        if stop_status is not None:
+            return stop_status
+
+        qc_path, has_usable_subject, crop_qc_abs = self._write_input_qc(input_abs, output_abs, sk_qc_abs, graphs)
         if not has_usable_subject:
             logger.fail(f"no subject passed the input QC, see {qc_path}")
             return 1
@@ -563,7 +635,8 @@ class RunCorticalTiles(ScriptBuilder):
         brainvisa_dir = join(dirname(__file__), "..", "..", "external", "cortical_tiles", "cortical_tiles", "brainvisa")
         script_path = abspath(join(brainvisa_dir, "generate_sulcal_regions.py"))
 
-        result, skips, markers = self._run_crop_passes(script_path, crop_sk_qc, output_abs, to_crop)
+        with self._open_graphs_file(graphs):
+            result, skips, markers = self._run_crop_passes(script_path, crop_sk_qc, output_abs, to_crop)
         if result not in (0, CROP_STATUS_PARTIAL):
             return result
 
