@@ -12,6 +12,7 @@ from os.path import isdir, join
 from cortical_tiles.brainvisa.utils.skip_list import session_key
 from soma import aims
 
+from champollion_pipeline.run_cortical_tiles_graphs import GraphListing
 from champollion_pipeline.utils.qc_report import REASON_SEPARATOR, read_qc_tsv
 from champollion_pipeline.utils.skeleton_qc import compute_skeleton_reasons
 from champollion_pipeline.utils.subject_folders import list_morphologist_subjects
@@ -88,6 +89,13 @@ def has_hemisphere_graph(input_abs: str, path_to_graph: str, subject: str, side:
     return False
 
 
+def _has_graph(input_abs: str, path_to_graph: str | None, subject: str, side: str, graphs: GraphListing | None) -> bool:
+    """True when ``graphs`` lists a graph of ``side`` for ``subject``; else when path_to_graph finds one."""
+    if graphs is not None:
+        return graphs.has_side(subject, side)
+    return has_hemisphere_graph(input_abs, path_to_graph or "", subject, side)
+
+
 def compute_sk_qc_reason(subject: str, sk_qc: dict[str, int] | None, is_refused: bool) -> str | None:
     """Reason the --sk_qc_path file gives against ``subject``, None when it gives none."""
     if is_refused:
@@ -104,17 +112,20 @@ def compute_end_status(status: int, crop_qc_abs: str) -> int:
     return CROP_STATUS_PARTIAL if crop_qc_abs and status == 0 else status
 
 
-def fetch_input_qc_rows(  # noqa: PLR0913 - path_sk_with_hull optional, five-argument calls kept
+def fetch_input_qc_rows(  # noqa: PLR0913 - path_sk_with_hull and graphs optional, five-argument calls kept
     input_abs: str,
-    path_to_graph: str,
+    path_to_graph: str | None,
     sk_qc: dict[str, int] | None,
     is_refused: bool,
     is_input_only: bool,
     path_sk_with_hull: str | None = None,
+    graphs: GraphListing | None = None,
 ) -> list[dict[str, object]]:
     """input_qc.tsv rows: one per input subject folder, then, unless ``is_input_only``, the file ids with no folder.
 
     Reasons in order: missing_graph_L, missing_graph_R, L then R skeleton (with path_sk_with_hull), the file reason.
+    A hemisphere has its graph when ``graphs`` (graph discovery, no path_to_graph) lists one for the subject folder,
+    else when a folder ``path_to_graph`` matches holds a <side>*.arg file.
     """
     subjects = list_input_subjects(input_abs)
     rows: list[dict[str, object]] = []
@@ -122,7 +133,7 @@ def fetch_input_qc_rows(  # noqa: PLR0913 - path_sk_with_hull optional, five-arg
         reasons = [
             f"{REASON_MISSING_GRAPH_STEM}{side}"
             for side in GRAPH_SIDES
-            if not has_hemisphere_graph(input_abs, path_to_graph, subject, side)
+            if not _has_graph(input_abs, path_to_graph, subject, side, graphs)
         ]
         if path_sk_with_hull is not None:
             folders = resolve_graph_paths(input_abs, path_sk_with_hull, subject)

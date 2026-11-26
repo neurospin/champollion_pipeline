@@ -181,15 +181,16 @@ def test_t1_path_to_graph_with_bids(tmp_path: Path) -> None:
     assert result.dataset.path_to_graph == "t1mri/*/default_analysis/folds/3.1"
 
 
-def test_morphologist_path_to_graph_from_tree(tmp_path: Path) -> None:
-    """Without --bids, the graph folder is read from the tree, a labelled session folder below it included."""
+def test_morphologist_path_to_graph_not_read_from_tree(tmp_path: Path) -> None:
+    """Without --bids, no graph folder path is set for a tree, a labelled session folder below its graph folder
+    included (REQ-ARGDISC-BDRABCZUK-3CA4DDF7F6C7: stage 2 finds the graphs by graph discovery)."""
     root = _morphologist_root(tmp_path)
     result = infer_paths(_config(), str(root), InputKind.MORPHOLOGIST)
-    assert result.dataset.path_to_graph == TREE_GRAPHS
+    assert result.dataset.path_to_graph is None
 
 
-def test_morphologist_path_to_graph_from_bids_tree(tmp_path: Path) -> None:
-    """With --bids, the acquisition folders differ between scans and the inferred path matches them by a wildcard."""
+def test_morphologist_path_to_graph_not_read_from_bids_tree(tmp_path: Path) -> None:
+    """With --bids, scans whose acquisition folders differ still get no graph folder path, wildcard or not."""
     root = tmp_path / "dataset"
     _graphs(
         root / MORPHOLOGIST_6,
@@ -199,7 +200,7 @@ def test_morphologist_path_to_graph_from_bids_tree(tmp_path: Path) -> None:
         },
     )
     result = infer_paths(_config(bids=True), str(root), InputKind.MORPHOLOGIST)
-    assert result.dataset.path_to_graph == "t1mri/*/my_analysis/folds/3.2"
+    assert result.dataset.path_to_graph is None
 
 
 @pytest.mark.parametrize(
@@ -207,7 +208,7 @@ def test_morphologist_path_to_graph_from_bids_tree(tmp_path: Path) -> None:
     [
         pytest.param(InputKind.T1, {}, "t1mri/default_acquisition/default_analysis/segmentation", id="t1"),
         pytest.param(InputKind.T1, {"bids": True}, "t1mri/*/default_analysis/segmentation", id="t1_bids"),
-        pytest.param(InputKind.MORPHOLOGIST, {}, "t1mri/acq_x/my_analysis/segmentation", id="morphologist"),
+        pytest.param(InputKind.MORPHOLOGIST, {}, DatasetConfig().path_sk_with_hull, id="morphologist_no_graph_folder"),
         pytest.param(
             InputKind.MORPHOLOGIST,
             {"path_to_graph": "t1mri/a/b/folds/9.9/base"},
@@ -219,7 +220,8 @@ def test_morphologist_path_to_graph_from_bids_tree(tmp_path: Path) -> None:
 def test_path_sk_with_hull_beside_folds(
     tmp_path: Path, kind: InputKind, dataset_fields: dict[str, object], expected: str
 ) -> None:
-    """The skeleton folder is the segmentation folder beside the folds folder of the returned graph path."""
+    """The skeleton folder is the segmentation folder beside the folds folder of the returned graph path; with no
+    returned graph path (a Morphologist input given none) it stays the default."""
     input_path = _t1_input(tmp_path) if kind is InputKind.T1 else _morphologist_root(tmp_path)
     result = infer_paths(_config(**dataset_fields), str(input_path), kind)
     assert result.dataset.path_sk_with_hull == expected

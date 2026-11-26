@@ -423,7 +423,7 @@ def test_prune_defaults():
 
 
 def test_cortical_tiles_required_options():
-    _assert_exit_2("run_cortical_tiles", ["/in", "/out", "--path_sk_with_hull", "s"])
+    # --path_to_graph is optional since TASK-ARGDISC-BDRABCZUK-1601F53514C5 (REQ-ARGDISC-BDRABCZUK-86F0D7690C07)
     _assert_exit_2("run_cortical_tiles", ["/in", "/out", "--path_to_graph", "g"])
 
 

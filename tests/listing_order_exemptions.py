@@ -44,16 +44,6 @@ EXEMPTIONS: dict[tuple[str, str, str], str] = {
         "lightning_logs.glob('version_*/checkpoints/*.ckpt')",
     ): "max() over the rank (step, version index, path text), a total order",
     (
-        "src/champollion_pipeline/path_inference.py",
-        "_graph_folders",
-        "glob.glob(os.path.join(base, SESSION_FOLDERS, T1MRI_FOLDER))",
-    ): "joined with the other t1mri glob and iterated as sorted(t1mri_folders)",
-    (
-        "src/champollion_pipeline/path_inference.py",
-        "_graph_folders",
-        "glob.glob(os.path.join(base, T1MRI_FOLDER))",
-    ): "joined with the other t1mri glob and iterated as sorted(t1mri_folders)",
-    (
         "src/champollion_pipeline/prune_failed_subjects.py",
         "PruneFailedSubjects._discover_subjects",
         "Path(crops_dir).iterdir()",

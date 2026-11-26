@@ -14,7 +14,11 @@ import tempfile
 from collections.abc import Callable
 from os.path import abspath, isdir, join
 
-from champollion_pipeline.generate_labelling_qc import REASON_NO_SESSION_DIR, fetch_subject_row
+from champollion_pipeline.generate_labelling_qc import (
+    REASON_NO_SESSION_DIR,
+    discover_graph_folder,
+    fetch_subject_row,
+)
 from champollion_pipeline.run_cortical_tiles_inputs import (
     CROP_STATUS_PARTIAL,
     GRAPH_SIDES,
@@ -89,14 +93,17 @@ def resolve_labelling_session(
 
 
 def fetch_labelling_qc_row(
-    morpho_dir: str, path_to_graph: str, subject: str, candidates: tuple[str, ...], bids: bool
+    morpho_dir: str, path_to_graph: str | None, subject: str, candidates: tuple[str, ...], bids: bool
 ) -> dict[str, str]:
     """labelling_qc.tsv row of a fused subject, at the graphs whole-brain ventricle removal reads.
 
     ``*`` must match exactly one folder: with BIDS names, the one folder of the subject part of
-    the id whose session_key is the fused id. None or several gives qc 0 no_session_dir.
+    the id whose session_key is the fused id. None or several gives qc 0 no_session_dir. Without path_to_graph
+    the graph folder is the one graph discovery finds below the subject folder.
     """
     folder = subject.partition("_")[0] if bids else subject
+    if path_to_graph is None:
+        return {**fetch_subject_row(morpho_dir, folder, None, candidates, False), "participant_id": subject}
     resolve = resolve_bids_graph_paths if bids else resolve_graph_paths
     graph_paths = resolve(morpho_dir, path_to_graph, subject)
     if len(graph_paths) == 1:
@@ -110,13 +117,13 @@ def fetch_labelling_qc_row(
     }
 
 
-def exclusion_warning(excluded: dict[str, list[str]], path_to_graph: str, candidates: tuple[str, ...]) -> str:
+def exclusion_warning(excluded: dict[str, list[str]], path_to_graph: str | None, candidates: tuple[str, ...]) -> str:
     """One-line warning naming the subjects left out of whole-brain removal, by reason."""
+    where = "graph discovery finds" if path_to_graph is None else f"--path_to_graph {path_to_graph!r} matches"
+    finder = "graph discovery" if path_to_graph is None else "--path_to_graph"
     clause_for = {
-        EXCLUDED_NO_GRAPH_FOLDER: f"--path_to_graph {path_to_graph!r} matches no folder for {{ids}}",
-        EXCLUDED_SEVERAL_GRAPH_FOLDERS: (
-            f"--path_to_graph {path_to_graph!r} matches several folders for {{ids}} (ambiguous, not guessed)"
-        ),
+        EXCLUDED_NO_GRAPH_FOLDER: f"{where} no folder for {{ids}}",
+        EXCLUDED_SEVERAL_GRAPH_FOLDERS: (f"{where} several folders for {{ids}} (ambiguous, not guessed)"),
         EXCLUDED_NO_LABELLED_GRAPH: (
             f"no labelled graph under {' or '.join(candidates)} for {{ids}} (run Morphologist with sulcal recognition)"
         ),
@@ -129,7 +136,7 @@ def exclusion_warning(excluded: dict[str, list[str]], path_to_graph: str, candid
     n = sum(len(ids) for ids in excluded.values())
     return (
         f"{n} subject(s) excluded from whole-brain ventricle removal, which "
-        "requires sulcal recognition (one labelled graph per subject, found through --path_to_graph): "
+        f"requires sulcal recognition (one labelled graph per subject, found through {finder}): "
         f"{'; '.join(clauses)}."
     )
 
@@ -153,6 +160,13 @@ def write_labelling_qc(
     return qc_path, [row["participant_id"] for row in rows if row["qc"] == "1"], has_no_labels
 
 
+def _discover_graph_paths(input_abs: str, subject: str, bids: bool) -> list[str]:
+    """The graph folder graph discovery finds below the subject folder of ``subject``, relative to it ([] when none)."""
+    folder = subject.partition("_")[0] if bids else subject
+    graph_dir = discover_graph_folder(join(input_abs, folder))[0]
+    return [os.path.relpath(graph_dir, join(input_abs, folder))] if graph_dir else []
+
+
 def group_whole_brain_subjects(
     args: argparse.Namespace, subjects: list[str], input_abs: str, candidates: tuple[str, ...]
 ) -> tuple[dict[tuple[str, str], list[str]], dict[str, list[str]]]:
@@ -160,8 +174,11 @@ def group_whole_brain_subjects(
     groups: dict[tuple[str, str], list[str]] = {}
     excluded: dict[str, list[str]] = {}
     for subject in subjects:
-        resolve = resolve_bids_graph_paths if args.bids else resolve_graph_paths
-        graph_paths = resolve(input_abs, args.path_to_graph, subject)
+        if args.path_to_graph is None:
+            graph_paths = _discover_graph_paths(input_abs, subject, args.bids)
+        else:
+            resolve = resolve_bids_graph_paths if args.bids else resolve_graph_paths
+            graph_paths = resolve(input_abs, args.path_to_graph, subject)
         if not graph_paths:
             excluded.setdefault(EXCLUDED_NO_GRAPH_FOLDER, []).append(subject)
             continue
@@ -172,7 +189,7 @@ def group_whole_brain_subjects(
         if session is None:
             excluded.setdefault(EXCLUDED_NO_LABELLED_GRAPH, []).append(subject)
         else:
-            groups.setdefault((session, graph_paths[0]), []).append(subject)
+            groups.setdefault((session, graph_paths[0] if args.path_to_graph is not None else ""), []).append(subject)
     return groups, excluded
 
 
@@ -251,7 +268,7 @@ def remove_ventricle_whole_brain(
             side="F",
             src_dir=src_dir,
             morpho_dir=input_abs,
-            path_to_graph=graph_path,
+            path_to_graph=graph_path or None,  # "": graph discovery, no graph folder path
             # add_left_and_right_volumes' default output_filename
             # ("resampled_skeleton") does not match remove_ventricle's
             # default src_filename ("skeleton_generated_") -- pass it

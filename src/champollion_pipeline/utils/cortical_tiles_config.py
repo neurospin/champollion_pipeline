@@ -250,6 +250,7 @@ def write_crop_config(path: str, input_abs: str, derivatives_abs: str, args: Any
 
     generate_sulcal_regions.py derives graphs_dir and output_dir from -d when they are "$local"; -d being the
     output (not the dataset root), both are set explicitly so outputs land in the derivatives folder.
+    ``args.path_to_graph`` None (graphs handed over as a --graphs map) writes no graph folder path (JSON null).
     """
     if not os.path.exists(path):
         return

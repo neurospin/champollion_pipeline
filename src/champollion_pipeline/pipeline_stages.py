@@ -89,6 +89,11 @@ class GenerateMorphologistGraphsStage(PipelineStage):
         return _new_script("champollion_pipeline.generate_morphologist_graphs", "GenerateMorphologistGraphs")
 
 
+def _compute_path_to_graph_args(dataset: DatasetConfig) -> list[str]:
+    """--path_to_graph=<value> for stage 2, none without a graph folder path (stage 2 then uses graph discovery)."""
+    return [f"--path_to_graph={dataset.path_to_graph}"] if dataset.path_to_graph is not None else []
+
+
 class RunCorticalTilesStage(PipelineStage):
     """Stage for running cortical_tiles."""
 
@@ -108,7 +113,7 @@ class RunCorticalTilesStage(PipelineStage):
         args = [
             _compute_morphologist_subjects_dir(self.config.dataset),
             str(self.config.dataset.cortical_tiles_output),
-            f"--path_to_graph={self.config.dataset.path_to_graph}",
+            *_compute_path_to_graph_args(self.config.dataset),
             f"--path_sk_with_hull={self.config.dataset.path_sk_with_hull}",
             f"--njobs={self.config.dataset.njobs}",
             *_compute_masks_args(self.config.dataset),
@@ -141,7 +146,10 @@ class RunCorticalTilesStage(PipelineStage):
     def required_file_patterns(self) -> list[str]:
         g = self.config.dataset.path_to_graph
         s = self.config.dataset.path_sk_with_hull
-        return [f"{g}/L*.arg", f"{g}/R*.arg", *(f"{s}/{compute_skeleton_pattern(side)}" for side in SKELETON_SIDES)]
+        graph_patterns = (
+            [f"{g}/L*.arg", f"{g}/R*.arg"] if g is not None else []
+        )  # none: stage 2's input QC finds the graphs
+        return [*graph_patterns, *(f"{s}/{compute_skeleton_pattern(side)}" for side in SKELETON_SIDES)]
 
     def output_dir(self) -> str | None:
         d = self.config.dataset.cortical_tiles_output

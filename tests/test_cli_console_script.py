@@ -56,7 +56,6 @@ _RUN_CONSOLE_SCRIPT = "import sys\nfrom champollion_pipeline.cli import main\nsy
 # Module-level names main.py bound at commit da693ee (imports, classes, functions, assignments).
 MAIN_PY_DA693EE_NAMES = (
     "AbstractContextManager",
-    "AmbiguousGraphFolders",
     "ArgumentConflictError",
     "ChampollionPipeline",
     "ClassVar",

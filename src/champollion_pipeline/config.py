@@ -47,7 +47,8 @@ class DatasetConfig:
 
     # Processing parameters
     njobs: int = 22
-    path_to_graph: str = "t1mri/default_acquisition/default_analysis/folds/3.3/base"
+    # None: no graph folder path, stage 2 finds the graphs by graph discovery (set for a Morphologist input)
+    path_to_graph: str | None = "t1mri/default_acquisition/default_analysis/folds/3.3/base"
     path_sk_with_hull: str = "t1mri/default_acquisition/default_analysis/segmentation"
     sk_qc_path: str = ""
     masks_version: str = DEFAULT_MASKS_VERSION

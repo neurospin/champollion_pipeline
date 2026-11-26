@@ -270,6 +270,7 @@ champollion_pipeline/
 │       ├── pipeline_stages.py       # The six pipeline stage classes run by champollion-pipeline, and their path helpers
 │       ├── generate_morphologist_graphs.py
 │       ├── run_cortical_tiles.py
+│       ├── run_cortical_tiles_graphs.py       # Stage 2 graph discovery: the --graphs map handed to cortical_tiles
 │       ├── run_cortical_tiles_inputs.py       # Stage 2 input listing, --path_to_graph resolution and input QC rows
 │       ├── run_cortical_tiles_whole_brain.py  # Stage 2 whole-brain fusion, labelling pre-check and ventricle removal
 │       ├── derivatives_layout.py
