@@ -13,6 +13,7 @@ import glob
 import logging
 import os
 import os.path
+import posixpath
 from collections import Counter
 from datetime import datetime
 
@@ -20,7 +21,9 @@ from champollion_utils.script_builder import ScriptBuilder
 from joblib import Parallel, delayed
 
 from champollion_pipeline.derivatives_layout import compute_run_log_path
+from champollion_pipeline.file_indexer.pipeline_checks import FileIndexStageIndexer
 from champollion_pipeline.process_setup import init_pipeline_process
+from champollion_pipeline.utils.graph_item import LooseGraphError
 from champollion_pipeline.utils.lib import (
     LABELLING_SESSION_CANDIDATES,
     ExplicitLabellingSession,
@@ -61,15 +64,46 @@ def fetch_subject_names(subjects_dir: str) -> list:
     return list_morphologist_subjects(subjects_dir)
 
 
-def find_graph_dir(subject_dir: str, path_to_graph: str, is_bids: bool):
+def discover_graph_folder(subject_dir: str) -> tuple[str | None, dict[str, set[str]]]:
+    """Return the graph folder of a subject found by graph discovery, and the sides each labelling set holds there.
+
+    The folder is the one holding the first labelled graph in natural path order, else the first graph; the sides
+    map labelling-set name to the hemispheres ("L", "R") graphs exist for in that folder. (None, {}) when the
+    subject has no graph. First graph folder only, for now: a data selector will replace it in a later version.
+
+    Raises:
+        LooseGraphError: a graph sits directly in subject_dir and its name does not start with sub-.
+    """
+    items = FileIndexStageIndexer("").discover_graphs(subject_dir)
+    if not items:
+        return None, {}
+
+    def folder_of(item) -> str:
+        folder = posixpath.dirname(item.path)
+        return posixpath.dirname(folder) if item.attributes["labelling_set"] else folder
+
+    labelled = [item for item in items if item.attributes["labelling_set"]]
+    graph_folder = folder_of((labelled or items)[0])
+    sides: dict[str, set[str]] = {}
+    for item in labelled:
+        if folder_of(item) == graph_folder and item.attributes["hemisphere"]:
+            sides.setdefault(item.attributes["labelling_set"], set()).add(item.attributes["hemisphere"])
+    return os.path.join(subject_dir, *graph_folder.split("/")) if graph_folder else subject_dir, sides
+
+
+def find_graph_dir(subject_dir: str, path_to_graph: str | None, is_bids: bool):
     """Return the resolved graph directory for a subject.
 
-    Classic layout (or BIDS without '*'): returns os.path.join(subject_dir, path_to_graph)
+    path_to_graph None: the graph folder found by graph discovery below subject_dir (None when no graph).
+
+    Given, classic layout (or BIDS without '*'): returns os.path.join(subject_dir, path_to_graph)
     without checking existence.
 
-    BIDS layout with '*': globs for matching directories under subject_dir.
+    Given, BIDS layout with '*': globs for matching directories under subject_dir.
     Returns the single match, None (0 matches), or GRAPH_DIR_AMBIGUOUS (>1 match).
     """
+    if path_to_graph is None:
+        return discover_graph_folder(subject_dir)[0]
     if is_bids and GRAPH_WILDCARD in path_to_graph:
         pattern = os.path.join(glob.escape(subject_dir), path_to_graph)
         matches = sorted(d for d in glob.glob(pattern) if os.path.isdir(d))
@@ -119,11 +153,18 @@ def find_session(graph_dir: str, sessions: tuple[str, ...]) -> str | None:
 
 
 def fetch_subject_row(
-    subjects_dir: str, subject: str, path_to_graph: str, sessions: tuple[str, ...], is_bids: bool
+    subjects_dir: str, subject: str, path_to_graph: str | None, sessions: tuple[str, ...], is_bids: bool
 ) -> dict:
-    """Build one TSV row for a subject; all dict values are strings."""
+    """Build one TSV row for a subject; all dict values are strings.
+
+    path_to_graph None: the graph folder and the labelled hemispheres come from graph discovery.
+    """
     subject_dir = os.path.join(subjects_dir, subject)
-    graph_dir = find_graph_dir(subject_dir, path_to_graph, is_bids)
+    discovered_sides = None
+    if path_to_graph is None:
+        graph_dir, discovered_sides = discover_graph_folder(subject_dir)
+    else:
+        graph_dir = find_graph_dir(subject_dir, path_to_graph, is_bids)
 
     # BIDS glob returned more than one match — ambiguous path.
     if graph_dir is GRAPH_DIR_AMBIGUOUS:
@@ -160,10 +201,13 @@ def fetch_subject_row(
     entries = os.listdir(session_dir)
     is_session_empty = len(entries) == 0
 
-    labelled = {
-        side: os.path.isfile(os.path.join(session_dir, make_graph_filename(side, subject, labelling_session)))
-        for side in SIDES
-    }
+    if discovered_sides is None:
+        labelled = {
+            side: os.path.isfile(os.path.join(session_dir, make_graph_filename(side, subject, labelling_session)))
+            for side in SIDES
+        }
+    else:
+        labelled = {side: side in discovered_sides.get(labelling_session, ()) for side in SIDES}
 
     reason = compute_reason(has_session_dir=True, is_session_empty=is_session_empty, labelled=labelled)
 
@@ -220,11 +264,12 @@ class GenerateLabellingQC(ScriptBuilder):
                 "output",
                 help="Path to the output QC TSV file.",
             )
-            .add_required_argument(
+            .add_optional_argument(
                 "--path_to_graph",
-                "Relative path from each subject directory to the graph folder "
+                "Optional override: relative path from each subject directory to the graph folder "
                 "(same as --path_to_graph in run_cortical_tiles.py). "
-                "With --bids, may contain a '*' wildcard.",
+                "With --bids, may contain a '*' wildcard. Default: each subject's graph folder is found by "
+                "graph discovery (first graph folder only, for now).",
             )
             .add_argument(
                 "--labelling_session",
@@ -260,16 +305,20 @@ class GenerateLabellingQC(ScriptBuilder):
 
         subject_names = fetch_subject_names(subjects_dir)
         sessions = labelling_session_candidates(self.args)
-        rows = Parallel(n_jobs=self.args.njobs)(
-            delayed(fetch_subject_row)(
-                subjects_dir,
-                subject,
-                self.args.path_to_graph,
-                sessions,
-                self.args.bids,
+        try:
+            rows = Parallel(n_jobs=self.args.njobs)(
+                delayed(fetch_subject_row)(
+                    subjects_dir,
+                    subject,
+                    self.args.path_to_graph,
+                    sessions,
+                    self.args.bids,
+                )
+                for subject in subject_names
             )
-            for subject in subject_names
-        )
+        except LooseGraphError as error:
+            logger.error(str(error))
+            return 2
         rows = sorted(rows, key=lambda r: r["participant_id"])
         save_qc_tsv(rows, self.args.output)
 
