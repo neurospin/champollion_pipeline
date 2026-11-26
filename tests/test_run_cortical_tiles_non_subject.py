@@ -1,13 +1,14 @@
 """Stage 2 lists its input subjects through the shared subject-folder rule.
 
-Requirements (INPUTKIND, recorded by the red stage of the stage 2 listing Task):
-    list_input_subjects leaves out a qc folder that holds no t1mri folder
-    list_input_subjects keeps a qc folder that holds a t1mri folder (pin)
+Requirements (INPUTKIND, recorded by the red stage of the stage 2 listing Task; qc rule layout-free since
+TASK-ARGDISC-BDRABCZUK-5ABBA33DB536: a .arg file outside dot folders, not a t1mri folder, makes qc a subject):
+    list_input_subjects leaves out a qc folder that holds no .arg file (REQ-INPUTKIND-BDRABCZUK-B8348A57C3F2, live)
+    list_input_subjects keeps a qc folder that holds a .arg file (pin)
     list_input_subjects keeps a folder named ra and leaves out a dot-folder (pin)
     list_input_subjects keeps the OSError of an unreadable input folder (pin)
-    the input QC has no row for a qc folder without t1mri
-    the input QC keeps a row for a qc folder with t1mri (pin)
-    a qc folder without t1mri is no side of a prefix pair, nor a dotted ID
+    the input QC has no row for a qc folder without a graph
+    the input QC keeps a row for a qc folder with a graph (pin)
+    a qc folder without a graph is no side of a prefix pair, nor a dotted ID
 """
 
 import os
@@ -35,29 +36,39 @@ def _subject(root, name, with_graphs=True):
     return root / name
 
 
-def _qc_folder(root, with_t1mri):
+def _qc_folder(root, with_t1mri, with_graph=False):
     qc = root / "qc"
     qc.mkdir()
     (qc / "report.tsv").write_text("x")
     if with_t1mri:
         (qc / "t1mri" / "default_acquisition").mkdir(parents=True)
+    if with_graph:
+        (qc / "t1mri" / "default_acquisition" / "Lqc.arg").write_text("x")
     return qc
 
 
 def test_qc_folder_without_t1mri_is_no_subject(tmp_path):
-    """qc without a t1mri folder is left out of the listing."""
+    """REQ-INPUTKIND-BDRABCZUK-B8348A57C3F2: qc holding no graph (nor a t1mri folder) is left out of the listing."""
     _subject(tmp_path, "s01")
     _qc_folder(tmp_path, with_t1mri=False)
 
     assert list_input_subjects(str(tmp_path)) == ["s01"]
 
 
-def test_qc_folder_with_t1mri_is_a_subject(tmp_path):
-    """Pin: a qc folder that holds a t1mri folder stays listed."""
+def test_qc_folder_with_a_graph_is_a_subject(tmp_path):
+    """REQ-ARGDISC-BDRABCZUK-372F95A73053: a qc folder that holds a .arg file stays listed."""
+    _subject(tmp_path, "s01")
+    _qc_folder(tmp_path, with_t1mri=True, with_graph=True)
+
+    assert list_input_subjects(str(tmp_path)) == ["qc", "s01"]
+
+
+def test_qc_folder_with_t1mri_and_no_graph_is_no_subject(tmp_path):
+    """REQ-ARGDISC-BDRABCZUK-8A14A3246F95, REQ-INPUTKIND-BDRABCZUK-B8348A57C3F2: a t1mri folder is no graph."""
     _subject(tmp_path, "s01")
     _qc_folder(tmp_path, with_t1mri=True)
 
-    assert list_input_subjects(str(tmp_path)) == ["qc", "s01"]
+    assert list_input_subjects(str(tmp_path)) == ["s01"]
 
 
 def test_ra_folder_is_a_subject_and_dot_folder_is_not(tmp_path):
@@ -93,9 +104,9 @@ def test_input_qc_has_no_row_for_qc_without_t1mri(tmp_path):
 
 
 def test_input_qc_keeps_a_row_for_qc_with_t1mri(tmp_path):
-    """Pin: a qc folder that holds a t1mri folder keeps its row."""
+    """Pin: a qc folder that holds a graph (in its t1mri folder) keeps its row."""
     _subject(tmp_path, "s01")
-    _qc_folder(tmp_path, with_t1mri=True)
+    _qc_folder(tmp_path, with_t1mri=True, with_graph=True)
 
     rows = fetch_input_qc_rows(str(tmp_path), "default_analysis/folds/3.1/default_session_auto", None, False, False)
 
@@ -111,9 +122,9 @@ def test_qc_without_t1mri_is_no_side_of_a_prefix_pair(tmp_path):
 
 
 def test_qc_with_t1mri_is_a_side_of_a_prefix_pair(tmp_path):
-    """Pin: a qc folder that holds a t1mri folder prefixes qc2."""
+    """Pin: a qc folder that holds a graph (in its t1mri folder) prefixes qc2."""
     _subject(tmp_path, "qc2")
-    _qc_folder(tmp_path, with_t1mri=True)
+    _qc_folder(tmp_path, with_t1mri=True, with_graph=True)
 
     assert find_prefix_id_pairs(str(tmp_path)) == [("qc", "qc2")]
 

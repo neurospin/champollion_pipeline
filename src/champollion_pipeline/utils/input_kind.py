@@ -4,19 +4,19 @@ Pure classification: what the pipeline does with the result is decided elsewhere
 search for the Morphologist subjects folder share one lazy walk and one set of predicates, so they cannot drift.
 
 A .arg file anywhere below the input, outside dot folders, is a Morphologist graph whatever the folder names. T1 files
-below a folder named t1mri count only when the input holds no .arg file; below derivatives or qc they never count.
+below a folder named t1mri count only when the input holds no .arg file; below derivatives or qc they never count. The
+subjects folder is the shared parent of the graphs' subject folders, each from find_graph_subject_folder.
 """
 
-import fnmatch
 import logging
 import os
 from collections.abc import Callable, Collection, Iterator
 from dataclasses import dataclass
 from enum import Enum
-from itertools import chain
 
 from champollion_pipeline.derivatives_layout import DERIVATIVES_DIRNAME, MORPHOLOGIST_DERIVATIVES_FOLDER
-from champollion_pipeline.utils.subject_folders import SESSION_FOLDERS
+from champollion_pipeline.utils.graph_item import LooseGraphError
+from champollion_pipeline.utils.subject_folders import find_graph_subject_folder
 
 T1_SUFFIXES: tuple[str, ...] = (".nii.gz", ".nii")
 NON_T1_FOLDERS: frozenset[str] = frozenset({"derivatives", "qc", "t1mri"})
@@ -255,11 +255,6 @@ def _is_graph(name: str) -> bool:
     return name.endswith(_GRAPH_SUFFIX)
 
 
-def _is_subject_graph(parts: _Parts, name: str) -> bool:
-    """Return whether a file ``name`` in the folder at ``parts`` is a graph below a t1mri folder of its subject."""
-    return _T1MRI_FOLDER in parts and _is_graph(name)
-
-
 @dataclass
 class _ScanFindings:
     """What a scan_input walk has reached so far, relative to the input.
@@ -384,60 +379,73 @@ def sourcedata_t1_files(input_dir: str) -> list[str]:
     return [path for path in find_t1_files(input_dir) if _SOURCEDATA_FOLDER in path.split(os.sep)[:-1]]
 
 
-def _is_session(name: str) -> bool:
-    """Return whether a folder ``name`` is a session folder."""
-    return fnmatch.fnmatchcase(name, SESSION_FOLDERS)
-
-
-def _leads_to_own_t1mri(parts: _Parts) -> bool:
-    """Return whether a folder at ``parts`` is on the way to the input's own ``t1mri`` or ``ses-*/t1mri`` folder."""
-    below_session = parts[1:] if _is_session(parts[0]) else parts
-    return not below_session or below_session[0] == _T1MRI_FOLDER
-
-
-def _subjects_folder(parts: _Parts) -> _Parts | None:
-    """Return the subjects folder of a graph in the folder at ``parts``, None when the input itself is the subject."""
-    level = parts.index(_T1MRI_FOLDER) - 1
-    if level >= 0 and _is_session(parts[level]):
-        level -= 1
-    return parts[:level] if level >= 0 else None
-
-
 def _at_or_below(parts: _Parts, folders: Collection[_Parts]) -> bool:
     """Return whether the folder at ``parts`` is one of ``folders`` or sits below one of them."""
     return any(parts[:end] in folders for end in range(1, len(parts) + 1))
 
 
 def resolve_subjects_dir(path: str) -> str | None:
-    """Return the folder whose children are the subject directories of ``path``, or None when there is none.
+    """Return the folder whose children are the subject folders of the graphs below ``path``, None when there is none.
 
-    A graph in the input's own ``t1mri`` or ``ses-*/t1mri`` folder makes the input a subject, so that check runs first,
-    whatever sits beside it. Then the walk leaves each subjects folder at its first graph; a subjects folder below
-    another is no candidate. Candidates are names on disk, so a link and its target are two of them.
+    The subject folder of each graph comes from find_graph_subject_folder; no folder name such as t1mri or ses-* is
+    special. A graph whose subject folder is the input itself gives None, whatever else sits below. The walk leaves
+    each subject folder at its first graph; a subjects folder below another is no candidate. Candidates are names on
+    disk, so a link and its target are two of them.
 
     Raises:
+        LooseGraphError: a .arg file sits directly in an input whose name does not start with sub-.
         AmbiguousSubjectsFolders: the graphs sit in two or more candidates.
     """
     if not os.path.isdir(path):
         return None
-    found: set[_Parts] = set()
+    root_name = _root_name(path)
+    _refuse_loose_graph(path, root_name)
+    parents = _subject_parents(path, root_name)
+    return None if parents is None else _pick_subjects_folder(path, parents)
+
+
+def _refuse_loose_graph(path: str, root_name: str) -> None:
+    """Raise LooseGraphError naming the first graph file directly in ``path`` when ``root_name`` is no sub- name."""
+    if root_name.startswith(_BIDS_PREFIX):
+        return
+    loose = next((entry.name for entry in _read_folder(path) if not entry.is_folder and _is_graph(entry.name)), None)
+    if loose is not None:
+        raise LooseGraphError(os.path.join(path, loose))
+
+
+def _subject_parents(path: str, root_name: str) -> set[_Parts] | None:
+    """Return the parents of the graphs' subject folders below ``path``; None when the input is a subject folder."""
+    subject_folders: set[_Parts] = set()
+    parents: set[_Parts] = set()
 
     def wanted(parts: _Parts) -> bool:
-        return not _at_or_below(parts, found)
+        return not _at_or_below(parts, subject_folders)
 
-    for parts, name in chain(_walk(path, _leads_to_own_t1mri), _walk(path, wanted)):
-        if not _is_subject_graph(parts, name):
+    for parts, name in _walk(path, wanted):
+        if not _is_graph(name):
             continue
-        folder = _subjects_folder(parts)
+        folder = find_graph_subject_folder(root_name, parts, name)
         if folder is None:
-            return None
+            raise LooseGraphError(os.path.join(path, name))
         if not folder:
-            return path
-        found.add(folder)
-    candidates = sorted(os.path.join(path, *folder) for folder in found if not _at_or_below(folder[:-1], found))
-    if len(candidates) > 1:
-        raise AmbiguousSubjectsFolders(path, tuple(candidates))
-    return candidates[0] if candidates else None
+            return None
+        subject_folders.add(folder)
+        parents.add(folder[:-1])
+    return parents
+
+
+def _pick_subjects_folder(path: str, parents: set[_Parts]) -> str | None:
+    """Return the one parent not below another, joined to ``path``; None for none.
+
+    Raises:
+        AmbiguousSubjectsFolders: two or more parents are not below another.
+    """
+    if () in parents:
+        return path
+    kept = sorted(os.path.join(path, *folder) for folder in parents if not _at_or_below(folder[:-1], parents))
+    if len(kept) > 1:
+        raise AmbiguousSubjectsFolders(path, tuple(kept))
+    return kept[0] if kept else None
 
 
 def _every_folder(_parts: _Parts) -> bool:
