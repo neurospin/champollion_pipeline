@@ -56,6 +56,8 @@ class DatasetConfig:
     region_masks: list[str] = field(default_factory=list)
     skel_seed: int | None = None  # None: the skel_seed in <derivatives>/pipeline_loop_2mm.json
     labelling_session: str = ""  # "": run_cortical_tiles picks the session per subject
+    # "": no --graph_label; else the labelling set that graph discovery lists in preference
+    graph_label: str = ""
     model: str = ""  # "": combine every model id; else only that model id (put_together_embeddings --model)
 
     # Region filter (empty = all 56 regions)
