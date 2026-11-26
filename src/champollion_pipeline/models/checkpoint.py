@@ -14,7 +14,7 @@ from pathlib import Path
 
 import torch
 
-from champollion_pipeline.models.defaults import DEFAULT_CHECKPOINT_EPOCH as DEFAULT_CHECKPOINT_EPOCH
+from champollion_pipeline.models.checkpoint_defaults import DEFAULT_CHECKPOINT_EPOCH as DEFAULT_CHECKPOINT_EPOCH
 
 _CONVERTED_CKPT_NAME = "best_model.ckpt"
 _WEIGHTS_FILE_NAME = "best_model_weights.pt"
