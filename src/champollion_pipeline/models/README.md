@@ -14,7 +14,9 @@ the argument parser and the config can import the other modules cheaply.
 | `__init__.py` | Package marker. |
 | `cache.py` | The models cache directory and the `model_set.json` marker of a model set: read, validate and write it atomically. |
 | `checkpoint.py` | Finds the region models of a model set and their weights: the epoch-N checkpoint, else the best-weights stand-in, and the temporary mirror given to `evaluate.py`. |
-| `defaults.py` | Model set defaults that need no torch, such as the default checkpoint epoch. |
+| `checkpoint_defaults.py` | The default checkpoint epoch of the embeddings stage; no imports, so no torch. |
+| `defaults.py` | Model set defaults that need no torch; re-exports the default checkpoint epoch for the config. |
+| `embeddings_options.py` | The option declarations of the stage 4 parser, without torch: the `--checkpoint-epoch` action and `add_embeddings_arguments`, which declares every embeddings stage option in order. |
 | `embeddings_qc.py` | QC of stages 4 and 5: crop rows of a run's region models, embedding widths, and the rows of each embeddings CSV file. |
 | `epoch_spec.py` | Parses the `--checkpoint-epoch` values and gives each model id its epoch; pure functions, no I/O. |
 | `fetch.py` | The model set fetch strategies (local path, Hugging Face, remote archive, interactive fallback) and the order they are tried in. |

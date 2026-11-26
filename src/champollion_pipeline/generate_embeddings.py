@@ -35,12 +35,16 @@ from champollion_pipeline.models.cache import ModelSet as ModelSet
 from champollion_pipeline.models.cache import ensure_models_cache_dir, write_json_atomic
 from champollion_pipeline.models.cache import read_model_set as read_model_set
 from champollion_pipeline.models.cache import write_model_set as write_model_set
+from champollion_pipeline.models.checkpoint import DEFAULT_CHECKPOINT_EPOCH as DEFAULT_CHECKPOINT_EPOCH
 from champollion_pipeline.models.checkpoint import (
-    DEFAULT_CHECKPOINT_EPOCH,
     evaluation_model_dir,
     uses_best_weights_stand_in,
     weights_source,
 )
+from champollion_pipeline.models.embeddings_options import (  # noqa: V104 - reference name
+    CheckpointEpochAction as _CheckpointEpochAction,  # noqa: F401 - reference name
+)
+from champollion_pipeline.models.embeddings_options import add_embeddings_arguments
 from champollion_pipeline.models.embeddings_qc import (
     EMBEDDINGS_FILENAME,
     OUTPUT_QC_FILENAME,
@@ -51,7 +55,6 @@ from champollion_pipeline.models.embeddings_qc import (
     remove_subject_rows,
     write_model_widths,
 )
-from champollion_pipeline.models.epoch_spec import parse_epoch_specs
 from champollion_pipeline.models.fetch import HuggingFaceStrategy as HuggingFaceStrategy
 from champollion_pipeline.models.fetch import InteractiveFallbackStrategy as InteractiveFallbackStrategy
 from champollion_pipeline.models.fetch import LocalPathStrategy as LocalPathStrategy
@@ -76,10 +79,9 @@ from champollion_pipeline.models.version_options import (
     resolve_model_version_alias,
 )
 from champollion_pipeline.process_setup import init_pipeline_process
-from champollion_pipeline.utils.lib import CORTICAL_TILES_VERSION
 from champollion_pipeline.utils.pipeline_commit import read_pipeline_commit
 from champollion_pipeline.utils.qc_report import log_qc_exclusions, read_qc_tsv, write_qc_tsv
-from champollion_pipeline.utils.region_masks import add_region_masks_option, refuse_masks_with_region_masks
+from champollion_pipeline.utils.region_masks import refuse_masks_with_region_masks
 
 PROVENANCE_FILE_NAME = "provenance.json"
 INPUT_QC_FILENAME = "input_qc.tsv"
@@ -87,23 +89,6 @@ FAILED_STATUS = 1
 _PROFILING_DEPRECATION = "--profiling is deprecated, removed in 2.0: use --profile DIR (or main.py --profile DIR)"
 
 logger = logging.getLogger(__name__)
-
-
-class _CheckpointEpochAction(argparse.Action):
-    """Repeatable --checkpoint-epoch [<id>=]N: sets checkpoint_epoch (the default) and checkpoint_epochs_by_id.
-
-    A value parse_epoch_specs refuses ends the parse with exit 2.
-    """
-
-    def __call__(self, parser, namespace, values, _option_string=None):
-        held = [*getattr(namespace, "checkpoint_epoch_values", ()), values]
-        try:
-            default, by_id = parse_epoch_specs(held, DEFAULT_CHECKPOINT_EPOCH)
-        except ValueError as err:
-            raise argparse.ArgumentError(self, str(err)) from err
-        namespace.checkpoint_epoch_values = held
-        setattr(namespace, self.dest, default)
-        namespace.checkpoint_epochs_by_id = by_id
 
 
 class GenerateEmbeddings(ScriptBuilder):
@@ -114,102 +99,7 @@ class GenerateEmbeddings(ScriptBuilder):
             script_name="generate_embeddings",
             description="Generate sulcal embeddings per region using champollion/evaluate.py.",
         )
-        (
-            self.add_argument(
-                "models_path", type=str, help="Path to the directory containing per-region model folders."
-            )
-            .add_argument(
-                "datasets_root",
-                type=str,
-                help="Absolute path to the dataset root directory (e.g. /my/path/to/DATASET/).",
-            )
-            .add_flag("--overwrite", "Recompute embeddings that already exist on disk.")
-            .add_flag("--cpu", "Force CPU usage (disable CUDA).")
-            .add_flag("--profiling", "Enable Python profiling (cProfile).")
-            .add_flag("--run-cka", "Run CKA coherence test after embeddings.")
-            .add_flag("--no-cache", "Force re-extraction of archive (ignore cache).")
-            .add_argument(
-                "--checkpoint-epoch",
-                action=_CheckpointEpochAction,
-                default=DEFAULT_CHECKPOINT_EPOCH,
-                metavar="[ID=]N",
-                help="Training epoch N (0-based) of the Lightning checkpoint epoch=N-step=*.ckpt to evaluate each "
-                f"model with. Default: {DEFAULT_CHECKPOINT_EPOCH}. Repeatable: a bare N is the default epoch (at most "
-                "one); ID=N sets the epoch of the models with model id ID (the folder path between the region folder "
-                "and the model folder).",
-            )
-            .add_flag(
-                "--per-model-folders",
-                "Write the embeddings of every model with a model id to <output>/<region>/<model id>/, even a "
-                "single model of its region (by default only a region holding two or more models does).",
-            )
-            .add_optional_argument(
-                "--cortical_version",
-                f"Derivatives folder name (e.g. 'cortical_tiles-2027'). "
-                f"Defaults to cortical_tiles-{CORTICAL_TILES_VERSION}. Crops are read from "
-                f"<datasets_root>/derivatives/<cortical_version>/crops/<masks>/2mm.",
-                default=f"cortical_tiles-{CORTICAL_TILES_VERSION}",
-            )
-            .add_flag(
-                "--legacy",
-                "Use deep_folding-2025 as the derivatives folder. Shorthand for --cortical_version deep_folding-2025.",
-            )
-            .add_optional_argument(
-                "--model-version",
-                "Model-set subfolder to download from the Hugging Face models repository (e.g. 'canonical_25'). "
-                "Ignored when models_path is a local directory.",
-                default=None,
-            )
-            .add_optional_argument(
-                "--masks-version",
-                "Deprecated alias of --model-version; same value and behaviour.",
-                default=None,
-            )
-            .add_optional_argument(
-                "--masks",
-                "Cortical tiles mask version used as crops subdirectory (e.g. 'canonical_25'): crops are read from "
-                "<datasets_root>/derivatives/<cortical_version>/crops/<masks>/2mm. "
-                "Default: the --model-version value when given; else, when models_path is a local folder, "
-                "the name of that folder if it is a known Mask version (otherwise exit 2 with an ERROR, pass --masks); "
-                f"{DEFAULT_MASKS_VERSION} only when models_path is not a local directory.",
-                default=None,
-            )
-            .add_flag(
-                "--allow-version-mismatch",
-                "Run even when --masks and --model-version differ (crops of one mask version evaluated with the "
-                "model set of another); a warning is emitted.",
-            )
-            .add_argument(
-                "--regions",
-                type=str,
-                nargs="+",
-                default=None,
-                help=(
-                    "Restrict embedding generation to specific region names "
-                    "(e.g. SCsylv_left FIPFIPPoCinf_right). "
-                    "By default all regions found in models_path are processed."
-                ),
-            )
-            .add_optional_argument(
-                "--output",
-                "Output base directory override. "
-                "Defaults to {datasets_root}/derivatives/champollion_V1/{masks}/region_embeddings/.",
-                default=None,
-            )
-            .add_optional_argument(
-                "--subjects",
-                "Deprecated and ignored. Each region's subjects file is read from "
-                "{crops}/<crop>/mask/{L|R}skeleton_subject.csv next to its skeleton.",
-                default=None,
-            )
-            .add_optional_argument(
-                "--models-cache",
-                "Models cache directory; relative paths resolve against the cwd. "
-                "Defaults to <datasets_root>/derivatives/champollion_V1/models_cache.",
-                default=None,
-            )
-        )
-        add_region_masks_option(self)
+        add_embeddings_arguments(self)
         self._models_source: dict | None = None
         self._excluded_subjects: frozenset[str] = frozenset()
         self._run: ModelRun | None = None
