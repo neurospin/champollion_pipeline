@@ -107,6 +107,7 @@ dataset:
   region_masks: []
   skel_seed: null
   labelling_session: ''
+  graph_label: ''
   model: ''
   regions: []
   classifier_name: svm
@@ -189,6 +190,7 @@ dataset:
   - SC-sylv_right=canonical_corrected_26_1
   skel_seed: 42
   labelling_session: 0_auto
+  graph_label: custom_set
   model: v2/run2
   regions:
   - S.C.-sylv._left
@@ -270,6 +272,7 @@ _CUSTOM_DATASET_VALUES = {
     "region_masks": ["SC-sylv_left=canonical_25", "SC-sylv_right=canonical_corrected_26_1"],
     "skel_seed": 42,
     "labelling_session": "0_auto",
+    "graph_label": "custom_set",
     "model": "v2/run2",
     "classifier_name": "logistic",
     "overwrite": True,
