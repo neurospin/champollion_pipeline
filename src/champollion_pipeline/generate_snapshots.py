@@ -33,13 +33,13 @@ from champollion_pipeline.snapshot_types.input_qc import (
 )
 from champollion_pipeline.snapshot_types.output_qc import OUTPUT_QC_FILENAME, SnapshotsOutputQC
 from champollion_pipeline.snapshot_types.sulcal import (
-    _detect_hemi,
-    compute_session_graphs,
+    choose_hemisphere_graphs,
+    discover_sulcal_graphs,
     find_first_kept_subject_graphs,
-    find_subject_dir,
     find_sulcal_graphs,
     find_white_mesh,
     generate_sulcal_graph_snapshot,
+    graph_path,
     list_acquisitions,
 )
 from champollion_pipeline.snapshot_types.tiles import (
@@ -56,6 +56,8 @@ from champollion_pipeline.snapshot_types.umap import (
     list_embedding_csvs,
     resolve_umap_embeddings_dir,
 )
+from champollion_pipeline.utils.graph_item import LooseGraphError
+from champollion_pipeline.utils.input_kind import AmbiguousSubjectsFolders, resolve_subjects_dir
 from champollion_pipeline.utils.lib import (
     LABELLING_SESSION_CANDIDATES,
     ExplicitLabellingSession,
@@ -69,7 +71,6 @@ __all__ = [
     "ICBM_MESH_DIR_FALLBACK",
     "REGION_GRAPH_ROOT_HINT",
     "GenerateSnapshots",
-    "_detect_hemi",
     "discover_umap_pairs",
     "find_completed_regions",
     "find_sulcal_graphs",
@@ -85,6 +86,8 @@ __all__ = [
 SULCAL_VIEW_QUATERNIONS = {"left": (0.5, 0.5, 0.5, 0.5), "right": (0.5, -0.5, -0.5, 0.5)}
 
 FAILED_STATUS = 1
+# The input-error status of the command line (a loose graph outside any subject folder)
+INPUT_ERROR_STATUS = 2
 # Partial success, the status stage 2 gives a partial run
 PARTIAL_STATUS = 3
 
@@ -175,6 +178,7 @@ class GenerateSnapshots(ScriptBuilder):
             .add_optional_argument("--champollion_data_root", "Override path to Champollion data directory")
         )
         self._output_qc = SnapshotsOutputQC()
+        self._sulcal_items = None
 
     def default_log_path(self) -> str:
         """Run-log path of a bare --log: <output_dir>/.log/snapshots_<stamp>.log."""
@@ -187,6 +191,10 @@ class GenerateSnapshots(ScriptBuilder):
         run_sulcal, run_tiles, run_umap = self._selected_steps()
         if run_umap and not self._choose_umap_embeddings_dir():
             return FAILED_STATUS
+        if run_sulcal:
+            stop_status = self._stop_on_sulcal_input()
+            if stop_status is not None:
+                return stop_status
         excluded, input_status = self._run_input_qc(run_sulcal, run_tiles, run_umap)
 
         size = (self.args.width, self.args.height)
@@ -210,6 +218,34 @@ class GenerateSnapshots(ScriptBuilder):
 
         output_status = _report_output_qc(self._output_qc, self.args.output_dir)
         return _compute_stage_status(input_status, output_status)
+
+    def _stop_on_sulcal_input(self) -> int | None:
+        """Discover the sulcal graphs once; return the stage status when the input stops the stage, else None.
+
+        A graph loose in a folder not named sub- gives INPUT_ERROR_STATUS, several subjects folders FAILED_STATUS (no
+        --subject only). Each stop logs one ERROR and writes input_qc.tsv with one qc 0 row; no step runs, no
+        manifest is written.
+        """
+        morphologist_dir = self._morphologist_dir()
+        if morphologist_dir is None or not osp.isdir(morphologist_dir):
+            return None
+        try:
+            self._sulcal_items = discover_sulcal_graphs(morphologist_dir)
+            if not getattr(self.args, "subject", None):
+                resolve_subjects_dir(morphologist_dir)
+        except LooseGraphError as error:
+            return self._stop_with_input_error(morphologist_dir, error, INPUT_ERROR_STATUS)
+        except AmbiguousSubjectsFolders as error:
+            return self._stop_with_input_error(morphologist_dir, error, FAILED_STATUS)
+        return None
+
+    def _stop_with_input_error(self, morphologist_dir, error, status) -> int:
+        """Log ``error``, write input_qc.tsv with one qc 0 row for ``morphologist_dir`` naming it, return ``status``."""
+        logger.error(str(error))
+        report = SnapshotsInputQC()
+        report.add_reason(morphologist_dir, " ".join(str(error).split()))
+        report.write(self.args.output_dir)
+        return status
 
     def _selected_steps(self) -> tuple[bool, bool, bool]:
         """Return (run_sulcal, run_tiles, run_umap) from the --*-only flags (none set runs all)."""
@@ -262,6 +298,7 @@ class GenerateSnapshots(ScriptBuilder):
                 morphologist_dir,
                 getattr(self.args, "subject", None),
                 getattr(self.args, "acquisition", None),
+                items=self._sulcal_items,
             )
         umap_dirs = self._umap_dirs() if run_umap else None
         csvs = list_embedding_csvs(umap_dirs[0], self._umap_regions()) if umap_dirs else []
@@ -302,29 +339,35 @@ class GenerateSnapshots(ScriptBuilder):
         subject = getattr(self.args, "subject", None)
         acquisition = getattr(self.args, "acquisition", None)
 
-        by_hemi = find_first_kept_subject_graphs(morphologist_dir, subject, acquisition, excluded)
+        by_hemi = find_first_kept_subject_graphs(
+            morphologist_dir, subject, acquisition, excluded, items=self._sulcal_items
+        )
 
         total = sum(len(v) for v in by_hemi.values())
         logger.trace(f"Found {total} sulcal graph(s)")
         sessions = labelling_session_candidates(self.args)
+        explicit = bool(getattr(self.args, "labelling_session_explicit", False))
         acq_tag = f"_{acquisition}" if acquisition else ""
 
-        for hemi, found_graphs in by_hemi.items():
-            hemi_graphs = compute_session_graphs(found_graphs, sessions)
-            if not hemi_graphs:
+        for hemi, found_items in by_hemi.items():
+            chosen = choose_hemisphere_graphs(morphologist_dir, found_items, sessions, explicit)
+            if not chosen:
                 continue
             out = osp.join(self.args.output_dir, f"sulcal_graph{acq_tag}_{hemi}.png")
             self._output_qc.expect(out)
-            if len(hemi_graphs) > 1:
-                self._report_ambiguous_hemisphere(hemi, hemi_graphs)
-                continue
-            graph_path = hemi_graphs[0]
-            white_mesh = find_white_mesh(graph_path)
+            first, *left_out = chosen
+            for item in left_out:
+                logger.info(
+                    f"Sulcal graph {graph_path(morphologist_dir, item)} not rendered: only the first {hemi} graph in "
+                    "natural path order is rendered for now (a data selector will replace this rule)"
+                )
+            first_path = graph_path(morphologist_dir, first)
+            white_mesh = find_white_mesh(first_path, first.attributes)
             if white_mesh:
                 logger.trace(f"White mesh: {white_mesh}")
             try:
                 snap = generate_sulcal_graph_snapshot(
-                    graph_path,
+                    first_path,
                     out,
                     size,
                     view_quaternion=SULCAL_VIEW_QUATERNIONS[hemi],
@@ -332,21 +375,9 @@ class GenerateSnapshots(ScriptBuilder):
                 )
                 snapshots.append(snap)
             except Exception as e:
-                logger.exception(f"Error processing {graph_path}: {e}")
+                logger.exception(f"Error processing {first_path}: {e}")
 
         return snapshots
-
-    def _report_ambiguous_hemisphere(self, hemi, hemi_graphs):
-        """Log one ERROR naming a hemisphere's graphs and the rendered subject's acquisitions (no snapshot)."""
-        subject_dir = find_subject_dir(sorted(hemi_graphs)[0])
-        acqs = list_acquisitions(subject_dir) if subject_dir else []
-        acq_list = ", ".join(acqs) if acqs else "unknown"
-        logger.error(
-            f"{len(hemi_graphs)} {hemi} graphs found "
-            f"(acquisitions: {acq_list}): {', '.join(sorted(hemi_graphs))}. "
-            f"No {hemi} sulcal snapshot generated. Re-run with --acquisition <name> "
-            f"(and --subject) to select a single graph."
-        )
 
     def _expect_tiles_files(self, out, crops_dir):
         """Register the snapshot file of each hemisphere with a completed crop region."""

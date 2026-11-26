@@ -4,20 +4,23 @@ import glob
 import logging
 import os
 import os.path as osp
-from pathlib import Path
+from collections.abc import Mapping
 
 import champollion_utils.logger  # noqa: F401 - installs Logger.trace/output/fail (LOG 22, OUTPUT 25, FAIL 45)
 
+from champollion_pipeline.file_indexer.pipeline_checks import FileIndexStageIndexer, natural_key
 from champollion_pipeline.snapshot_types import brainvisa_imports
+from champollion_pipeline.utils.graph_item import GraphItem
+from champollion_pipeline.utils.input_kind import resolve_subjects_dir
 from champollion_pipeline.utils.subject_folders import list_morphologist_subjects
 
 logger = logging.getLogger(__name__)
 
 HEMISPHERES = ("left", "right")
-# Morphologist names a sulcal graph <L|R><subject>[_<session>].arg: the first character is the side.
-SIDE_BY_LETTER = {"L": "left", "R": "right"}
-# Morphologist folder holding a subject's acquisition folders: <subject>/t1mri/<acquisition>/...
-T1MRI_FOLDER = "t1mri"
+# Maps the hemisphere attribute of a discovered graph (L or R) to the hemisphere key; not a side detection.
+SIDE_NAME = {"L": "left", "R": "right"}
+# A white mesh of side X is a .gii file whose name ends with one of these, {side} being L or R.
+WHITE_MESH_SUFFIXES = ("{side}white.gii", "hemi-{side}_white.gii")
 
 
 def list_acquisitions(subject_dir):
@@ -108,63 +111,40 @@ def compute_session_graphs(graphs, sessions):
     return list(graphs)
 
 
-def find_subject_dir(graph_path):
-    """Return the folder holding the ``t1mri`` folder nearest above ``graph_path``, or None when there is none.
+def find_white_mesh(graph_path, attributes: Mapping[str, str | None]):
+    """Find the white mesh of a discovered sulcal graph, from the nearest folder above it that holds one.
 
-    Complexity: O(depth of graph_path).
-    """
-    for parent in Path(graph_path).parents:
-        if parent.name == T1MRI_FOLDER:
-            return str(parent.parent)
-    return None
-
-
-def find_white_mesh(graph_path):
-    """Find the white matter mesh corresponding to a sulcal graph.
-
-    Navigates from the .arg graph path up to the analysis root
-    (``default_analysis`` or acquisition index ``0``), then into
-    ``segmentation/mesh/`` to locate the ``*Lwhite.gii`` or ``*Rwhite.gii``
-    mesh named by the graph file name's leading side letter (L or R).
+    The search starts in the graph's own folder and goes up one folder at a time. At each folder, the folder and
+    everything below it (links not followed) are searched for a white mesh of the graph's hemisphere. The search ends
+    after the nearest folder above the graph named after the graph's subject attribute.
 
     Args:
-        graph_path: Path to .arg sulcal graph file
+        graph_path: Path to the .arg sulcal graph file.
+        attributes: The ``attributes`` of the graph's discover_graphs item (hemisphere, subject).
 
     Returns:
-        Path to the white mesh file that comes first in sorted() order, or
-        None if not found or when the graph file name has no leading side
-        letter.
+        Path to the white mesh file that comes first in sorted() order in the nearest folder holding one, or None
+        when none is found or when the hemisphere attribute is not L or R.
 
-    Complexity: O(n log n) in the number of white mesh files of the side.
+    Complexity: O(depth x entries below the subject folder) worst case.
     """
-    letter = osp.basename(graph_path)[:1]
-    if letter not in SIDE_BY_LETTER:
+    side = attributes.get("hemisphere")
+    if side not in SIDE_NAME:
         return None
-
-    parts = graph_path.replace("\\", "/").split("/")
-    idx = None
-    for anchor in ("default_analysis", "0"):
-        try:
-            candidate = parts.index(anchor)
-        except ValueError:
-            continue
-        if anchor == "0" and (candidate < 1 or parts[candidate - 1] != "default_acquisition"):
-            continue
-        idx = candidate
-        break
-
-    if idx is None:
-        return None
-
-    analysis_dir = "/".join(parts[: idx + 1])
-    mesh_dir = osp.join(analysis_dir, "segmentation", "mesh")
-    if not osp.isdir(mesh_dir):
-        return None
-
-    pattern = osp.join(mesh_dir, f"*{letter}white.gii")
-
-    matches = sorted(glob.glob(pattern))
-    return matches[0] if matches else None
+    suffixes = tuple(suffix.format(side=side) for suffix in WHITE_MESH_SUFFIXES)
+    own = osp.dirname(graph_path)
+    folders = [own]
+    while osp.basename(folders[-1]) != attributes.get("subject") and osp.dirname(folders[-1]) != folders[-1]:
+        folders.append(osp.dirname(folders[-1]))
+    if osp.basename(folders[-1]) != attributes.get("subject"):
+        folders = [own]
+    for folder in folders:
+        matches = sorted(
+            osp.join(root, name) for root, _, names in os.walk(folder) for name in names if name.endswith(suffixes)
+        )
+        if matches:
+            return matches[0]
+    return None
 
 
 def generate_sulcal_graph_snapshot(  # noqa: PLR0913 - snapshot API; keyword defaults used by generate_snapshots
@@ -217,46 +197,111 @@ def generate_sulcal_graph_snapshot(  # noqa: PLR0913 - snapshot API; keyword def
     return output_path
 
 
-def _detect_hemi(graph_path):
-    """Return ``"left"``/``"right"`` from the graph file name's first character (L/R), else None."""
-    return SIDE_BY_LETTER.get(osp.basename(graph_path)[:1])
+def discover_sulcal_graphs(morphologist_dir):
+    """Return the GraphItems of the StageIndexer discover_graphs operation for ``morphologist_dir``.
+
+    Raises:
+        LooseGraphError: a .arg file sits directly in a folder whose name does not start with sub-.
+    """
+    return FileIndexStageIndexer("").discover_graphs(morphologist_dir)
 
 
-def list_sulcal_subjects(morphologist_dir, subject=None):
-    """Return ``[subject]`` when given, else the names ``list_morphologist_subjects`` gives for ``morphologist_dir``."""
+def graph_path(morphologist_dir, item: GraphItem) -> str:
+    """Return the path of ``item``'s graph file: ``morphologist_dir`` joined with the item's POSIX relative path."""
+    return osp.join(morphologist_dir, *item.path.split("/"))
+
+
+def list_sulcal_subjects(morphologist_dir, subject=None, items=None):
+    """Return ``[subject]`` when given, else the subject folder names and the subject attributes of the graphs.
+
+    Without ``subject`` the names are those of the subject folders (the children of the folder
+    ``resolve_subjects_dir`` returns, else the Morphologist folder itself) united with the subject attributes of
+    ``items``, once each, in natural order. No graph at all gives an empty list.
+
+    Args:
+        morphologist_dir: Path of the Morphologist folder.
+        subject: Optional subject name; returned alone with no I/O.
+        items: The discover_graphs result when the caller holds it, else it is discovered now.
+
+    Raises:
+        AmbiguousSubjectsFolders: the graphs sit in several subjects folders.
+        LooseGraphError: a .arg file sits directly in a folder whose name does not start with sub-.
+    """
     if subject:
         return [subject]
-    return list_morphologist_subjects(morphologist_dir)
+    if items is None:
+        items = discover_sulcal_graphs(morphologist_dir)
+    if not items:
+        return []
+    folder = resolve_subjects_dir(morphologist_dir)
+    folders = [osp.basename(osp.abspath(morphologist_dir))] if folder is None else list_morphologist_subjects(folder)
+    names = {*folders, *(item.attributes["subject"] for item in items)}
+    result = sorted(names, key=natural_key)
+    assert result == sorted(set(result), key=natural_key), "list_sulcal_subjects post: unique, natural order"
+    return result
 
 
-def find_sulcal_graphs_by_hemi(morphologist_dir, subject, acquisition=None):
-    """Return one subject's sorted sulcal graphs grouped as ``{"left": [...], "right": [...]}``.
+def find_sulcal_graph_items_by_hemi(morphologist_dir, subject, acquisition=None, items=None):
+    """Return one subject's discovered graph items as ``{"left": [...], "right": [...]}``, in discovery order.
 
-    A graph whose file name has no leading side letter (L or R) goes in neither
-    list and is reported by one WARNING naming its path.
+    The subject's graphs are the items whose subject attribute equals ``subject``, whatever the folder names on their
+    paths. ``acquisition`` keeps the items with that folder name on their path. An item whose hemisphere attribute is
+    None goes in neither list and is reported by one WARNING naming its path.
     """
+    if items is None:
+        items = discover_sulcal_graphs(morphologist_dir)
     by_hemi = {hemi: [] for hemi in HEMISPHERES}
-    for graph in sorted(find_sulcal_graphs(morphologist_dir, subject=subject, acquisition=acquisition)):
-        side = _detect_hemi(graph)
+    for item in items:
+        if item.attributes["subject"] != subject:
+            continue
+        if acquisition and f"/{acquisition}/" not in f"/{item.path}":
+            continue
+        side = SIDE_NAME.get(item.attributes["hemisphere"])
         if side is None:
             logger.warning(
-                f"Sulcal graph {graph} has no leading side letter (L or R): left out of both hemisphere lists"
+                f"Sulcal graph {graph_path(morphologist_dir, item)} has no hemisphere attribute "
+                "(hemi-L/hemi-R entity or leading L or R): left out of both hemisphere lists"
             )
             continue
-        by_hemi[side].append(graph)
+        by_hemi[side].append(item)
     return by_hemi
 
 
-def find_first_kept_subject_graphs(morphologist_dir, subject=None, acquisition=None, excluded=frozenset()):
-    """Return the graphs by hemisphere of the first non-excluded subject that has a sulcal graph.
+def find_sulcal_graphs_by_hemi(morphologist_dir, subject, acquisition=None, items=None):
+    """Return the lists of ``find_sulcal_graph_items_by_hemi`` as graph path strings."""
+    by_hemi = find_sulcal_graph_items_by_hemi(morphologist_dir, subject, acquisition, items)
+    return {hemi: [graph_path(morphologist_dir, item) for item in found] for hemi, found in by_hemi.items()}
 
-    Subjects are taken in ``list_sulcal_subjects`` order; when none qualifies,
-    both hemisphere lists are empty.
+
+def find_first_kept_subject_graphs(morphologist_dir, subject=None, acquisition=None, excluded=frozenset(), items=None):
+    """Return the graph items by hemisphere of the first non-excluded subject that has a sulcal graph.
+
+    Subjects are taken in ``list_sulcal_subjects`` order; when none qualifies, both hemisphere lists are empty.
     """
-    for name in list_sulcal_subjects(morphologist_dir, subject):
+    if items is None:
+        items = discover_sulcal_graphs(morphologist_dir)
+    for name in list_sulcal_subjects(morphologist_dir, subject, items):
         if name in excluded:
             continue
-        by_hemi = find_sulcal_graphs_by_hemi(morphologist_dir, name, acquisition)
+        by_hemi = find_sulcal_graph_items_by_hemi(morphologist_dir, name, acquisition, items)
         if any(by_hemi.values()):
             return by_hemi
     return {hemi: [] for hemi in HEMISPHERES}
+
+
+def choose_hemisphere_graphs(morphologist_dir, items, sessions, explicit):
+    """Return the items of one hemisphere to render from: a labelling session's, else the labelled ones.
+
+    A graph lies in a session when its parent folder is named like a session of ``sessions`` (first match wins). With
+    no such graph and no explicit ``--labelling_session``, the items whose labelling_set attribute is not None are
+    kept when there is at least one. Else every item is kept. The order of ``items`` is kept.
+    """
+    paths = [graph_path(morphologist_dir, item) for item in items]
+    if any(osp.basename(osp.dirname(path)) in sessions for path in paths):
+        kept = set(compute_session_graphs(paths, sessions))
+        return [item for item, path in zip(items, paths, strict=True) if path in kept]
+    if not explicit:
+        labelled = [item for item in items if item.attributes["labelling_set"] is not None]
+        if labelled:
+            return labelled
+    return list(items)

@@ -71,72 +71,57 @@ class TestFindSulcalGraphs:
         assert len(result) == 1
 
 
+LEFT = {"hemisphere": "L", "subject": "sub-01"}
+RIGHT = {"hemisphere": "R", "subject": "sub-01"}
+
+
+def _mesh_and_graph(base, mesh_names, graph_name, graph_in="folds"):
+    """Create ``base``/segmentation/mesh holding ``mesh_names``; return the path of ``base``/``graph_in``/graph_name."""
+    mesh_dir = base / "segmentation" / "mesh"
+    mesh_dir.mkdir(parents=True)
+    for name in mesh_names:
+        (mesh_dir / name).touch()
+    folds_dir = base / graph_in
+    folds_dir.mkdir(parents=True)
+    return str(folds_dir / graph_name)
+
+
 class TestFindWhiteMesh:
-    """Test find_white_mesh function."""
+    """Test find_white_mesh with the discovery attributes of the graph (TASK-ARGDISC-BDRABCZUK-AACEA4B5776D)."""
 
     def test_morphologist_60_structure(self, temp_dir):
         """Test finding mesh in Morphologist 6.0 layout."""
-        # Build: sub-01/default_acquisition/0/segmentation/mesh/sub-01_Lwhite.gii
         base = Path(temp_dir) / "sub-01" / "default_acquisition" / "0"
-        mesh_dir = base / "segmentation" / "mesh"
-        mesh_dir.mkdir(parents=True)
-        (mesh_dir / "sub-01_Lwhite.gii").touch()
-
-        folds_dir = base / "folds" / "3.1"
-        folds_dir.mkdir(parents=True)
-        graph_path = str(folds_dir / "Lsulci_sub-01.arg")
-        Path(graph_path).touch()
-
-        result = find_white_mesh(graph_path)
+        graph_path = _mesh_and_graph(base, ["sub-01_Lwhite.gii"], "Lsulci_sub-01.arg", "folds/3.1")
+        result = find_white_mesh(graph_path, LEFT)
         assert result is not None
         assert result.endswith("Lwhite.gii")
 
     def test_morphologist_legacy_structure(self, temp_dir):
         """Test finding mesh in Morphologist <6 layout (default_analysis)."""
         base = Path(temp_dir) / "sub-01" / "default_analysis"
-        mesh_dir = base / "segmentation" / "mesh"
-        mesh_dir.mkdir(parents=True)
-        (mesh_dir / "sub-01_Rwhite.gii").touch()
-
-        folds_dir = base / "folds" / "3.1"
-        folds_dir.mkdir(parents=True)
-        graph_path = str(folds_dir / "Rsulci_sub-01.arg")
-        Path(graph_path).touch()
-
-        result = find_white_mesh(graph_path)
+        graph_path = _mesh_and_graph(base, ["sub-01_Rwhite.gii"], "Rsulci_sub-01.arg", "folds/3.1")
+        result = find_white_mesh(graph_path, RIGHT)
         assert result is not None
         assert result.endswith("Rwhite.gii")
 
     def test_right_hemisphere_detection(self, temp_dir):
         """Test that right hemisphere graphs find Rwhite mesh."""
         base = Path(temp_dir) / "sub-01" / "default_acquisition" / "0"
-        mesh_dir = base / "segmentation" / "mesh"
-        mesh_dir.mkdir(parents=True)
-        (mesh_dir / "sub-01_Lwhite.gii").touch()
-        (mesh_dir / "sub-01_Rwhite.gii").touch()
-
-        folds_dir = base / "folds"
-        folds_dir.mkdir(parents=True)
-        graph_path = str(folds_dir / "Rsulci_sub-01.arg")
-
-        result = find_white_mesh(graph_path)
+        graph_path = _mesh_and_graph(base, ["sub-01_Lwhite.gii", "sub-01_Rwhite.gii"], "Rsulci_sub-01.arg")
+        result = find_white_mesh(graph_path, RIGHT)
         assert result is not None
         assert "Rwhite" in result
 
     def test_missing_mesh_dir_returns_none(self, temp_dir):
-        """Test that missing mesh directory returns None."""
-        base = Path(temp_dir) / "sub-01" / "default_analysis"
-        folds_dir = base / "folds"
+        """Test that a subject folder without any mesh returns None."""
+        folds_dir = Path(temp_dir) / "sub-01" / "default_analysis" / "folds"
         folds_dir.mkdir(parents=True)
-        graph_path = str(folds_dir / "Lsulci_sub-01.arg")
+        assert find_white_mesh(str(folds_dir / "Lsulci_sub-01.arg"), LEFT) is None
 
-        result = find_white_mesh(graph_path)
-        assert result is None
-
-    def test_no_anchor_dir_returns_none(self):
-        """Test that a path without known anchors returns None."""
-        result = find_white_mesh("/some/random/path/graph.arg")
-        assert result is None
+    def test_missing_folder_returns_none(self):
+        """Test that a graph in a folder that does not exist returns None."""
+        assert find_white_mesh("/some/random/path/graph.arg", LEFT) is None
 
 
 class TestFindCompletedRegions:
@@ -725,7 +710,10 @@ class TestSnapshotsInputQC:
     def test_several_reasons_joined_by_semicolons(self, temp_dir):
         """REQ 04C1D2865B16: a subject failing two checks gets both reasons joined by semicolons."""
         morph = os.path.join(temp_dir, "morphologist")
-        (Path(morph) / "sub-01" / "t1mri").mkdir(parents=True)
+        # A graph with no hemisphere attribute leaves both hemisphere lists of the subject empty.
+        folds = Path(morph) / "sub-01" / "t1mri" / "default_analysis" / "folds"
+        folds.mkdir(parents=True)
+        (folds / "graph.arg").touch()
         output_dir = os.path.join(temp_dir, "out")
 
         with patch(_RENDER_SULCAL, side_effect=lambda graph_path, out, *a, **k: out):

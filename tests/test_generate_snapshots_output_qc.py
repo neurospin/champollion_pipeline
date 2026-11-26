@@ -430,20 +430,21 @@ class TestCompleteRun:
         assert result == 0
 
 
-class TestAmbiguousHemisphereQc:
-    """REQ-SNAPSULC-BDRABCZUK-9924F275B219: a hemisphere skipped for ambiguity is a lost snapshot, never silent."""
+class TestSeveralGraphsOfAHemisphereQc:
+    """REQ-ARGDISC-BDRABCZUK-4F013D0F2F44 (supersedes REQ-SNAPSULC 9924F275B219, 0422374638E8): the first graph
+    of a hemisphere is rendered, so its snapshot row holds qc 1 (until a data selector replaces this rule)."""
 
-    def test_ambiguous_row_holds_qc_0_missing_snapshot(self, temp_dir):
-        """The left hemisphere with two graphs gets qc 0 and reason missing_snapshot."""
+    def test_first_graph_row_holds_qc_1(self, temp_dir):
+        """The left hemisphere with two graphs: the first renders, the row holds qc 1 and no reason."""
         args = _sulcal_args(temp_dir)
         _second_acquisition_left_graph(temp_dir)
         _run_stage(args)
         row = _rows(temp_dir).get(SULCAL_LEFT)
-        assert row is not None, "no output_qc.tsv row for the ambiguous left hemisphere"
-        assert (row["qc"], row["reason"]) == ("0", "missing_snapshot")
+        assert row is not None, "no output_qc.tsv row for the left hemisphere"
+        assert (row["qc"], row["reason"]) == ("1", "")
 
-    def test_ambiguous_hemisphere_makes_the_run_partial(self, temp_dir):
-        """The ambiguous left beside a usable right snapshot makes the stage return 3, not 0."""
+    def test_several_graphs_of_a_hemisphere_keep_the_run_complete(self, temp_dir):
+        """The left-out graph does not make the stage partial: it returns 0."""
         args = _sulcal_args(temp_dir)
         _second_acquisition_left_graph(temp_dir)
-        assert _run_stage(args) == 3
+        assert _run_stage(args) == 0

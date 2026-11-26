@@ -409,7 +409,7 @@ class FileIndexStageIndexer:  # noqa: V102 - used by main.py
                 "labelling_set": _labelling_set(root_name, parts),
             }
             items.append(GraphItem("/".join((*parts, name)), attributes))
-        result = sorted(items, key=lambda item: _natural_key(item.path))
+        result = sorted(items, key=lambda item: natural_key(item.path))
         assert len({x.path for x in result}) == len(result), (
             "FileIndexStageIndexer.discover_graphs post: len(set(x.path for x in result)) == len(result)"
         )
@@ -439,7 +439,7 @@ def _labelling_set(root_name: str, parts: tuple[str, ...]) -> str | None:
     return own if own.endswith(_LABELLING_SET_ENDINGS) else None
 
 
-def _natural_key(path: str) -> tuple[tuple[str | int, ...], str]:
+def natural_key(path: str) -> tuple[tuple[str | int, ...], str]:
     """Sort key comparing runs of digits as numbers; the plain path breaks ties, so the order is total."""
     pieces = _DIGIT_RUN.split(path)
     return (tuple(int(piece) if index % 2 else piece for index, piece in enumerate(pieces)), path)

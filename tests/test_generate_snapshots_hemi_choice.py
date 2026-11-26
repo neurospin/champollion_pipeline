@@ -29,24 +29,28 @@ def _run(script):
 
 
 class TestAmbiguousHemisphere:
-    def test_no_snapshot_for_ambiguous_hemisphere(self, tmp_path):
-        morpho = tmp_path / "morpho"
-        _folds(morpho, "wk30", ["Lsulci.arg", "Rsulci.arg"])
-        _folds(morpho, "wk40", ["Lsulci.arg"])
-        snaps, _ = _run(_script(tmp_path, morpho))
-        assert [s for s in snaps if s.endswith("_left.png")] == []
+    """Several graphs of a hemisphere: only the first in natural path order is rendered, for now.
 
-    def test_error_names_graph_paths_and_option(self, tmp_path, caplog):
+    REQ-ARGDISC-BDRABCZUK-C1E227A48539, -3A36B34AB8C8 (supersede REQ-PATTERNS C3BF41ED43D3, 0D651D3AE998).
+    """
+
+    def test_first_graph_of_the_hemisphere_is_rendered(self, tmp_path):
         morpho = tmp_path / "morpho"
-        a = _folds(morpho, "wk30", ["Lsulci.arg"])
+        a = _folds(morpho, "wk30", ["Lsulci.arg", "Rsulci.arg"])
+        _folds(morpho, "wk40", ["Lsulci.arg"])
+        _, render = _run(_script(tmp_path, morpho))
+        left = [str(call.args[0]) for call in render.call_args_list if str(call.args[1]).endswith("_left.png")]
+        assert left == [str(a / "Lsulci.arg")]
+
+    def test_left_out_graph_is_logged_at_info_and_no_error(self, tmp_path, caplog):
+        morpho = tmp_path / "morpho"
+        _folds(morpho, "wk30", ["Lsulci.arg"])
         b = _folds(morpho, "wk40", ["Lsulci.arg"])
         with caplog.at_level(logging.DEBUG):
             _run(_script(tmp_path, morpho))
-        errors = [r for r in caplog.records if r.levelno == logging.ERROR]
-        assert len(errors) == 1
-        msg = errors[0].getMessage()
-        assert str(a / "Lsulci.arg") in msg and str(b / "Lsulci.arg") in msg
-        assert "--acquisition" in msg
+        infos = [r.getMessage() for r in caplog.records if r.levelno == logging.INFO]
+        assert [m for m in infos if str(b / "Lsulci.arg") in m]
+        assert not [r for r in caplog.records if r.levelno >= logging.ERROR]
 
     def test_unambiguous_hemisphere_is_still_rendered(self, tmp_path):
         morpho = tmp_path / "morpho"
@@ -121,20 +125,3 @@ class TestLabellingSessionSelection:
         folds = _session_folds(morpho, "sub-002", (DEFAULT,), sides=("L",))
         _, render = _run(_script(tmp_path, morpho))
         assert _rendered_graphs(render) == [str(folds / DEFAULT / f"Lsub-002_{DEFAULT}.arg")]
-
-
-class TestAmbiguityMessage:
-    """REQ-SNAPSULC-BDRABCZUK-192418778A2A: the ambiguity ERROR lists the rendered subject's acquisitions."""
-
-    def test_error_lists_the_rendered_subject_acquisitions(self, tmp_path, caplog):
-        morpho = tmp_path / "morpho"
-        graphs = [_folds(morpho, acq, ["Lsulci.arg"], subject="sub-001") / "Lsulci.arg" for acq in ("wk30", "wk40")]
-        with caplog.at_level(logging.DEBUG):
-            _run(_script(tmp_path, morpho))
-        errors = [r.getMessage() for r in caplog.records if r.levelno == logging.ERROR]
-        assert len(errors) == 1, errors
-        # The graph paths hold the acquisition names too: only the text outside them counts.
-        listing = errors[0]
-        for graph in graphs:
-            listing = listing.replace(str(graph), "")
-        assert "wk30" in listing and "wk40" in listing, errors[0]
