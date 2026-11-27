@@ -3,7 +3,8 @@
 
 A morphologist-cli tree (IDEASII) holds sub-<label>/ses-1/run-0/ana-0/... and no t1mri folder. The pre-check judges
 scans <subject>/t1mri/<acquisition> only (SubjectEligibilityChecker.list_scans), so it lists no scan for such a tree,
-though graph discovery finds its subjects. Known gap, left to a follow-up Task: this test pins it.
+though graph discovery finds its subjects. TASK-ARGDISC-BDRABCZUK-A12B4526C531 closes the gap: a subject with no
+t1mri folder and a graph below it is listed as one scan (first session only, for now).
 """
 
 import logging
@@ -15,12 +16,16 @@ from champollion_pipeline.config import PipelineConfig
 from champollion_pipeline.file_indexer.pipeline_checks import SubjectEligibilityChecker
 from champollion_pipeline.file_indexer.scan_id import ScanId
 from champollion_pipeline.pipeline_stages import RunCorticalTilesStage
-from tests.morphologist_layout_fixtures import CLI_SUBJECTS, build_morphologist_cli_tree
+from tests.morphologist_layout_fixtures import (
+    CLASSIC_SUBJECTS,
+    CLI_SUBJECTS,
+    build_classic_tree,
+    build_morphologist_cli_tree,
+)
 
 pytestmark = pytest.mark.unit  # noqa: V107
 
 
-@pytest.mark.xfail(strict=True, reason="pure cli tree listing: follow-up Task")
 def test_pre_check_lists_the_subjects_of_a_pure_cli_tree(tmp_path):
     """Every subject graph discovery finds in a pure cli tree is judged by the pre-check, here as eligible."""
     root = build_morphologist_cli_tree(Path(tmp_path))
@@ -32,6 +37,42 @@ def test_pre_check_lists_the_subjects_of_a_pure_cli_tree(tmp_path):
 
     assert sorted(scan.subject for scan in report.eligible) == sorted(CLI_SUBJECTS)
     assert report.ineligible == {}
+
+
+def test_pre_check_lists_a_pure_cli_subject_once_with_its_subject_folder(tmp_path):
+    """A pure cli subject is one scan, named by its subject folder, whatever sessions it holds."""
+    root = build_morphologist_cli_tree(Path(tmp_path))
+    (root / "sub-01" / "ses-2" / "run-0" / "ana-0" / "folds" / "3.1").mkdir(parents=True)
+    (root / "sub-01" / "ses-2" / "run-0" / "ana-0" / "folds" / "3.1" / "sub-01_ses-2_run-0_hemi-L.arg").touch()
+
+    scans = SubjectEligibilityChecker(str(root), []).list_scans()
+
+    assert [scan.subject for scan in scans] == sorted(CLI_SUBJECTS)
+    assert {scan.acquisition for scan in scans} == {""}
+
+
+def test_pre_check_lists_classic_and_pure_cli_subjects_of_a_mixed_tree(tmp_path):
+    """Classic subjects keep one scan per t1mri acquisition; pure cli subjects join them as one scan each."""
+    root = build_classic_tree(Path(tmp_path))
+    build_morphologist_cli_tree(root)
+
+    scans = SubjectEligibilityChecker(str(root), []).list_scans()
+
+    expected = [(subject, "default_acquisition") for subject in CLASSIC_SUBJECTS] + [
+        (subject, "") for subject in CLI_SUBJECTS
+    ]
+    assert sorted((scan.subject, scan.acquisition) for scan in scans) == sorted(expected)
+
+
+def test_pre_check_leaves_out_a_folder_without_graph_or_t1mri(tmp_path):
+    """A subject folder holding neither a t1mri acquisition nor a graph gets no scan."""
+    root = build_morphologist_cli_tree(Path(tmp_path))
+    (root / "sub-99").mkdir()
+    (root / "sub-99" / "notes.txt").touch()
+
+    scans = SubjectEligibilityChecker(str(root), []).list_scans()
+
+    assert [scan.subject for scan in scans] == sorted(CLI_SUBJECTS)
 
 
 def _stage_patterns() -> list[str]:
