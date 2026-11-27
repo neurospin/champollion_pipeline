@@ -130,7 +130,8 @@ class SubjectEligibilityReport:
 class SubjectEligibilityChecker:
     """Index ``subjects_dir`` and check the required patterns of each scan.
 
-    A scan is one Morphologist acquisition folder ``<subject>/t1mri/<acquisition>``. Patterns are
+    A scan is one Morphologist acquisition folder ``<subject>/t1mri/<acquisition>``, or, for a subject with no such
+    folder but a graph below it (a morphologist-cli tree), the subject folder itself. Patterns are
     relative to it for ``scan_has_pattern`` and ``check``, and to the subject folder for
     ``scan_has_subject_pattern`` and ``check_subject_patterns``. ``path_to_graph`` only records the
     dataset's graph sub-path for the caller and is read by no method. Not thread-safe: use one
@@ -172,12 +173,18 @@ class SubjectEligibilityChecker:
             logger.warning("Subjects directory not found or not a directory: %s", self.subjects_dir)
             return []
         scans: list[ScanId] = []
+        graph_subjects: frozenset[str] | None = None
         for subject in list_morphologist_subjects(self.subjects_dir):
             if self.bids and not subject.startswith(BIDS_SUBJECT_PREFIX):
                 continue
             acquisitions = self._acquisitions(subject)
             if not acquisitions:
-                self._warn_no_acquisition(subject)
+                if graph_subjects is None:
+                    graph_subjects = self._graph_subjects()
+                if subject in graph_subjects:
+                    scans.append(ScanId(subject, "", bids=self.bids))
+                else:
+                    self._warn_no_acquisition(subject)
                 continue
             scans.extend(ScanId(subject, acquisition, bids=self.bids) for acquisition in acquisitions)
         return sorted(scans)
@@ -235,7 +242,7 @@ class SubjectEligibilityChecker:
         """
         escaped = SUBJECT_PATTERN_WILDCARD.join(glob.escape(part) for part in pattern.split(SUBJECT_PATTERN_WILDCARD))
         full = join(glob.escape(join(self.subjects_dir, scan_id.subject)), escaped)
-        scan_dir = os.path.normpath(join(self.subjects_dir, scan_id.path_prefix)) + os.sep
+        scan_dir = os.path.normpath(join(self.subjects_dir, self._scan_folder(scan_id))) + os.sep
         return any(
             os.path.normpath(path).startswith(scan_dir) and os.path.isfile(path)
             for path in sorted(glob.glob(full, include_hidden=self.include_hidden))
@@ -298,6 +305,15 @@ class SubjectEligibilityChecker:
             logger.debug("Cannot list %s; no acquisition taken from it", t1mri, exc_info=True)
             return []
 
+    def _graph_subjects(self) -> frozenset[str]:
+        """Names of the child folders of ``subjects_dir`` that hold a graph, by ``find_graph_subject_folder``.
+
+        A loose graph, or one of ``subjects_dir`` itself, names no child subject and is skipped. O(entries below).
+        """
+        root_name = os.path.basename(os.path.abspath(self.subjects_dir))
+        found = (find_graph_subject_folder(root_name, parts, name) for parts, name in graph_files(self.subjects_dir))
+        return frozenset(folder[0] for folder in found if folder)
+
     def _warn_no_acquisition(self, subject: str) -> None:
         """Warn once per subject, per checker, that it holds no acquisition folder."""
         if subject in self._warned_subjects:
@@ -310,9 +326,14 @@ class SubjectEligibilityChecker:
         )
 
     @staticmethod
+    def _scan_folder(scan_id: ScanId) -> str:
+        """Relative folder of a scan: ``<subject>/t1mri/<acquisition>``, or the subject folder of a graph-only scan."""
+        return scan_id.path_prefix if scan_id.acquisition else scan_id.subject
+
+    @staticmethod
     def _full_pattern(scan_id: ScanId, pattern: str) -> str:
-        """The single place a scan and a pattern are composed: ``<subject>/t1mri/<acquisition>/<pattern>``."""
-        return f"{scan_id.path_prefix}/{pattern}"
+        """The single place a scan and a pattern are composed: ``<scan folder>/<pattern>``."""
+        return f"{SubjectEligibilityChecker._scan_folder(scan_id)}/{pattern}"
 
     def _save_index(self, path: str) -> None:
         """Write the index as BTree.to_dict() JSON, atomically."""
