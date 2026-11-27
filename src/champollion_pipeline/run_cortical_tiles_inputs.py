@@ -154,20 +154,3 @@ def fetch_input_qc_rows(  # noqa: PLR0913 - path_sk_with_hull and graphs optiona
 def find_dotted_ids(input_dir: str) -> list[str]:
     """Sorted input subject IDs (the list_input_subjects names) that contain a dot; none for a non-directory."""
     return [name for name in list_input_subjects(input_dir) if "." in name]
-
-
-# TEMPORARY (DEF-CORTILES-BDRABCZUK-8A44DAD7F312)
-def find_prefix_id_pairs(input_dir: str) -> list[tuple[str, str]]:
-    """Every (shorter, longer) pair of input subject IDs where one strictly prefixes the other, sorted.
-
-    Subject IDs are the list_input_subjects names of ``input_dir``, as cortical_tiles lists them
-    (with or without --bids). An input that is not a directory gives no pair.
-    """
-    names = list_input_subjects(input_dir)
-    pairs = []
-    for i, shorter in enumerate(names):
-        for longer in names[i + 1 :]:
-            if not longer.startswith(shorter):
-                break
-            pairs.append((shorter, longer))
-    return sorted(pairs)

@@ -45,8 +45,8 @@ _BIDS_HELP = (
     "and passes --bids to cortical_tiles."
 )
 _ALLOW_PREFIX_IDS_HELP = (
-    "TEMPORARY: let cortical_tiles run when a subject ID is a strict prefix "
-    "of another (e.g. sub-1 and sub-10); its transforms may then be wrong."
+    "Deprecated, no effect: a subject ID that is a strict prefix of another (e.g. sub-1 and sub-10) is "
+    "accepted. Kept so that a replayed config still parses."
 )
 _ALLOW_VERSION_MISMATCH_HELP = (
     "Run on when the given Mask version or per-region map differs from the local model set's; logs one WARNING per "

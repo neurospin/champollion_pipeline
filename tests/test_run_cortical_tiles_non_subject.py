@@ -18,7 +18,6 @@ import pytest
 from champollion_pipeline.run_cortical_tiles_inputs import (
     fetch_input_qc_rows,
     find_dotted_ids,
-    find_prefix_id_pairs,
     list_input_subjects,
 )
 
@@ -111,22 +110,6 @@ def test_input_qc_keeps_a_row_for_qc_with_t1mri(tmp_path):
     rows = fetch_input_qc_rows(str(tmp_path), "default_analysis/folds/3.1/default_session_auto", None, False, False)
 
     assert [row["participant_id"] for row in rows] == ["qc", "s01"]
-
-
-def test_qc_without_t1mri_is_no_side_of_a_prefix_pair(tmp_path):
-    """A qc folder without t1mri does not prefix qc2."""
-    _subject(tmp_path, "qc2")
-    _qc_folder(tmp_path, with_t1mri=False)
-
-    assert find_prefix_id_pairs(str(tmp_path)) == []
-
-
-def test_qc_with_t1mri_is_a_side_of_a_prefix_pair(tmp_path):
-    """Pin: a qc folder that holds a graph (in its t1mri folder) prefixes qc2."""
-    _subject(tmp_path, "qc2")
-    _qc_folder(tmp_path, with_t1mri=True, with_graph=True)
-
-    assert find_prefix_id_pairs(str(tmp_path)) == [("qc", "qc2")]
 
 
 def test_dotted_ids_come_from_the_listed_subjects(tmp_path):

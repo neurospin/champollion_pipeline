@@ -43,7 +43,6 @@ FS_SETTINGS = settings(max_examples=40, deadline=None)
 OWN_NAMES = (
     "logger",
     "LABELLING_SESSION_DEFAULT",
-    "PREFIX_PAIRS_SHOWN",
     "TRANSFORM_QC_FILENAME",
     "INPUT_QC_FILENAME",
     "OUTPUT_QC_FILENAME",
@@ -72,7 +71,6 @@ INPUTS_NAMES = (
     "compute_end_status",
     "fetch_input_qc_rows",
     "find_dotted_ids",
-    "find_prefix_id_pairs",
 )
 WHOLE_BRAIN_NAMES = (
     "WHOLE_BRAIN_SRC_FILENAME",
@@ -132,7 +130,7 @@ def test_reference_module_names_importable():
     """Each 3039b13 module-level name resolves on the module that defines it now."""
     homes = ((current, OWN_NAMES), (inputs, INPUTS_NAMES), (whole_brain, WHOLE_BRAIN_NAMES))
     missing = [f"{module.__name__}.{name}" for module, group in homes for name in group if not hasattr(module, name)]
-    assert len(set(REFERENCE_NAMES)) == 44
+    assert len(set(REFERENCE_NAMES)) == 42
     assert missing == [], f"names not importable from the module that defines them: {missing}"
 
 
@@ -186,11 +184,3 @@ def test_find_dotted_ids_matches_reference(reference, names):
     with tempfile.TemporaryDirectory() as input_dir:
         _make_folders(input_dir, names)
         assert inputs.find_dotted_ids(input_dir) == reference.find_dotted_ids(input_dir)
-
-
-@FS_SETTINGS
-@given(names=st.lists(ids, max_size=6, unique=True))
-def test_find_prefix_id_pairs_matches_reference(reference, names):
-    with tempfile.TemporaryDirectory() as input_dir:
-        _make_folders(input_dir, names)
-        assert inputs.find_prefix_id_pairs(input_dir) == reference.find_prefix_id_pairs(input_dir)
