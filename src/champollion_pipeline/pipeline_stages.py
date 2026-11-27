@@ -31,7 +31,7 @@ from champollion_pipeline.utils.cortical_tiles_config import compute_versioned_c
 from champollion_pipeline.utils.input_kind import stage1_subjects_dir
 from champollion_pipeline.utils.lib import DERIVATIVES_FOLDER, find_dataset_folder
 from champollion_pipeline.utils.region_masks import REGION_MASKS_OPTION
-from champollion_pipeline.utils.skeleton_qc import SKELETON_SIDES, compute_skeleton_pattern
+from champollion_pipeline.utils.skeleton_qc import SKELETON_SIDES, compute_skeleton_requirement
 
 
 def _new_script(module_name: str, class_name: str) -> ScriptBuilder:
@@ -151,7 +151,7 @@ class RunCorticalTilesStage(PipelineStage):
         graph_patterns = (
             [f"{g}/L*.arg", f"{g}/R*.arg"] if g is not None else []
         )  # none: stage 2's input QC finds the graphs
-        return [*graph_patterns, *(f"{s}/{compute_skeleton_pattern(side)}" for side in SKELETON_SIDES)]
+        return [*graph_patterns, *(compute_skeleton_requirement(side, s) for side in SKELETON_SIDES)]
 
     def output_dir(self) -> str | None:
         d = self.config.dataset.cortical_tiles_output

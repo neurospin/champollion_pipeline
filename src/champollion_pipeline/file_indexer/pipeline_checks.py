@@ -28,6 +28,7 @@ from champollion_utils.logger import OUTPUT
 
 from champollion_pipeline.utils.graph_item import GraphItem, LooseGraphError
 from champollion_pipeline.utils.input_kind import graph_files
+from champollion_pipeline.utils.skeleton_qc import ANY_DEPTH_SEGMENT, SKELETON_ALTERNATIVE
 from champollion_pipeline.utils.subject_folders import find_graph_subject_folder, list_morphologist_subjects
 
 from .btree import BTree
@@ -201,12 +202,37 @@ class SubjectEligibilityChecker:
         return self._sort_scans(self.scan_has_pattern, save_index_to)
 
     def scan_has_subject_pattern(self, scan_id: ScanId, pattern: str) -> bool:
-        """Return True when a file inside the folder of ``scan_id`` matches ``<subject>/<pattern>``.
+        """Return True when one alternative of ``pattern`` (split on ``|``) matches a file of ``scan_id``.
+
+        An alternative starting with ``**/`` matches a file at any depth below the subject folder, by the walk
+        rule of skeleton_qc.list_subject_skeleton_files: the checker's index, which leaves out dot-named entries
+        and does not enter a symlinked folder. Any other alternative is matched by ``_has_scan_file``. A pattern
+        holding neither marker gives the result it gave before. O(entries below the subject folder).
+        """
+        _check_relative(pattern)
+        return any(
+            self._has_any_depth_file(scan_id, alternative[len(ANY_DEPTH_SEGMENT) :])
+            if alternative.startswith(ANY_DEPTH_SEGMENT)
+            else self._has_scan_file(scan_id, alternative)
+            for alternative in pattern.split(SKELETON_ALTERNATIVE)
+        )
+
+    def _has_any_depth_file(self, scan_id: ScanId, tail: str) -> bool:
+        """True when an indexed file below ``<subject>/`` ends with the segments of ``tail``, ``*`` in one segment."""
+        regex = re.compile(
+            "(?:^|/)" + "[^/]*".join(re.escape(part) for part in tail.split(SUBJECT_PATTERN_WILDCARD)) + "$"
+        )
+        prefix = f"{scan_id.subject}/"
+        return any(
+            regex.search(key[len(prefix) :]) for key, _ in self._index().range_query(prefix, prefix + _KEY_MAX_SUFFIX)
+        )
+
+    def _has_scan_file(self, scan_id: ScanId, pattern: str) -> bool:
+        """True when a file inside the folder of ``scan_id`` matches ``<subject>/<pattern>``.
 
         Reads the file system as input_qc.tsv does, so the two views agree: ``*`` is the only
         wildcard and stays inside one path segment, and symbolic links are followed.
         """
-        _check_relative(pattern)
         escaped = SUBJECT_PATTERN_WILDCARD.join(glob.escape(part) for part in pattern.split(SUBJECT_PATTERN_WILDCARD))
         full = join(glob.escape(join(self.subjects_dir, scan_id.subject)), escaped)
         scan_dir = os.path.normpath(join(self.subjects_dir, scan_id.path_prefix)) + os.sep
@@ -230,12 +256,24 @@ class SubjectEligibilityChecker:
         for scan in self.list_scans():
             missing = [p for p in self.required_patterns if not has_pattern(scan, p)]
             if missing:
-                report.ineligible[scan] = missing
+                report.ineligible[scan] = [self._describe_missing(scan, p) for p in missing]
             else:
                 report.eligible.append(scan)
         if save_index_to is not None:
             self._save_index(save_index_to)
         return report
+
+    def _describe_missing(self, scan_id: ScanId, pattern: str) -> str:
+        """Text a report names for a missing ``pattern``: never the raw alternatives string.
+
+        A pattern with alternatives gives its first (classic) one when the subject has a t1mri folder, else its
+        last (morphologist-cli) one; any other pattern is returned unchanged. O(1) plus one stat.
+        """
+        alternatives = pattern.split(SKELETON_ALTERNATIVE)
+        if len(alternatives) == 1:
+            return pattern
+        has_t1mri = os.path.isdir(join(self.subjects_dir, scan_id.subject, T1MRI_DIR))
+        return alternatives[0] if has_t1mri else alternatives[-1]
 
     def _index(self) -> BTree:
         if self._tree is None:

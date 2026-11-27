@@ -21,6 +21,9 @@ SKELETON_SIDES = ("L", "R")
 REASON_MISSING_SKELETON_STEM = "missing_skeleton_"  # + side
 REASON_UNUSABLE_SKELETON_STEM = "unusable_skeleton_"  # + side
 CROP_QC_FILENAME = "crop_qc.tsv"
+CLI_SKELETON_SUFFIX = "_hemi-{side}_skeleton.nii.gz"  # morphologist-cli: <name>_hemi-<S>_skeleton.nii.gz
+SKELETON_ALTERNATIVE = "|"  # separator of the alternatives of one required pattern of the pre-check
+ANY_DEPTH_SEGMENT = "**/"  # leading segment of an alternative: any depth below the subject folder
 
 
 def compute_skeleton_pattern(side: str) -> str:
@@ -35,6 +38,43 @@ def list_skeleton_files(subject_dir: str, folders: list[str], side: str) -> list
         pattern = join(glob.escape(join(subject_dir, folder)), compute_skeleton_pattern(side))
         files.extend(match for match in sorted(glob.glob(pattern)) if isfile(match))
     return files
+
+
+def compute_cli_skeleton_suffix(side: str) -> str:
+    """File name ending of the morphologist-cli skeleton of hemisphere ``side``."""
+    return CLI_SKELETON_SUFFIX.format(side=side)
+
+
+def list_subject_skeleton_files(subject_dir: str, side: str) -> list[str]:
+    """morphologist-cli skeleton files of ``side`` anywhere below ``subject_dir``, depth-first, entries sorted by name.
+
+    Names only: no file is opened. A dot-named entry and a symlinked folder are left out; a missing folder gives [].
+    The subject folder is the one graph discovery assigns to the subject: no other subject-folder rule is applied.
+    Complexity: O(entries below subject_dir).
+    """
+    suffix = compute_cli_skeleton_suffix(side)
+    files: list[str] = []
+    for folder, subfolders, names in os.walk(subject_dir):  # followlinks False: a symlinked folder is not entered
+        subfolders[:] = sorted(name for name in subfolders if not name.startswith("."))
+        files.extend(
+            join(folder, name)
+            for name in sorted(names)
+            if name.endswith(suffix) and len(name) > len(suffix) and not name.startswith(".")
+            if isfile(join(folder, name))
+        )
+    return files
+
+
+def compute_skeleton_requirement(side: str, classic_folder: str | None) -> str:
+    """Pre-check pattern of the hemisphere ``side`` skeleton: the classic name or the morphologist-cli one.
+
+    Two alternatives joined by SKELETON_ALTERNATIVE: ``<classic_folder>/<S>skeleton*.nii.gz`` and the cli name at any
+    depth below the subject folder; no ``classic_folder`` gives the cli alternative alone. Pure, O(1).
+    """
+    cli = f"{ANY_DEPTH_SEGMENT}*{compute_cli_skeleton_suffix(side)}"
+    if not classic_folder:
+        return cli
+    return f"{classic_folder}/{compute_skeleton_pattern(side)}{SKELETON_ALTERNATIVE}{cli}"
 
 
 def has_nonzero_voxel(path: str, read_volume: Callable[[str], object]) -> bool:
@@ -52,6 +92,7 @@ def compute_skeleton_reasons(subject_dir: str, folders: list[str], read_volume: 
     reasons = []
     for side in SKELETON_SIDES:
         files = list_skeleton_files(subject_dir, folders, side)
+        files += [path for path in list_subject_skeleton_files(subject_dir, side) if path not in files]
         if not files:
             reasons.append(f"{REASON_MISSING_SKELETON_STEM}{side}")
         elif not any(has_nonzero_voxel(path, read_volume) for path in files):
