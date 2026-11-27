@@ -24,7 +24,7 @@ disabled, so the results do not depend on PyAIMS or on the network.
 Requirements (area COMPARE, author BDRABCZUK):
 1BCAE707D4F5 subcommand set, 0001B4BA200B no subcommand, 6890D56963CE --help exit,
 25766A5C0F8A 5E573581E6D1 55C9624283C1 75FFC4D00D3A 78DD0EF742C1 subcommand options,
-4B6CAF044462 9948C646D2E5 required options, 117DA8854F73 176B8286C589
+4B6CAF044462 97111F39496A required options, 117DA8854F73 176B8286C589
 344D566E476B 7B6A038CF0A3 06A9B555A5BF subcommand defaults, B8A47BB26FE8
 1BA70A85A01E EA954461B742 choices, 941405980FD7 missing --set_a, 5EA1F9FAA661
 compare names, 2A0C618A7734 3726FBCC818E 0E56D0E7DF0C script options,
@@ -278,9 +278,10 @@ def test_compare_set_options_required(subcommand, missing, tmp_path):
     assert excinfo.value.code == 2
 
 
-@pytest.mark.parametrize("missing", list(_DB_REQUIRED))
+@pytest.mark.parametrize("missing", ["--labeled_subjects_dir"])
 def test_databases_graph_options_required(missing):
-    """REQ-COMPARE-BDRABCZUK-9948C646D2E5 (src/compare.py databases and src/compare_databases.py)."""
+    """REQ-COMPARE-BDRABCZUK-97111F39496A (supersedes -9948C646D2E5; src/compare.py databases and
+    src/compare_databases.py). The graph sub-path options are optional since TASK-ARGDISC-BDRABCZUK-6FFA97286BC0."""
 
     argv = _db_args()
     index = argv.index(missing)

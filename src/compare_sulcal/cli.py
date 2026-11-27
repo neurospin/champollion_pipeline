@@ -13,6 +13,7 @@ import numpy as np
 from champollion_utils.script_builder import ScriptBuilder
 from joblib import Parallel, cpu_count, delayed
 
+from champollion_pipeline.file_indexer.pipeline_checks import FileIndexStageIndexer
 from compare_sulcal import brainvisa, crops, databases, embeddings, masks, viewer
 
 logger = logging.getLogger(__name__)
@@ -24,6 +25,14 @@ _EMB_BASE_COLUMNS = ["region", "side", "subject", "knn_overlap"]
 
 
 _AIMS_MODES = frozenset({"masks", "cortical_tiles", "databases", "crops"})
+
+
+DISCOVERY_STOP_STATUS = 2
+
+
+def _db_sides(side: str) -> list[str]:
+    """Hemisphere sides the databases subcommand reads for --side: ["L", "R"] for both, else [side]."""
+    return ["L", "R"] if side == "both" else [side]
 
 
 def _positive_finite_float(value: str) -> float:
@@ -163,10 +172,21 @@ class Compare(ScriptBuilder):
         )
         db_p.add_argument(
             "--path_to_graph_a",
-            required=True,
-            help="Relative sub-path for campaign A (e.g. t1mri/t1/default_analysis/folds/3.3/base2018_manual).",
+            default=None,
+            help=(
+                "Relative sub-path for campaign A (e.g. t1mri/t1/default_analysis/folds/3.3/base2018_manual). "
+                "Without it, campaign A's graphs come from graph discovery of --labeled_subjects_dir, "
+                "labelling set = --label_a."
+            ),
         )
-        db_p.add_argument("--path_to_graph_b", required=True, help="Relative sub-path for campaign B.")
+        db_p.add_argument(
+            "--path_to_graph_b",
+            default=None,
+            help=(
+                "Relative sub-path for campaign B. Without it, campaign B's graphs come from graph discovery of "
+                "--labeled_subjects_dir, labelling set = --label_b."
+            ),
+        )
         db_p.add_argument("--label_a", default="A", help="Name for campaign A.")
         db_p.add_argument("--label_b", default="B", help="Name for campaign B.")
         db_p.add_argument(
@@ -532,16 +552,89 @@ class Compare(ScriptBuilder):
             logger.trace(f"    [{side}] Done ({n_ok}/{len(subjects)}).")
         return all_data
 
+    def _discover_campaigns(
+        self, sides
+    ) -> "tuple[databases.CampaignGraphs | None, databases.CampaignGraphs | None] | None":
+        """Graph discovery choice of each campaign without sub-path (None for a sub-path campaign).
+
+        Discovery of --labeled_subjects_dir runs once, and only when a sub-path is missing. A campaign label with no
+        discovered graph logs one ERROR naming the label, the folder and every labelling set found; any such ERROR
+        returns None, before any graph is read.
+        """
+        campaigns = (
+            (self.args.path_to_graph_a, self.args.label_a),
+            (self.args.path_to_graph_b, self.args.label_b),
+        )
+        if all(path is not None for path, _label in campaigns):
+            return None, None
+        subjects_dir = self.args.labeled_subjects_dir
+        items = FileIndexStageIndexer("").discover_graphs(subjects_dir)
+        found = databases.list_labelling_sets(items)
+        stop = False
+        for path, label in campaigns:
+            if path is None and label not in found:
+                logger.error(
+                    f"No graph of labelling set {label!r} found by graph discovery of {subjects_dir}; "
+                    f"labelling sets found: {', '.join(found) or 'none'}"
+                )
+                stop = True
+        if stop:
+            return None
+        sel_a, sel_b = (
+            None if path is not None else databases.select_campaign_graphs(items, label, sides)
+            for path, label in campaigns
+        )
+        return sel_a, sel_b
+
+    def _load_campaign(self, campaign, selection, sides, njobs) -> dict:
+        """Load campaign "a" or "b": from its sub-path when given, else from its graph discovery selection."""
+        path = getattr(self.args, f"path_to_graph_{campaign}")
+        label = getattr(self.args, f"label_{campaign}")
+        if path is not None:
+            logger.trace(f"Loading campaign {campaign.upper()} ({label}): {path}")
+            return self._load_database(path, sides, self.args.labeled_subjects_dir, njobs)
+        logger.trace(f"Loading campaign {campaign.upper()} ({label}): graph discovery, labelling set {label}")
+        return self._load_discovered_database(selection, njobs)
+
+    def _load_discovered_database(self, selection, njobs) -> dict:
+        """Read the graphs of a discovery selection: subject -> {sulcus: voxels}, both sides merged per subject."""
+        root = abspath(self.args.labeled_subjects_dir)
+        all_data: dict = {}
+        for side in _db_sides(self.args.side):
+            logger.trace(f"    [{side}] {len(selection.subjects)} subjects found, loading with {njobs} worker(s)…")
+            reads = []
+            for graph in selection.graphs:
+                if graph.side != side:
+                    continue
+                graph_path = os.path.join(root, *graph.path.split("/"))
+                if graph.matches > 1:
+                    logger.warning(
+                        f"    [{side}] {graph.matches} graphs of labelling set {selection.label} for subject "
+                        f"{graph.subject}; reading the first: {graph_path}"
+                    )
+                reads.append((graph.subject, graph_path))
+            results = Parallel(n_jobs=njobs, prefer="processes")(
+                delayed(databases._get_graph_voxel_counts)(subject, graph_path) for subject, graph_path in reads
+            )
+            for sub_name, counts in results:
+                all_data.setdefault(sub_name, {}).update(counts)
+            for missing_side, subject in selection.missing:
+                if missing_side == side:
+                    logger.warning(f"    [{side}] no graph of labelling set {selection.label} for {subject}")
+            logger.trace(f"    [{side}] Done ({len(results)}/{len(selection.subjects)}).")
+        return all_data
+
     def _run_databases(self) -> int:  # noqa: PLR0915 - linear subcommand body; split deferred (user decision 2026-10-23)
-        sides = ["L", "R"] if self.args.side == "both" else [self.args.side]
+        sides = _db_sides(self.args.side)
         njobs = self.args.njobs or max(1, min(22, cpu_count() - 2))
         la, lb = self.args.label_a, self.args.label_b
 
-        logger.trace(f"Loading campaign A ({la}): {self.args.path_to_graph_a}")
-        data_a = self._load_database(self.args.path_to_graph_a, sides, self.args.labeled_subjects_dir, njobs)
-
-        logger.trace(f"Loading campaign B ({lb}): {self.args.path_to_graph_b}")
-        data_b = self._load_database(self.args.path_to_graph_b, sides, self.args.labeled_subjects_dir, njobs)
+        selections = self._discover_campaigns(sides)
+        if selections is None:
+            return DISCOVERY_STOP_STATUS
+        sel_a, sel_b = selections
+        data_a = self._load_campaign("a", sel_a, sides, njobs)
+        data_b = self._load_campaign("b", sel_b, sides, njobs)
 
         subs_a, subs_b = set(data_a), set(data_b)
         logger.output(f"Subjects in {la} only:  {len(subs_a - subs_b)}")
