@@ -319,6 +319,16 @@ Installing the package provides these entry points, declared in
 
 `generate_masks.py` also ships in the package but declares no console script.
 
+### Training notes (`champollion-train`)
+
+What the pinned `champollion_V1` does when `champollion-train` runs it:
+
+- **Sparse files.** With `--load-sparse`, the data module reads one `<sub>.npy` per subject from each of the three folders of a region entry (`coords_all`, `numpy_all`, `foldlabel_all`), where `<sub>` is the subject id. The old suffixed names (`_coords`, `_skeleton_values`, `_foldlabel_values`) are no longer read. Every region entry must define `coords_all`, and the three paths must be folders, not files.
+- **Whole-brain sparse inputs are not available yet.** Nothing in the pipeline writes these per-subject files; the opt-in `--sparse` path that produces them comes with the SPARSE epic (`TASK-SPARSE-BDRABCZUK-5497CCAD2276`).
+- **DataLoader workers.** On CUDA the default is `num_cpu_workers: 24` (46 on CPU). `--njobs` still overrides it.
+- **Model summary.** The `torchinfo` summary is printed without a forward pass, except for a single-region ConvNet, the only case where the summary runs one. A ResNet backbone, or a run over several regions, prints the layer table only.
+- **Evaluation messages.** `evaluate.py` reports its progress (for example `Model weights loaded`) through the champollion_V1 logger, not `print`; only the final `Saved embeddings to ...` line is still printed.
+
 ## Testing
 
 ```bash
