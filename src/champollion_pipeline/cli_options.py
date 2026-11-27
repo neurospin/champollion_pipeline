@@ -135,6 +135,9 @@ _KIND_OPTIONS = {
     ArgumentKind.STAGE_SET: {"nargs": "+", "choices": list(PipelineConfig().stages)},
 }
 
+# Folder name prefix each graph selection field's regex applies to (select_graphs keeps the prefix in the match).
+_GRAPH_SELECTION_PREFIXES = {"session": "ses-", "run": "run-", "analysis": "ana-"}
+
 # Options of single fields; they win over those of their kind. The levels are attributes of the logging module,
 # which main.py reads: the champollion_utils level names are not, so they stay out.
 _FIELD_OPTIONS = {
@@ -154,6 +157,14 @@ _FIELD_OPTIONS = {
     "log_level": {"choices": ("DEBUG", "INFO", "WARNING", "ERROR", "CRITICAL")},
     "log": {"nargs": "?", "const": "", "metavar": "DIR", "help": _LOG_HELP},
     **{field_name: {"help": _UNREAD_FIELD_HELP} for field_name in _UNREAD_FIELDS},
+    **{
+        field_name: {
+            "metavar": "REGEX",
+            "help": f"A regular expression matched at the start of the {prefix} folder name of a scan (Python "
+            f"re.match), for graph selection; default empty: no {prefix} filter",
+        }
+        for field_name, prefix in _GRAPH_SELECTION_PREFIXES.items()
+    },
 }
 
 

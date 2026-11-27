@@ -26,7 +26,6 @@ is a terminal stand-in answering the planned kind.
 """
 
 import dataclasses
-import os
 import tempfile
 import typing
 from pathlib import Path
@@ -38,7 +37,7 @@ from hypothesis import strategies as st
 from champollion_pipeline import input_kind_choice, replay_config
 from champollion_pipeline.config import ConfigLoader, DatasetConfig, PipelineConfig
 from tests.main_stage_helpers import (
-    enter_work_dir,
+    enter_clean_work_dir,
     load_main_module,
     main_runner,
     make_morphologist_input,
@@ -126,10 +125,7 @@ def _round_trip(config: PipelineConfig) -> PipelineConfig:
 
 @pytest.fixture
 def work_dir(monkeypatch, tmp_path) -> Path:
-    for name in list(os.environ):
-        if name == "HF_TOKEN" or name.startswith("CHAMPOLLION_"):
-            monkeypatch.delenv(name)
-    return enter_work_dir(monkeypatch, tmp_path)
+    return enter_clean_work_dir(monkeypatch, tmp_path)
 
 
 @pytest.fixture
