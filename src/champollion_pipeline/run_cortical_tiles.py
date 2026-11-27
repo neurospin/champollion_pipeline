@@ -52,7 +52,6 @@ from champollion_pipeline.run_cortical_tiles_inputs import (
     fetch_input_qc_rows,
     fetch_sk_qc_ids,
     find_dotted_ids,
-    find_prefix_id_pairs,
 )
 from champollion_pipeline.run_cortical_tiles_whole_brain import (
     compute_fusion_failure_status,
@@ -101,11 +100,8 @@ from champollion_pipeline.utils.transform_qc import transform_qc_rows
 logger = logging.getLogger(__name__)
 
 LABELLING_SESSION_DEFAULT = LABELLING_SESSION_CANDIDATES[0]
-# TEMPORARY (DEF-CORTILES-BDRABCZUK-8A44DAD7F312): the prefix-ID guard below (and its flag, check and test file)
-# goes once cortical_tiles stops globbing {subject}*/ in generate_ICBM2009c_transforms.py.
-PREFIX_PAIRS_SHOWN = 5  # prefix pairs named in the refusal or warning
 # TEMPORARY (DEF-CORTILES-BDRABCZUK-8A44DAD7F312): transform QC, a report of subjects whose ICBM2009c
-# transform is byte-identical to another subject's; goes with the prefix-ID guard.
+# transform is byte-identical to another subject's.
 TRANSFORM_QC_FILENAME = "transform_qc.tsv"
 INPUT_QC_FILENAME = "input_qc.tsv"
 OUTPUT_QC_FILENAME = "output_qc.tsv"
@@ -201,11 +197,10 @@ class RunCorticalTiles(ScriptBuilder):
                 "Input is BIDS-named (sub-/ses-/run- prefixed files). Threaded into the "
                 "pipeline JSON config and the whole-brain ventricle-removal call.",
             )
-            .add_flag(  # TEMPORARY (DEF-CORTILES-BDRABCZUK-8A44DAD7F312)
+            .add_flag(
                 "--allow-prefix-ids",
-                "Run even when one input subject ID strictly prefixes another (e.g. sub-1 and sub-10); "
-                "logs a warning instead of refusing. cortical_tiles may then give a subject the ICBM2009c "
-                "transform of the other. Temporary: removed once cortical_tiles fixes its {subject}*/ glob.",
+                "Deprecated, no effect: a subject ID that prefixes another (e.g. sub-1 and sub-10) is accepted. "
+                "Kept so that a replayed config still parses; logs a warning.",
             )
         )
         add_region_masks_option(self)
@@ -221,14 +216,10 @@ class RunCorticalTiles(ScriptBuilder):
             self.parser.error(f"{REGION_MASKS_OPTION} gives no Mask version to {', '.join(missing)}")
         return parsed
 
-    # TEMPORARY (DEF-CORTILES-BDRABCZUK-8A44DAD7F312, -9C7D2B9265BC)
+    # TEMPORARY (DEF-CORTILES-BDRABCZUK-9C7D2B9265BC)
     def _check_subject_ids(self, input_abs: str, output_abs: str) -> bool:
-        """Run the temporary subject-ID and root guards; False when one refuses the input."""
-        return (
-            self._check_root_substrings(input_abs, output_abs)
-            and self._check_dotted_ids(input_abs)
-            and self._check_prefix_ids(input_abs)
-        )
+        """Run the temporary dotted-ID and root guards; False when one refuses the input."""
+        return self._check_root_substrings(input_abs, output_abs) and self._check_dotted_ids(input_abs)
 
     # TEMPORARY (DEF-CORTILES-BDRABCZUK-9C7D2B9265BC)
     def _check_root_substrings(self, input_abs: str, output_abs: str) -> bool:
@@ -256,27 +247,6 @@ class RunCorticalTiles(ScriptBuilder):
             "and would merge them (A.1 and A.2 become A). Rename the subject folders, or pass --bids."
         )
         return False
-
-    # TEMPORARY (DEF-CORTILES-BDRABCZUK-8A44DAD7F312)
-    def _check_prefix_ids(self, input_abs: str) -> bool:
-        """Refuse (False, error) or allow with a warning (True) an input with prefix subject IDs."""
-        pairs = find_prefix_id_pairs(input_abs)
-        if not pairs:
-            return True
-        listed = ", ".join(f"({a}, {b})" for a, b in pairs[:PREFIX_PAIRS_SHOWN])
-        more = f" and {len(pairs) - PREFIX_PAIRS_SHOWN} more" if len(pairs) > PREFIX_PAIRS_SHOWN else ""
-        head = f"{len(pairs)} input subject ID pair(s) where one ID strictly prefixes another: {listed}{more}."
-        if not self.args.allow_prefix_ids:
-            logger.error(
-                head + " cortical_tiles globs '{subject}*/' and may give a subject the ICBM2009c transform of "
-                "another one. Rename the subject folders, or pass --allow-prefix-ids to run anyway."
-            )
-            return False
-        logger.warning(
-            head + " --allow-prefix-ids given: running anyway; cortical_tiles may give a subject the ICBM2009c "
-            "transform of another one (check these subjects' transforms)."
-        )
-        return True
 
     def _preflight_check(self, output_abs: str, config_path: str) -> bool:
         """Migrate legacy crops, then check the requested version's crops: False (no crop step) on a legacy
@@ -592,7 +562,11 @@ class RunCorticalTiles(ScriptBuilder):
         input_abs = abspath(self.args.input)
         output_abs = abspath(self.args.output)
         sk_qc_abs = abspath(self.args.sk_qc_path) if self.args.sk_qc_path else ""
-        # TEMPORARY (DEF-CORTILES-BDRABCZUK-8A44DAD7F312, -9C7D2B9265BC)
+        if self.args.allow_prefix_ids:
+            logger.warning(
+                "--allow-prefix-ids is deprecated and has no effect: a subject ID that prefixes another is accepted."
+            )
+        # TEMPORARY (DEF-CORTILES-BDRABCZUK-9C7D2B9265BC)
         if not self._check_subject_ids(input_abs, output_abs):
             return 1
 

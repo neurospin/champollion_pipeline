@@ -95,7 +95,7 @@ class DatasetConfig:
     # BIDS database layout (subjects/sub-*/ses-*/...)
     bids: bool = False
 
-    # TEMPORARY: let run_cortical_tiles accept subject IDs that are strict prefixes of others
+    # Deprecated, no effect (cortical_tiles matches subject folders exactly); kept so a replayed config parses
     allow_prefix_ids: bool = False
 
     # Run on when the given Mask version or per-region map differs from the local model set's; forwarded to stage 4

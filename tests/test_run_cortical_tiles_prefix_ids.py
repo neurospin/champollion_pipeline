@@ -1,23 +1,16 @@
-"""Prefix subject-ID guard of run_cortical_tiles.py (TASK-CORTILES-BDRABCZUK-E9CFBC50E516).
+"""Prefix subject IDs reach stage 2 (TASK-CORTILES-BDRABCZUK-96603E82E1F7).
 
-cortical_tiles' generate_ICBM2009c_transforms.py globs ``{subject}*/`` and keeps the
-first match, so a subject whose folder name prefixes another one (sub-1 / sub-10) can
-receive the other subject's ICBM2009c transform (DEF-CORTILES-BDRABCZUK-8A44DAD7F312).
-cortical_tiles lists the entries of the input directory as subjects, with or without
---bids; the glob only matches directories, and never a name starting with a dot.
+cortical_tiles 7b80c89 matches subject folders exactly (tests/test_cortical_tiles_exact_subject_folders.py), so the
+temporary prefix guard of TASK-CORTILES-BDRABCZUK-E9CFBC50E516 is gone (DEF-CORTILES-BDRABCZUK-8A44DAD7F312).
+--allow-prefix-ids stays accepted, for config replay, as a no-op that logs a deprecation warning.
 
-REQ-CORTILES-BDRABCZUK-6C72CEECC13B: prefix pair without --allow-prefix-ids: non-zero
-    code, generate_sulcal_regions.py not run.
-REQ-CORTILES-BDRABCZUK-3BC325A938C2: prefix pair without --allow-prefix-ids: ERROR record
-    with the pair count and the first five pairs in lexicographic order.
-REQ-CORTILES-BDRABCZUK-3F455F6B133E: prefix pair with --allow-prefix-ids: WARNING record
-    with the pair count and the first five pairs in lexicographic order.
-REQ-CORTILES-BDRABCZUK-DE1299433603: prefix pair with --allow-prefix-ids:
-    generate_sulcal_regions.py runs.
+REQ-CORTILES-BDRABCZUK-CBC851B76315: prefix pair without --allow-prefix-ids: generate_sulcal_regions.py runs.
+REQ-CORTILES-BDRABCZUK-ABF279058F0A: prefix pair: no ERROR record naming the pair.
+REQ-CORTILES-BDRABCZUK-AD5F7A32399E: --allow-prefix-ids: one deprecation WARNING record.
+REQ-INPUTKIND-BDRABCZUK-DED80F6406DA: prefix pair with --allow-prefix-ids: generate_sulcal_regions.py runs.
 """
 
 import logging
-import re
 from pathlib import Path
 from unittest.mock import MagicMock, patch
 
@@ -31,9 +24,6 @@ pytestmark = pytest.mark.unit  # noqa: V107
 LOGGER_NAME = "champollion_pipeline.run_cortical_tiles"
 ALLOW_FLAG = "--allow-prefix-ids"
 CORTICAL_TILES_SCRIPT = "generate_sulcal_regions.py"
-
-# Seven disjoint prefix pairs: (sub-a, sub-a0) ... (sub-g, sub-g0), in lexicographic order.
-SEVEN_PAIRS = [(f"sub-{letter}", f"sub-{letter}0") for letter in "abcdefg"]
 
 
 def _layout(input_dir: Path, folders, files=()) -> None:
@@ -86,27 +76,25 @@ def _messages(pipeline_caplog, level: int, text: str) -> list[str]:
     ]
 
 
-def _assert_count_and_first_five(message: str) -> None:
-    assert re.search(r"\b7\b", message), message
-    for shorter, longer in SEVEN_PAIRS[:5]:
-        assert shorter in message and longer in message, (shorter, longer, message)
-    for _, longer in SEVEN_PAIRS[5:]:
-        assert longer not in message, (longer, message)
-
-
-class TestPrefixIdsRefused:
-    """Without --allow-prefix-ids, a prefix pair stops the run (NTUI: check the input first)."""
+class TestPrefixIdsAccepted:
+    """A prefix pair no longer stops the run."""
 
     @pytest.mark.parametrize("extra", [[], ["--bids"]], ids=["plain", "bids"])
-    def test_refuses_without_running_cortical_tiles(self, temp_dir, extra):
-        """REQ-CORTILES-BDRABCZUK-6C72CEECC13B."""
+    def test_runs_cortical_tiles(self, temp_dir, extra):
+        """REQ-CORTILES-BDRABCZUK-CBC851B76315."""
         result, execute = _run(temp_dir, ["sub-1", "sub-10", "sub-2"], *extra)
 
-        assert result != 0
-        assert not _ran_cortical_tiles(execute)
+        assert result == 0
+        assert _ran_cortical_tiles(execute)
 
-    def test_files_and_dot_directories_do_not_count(self, temp_dir, pipeline_caplog):
-        """REQ-CORTILES-BDRABCZUK-6C72CEECC13B: only non-dot subdirectory names are compared."""
+    def test_logs_no_error_for_the_pairs(self, temp_dir, pipeline_caplog):
+        """REQ-CORTILES-BDRABCZUK-ABF279058F0A: sub-1, sub-10, sub-100 make pairs and no error."""
+        _run(temp_dir, ["sub-1", "sub-10", "sub-100"])
+
+        assert not _messages(pipeline_caplog, logging.ERROR, "sub-10")
+
+    def test_files_and_dot_directories_do_not_matter(self, temp_dir):
+        """REQ-CORTILES-BDRABCZUK-CBC851B76315: only non-dot subdirectories are subjects; the run goes on."""
         result, execute = _run(
             temp_dir,
             ["sub-1", "sub-2", ".cache", ".cache2"],
@@ -115,45 +103,30 @@ class TestPrefixIdsRefused:
 
         assert result == 0
         assert _ran_cortical_tiles(execute)
-        assert not _messages(pipeline_caplog, logging.ERROR, "sub-1")
-
-    def test_error_names_count_and_first_five_pairs(self, temp_dir, pipeline_caplog):
-        """REQ-CORTILES-BDRABCZUK-3BC325A938C2."""
-        folders = [name for pair in SEVEN_PAIRS for name in pair]
-
-        _run(temp_dir, folders)
-
-        errors = _messages(pipeline_caplog, logging.ERROR, SEVEN_PAIRS[0][1])
-        assert len(errors) == 1, errors
-        _assert_count_and_first_five(errors[0])
-
-    def test_error_counts_each_prefix_pair(self, temp_dir, pipeline_caplog):
-        """REQ-CORTILES-BDRABCZUK-3BC325A938C2: sub-1, sub-10, sub-100 make three pairs."""
-        _run(temp_dir, ["sub-1", "sub-10", "sub-100"])
-
-        errors = _messages(pipeline_caplog, logging.ERROR, "sub-10")
-        assert len(errors) == 1, errors
-        assert re.search(r"\b3\b", errors[0]), errors[0]
 
 
-class TestPrefixIdsAllowed:
-    """With --allow-prefix-ids, a prefix pair is a warning and the run goes on."""
+class TestAllowFlagDeprecated:
+    """--allow-prefix-ids is accepted and does nothing but warn."""
 
     @pytest.mark.parametrize("extra", [[], ["--bids"]], ids=["plain", "bids"])
     def test_runs_cortical_tiles(self, temp_dir, extra):
-        """REQ-CORTILES-BDRABCZUK-DE1299433603."""
+        """REQ-INPUTKIND-BDRABCZUK-DED80F6406DA."""
         result, execute = _run(temp_dir, ["sub-1", "sub-10", "sub-2"], ALLOW_FLAG, *extra)
 
         assert result == 0
         assert _ran_cortical_tiles(execute)
 
-    def test_warning_names_count_and_first_five_pairs(self, temp_dir, pipeline_caplog):
-        """REQ-CORTILES-BDRABCZUK-3F455F6B133E."""
-        folders = [name for pair in SEVEN_PAIRS for name in pair]
-
+    @pytest.mark.parametrize("folders", [["sub-1", "sub-10"], ["sub-1", "sub-2"]], ids=["pair", "no_pair"])
+    def test_warns_once_that_the_flag_is_deprecated(self, temp_dir, pipeline_caplog, folders):
+        """REQ-CORTILES-BDRABCZUK-AD5F7A32399E: one WARNING, with or without a prefix pair."""
         _run(temp_dir, folders, ALLOW_FLAG)
 
-        warnings_ = _messages(pipeline_caplog, logging.WARNING, SEVEN_PAIRS[0][1])
+        warnings_ = _messages(pipeline_caplog, logging.WARNING, ALLOW_FLAG)
         assert len(warnings_) == 1, warnings_
-        _assert_count_and_first_five(warnings_[0])
-        assert not _messages(pipeline_caplog, logging.ERROR, SEVEN_PAIRS[0][1])
+        assert "deprecated" in warnings_[0] and "no effect" in warnings_[0], warnings_[0]
+
+    def test_no_warning_without_the_flag(self, temp_dir, pipeline_caplog):
+        """REQ-CORTILES-BDRABCZUK-AD5F7A32399E: the warning belongs to the flag."""
+        _run(temp_dir, ["sub-1", "sub-10"])
+
+        assert not _messages(pipeline_caplog, logging.WARNING, ALLOW_FLAG)
