@@ -764,6 +764,17 @@ Graph discovery keeps one graph per subject and side:
   parser.
 - Stage 2 hands cortical_tiles a `--graphs` map with the graphs found per subject, unless `--path_to_graph` is given.
 
+### Skeleton names
+
+Stage 2's skeleton check and the pre-check of `main.py` accept two names for the skeleton of each hemisphere `S` (`L` or `R`):
+
+- classic: `<subject>/t1mri/.../<S>skeleton*.nii.gz`, below the `--path_sk_with_hull` folder;
+- morphologist-cli: `<subject>_ses-1_run-0_hemi-<S>_skeleton.nii.gz`, at any depth below the subject folder of the graph. The file name must end in `_hemi-<S>_skeleton.nii.gz`; names and folders starting with a dot, and symbolic links to folders, are skipped.
+
+A hemisphere with either name counts as found. When the pre-check reports a missing skeleton, it names the classic pattern if the subject has a `t1mri` folder, and the morphologist-cli pattern otherwise.
+
+The pre-check also finds subjects without a `t1mri` folder: a subject folder that holds no `t1mri` acquisition but has a `.arg` graph below it is checked as one scan, its subject folder found by graph discovery. As in graph discovery, only the first session of a subject is kept for now.
+
 ## Replay config
 
 A Config file is an option, not a requirement (see [Running champollion-pipeline without a Config file](#running-champollion-pipeline-without-a-config-file)).
