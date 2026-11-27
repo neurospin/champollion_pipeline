@@ -21,7 +21,8 @@ Mask version, TASK-MODELVER-BDRABCZUK-39D727185A86), and one dataset 'region_mas
 (the per-region Mask version map the replay file of a map run carries, REQ-MODELVER-BDRABCZUK-B2B453643BD4,
 TASK-MODELVER-BDRABCZUK-6C6C79B0F6DE; written as [] when empty), and one dataset 'allow_version_mismatch'
 line after allow_prefix_ids (TASK-MODELVER-BDRABCZUK-3B2E4833B088, user decision 2026-11-24: Config file field,
-default false; REQ-MODELVER-BDRABCZUK-2D6995B41B98);
+default false; REQ-MODELVER-BDRABCZUK-2D6995B41B98), and three dataset lines 'session', 'run' and 'analysis'
+after graph_label (the graph selection filters, TASK-ARGDISC-BDRABCZUK-91F0268EFCDC; written as '' when empty);
 the serialiser must reproduce them
 byte for byte (REQ-REFACTOR-BDRABCZUK-B5835A3C130E, superseding -20D84DC86928, -B65FECA525EF, -679F9A49A534
 and -2636D42F82B1)
@@ -108,6 +109,9 @@ dataset:
   skel_seed: null
   labelling_session: ''
   graph_label: ''
+  session: ''
+  run: ''
+  analysis: ''
   model: ''
   regions: []
   classifier_name: svm
@@ -191,6 +195,9 @@ dataset:
   skel_seed: 42
   labelling_session: 0_auto
   graph_label: custom_set
+  session: ses-2
+  run: run-0
+  analysis: ana-1
   model: v2/run2
   regions:
   - S.C.-sylv._left
@@ -273,6 +280,9 @@ _CUSTOM_DATASET_VALUES = {
     "skel_seed": 42,
     "labelling_session": "0_auto",
     "graph_label": "custom_set",
+    "session": "ses-2",
+    "run": "run-0",
+    "analysis": "ana-1",
     "model": "v2/run2",
     "classifier_name": "logistic",
     "overwrite": True,

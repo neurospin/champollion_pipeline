@@ -9,6 +9,7 @@ own module by a MagicMock, run the stage and return the argv handed to ``parse_a
 import dataclasses
 import importlib.util
 import logging
+import os
 import sys
 from pathlib import Path
 from unittest.mock import MagicMock, patch
@@ -157,6 +158,14 @@ def enter_work_dir(monkeypatch, tmp_path):
     cwd.mkdir()
     monkeypatch.chdir(cwd)
     return cwd
+
+
+def enter_clean_work_dir(monkeypatch, tmp_path):
+    """enter_work_dir with HF_TOKEN and the CHAMPOLLION_* variables of the process environment removed."""
+    for name in list(os.environ):
+        if name == "HF_TOKEN" or name.startswith("CHAMPOLLION_"):
+            monkeypatch.delenv(name)
+    return enter_work_dir(monkeypatch, tmp_path)
 
 
 def fake_script(argv, name, on_run=None):

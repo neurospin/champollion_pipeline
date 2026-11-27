@@ -68,6 +68,9 @@ repository's root; OUTPUT is the dataset root (the second positional argument, o
 | `--morphologist-graphs` | `MORPHOLOGIST_GRAPHS` | `OUTPUT/derivatives/morphologist-6.0` | Morphologist subjects folder read by stage 2 |
 | `--path-to-graph` | `PATH_TO_GRAPH` | `t1mri/default_acquisition/default_analysis/folds/3.3/base` | Folder of the sulcal graphs below each subject |
 | `--graph-label` | `GRAPH_LABEL` | empty: not passed to cortical_tiles | Labelling set (for example `default_session_auto`) that graph discovery lists in preference; passed to cortical_tiles as its graph label |
+| `--session` | `REGEX` | empty: no `ses-` filter, every session is its own scan | A regular expression matched at the start of the `ses-` folder name of a scan (Python `re.match`), for graph selection: anchored at the start of the folder name, its `ses-` prefix kept (for example `ses-2`) |
+| `--run` | `REGEX` | empty: no `run-` filter, every run is its own scan | A regular expression matched at the start of the `run-` folder name of a scan (Python `re.match`), for graph selection: anchored at the start of the folder name, its `run-` prefix kept (for example `run-1`) |
+| `--analysis` | `REGEX` | empty: no `ana-` filter, every analysis is its own scan | A regular expression matched at the start of the `ana-` folder name of a scan (Python `re.match`), for graph selection: anchored at the start of the folder name, its `ana-` prefix kept (for example `ana-default`) |
 | `--path-sk-with-hull` | `PATH_SK_WITH_HULL` | `t1mri/default_acquisition/default_analysis/segmentation` | Folder of the skeletons with hull below each subject |
 | `--cortical-tiles-output` | `CORTICAL_TILES_OUTPUT` | `OUTPUT/derivatives` | Output folder of cortical_tiles (stage 2) |
 | `--njobs` | `NJOBS` | `22` | Number of parallel jobs of cortical_tiles |

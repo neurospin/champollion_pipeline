@@ -4,6 +4,7 @@ Pipeline configuration: DatasetConfig, PipelineConfig and ConfigLoader (YAML loa
 """
 
 import logging
+import re
 from dataclasses import asdict, dataclass, field
 from pathlib import Path
 
@@ -24,6 +25,9 @@ _REMOVED_DATASET_KEYS = {
 
 # Dataset fields never written by save_to_yaml: secrets, supplied through the environment (REQ-HFTOKEN-01).
 _UNSAVED_DATASET_KEYS = ("hf_token",)
+
+# DatasetConfig fields that narrow graph selection: each an anchored-start regex on the ses-, run- or ana- folder name.
+GRAPH_SELECTION_FIELDS = ("session", "run", "analysis")
 
 
 @dataclass
@@ -58,6 +62,10 @@ class DatasetConfig:
     labelling_session: str = ""  # "": run_cortical_tiles picks the session per subject
     # "": no --graph_label; else the labelling set that graph discovery lists in preference
     graph_label: str = ""
+    # "": no filter; else a regex matched at the start of the ses-, run- or ana- folder name (select_graphs filters)
+    session: str = ""
+    run: str = ""
+    analysis: str = ""
     model: str = ""  # "": combine every model id; else only that model id (put_together_embeddings --model)
 
     # Region filter (empty = all 56 regions)
@@ -105,6 +113,31 @@ class DatasetConfig:
     snapshots_path: str = ""
     reference_data_path: str = ""  # noqa: V107 - YAML config field
     champollion_data_root: str | None = None
+
+
+def graph_selection_filters(dataset: DatasetConfig) -> dict[str, str]:
+    """The select_graphs filters of dataset: one entry per non-empty field among session, run and analysis.
+
+    Values unchanged, keys in GRAPH_SELECTION_FIELDS order; {} when all three are empty. No validation: a run checks
+    the values once with check_graph_selection_filters.
+    """
+    values = {name: getattr(dataset, name) for name in GRAPH_SELECTION_FIELDS}
+    return {name: value for name, value in values.items() if value != ""}
+
+
+class GraphSelectionFilterError(ValueError):
+    """A session, run or analysis value of DatasetConfig that is not a valid regular expression."""
+
+
+def check_graph_selection_filters(dataset: DatasetConfig) -> None:
+    """Raise GraphSelectionFilterError naming the option of the first non-empty filter value re.compile refuses."""
+    for name, value in graph_selection_filters(dataset).items():
+        try:
+            re.compile(value)
+        except re.error as re_error:
+            raise GraphSelectionFilterError(
+                f"--{name} {value!r} (dataset.{name}) is not a valid regular expression: {re_error}"
+            ) from re_error
 
 
 @dataclass

@@ -52,7 +52,13 @@ from champollion_pipeline.cli_options import (
     apply_config_arguments,
     fold_path_arguments,
 )
-from champollion_pipeline.config import ConfigLoader, DatasetConfig, PipelineConfig
+from champollion_pipeline.config import (
+    ConfigLoader,
+    DatasetConfig,
+    GraphSelectionFilterError,
+    PipelineConfig,
+    check_graph_selection_filters,
+)
 from champollion_pipeline.derivatives_layout import compute_champollion_configs_root as compute_champollion_configs_root
 from champollion_pipeline.derivatives_layout import compute_combined_embeddings_dir as compute_combined_embeddings_dir
 from champollion_pipeline.derivatives_layout import compute_region_embeddings_dir as compute_region_embeddings_dir
@@ -648,14 +654,20 @@ class ChampollionPipeline(ScriptBuilder):
 
     def run(self) -> int:
         """Run the pipeline; InputChoiceError (its exit_status: 1; NeitherInput, its subclass DerivedVolumesOnly and
-        LooseGraphInput 2), ArgumentConflictError, EnvFileError, RegionMasksError, MaskVersionStop (2): one ERROR
-        record."""
+        LooseGraphInput 2), ArgumentConflictError, EnvFileError, RegionMasksError, MaskVersionStop,
+        GraphSelectionFilterError (2): one ERROR record."""
         try:
             return self._run_pipeline(self.args)
         except InputChoiceError as error:
             logger.error(str(error))
             return error.exit_status
-        except (ArgumentConflictError, EnvFileError, RegionMasksError, MaskVersionStop) as error:
+        except (
+            ArgumentConflictError,
+            EnvFileError,
+            RegionMasksError,
+            MaskVersionStop,
+            GraphSelectionFilterError,
+        ) as error:
             logger.error(str(error))
             return _USAGE_ERROR_STATUS
 
@@ -673,6 +685,7 @@ class ChampollionPipeline(ScriptBuilder):
         apply_env_values(config, env_values)
         _apply_cli_overrides(config, args, from_default=not args.config)
         check_input_kind_value(config.dataset)
+        check_graph_selection_filters(config.dataset)
         is_map_dropped = _check_given_masks(config, args)
         _start_config_profiling(config, args)
         if config.mode == "streaming":
