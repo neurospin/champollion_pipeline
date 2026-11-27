@@ -18,6 +18,15 @@ Usage
       --masks_a external/cortical_tiles/data/mask/canonical_25/2mm \\
       --masks_b /path/to/sulci_masks_2018/2.0 \\
       --output /tmp/db_comparison.csv
+
+Without --path_to_graph_a / --path_to_graph_b, each campaign's graphs come from
+graph discovery of --labeled_subjects_dir: the graphs whose labelling set is
+--label_a (campaign A) or --label_b (campaign B), one per subject and side.
+
+    pixi run compare-databases \\
+      --labeled_subjects_dir /path/to/morphologist/subjects \\
+      --label_a base2018_manual --label_b deepcnn_session_auto \\
+      --output /tmp/db_comparison.csv
 """
 
 from datetime import datetime
@@ -56,13 +65,19 @@ class CompareDatabases(ScriptBuilder):
         )
         (
             self.add_required_argument("--labeled_subjects_dir", "Root directory containing subject subdirectories.")
-            .add_required_argument(
+            .add_optional_argument(
                 "--path_to_graph_a",
-                "Relative sub-path for campaign A (e.g. t1mri/t1/default_analysis/folds/3.3/base2018_manual).",
+                "Relative sub-path for campaign A (e.g. t1mri/t1/default_analysis/folds/3.3/base2018_manual). "
+                "Without it, campaign A's graphs come from graph discovery of --labeled_subjects_dir, "
+                "labelling set = --label_a.",
+                default=None,
             )
-            .add_required_argument(
+            .add_optional_argument(
                 "--path_to_graph_b",
-                "Relative sub-path for campaign B (e.g. t1mri/t1/default_analysis/folds/3.3/base2018b_manual).",
+                "Relative sub-path for campaign B (e.g. t1mri/t1/default_analysis/folds/3.3/base2018b_manual). "
+                "Without it, campaign B's graphs come from graph discovery of --labeled_subjects_dir, "
+                "labelling set = --label_b.",
+                default=None,
             )
             .add_optional_argument("--label_a", "Name for campaign A.", default="A")
             .add_optional_argument("--label_b", "Name for campaign B.", default="B")
