@@ -27,7 +27,9 @@ from joblib import Parallel, delayed
 from soma import aims
 
 from champollion_pipeline.derivatives_layout import DEFAULT_REGIONS, compute_run_log_path
+from champollion_pipeline.file_indexer.pipeline_checks import FileIndexStageIndexer
 from champollion_pipeline.process_setup import detach_frozen_root_handlers
+from champollion_pipeline.utils.graph_item import GraphItem
 
 logger = logging.getLogger(__name__)
 
@@ -61,7 +63,7 @@ class RunConfig:
     sides: list
     mask_dir: str
     labeled_subjects_dir: str
-    path_to_graph_supervised: str
+    path_to_graph_supervised: str | None
     nb_subjects: int
     voxel_size: float
     force: bool
@@ -164,13 +166,69 @@ def _attach_graph_glob(subjects: list, side: str, path_to_graph_supervised: str)
 
 
 def _graph_matches(sub) -> list:
-    """Sorted graph files of sub whose name is side + subject followed by '_' or '.'.
+    """Graph files of sub: its discovered graphs when it carries them, else the override glob's matches.
 
+    Override glob: sorted files whose name is side + subject followed by '_' or '.';
     '-' is not a delimiter, so sub-1 never matches the graph of sub-10.
     """
+    if "graphs" in sub:
+        return list(sub["graphs"])
     prefix = sub["side"] + sub["subject"]
     candidates = glob.glob(join(glob.escape(sub["dir"]), sub["graph_file"]))
     return sorted(c for c in candidates if re.match(re.escape(prefix) + r"[_.]", os.path.basename(c)))
+
+
+def _discovered_subjects(labeled_subjects_dir: str, items: list[GraphItem], side: str) -> list[dict]:
+    """One subject record per distinct discovered subject, in first-appearance order of items.
+
+    Each record is {"subject", "side", "dir", "graphs"}; graphs are the absolute paths (labeled_subjects_dir joined
+    with the item path), in items order, of the subject's items of this hemisphere with a labelling set. A subject
+    whose graphs of this side are all unlabelled, or of another side, gets graphs == []. Pure: no I/O, items not
+    mutated. O(len(items)).
+    """
+    records: dict[str, dict] = {}
+    for item in items:
+        subject = item.attributes["subject"]
+        record = records.setdefault(
+            subject, {"subject": subject, "side": side, "dir": labeled_subjects_dir, "graphs": []}
+        )
+        if item.attributes["hemisphere"] == side and item.attributes["labelling_set"] is not None:
+            record["graphs"].append(join(labeled_subjects_dir, *item.path.split("/")))
+    return list(records.values())
+
+
+def _discovered_items(config: RunConfig) -> list[GraphItem] | None:
+    """Discovered graphs of config.labeled_subjects_dir; None when --path_to_graph_supervised overrides discovery."""
+    if config.path_to_graph_supervised is not None:
+        return None
+    return FileIndexStageIndexer("").discover_graphs(config.labeled_subjects_dir)
+
+
+def _sulci_to_run(config: RunConfig, side: str) -> dict:
+    """{full sulcus name: sulcus} of the sulci of side whose mask is missing, or all of them under --force."""
+    return {
+        complete_sulci_name(s, side): s
+        for s in sorted(config.sulci)
+        if config.force or not exists(join(config.mask_dir, side, complete_sulci_name(s, side) + ".nii.gz"))
+    }
+
+
+def _side_subjects(config: RunConfig, side: str, items: list[GraphItem] | None) -> list[dict]:
+    """Subject records of one side, selected to config.nb_subjects.
+
+    items None (--path_to_graph_supervised given): the override listing below each subject folder; else the
+    records of the discovered items (_discovered_subjects).
+    """
+    if items is None:
+        # The lister %-formats this pattern once; the workers use the escaped glob set below instead.
+        graph_file_pattern = (
+            "%(subject)s/" + config.path_to_graph_supervised.replace("%", "%%") + "/%(side)s%(subject)s*.arg"
+        )
+        subjects = get_all_subjects_as_dictionary([config.labeled_subjects_dir], [graph_file_pattern], side)
+        _attach_graph_glob(subjects, side, config.path_to_graph_supervised)
+    else:
+        subjects = _discovered_subjects(config.labeled_subjects_dir, items, side)
+    return select_subjects_int_if_list_of_dict(subjects, subjects, config.nb_subjects)
 
 
 def _load_and_extract_subject(sub, sulci_full_set, voxel_size_tuple):
@@ -262,6 +320,10 @@ class SerialRunner(MaskRunner):
     """
 
     def __call__(self, config: RunConfig):
+        if config.path_to_graph_supervised is None:
+            # Graph discovery: the buffered loader with one worker; compute_mask has its own subject listing.
+            yield from BufferedRunner(1, verbose=self.verbose)(config)
+            return
         for side in config.sides:
             results = {}
             for sulcus in sorted(config.sulci):
@@ -325,23 +387,13 @@ class BufferedRunner(MaskRunner):
 
     def __call__(self, config: RunConfig):
         voxel_size_tuple = (config.voxel_size, config.voxel_size, config.voxel_size)
+        items = _discovered_items(config)
 
         for side in config.sides:
-            # The lister %-formats this pattern once; the workers use the escaped glob set below instead.
-            graph_file_pattern = (
-                "%(subject)s/" + config.path_to_graph_supervised.replace("%", "%%") + "/%(side)s%(subject)s*.arg"
-            )
-
-            subjects = get_all_subjects_as_dictionary([config.labeled_subjects_dir], [graph_file_pattern], side)
-            _attach_graph_glob(subjects, side, config.path_to_graph_supervised)
-            subjects = select_subjects_int_if_list_of_dict(subjects, subjects, config.nb_subjects)
+            subjects = _side_subjects(config, side, items)
 
             # Determine which sulci need work (skip existing unless --force)
-            sulci_to_run = {
-                complete_sulci_name(s, side): s
-                for s in sorted(config.sulci)
-                if config.force or not exists(join(config.mask_dir, side, complete_sulci_name(s, side) + ".nii.gz"))
-            }
+            sulci_to_run = _sulci_to_run(config, side)
             sulci_full_set = set(sulci_to_run)
 
             # ── Phase 1: parallel load + extract per subject ───────────────
@@ -429,10 +481,12 @@ class GenerateMasks(ScriptBuilder):
                 "Directory containing manually labelled subjects "
                 "(e.g. /neurospin/dico/data/bv_databases/human/manually_labeled/pclean/all).",
             )
-            .add_required_argument(
+            .add_optional_argument(
                 "--path_to_graph_supervised",
                 "Relative sub-path from each subject dir to the graph files "
-                "(e.g. t1mri/t1/default_analysis/folds/3.3/base2026_manual).",
+                "(e.g. t1mri/t1/default_analysis/folds/3.3/base2026_manual). "
+                "Omitted: each subject's labelled graphs are found by graph discovery of --labeled_subjects_dir.",
+                default=None,
             )
             .add_required_argument(
                 "--output_dir",
