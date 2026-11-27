@@ -666,7 +666,8 @@ bare `--log` last.
 required path, and every other path of the PipelineConfig is inferred from it. A sequential run with an input path and no `--config` enables every
 stage unless `--stages` names some.
 
-What the input path holds decides the run: `.arg` files first, else `.nii.gz` (or `.nii`) files.
+What the input path holds decides the run, and no folder layout is required: any `.arg` file anywhere below the input
+means Morphologist outputs, else any `.nii.gz` (or `.nii`) file means T1 files, else the run exits with code 2.
 `champollion-pipeline` reads the input until it knows whether a `.arg` file exists, so a T1 input is read whole:
 
 - Morphologist outputs: any `.arg` file below the input, outside folders whose name starts with a dot, whatever the
@@ -675,15 +676,22 @@ What the input path holds decides the run: `.arg` files first, else `.nii.gz` (o
   above that subjects folder.
 - T1 files: `.nii` or `.nii.gz` files, at any depth, so nested T1 folders work. Files below a folder named `t1mri`
   count only when the input holds no `.arg` file; files below a folder named `derivatives` or `qc` never count.
-  Outside `t1mri`, below a `sub-*` folder a `sub-*` file must end in `_T1w`. Morphologist derived volumes are left
-  out. The Dataset root (`dataset.datasets_root`) is the input path itself, and stage 1 writes the Morphologist
-  outputs below it.
+  Outside `t1mri`, below a `sub-*` folder a `sub-*` file must end in `_T1w`. The Dataset root
+  (`dataset.datasets_root`) is the input path itself, and stage 1 writes the Morphologist outputs below it.
 - Neither kind (or not a folder): the run logs one error and exits with code 2.
 - Both kinds, or T1 files below a folder named `sourcedata`: at a terminal `champollion-pipeline` asks which kind to use; without
   one it exits with code 1 and names `--input-kind t1` and `--input-kind morphologist`. Pass `--input-kind` to
   answer in advance (the replay config keeps it).
 - Several subjects folders in one Morphologist input: the same prompt, or an error naming the folders; pass the one
   to use as `--input-path` or `--morphologist-graphs`.
+
+Morphologist derived volumes are never T1 files. A NIfTI file is derived when it sits in a folder named
+`segmentation`, or when its name, without `.nii.gz` or `.nii`, ends with `_brain`, `_skull_stripped`, `_nobias`,
+`_hfiltered`, `_variance`, `_edges`, `_voronoi`, `_whiteridge`, `_skeleton`, `_cortex`, `_grey_white`,
+`_gw_interface`, `_roots` or `_csf`, or starts with `brain_`, `skull_stripped_`, `nobias_`, `hfiltered_`, `variance_`, `edges_`, `voronoi_` or `whiteridge_`, or
+with `L` or `R` and `skeleton_`, `cortex_`, `grey_white_`, `gw_interface_`, `roots_` or `csf_`. When the input also holds real T1 files, the derived volumes
+are left out and one WARNING gives their count. When every NIfTI file of the input is derived, the run exits with
+code 2.
 
 `<output>` (or `--output-path`, or `--datasets-root`) sets the Dataset root, `dataset.datasets_root`, and wins over
 the inferred one. Two forms that name different paths stop the run with code 2. A Morphologist input whose Dataset root
@@ -729,11 +737,32 @@ Two layouts of a Morphologist tree are read:
 ```
 
 The subjects folder is the folder whose children are the subject folders: `morphologist-6.0` in the first layout,
-`subjects` in the second. A subject folder holds `t1mri`, or `ses-*/t1mri` with sessions. A folder named `qc` beside
-the subject folders is read as a subject only when it holds a `t1mri` folder, and a folder starting with a dot never is.
-Give `<input>` as the tree root, the subjects folder or the `morphologist-6.0` folder: `champollion-pipeline` finds the subjects
-folder, or takes `--morphologist-graphs`. For a Morphologist input, `path_to_graph` stays unset
-when none is given: stage 2 then finds the graphs by graph discovery, whatever the folder names.
+`subjects` in the second. A folder starting with a dot is never a subject, and a folder named `qc` beside the subject
+folders is read as a subject only when it holds a `.arg` file. Give `<input>` as the tree root, the subjects folder or
+the `morphologist-6.0` folder: `champollion-pipeline` finds the subjects folder, or takes `--morphologist-graphs`.
+For a Morphologist input, `path_to_graph` stays unset when none is given: stage 2 then finds the graphs by graph
+discovery, whatever the folder names.
+
+### Subject ids and graphs
+
+No folder name such as `t1mri` or `ses-*` is needed. The subject folder of a graph (`.arg` file) is the nearest
+folder above it, the input folder included, whose name starts with `sub-`. Without one, it is the nearest folder
+named `N` when the graph file name starts with `N.`, `N_`, `LN.`, `LN_`, `RN.` or `RN_`; otherwise it is the child of the input that holds the graph. The subject id is the name of that
+folder. Example: `graphs/sub-01/anything/Lsub-01.arg` belongs to `sub-01`, and `graphs/0042/Lfolds.arg` to `0042`.
+
+A `.arg` file directly in the input, when the input folder's name does not start with `sub-`, is refused: the run
+logs one error naming the file and exits with code 2. Give the subject folder as the input instead.
+
+Graph discovery keeps one graph per subject and side:
+
+- A labelled graph (a `*_auto` labelling set such as `default_session_auto`) wins over the unlabelled one. With no
+  labelled graph the unlabelled graph is used, with a WARNING.
+- A subject with graphs of several labelling sets stops the run with code 2, naming the sets, unless `--graph-label`
+  names one.
+- For now only the first session or acquisition of a subject is kept, in natural path order (`3TV2` before `3TV10`);
+  the others are logged as left out. This is temporary: a later version will select the data with a file-tree
+  parser.
+- Stage 2 hands cortical_tiles a `--graphs` map with the graphs found per subject, unless `--path_to_graph` is given.
 
 ## Replay config
 
