@@ -7,6 +7,7 @@ result); each stage supplies its argv, its script and its messages through hooks
 import logging
 import os
 from abc import ABC, abstractmethod
+from collections.abc import Mapping
 from dataclasses import dataclass
 from datetime import datetime
 from os.path import join
@@ -56,6 +57,29 @@ class StageIndexer(Protocol):  # noqa: V102 - used by main.py
 
         Raises:
             LooseGraphError: a ValueError, for a graph directly in a given folder not named sub-*.
+        """
+
+    def select_graphs(  # noqa: V105 - the port, called by graph readers
+        self, folder: str, filters: Mapping[str, str] | None = None
+    ) -> list[GraphItem]:
+        """Return the items of discover_graphs(folder), with the attributes subject, session, run and analysis.
+
+        Filter API of capsul's DataSelector: each filter maps one of those four attributes to a Python regular
+        expression applied with re.match (anchored at the start only); an item is kept when every filter matches
+        its value, and an item whose filtered value is None is left out. No filter (None or empty) keeps every item.
+        Paths and order are those of discover_graphs; how the values are read belongs to each adapter.
+
+        Args:
+            folder: Folder to search.
+            filters: Attribute name to regular expression.
+
+        Returns:
+            The GraphItem of each selected graph.
+
+        Raises:
+            ValueError: a filter names another attribute, or is not a valid regular expression (checked before
+                folder is read).
+            NotADirectoryError, LooseGraphError: as discover_graphs.
         """
 
 
