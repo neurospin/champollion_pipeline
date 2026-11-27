@@ -535,9 +535,9 @@ class GenerateMasks(ScriptBuilder):
 
     def run(self):
         """Execute mask generation for all (sulcus × side) combinations."""
-        logger.trace(f"generate_masks.py/labeled_subjects_dir: {self.args.labeled_subjects_dir}")
-        logger.trace(f"generate_masks.py/path_to_graph_supervised: {self.args.path_to_graph_supervised}")
-        logger.trace(f"generate_masks.py/output_dir: {self.args.output_dir}")
+        logger.trace(f"labeled_subjects_dir: {self.args.labeled_subjects_dir}")
+        logger.trace(f"path_to_graph_supervised: {self.args.path_to_graph_supervised}")
+        logger.trace(f"output_dir: {self.args.output_dir}")
         logger.trace(f"Argument values: {self.args}")
 
         regions = self.args.regions if self.args.regions else _REGIONS_DEFAULT
@@ -545,9 +545,7 @@ class GenerateMasks(ScriptBuilder):
 
         json_path = abspath(join(dirname(__file__), "resources", "sulci_regions_champollion_V1.json"))
         sulci = get_sulci_for_regions(regions, sides, json_path)
-        logger.trace(
-            f"generate_masks.py: {len(sulci)} unique sulci from {len(regions)} region(s) × {len(sides)} side(s)"
-        )
+        logger.trace(f"{len(sulci)} unique sulci from {len(regions)} region(s) × {len(sides)} side(s)")
 
         vox_str = f"{int(self.args.voxel_size)}mm"
         mask_dir = (
@@ -570,7 +568,7 @@ class GenerateMasks(ScriptBuilder):
             if self.args.buffered
             else "serial unbuffered"
         )
-        logger.trace(f"generate_masks.py: {mode} mode")
+        logger.trace(f"{mode} mode")
 
         config = RunConfig(
             sulci=sulci,
