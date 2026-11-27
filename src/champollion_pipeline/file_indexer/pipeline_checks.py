@@ -18,7 +18,7 @@ import logging
 import os
 import re
 from collections import Counter
-from collections.abc import Callable
+from collections.abc import Callable, Mapping
 from dataclasses import dataclass, field
 from fnmatch import fnmatchcase
 from os.path import join, splitext
@@ -53,6 +53,10 @@ _SIDES = ("L", "R")
 # Graph discovery: the hemi-L / hemi-R entity of a graph name.
 _HEMI_ENTITY = re.compile(r"(?:^|_)hemi-([LR])(?=_|\.arg$)")
 _DIGIT_RUN = re.compile(r"([0-9]+)")
+# Graph selection: the attributes a select_graphs filter may name (capsul DataSelector's filter API).
+_SELECT_ATTRIBUTES = ("subject", "session", "run", "analysis")
+# Graph selection: each scan attribute and the folder-name prefix it is read from.
+_SCAN_ENTITY_PREFIXES = (("session", "ses-"), ("run", "run-"), ("analysis", "ana-"))
 
 
 def _check_relative(pattern: str) -> None:
@@ -482,6 +486,75 @@ class FileIndexStageIndexer:  # noqa: V102 - used by main.py
             "FileIndexStageIndexer.discover_graphs post: subject is not None"
         )
         return result
+
+    def select_graphs(  # noqa: V105 - the port, called by graph readers
+        self, folder: str, filters: Mapping[str, str] | None = None
+    ) -> list[GraphItem]:
+        """Return the discover_graphs items of folder with session, run and analysis added, narrowed by filters.
+
+        session, run and analysis are the names of the nearest ses-*, run-* and ana-* folders between the item's
+        subject folder (find_graph_subject_folder) and its graph, prefix kept, else None. filters (capsul
+        DataSelector's filter API) map subject, session, run or analysis to a regular expression applied with
+        re.match; an item is kept when each matches its value, never when that value is None. None or empty keeps
+        every item. Paths and order are those of discover_graphs. No file is opened, no index written.
+
+        Raises:
+            ValueError: a filter names another attribute, or is no valid regular expression; checked before folder
+                is read, so it wins over a bad folder.
+            NotADirectoryError, LooseGraphError: as discover_graphs.
+
+        Complexity: discover_graphs, plus O(items x depth) name compares and O(items x filters) matches.
+        """
+        patterns = _compile_filters(filters or {})
+        root_name = os.path.basename(os.path.abspath(folder))
+        result = []
+        for item in self.discover_graphs(folder):
+            *parts, name = item.path.split("/")
+            subject_folder = find_graph_subject_folder(root_name, tuple(parts), name)
+            attributes = {**item.attributes, **_scan_attributes(parts[len(subject_folder or ()) :])}
+            if all(
+                attributes[attribute] is not None and pattern.match(attributes[attribute])
+                for attribute, pattern in patterns
+            ):
+                result.append(GraphItem(item.path, attributes))
+        assert len({x.path for x in result}) == len(result), (
+            "FileIndexStageIndexer.select_graphs post: len(set(x.path for x in result)) == len(result)"
+        )
+        keys = ["analysis", "hemisphere", "labelling_set", "run", "session", "subject"]
+        assert all(sorted(x.attributes) == keys for x in result), (
+            "FileIndexStageIndexer.select_graphs post: attribute keys are analysis, hemisphere, labelling_set, run, "
+            "session, subject"
+        )
+        assert all(x.attributes["subject"] is not None for x in result), (
+            "FileIndexStageIndexer.select_graphs post: subject is not None"
+        )
+        return result
+
+
+def _compile_filters(filters: Mapping[str, str]) -> list[tuple[str, re.Pattern[str]]]:
+    """(attribute, compiled regex) per filter, in mapping order; ValueError on another attribute or a bad regex."""
+    unknown = sorted(set(filters) - set(_SELECT_ATTRIBUTES))
+    if unknown:
+        raise ValueError(
+            f"Graph selection filters on {', '.join(_SELECT_ATTRIBUTES)} only, got {', '.join(map(repr, unknown))}"
+        )
+    compiled = []
+    for attribute, expression in filters.items():
+        try:
+            compiled.append((attribute, re.compile(expression)))
+        except re.error as err:
+            raise ValueError(f"The {attribute} filter {expression!r} is no valid regular expression: {err}") from err
+    return compiled
+
+
+def _scan_attributes(folders: list[str]) -> dict[str, str | None]:
+    """session, run and analysis of a graph from the folders between its subject folder and itself."""
+    return {attribute: _nearest_prefixed(folders, prefix) for attribute, prefix in _SCAN_ENTITY_PREFIXES}
+
+
+def _nearest_prefixed(folders: list[str], prefix: str) -> str | None:
+    """Name of the last folder starting with prefix, verbatim, else None."""
+    return next((folder for folder in reversed(folders) if folder.startswith(prefix)), None)
 
 
 def _hemisphere(name: str) -> str | None:
